@@ -1738,20 +1738,52 @@ function translateStraightLineStatement(
 
   const multilineKeywordCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(statement);
   if (multilineKeywordCall !== null) {
-    const statements = [`${translateExpression(multilineKeywordCall[1], nameMap, arrayNames)}({`];
+    const positionalParts: string[] = [];
+    const keywordParts: string[] = [];
+    let sawKeyword = false;
     let nextIndex = index + 1;
     while (nextIndex < lines.length) {
       const trimmed = lines[nextIndex].trim();
       if (trimmed === ')') {
-        statements.push('});');
-        return { statements, nextIndex: nextIndex + 1 };
+        const callee = translateExpression(multilineKeywordCall[1], nameMap, arrayNames);
+        if (keywordParts.length === 0) {
+          return {
+            statements: [`${callee}(${positionalParts.map((part) => translateExpression(part, nameMap, arrayNames)).join(', ')});`],
+            nextIndex: nextIndex + 1,
+          };
+        }
+        if (positionalParts.length === 0) {
+          return {
+            statements: [
+              `${callee}({`,
+              ...keywordParts.map((part) => `  ${part},`),
+              '});',
+            ],
+            nextIndex: nextIndex + 1,
+          };
+        }
+        return {
+          statements: [
+            `${callee}(`,
+            ...positionalParts.map((part) => `  ${translateExpression(part, nameMap, arrayNames)},`),
+            `  { ${keywordParts.join(', ')} },`,
+            ');',
+          ],
+          nextIndex: nextIndex + 1,
+        };
       }
 
-      const keywordArg = /^([A-Za-z_][A-Za-z0-9_]*)=(.+),$/.exec(trimmed);
+      const arg = trimmed.replace(/,$/, '');
+      const keywordArg = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(arg);
       if (keywordArg === null) {
-        return null;
+        if (sawKeyword) {
+          return null;
+        }
+        positionalParts.push(arg);
+      } else {
+        sawKeyword = true;
+        keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${translateExpression(keywordArg[2], nameMap, arrayNames)}`);
       }
-      statements.push(`  ${tsExportNameForPythonName(keywordArg[1])}: ${translateExpression(keywordArg[2], nameMap, arrayNames)},`);
       nextIndex += 1;
     }
     return null;
@@ -2094,6 +2126,7 @@ function translateExpression(
     )
     .replaceAll(/\b(?:float|str|bool)\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, '$1')
     .replaceAll(/\blen\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, '$1.length')
+    .replaceAll(/\.append\(/g, '.push(')
     .replaceAll(/ is not None\b/g, ' !== null')
     .replaceAll(/ is None\b/g, ' === null')
     .replaceAll(/ == /g, ' === ')
