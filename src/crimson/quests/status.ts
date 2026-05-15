@@ -1,6 +1,6 @@
 // Port of crimson/quests/status.py
 
-import { QuestLevel } from './level.ts';
+import type { QuestLevel } from '@crimson/quests/level.ts';
 
 // `game.cfg.quest_play_counts` only has dedicated quest slots for quests 1.1..4.10:
 // - attempts live at indices 11..50
@@ -18,6 +18,7 @@ export function questGamesCounterIndex(level: QuestLevel): number {
 
 export function trackedQuestGamesCounterIndex(level: QuestLevel): number | null {
   // Return the persisted attempts slot for quest levels that fit in game.cfg.
+
   if (!questTrackedInStatus(level)) {
     return null;
   }
@@ -34,6 +35,7 @@ export function questTrackedInStatus(level: QuestLevel): boolean {
 
 export function trackedQuestCompletedCounterIndex(level: QuestLevel): number | null {
   // Return the persisted completion slot for quest levels that fit in game.cfg.
+
   if (!questTrackedInStatus(level)) {
     return null;
   }
