@@ -1038,6 +1038,24 @@ function parseMultilineCallParts(
       positionalParts.push(arg);
     } else {
       sawKeyword = true;
+      const nestedCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(keywordArg[2]);
+      if (nestedCall !== null) {
+        const callExpression = parseMultilineCallExpression(
+          lines,
+          nextIndex + 1,
+          nestedCall[1],
+          nameMap,
+          arrayNames,
+          validatedTypeAliases,
+          mapNames,
+        );
+        if (callExpression === null) {
+          return null;
+        }
+        keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${callExpression.expression}`);
+        nextIndex = callExpression.nextIndex;
+        continue;
+      }
       keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${translateExpression(keywordArg[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
     }
     nextIndex += 1;
