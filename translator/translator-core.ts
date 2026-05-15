@@ -12,6 +12,7 @@ import {
   parseNamespaceReexports,
   parsePackageVersionModule,
   parsePlatformDirsModule,
+  parseProfileHooksModule,
   parseProtocolModule,
   parseMsgspecStructModule,
   parseSimpleExportModule,
@@ -34,6 +35,7 @@ import {
   renderNamespaceReexports,
   renderPackageVersionModule,
   renderPlatformDirsModule,
+  renderProfileHooksModule,
   renderProtocolModule,
   renderMsgspecStructModule,
   renderSimpleExportModule,
@@ -97,6 +99,10 @@ export async function translateFile(job: TranslationJob): Promise<string> {
 
   if (parseBrowserInputModule(futureStripped)) {
     return renderBrowserInputModule(job.relativePath);
+  }
+
+  if (parseProfileHooksModule(futureStripped)) {
+    return renderProfileHooksModule(job.relativePath);
   }
 
   const simpleExportModule = parseSimpleExportModule(futureStripped, job.relativePath);
