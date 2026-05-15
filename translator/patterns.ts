@@ -789,6 +789,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   const leadingAssignments: SimpleModuleAssignment[] = [];
   const functions: SimpleModuleFunction[] = [];
   const assignments: SimpleModuleAssignment[] = [];
+  const allNames: string[] = [];
   const moduleNameMap = new Map<string, string>();
   let index = 0;
 
@@ -802,10 +803,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       break;
     }
     if (trimmed.startsWith('__all__ = ')) {
-      if (!isOneLineAllAssignment(trimmed)) {
+      const parsedAllNames = parseOneLineAllNames(trimmed);
+      if (parsedAllNames === null && !isOneLineAllAssignment(trimmed)) {
         while (index < lines.length && lines[index].trim() !== ']') {
           index += 1;
         }
+      } else if (parsedAllNames !== null) {
+        allNames.push(...parsedAllNames);
       }
       index += 1;
       continue;
@@ -931,10 +935,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
 
     if (trimmed.startsWith('__all__ = ')) {
-      if (!isOneLineAllAssignment(trimmed)) {
+      const parsedAllNames = parseOneLineAllNames(trimmed);
+      if (parsedAllNames === null && !isOneLineAllAssignment(trimmed)) {
         while (index < lines.length && lines[index].trim() !== ']') {
           index += 1;
         }
+      } else if (parsedAllNames !== null) {
+        allNames.push(...parsedAllNames);
       }
       index += 1;
       continue;
@@ -949,6 +956,15 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   }
 
   markTypeOnlyImports(imports, functions, [...leadingAssignments, ...assignments]);
+  if (allNames.length > 0) {
+    const exportedNames = new Set(allNames.map(tsPublicNameForPythonName));
+    for (const fn of functions) {
+      fn.exported = exportedNames.has(fn.name);
+    }
+    for (const assignment of [...leadingAssignments, ...assignments]) {
+      assignment.exported = exportedNames.has(assignment.name);
+    }
+  }
 
   return leadingAssignments.length + functions.length + assignments.length > 0
     ? { imports, leadingAssignments, functions, assignments }
@@ -1220,6 +1236,30 @@ function parseTopLevelAssignment(
     exported: annotatedType === null || !pythonName.startsWith('_'),
     typeExpression: annotatedType === null ? undefined : tsTypeExpression(annotatedType),
   };
+  if (value === '(') {
+    const valueLines = ['['];
+    let nextIndex = index + 1;
+    while (nextIndex < lines.length) {
+      const trimmed = lines[nextIndex].trim();
+      if (trimmed === ')') {
+        valueLines.push(']');
+        return {
+          assignment: { ...baseAssignment, valueLines },
+          nextIndex: nextIndex + 1,
+        };
+      }
+
+      const tupleItem = /^(.+),$/.exec(trimmed);
+      if (tupleItem === null) {
+        return null;
+      }
+      valueLines.push(`  ${translateExpression(tupleItem[1])},`);
+      nextIndex += 1;
+    }
+
+    return null;
+  }
+
   const keywordCall = /^([A-Za-z_][A-Za-z0-9_]*)\($/.exec(value);
   if (keywordCall === null) {
     return {
