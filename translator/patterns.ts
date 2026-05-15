@@ -1921,6 +1921,11 @@ function translateExpression(
     return `typeof process !== 'undefined' && process.env?.${envComparison[1]} === '${envComparison[2]}'`;
   }
 
+  const primitiveCast = /^(?:float|str|bool)\((.+)\)$/.exec(trimmed);
+  if (primitiveCast !== null) {
+    return translateExpression(primitiveCast[1], nameMap, arrayNames);
+  }
+
   const tempDirPathJoin = /^Path\(tempfile\.gettempdir\(\)\) \/ "([^"\\]*)"$/.exec(trimmed);
   if (tempDirPathJoin !== null) {
     return tsStringLiteral(`"/tmp/${tempDirPathJoin[1]}"`);
@@ -1959,6 +1964,16 @@ function translateExpression(
   if (chainedLessEqualComparison !== null) {
     const middle = translateExpression(chainedLessEqualComparison[2], nameMap, arrayNames);
     return `${translateExpression(chainedLessEqualComparison[1], nameMap, arrayNames)} <= ${middle} && ${middle} <= ${translateExpression(chainedLessEqualComparison[3], nameMap, arrayNames)}`;
+  }
+
+  const binaryComparison = /^(.+?) (<=|>=|<|>|==|!=) (.+)$/.exec(trimmed);
+  if (binaryComparison !== null) {
+    const operator = binaryComparison[2] === '=='
+      ? '==='
+      : binaryComparison[2] === '!='
+        ? '!=='
+        : binaryComparison[2];
+    return `${translateExpression(binaryComparison[1], nameMap, arrayNames)} ${operator} ${translateExpression(binaryComparison[3], nameMap, arrayNames)}`;
   }
 
   const notIdentifier = /^not ([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);

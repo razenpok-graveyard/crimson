@@ -1,7 +1,7 @@
 // Port of crimson/bonuses/shield.py
 
 import { f32 } from '@crimson/math-parity.ts';
-import type { BonusApplyCtx } from './apply-context.ts';
+import type { BonusApplyCtx } from '@crimson/bonuses/apply-context.ts';
 
 export function applyShield(ctx: BonusApplyCtx): void {
   let shouldRegister = ctx.player.shieldTimer <= 0.0;
