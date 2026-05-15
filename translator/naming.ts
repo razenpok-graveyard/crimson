@@ -41,6 +41,10 @@ export function tsTypeExpression(pythonType: string): string {
   if (listType !== null) {
     return `${tsTypeExpression(listType[1])}[]`;
   }
+  const sequenceType = /^Sequence\[(.+)\]$/.exec(trimmed);
+  if (sequenceType !== null) {
+    return `readonly ${tsTypeExpression(sequenceType[1])}[]`;
+  }
   if (trimmed === 'None') {
     return 'void';
   }

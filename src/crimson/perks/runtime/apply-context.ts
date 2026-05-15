@@ -5,6 +5,8 @@ import type { PerkId } from '@crimson/perks/ids.ts';
 import type { PerkSelectionState } from '@crimson/perks/state.ts';
 import type { CreatureState } from '@crimson/creatures/runtime.ts';
 
+export type PerkApplyHandler = (arg0: PerkApplyCtx) => void;
+
 export class PerkApplyCtx {
   state: GameplayState;
   players: PlayerState[];
@@ -33,8 +35,6 @@ export class PerkApplyCtx {
   }
 
   frameDt(): number {
-    return this.dt ?? 0.0;
+    return this.dt !== null ? this.dt : 0.0;
   }
 }
-
-export type PerkApplyHandler = (ctx: PerkApplyCtx) => void;

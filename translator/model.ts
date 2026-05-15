@@ -127,6 +127,7 @@ export interface StructClassDefinition {
   docstring: string | null;
   readonlyFields: boolean;
   fields: StructFieldDefinition[];
+  methods: SimpleModuleFunction[];
 }
 
 export interface StructFieldDefinition {

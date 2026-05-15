@@ -381,7 +381,7 @@ export function parseTypeAliases(trimmedPython: string): TypeAlias[] | null {
       continue;
     }
 
-    if (trimmed === 'from collections.abc import Callable') {
+    if (isCollectionsAbcTypeImport(trimmed)) {
       sawTypeAliasImport = true;
       continue;
     }
@@ -770,8 +770,22 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       index += 1;
       continue;
     }
-    if (trimmed === 'from collections.abc import Callable' || trimmed === 'from pathlib import Path' || trimmed === 'from typing import Protocol') {
+    if (
+      isCollectionsAbcTypeImport(trimmed)
+      || trimmed === 'from pathlib import Path'
+      || trimmed === 'from typing import Protocol'
+      || trimmed === 'from typing import TYPE_CHECKING'
+    ) {
       index += 1;
+      continue;
+    }
+    if (trimmed === 'if TYPE_CHECKING:') {
+      const typeCheckingImports = parseTypeCheckingImports(lines, index, relativePath);
+      if (typeCheckingImports === null) {
+        return null;
+      }
+      imports.push(...typeCheckingImports.imports);
+      index = typeCheckingImports.nextIndex;
       continue;
     }
 
@@ -835,6 +849,45 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
   return typeAliases.length + classes.length + protocols.length > 0 ? { imports, typeAliases, classes, protocols } : null;
 }
 
+function isCollectionsAbcTypeImport(trimmedLine: string): boolean {
+  const typeImport = /^from collections\.abc import (.+)$/.exec(trimmedLine);
+  if (typeImport === null) {
+    return false;
+  }
+  return typeImport[1]
+    .split(', ')
+    .every((name) => ['Callable', 'Sequence'].includes(name));
+}
+
+function parseTypeCheckingImports(
+  lines: string[],
+  index: number,
+  relativePath: string,
+): { imports: ImportDefinition[]; nextIndex: number } | null {
+  const imports: ImportDefinition[] = [];
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length) {
+    const line = lines[nextIndex];
+    if (line.trim() === '') {
+      nextIndex += 1;
+      continue;
+    }
+    if (!line.startsWith('    ')) {
+      break;
+    }
+    const fromImport = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(line.trim());
+    if (fromImport === null) {
+      return null;
+    }
+    imports.push({
+      modulePath: tsImportPathForPythonImport(fromImport[1], relativePath),
+      names: fromImport[2].split(', ').map(tsExportNameForPythonName),
+    });
+    nextIndex += 1;
+  }
+  return { imports, nextIndex };
+}
+
 function parseStructClass(
   lines: string[],
   index: number,
@@ -852,6 +905,7 @@ function parseStructClass(
   }
 
   const fields: StructModule['classes'][number]['fields'] = [];
+  const methods: SimpleModuleFunction[] = [];
   while (nextIndex < lines.length) {
     const line = lines[nextIndex];
     const trimmedField = line.trim();
@@ -861,6 +915,13 @@ function parseStructClass(
     }
     if (!line.startsWith('    ')) {
       break;
+    }
+
+    const method = parseStructMethod(lines, nextIndex);
+    if (method !== null) {
+      methods.push(method.method);
+      nextIndex = method.nextIndex;
+      continue;
     }
 
     const field = /^    ([A-Za-z_][A-Za-z0-9_]*): (.+?)(?: = (.+))?$/.exec(line);
@@ -885,6 +946,81 @@ function parseStructClass(
       docstring: docstring?.value ?? null,
       readonlyFields,
       fields,
+      methods,
+    },
+    nextIndex,
+  };
+}
+
+function parseStructMethod(
+  lines: string[],
+  index: number,
+): { method: SimpleModuleFunction; nextIndex: number } | null {
+  const header = /^    def ([A-Za-z_][A-Za-z0-9_]*)\((.*)\) -> ([^:]+):$/.exec(lines[index] ?? '');
+  if (header === null) {
+    return null;
+  }
+  const parametersText = header[2];
+  if (parametersText !== 'self' && !parametersText.startsWith('self, ')) {
+    return null;
+  }
+
+  const parameters: FunctionParameter[] = [];
+  const optsParams: OptionalFunctionParameter[] = [];
+  const arrayNames = new Set<string>();
+  const extraParameters = parametersText === 'self' ? '' : parametersText.slice('self, '.length);
+  if (extraParameters !== '') {
+    for (const parameterText of splitTopLevelComma(extraParameters)) {
+      const parameter = /^([A-Za-z_][A-Za-z0-9_]*): ([^=]+?)(?: = (.+))?$/.exec(parameterText);
+      if (parameter === null || parameter[3] !== undefined) {
+        return null;
+      }
+      const parsedParameter = {
+        name: tsExportNameForPythonName(parameter[1]),
+        typeExpression: tsTypeExpression(parameter[2]),
+      };
+      if (parsedParameter.typeExpression.endsWith('[]')) {
+        arrayNames.add(parameter[1]);
+      }
+      parameters.push(parsedParameter);
+    }
+  }
+
+  const statements: string[] = [];
+  const nameMap = new Map<string, string>([['self', 'this']]);
+  const declaredNames = new Set<string>();
+  const reassignedNames = reassignedLocalNames(lines, index + 1);
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, '        ')) {
+    if (lines[nextIndex].trim() === '') {
+      statements.push('');
+      nextIndex += 1;
+      continue;
+    }
+    const statement = translateStraightLineStatement(
+      lines,
+      nextIndex,
+      '        ',
+      nameMap,
+      declaredNames,
+      reassignedNames,
+      arrayNames,
+    );
+    if (statement === null) {
+      return null;
+    }
+    statements.push(...statement.statements);
+    nextIndex = statement.nextIndex;
+  }
+
+  return {
+    method: {
+      name: tsExportNameForPythonName(header[1]),
+      exported: false,
+      parameters,
+      optsParams,
+      returnType: tsTypeExpression(header[3]),
+      statements,
     },
     nextIndex,
   };
@@ -1046,11 +1182,19 @@ function markStructTypeOnlyImports(
   protocols: StructModule['protocols'],
 ): void {
   const valueText = classes
-    .flatMap((structClass) => structClass.fields.map((field) => field.defaultValue ?? ''))
+    .flatMap((structClass) => [
+      ...structClass.fields.map((field) => field.defaultValue ?? ''),
+      ...structClass.methods.flatMap((method) => method.statements),
+    ])
     .join('\n');
   const typeText = [
     ...typeAliases.map((alias) => alias.typeExpression),
     ...classes.flatMap((structClass) => structClass.fields.map((field) => field.typeExpression)),
+    ...classes.flatMap((structClass) => structClass.methods.flatMap((method) => [
+      method.returnType,
+      ...method.parameters.map((parameter) => parameter.typeExpression),
+      ...method.optsParams.map((parameter) => parameter.typeExpression),
+    ])),
     ...protocols.flatMap((protocol) => protocol.methods.flatMap((method) => [
       method.returnType,
       ...method.parameters.map((parameter) => parameter.typeExpression),
@@ -1250,7 +1394,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
     if (
-      trimmed === 'from collections.abc import Callable'
+      isCollectionsAbcTypeImport(trimmed)
       || trimmed === 'from pathlib import Path'
       || trimmed === 'from typing import Annotated, TypeAlias'
       || trimmed === 'import msgspec'
@@ -2277,12 +2421,18 @@ function markTypeOnlyImports(
       alias.validation?.le ?? '',
     ]),
     ...classes.flatMap((structClass) => structClass.fields.map((field) => field.defaultValue ?? '')),
+    ...classes.flatMap((structClass) => structClass.methods.flatMap((method) => method.statements)),
     ...functions.flatMap((fn) => fn.statements),
     ...assignments.flatMap((assignment) => assignment.valueLines),
   ].join('\n');
   const typeText = [
     ...typeAliases.map((alias) => alias.typeExpression),
     ...classes.flatMap((structClass) => structClass.fields.map((field) => field.typeExpression)),
+    ...classes.flatMap((structClass) => structClass.methods.flatMap((method) => [
+      method.returnType,
+      ...method.parameters.map((parameter) => parameter.typeExpression),
+      ...method.optsParams.map((parameter) => parameter.typeExpression),
+    ])),
     ...functions.flatMap((fn) => [
       fn.returnType,
       ...fn.parameters.map((parameter) => parameter.typeExpression),

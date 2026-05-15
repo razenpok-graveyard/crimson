@@ -280,6 +280,29 @@ function renderStructClasses(lines: string[], classes: StructModule['classes']):
       }
     }
     lines.push('  }');
+    for (const method of structClass.methods) {
+      lines.push('');
+      const params = method.parameters.map((param) => `${param.name}: ${param.typeExpression}`);
+      if (method.optsParams.length > 0) {
+        const optsType = method.optsParams
+          .map((param) => `${param.name}${param.defaultValue === null ? '' : '?'}: ${param.typeExpression}`)
+          .join('; ');
+        const allOptsHaveDefaults = method.optsParams.every((param) => param.defaultValue !== null);
+        params.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
+      }
+      lines.push(`  ${method.name}(${params.join(', ')}): ${method.returnType} {`);
+      for (const param of method.optsParams) {
+        if (param.defaultValue === null) {
+          lines.push(`    const ${param.name} = opts.${param.name};`);
+        } else {
+          lines.push(`    const ${param.name} = opts.${param.name} ?? ${param.defaultValue};`);
+        }
+      }
+      for (const statement of method.statements) {
+        lines.push(statement === '' ? '' : `    ${statement}`);
+      }
+      lines.push('  }');
+    }
     lines.push('}');
     if (index < classes.length - 1) {
       lines.push('');
