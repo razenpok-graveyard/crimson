@@ -5,7 +5,7 @@ import { PerkId } from '@crimson/perks/ids.ts';
 import type { PerksUpdateEffectsCtx } from '@crimson/perks/runtime/effects-context.ts';
 import { PerkHooks } from '@crimson/perks/runtime/hook-types.ts';
 
-function updateEvilEyesTarget(ctx: PerksUpdateEffectsCtx): void {
+export function updateEvilEyesTarget(ctx: PerksUpdateEffectsCtx): void {
   if (ctx.players.length === 0) {
     return;
   }
