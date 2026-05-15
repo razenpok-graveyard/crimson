@@ -15,6 +15,9 @@ import type {
   SimpleExportModule,
   SimpleFunctionDefinition,
   SimpleFunctionParameter,
+  SimpleModuleAssignment,
+  SimpleModuleFunction,
+  StraightLineModule,
   TypeAlias,
 } from './model.js';
 import { tsCallableType, tsExportNameForPythonName, tsLiteralExpression, tsTypeExpression } from './naming.js';
@@ -617,6 +620,109 @@ export function parsePackageVersionModule(trimmedPython: string): PackageVersion
   return sawImport && packageName !== null ? { packageName } : null;
 }
 
+export function parseStraightLineModule(trimmedPython: string, relativePath: string): StraightLineModule | null {
+  const lines = flattenFromImportBlocks(trimmedPython.split(/\r?\n/));
+  const imports: ImportDefinition[] = [];
+  const functions: SimpleModuleFunction[] = [];
+  const assignments: SimpleModuleAssignment[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const trimmed = lines[index].trim();
+    if (trimmed === '') {
+      index += 1;
+      continue;
+    }
+    if (trimmed.startsWith('def ')) {
+      break;
+    }
+
+    const fromImport = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
+    if (fromImport === null) {
+      return null;
+    }
+
+    const names = fromImport[2].split(', ').map(tsExportNameForPythonName);
+    imports.push({
+      modulePath: tsImportPathForPythonImport(fromImport[1], relativePath),
+      names,
+    });
+    index += 1;
+  }
+
+  while (index < lines.length) {
+    while (index < lines.length && lines[index].trim() === '') {
+      index += 1;
+    }
+    if (/^[A-Za-z_][A-Za-z0-9_]* = /.test(lines[index] ?? '')) {
+      break;
+    }
+
+    const header = /^def ([A-Za-z_][A-Za-z0-9_]*)\((.*)\) -> ([^:]+):$/.exec(lines[index] ?? '');
+    if (header === null) {
+      return null;
+    }
+    index += 1;
+
+    const parameters: FunctionParameter[] = [];
+    if (header[2] !== '') {
+      for (const parameterText of header[2].split(', ')) {
+        const parameter = /^([A-Za-z_][A-Za-z0-9_]*): (.+)$/.exec(parameterText);
+        if (parameter === null) {
+          return null;
+        }
+        parameters.push({
+          name: tsExportNameForPythonName(parameter[1]),
+          typeExpression: tsTypeExpression(parameter[2]),
+        });
+      }
+    }
+
+    const statements: string[] = [];
+    while (index < lines.length) {
+      const line = lines[index];
+      if (line.trim() === '') {
+        index += 1;
+        break;
+      }
+      const statement = translateStraightLineStatement(line);
+      if (statement === null) {
+        return null;
+      }
+      statements.push(statement);
+      index += 1;
+    }
+
+    functions.push({
+      name: tsExportNameForPythonName(header[1]),
+      parameters,
+      returnType: tsTypeExpression(header[3]),
+      statements,
+    });
+  }
+
+  while (index < lines.length) {
+    const trimmed = lines[index].trim();
+    if (trimmed === '') {
+      index += 1;
+      continue;
+    }
+
+    const assignment = parseTopLevelAssignment(lines, index);
+    if (assignment === null) {
+      return null;
+    }
+    assignments.push(assignment.assignment);
+    index = assignment.nextIndex;
+  }
+
+  markTypeOnlyImports(imports, functions, assignments);
+
+  return functions.length + assignments.length > 0
+    ? { imports, functions, assignments }
+    : null;
+}
+
 function parseOneLineAllNames(trimmedLine: string): string[] | null {
   const allAssignment = /^__all__ = \[(.*)\]$/.exec(trimmedLine);
   if (allAssignment === null) {
@@ -635,6 +741,110 @@ function parseOneLineAllNames(trimmedLine: string): string[] | null {
     names.push(name[1]);
   }
   return names;
+}
+
+function translateStraightLineStatement(line: string): string | null {
+  const statement = /^    (.+)$/.exec(line)?.[1] ?? null;
+  if (statement === null || statement.startsWith(' ')) {
+    return null;
+  }
+
+  const returnStatement = /^return (.+)$/.exec(statement);
+  if (returnStatement !== null) {
+    return `return ${translateExpression(returnStatement[1])};`;
+  }
+
+  const assignment = /^(.+?) (\+=|-=|\*=|\/=|=) (.+)$/.exec(statement);
+  if (assignment !== null) {
+    return `${translateExpression(assignment[1])} ${assignment[2]} ${translateExpression(assignment[3])};`;
+  }
+
+  return null;
+}
+
+function parseTopLevelAssignment(
+  lines: string[],
+  index: number,
+): { assignment: SimpleModuleAssignment; nextIndex: number } | null {
+  const assignment = /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(lines[index] ?? '');
+  if (assignment === null) {
+    return null;
+  }
+
+  const name = tsExportNameForPythonName(assignment[1]);
+  const value = assignment[2];
+  const keywordCall = /^([A-Za-z_][A-Za-z0-9_]*)\($/.exec(value);
+  if (keywordCall === null) {
+    return {
+      assignment: { name, valueLines: [translateExpression(value)] },
+      nextIndex: index + 1,
+    };
+  }
+
+  const callee = tsExportNameForPythonName(keywordCall[1]);
+  const callPrefix = /^[A-Z]/.test(callee) ? `new ${callee}` : callee;
+  const valueLines = [`${callPrefix}({`];
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length) {
+    const trimmed = lines[nextIndex].trim();
+    if (trimmed === ')') {
+      valueLines.push('})');
+      return {
+        assignment: { name, valueLines },
+        nextIndex: nextIndex + 1,
+      };
+    }
+
+    const keywordArg = /^([A-Za-z_][A-Za-z0-9_]*)=(.+),$/.exec(trimmed);
+    if (keywordArg === null) {
+      return null;
+    }
+    valueLines.push(`  ${tsExportNameForPythonName(keywordArg[1])}: ${translateExpression(keywordArg[2])},`);
+    nextIndex += 1;
+  }
+
+  return null;
+}
+
+function markTypeOnlyImports(
+  imports: ImportDefinition[],
+  functions: SimpleModuleFunction[],
+  assignments: SimpleModuleAssignment[],
+): void {
+  const valueText = [
+    ...functions.flatMap((fn) => fn.statements),
+    ...assignments.flatMap((assignment) => assignment.valueLines),
+  ].join('\n');
+
+  for (const importDefinition of imports) {
+    importDefinition.typeOnly = importDefinition.names.every((name) => !identifierPattern(name).test(valueText));
+  }
+}
+
+function translateExpression(pythonExpression: string): string {
+  return pythonExpression
+    .trim()
+    .replaceAll(/\b(?:float|str|bool)\(([A-Za-z_][A-Za-z0-9_]*)\)/g, '$1')
+    .replaceAll(/\b[A-Za-z_][A-Za-z0-9_]*\b/g, (name) => {
+      if (name === 'True') {
+        return 'true';
+      }
+      if (name === 'False') {
+        return 'false';
+      }
+      if (name === 'None') {
+        return 'null';
+      }
+      return tsExportNameForPythonName(name);
+    });
+}
+
+function identifierPattern(identifier: string): RegExp {
+  return new RegExp(`\\b${escapeRegExp(identifier)}\\b`);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function tsSimpleExpression(pythonExpression: string, parameters: SimpleFunctionParameter[]): string | null {

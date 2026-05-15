@@ -48,6 +48,7 @@ export interface FunctionDefinition {
 export interface ImportDefinition {
   modulePath: string;
   names: string[];
+  typeOnly?: boolean;
 }
 
 export interface GuardedAttributeFunction {
@@ -112,4 +113,22 @@ export interface InitReexports {
   docstring: string | null;
   namespaceReexports: NamespaceReexport[];
   reexports: Reexport[];
+}
+
+export interface SimpleModuleFunction {
+  name: string;
+  parameters: FunctionParameter[];
+  returnType: string;
+  statements: string[];
+}
+
+export interface SimpleModuleAssignment {
+  name: string;
+  valueLines: string[];
+}
+
+export interface StraightLineModule {
+  imports: ImportDefinition[];
+  functions: SimpleModuleFunction[];
+  assignments: SimpleModuleAssignment[];
 }

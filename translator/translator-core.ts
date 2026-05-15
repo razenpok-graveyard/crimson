@@ -11,6 +11,7 @@ import {
   parsePackageVersionModule,
   parseProtocolModule,
   parseSimpleExportModule,
+  parseStraightLineModule,
   parseTypeAliases,
 } from './patterns.js';
 import { pythonProjectRoot, repoRoot } from './paths.js';
@@ -27,6 +28,7 @@ import {
   renderPackageVersionModule,
   renderProtocolModule,
   renderSimpleExportModule,
+  renderStraightLineModule,
   renderTypeAliases,
 } from './renderers.js';
 
@@ -80,6 +82,11 @@ export async function translateFile(job: TranslationJob): Promise<string> {
   const simpleExportModule = parseSimpleExportModule(futureStripped, job.relativePath);
   if (simpleExportModule !== null) {
     return renderSimpleExportModule(job.relativePath, simpleExportModule);
+  }
+
+  const straightLineModule = parseStraightLineModule(futureStripped, job.relativePath);
+  if (straightLineModule !== null) {
+    return renderStraightLineModule(job.relativePath, straightLineModule);
   }
 
   const functionsModule = parseFunctionsModule(futureStripped);

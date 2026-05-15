@@ -7,6 +7,7 @@ import type {
   NamespaceReexport,
   ProtocolDefinition,
   SimpleExportModule,
+  StraightLineModule,
   TypeAlias,
 } from './model.js';
 
@@ -159,6 +160,41 @@ export function renderSimpleExportModule(relativePath: string, module: SimpleExp
     }
     lines.push(`  return ${fn.returnExpression};`);
     lines.push('}');
+  }
+  lines.push('');
+  return lines.join('\n');
+}
+
+export function renderStraightLineModule(relativePath: string, module: StraightLineModule): string {
+  const lines = [`// Port of ${relativePath}`, ''];
+  for (const importDefinition of module.imports) {
+    lines.push(
+      `import ${importDefinition.typeOnly ? 'type ' : ''}{ ${importDefinition.names.join(', ')} } from '${importDefinition.modulePath}';`,
+    );
+  }
+  lines.push('');
+
+  for (const fn of module.functions) {
+    const params = fn.parameters.map((param) => `${param.name}: ${param.typeExpression}`).join(', ');
+    lines.push(`function ${fn.name}(${params}): ${fn.returnType} {`);
+    for (const statement of fn.statements) {
+      lines.push(`  ${statement}`);
+    }
+    lines.push('}');
+    lines.push('');
+  }
+
+  for (const assignment of module.assignments) {
+    if (assignment.valueLines.length === 1) {
+      lines.push(`export const ${assignment.name} = ${assignment.valueLines[0]};`);
+      continue;
+    }
+
+    lines.push(`export const ${assignment.name} = ${assignment.valueLines[0]}`);
+    for (const valueLine of assignment.valueLines.slice(1, -1)) {
+      lines.push(valueLine);
+    }
+    lines.push(`${assignment.valueLines.at(-1)};`);
   }
   lines.push('');
   return lines.join('\n');
