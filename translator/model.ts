@@ -19,6 +19,15 @@ export interface NamespaceReexport {
 export interface TypeAlias {
   name: string;
   typeExpression: string;
+  validation?: TypeAliasValidation;
+}
+
+export interface TypeAliasValidation {
+  minLength?: string;
+  maxLength?: string;
+  pattern?: string;
+  ge?: string;
+  le?: string;
 }
 
 export interface EnumMember {
@@ -188,6 +197,7 @@ export interface SimpleModuleAssignment {
 export interface StraightLineModule {
   imports: ImportDefinition[];
   reexports: Reexport[];
+  typeAliases: TypeAlias[];
   leadingAssignments: SimpleModuleAssignment[];
   functions: SimpleModuleFunction[];
   assignments: SimpleModuleAssignment[];

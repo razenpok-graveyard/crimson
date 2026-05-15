@@ -297,6 +297,23 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
     lines.push('');
   }
 
+  for (const alias of module.typeAliases) {
+    lines.push(`export type ${alias.name} = ${alias.typeExpression};`);
+  }
+  const validatedAliases = module.typeAliases.filter((alias) => alias.validation !== undefined);
+  if (validatedAliases.length > 0) {
+    lines.push('');
+    for (let index = 0; index < validatedAliases.length; index += 1) {
+      renderTypeAliasValidator(lines, validatedAliases[index]);
+      if (index < validatedAliases.length - 1) {
+        lines.push('');
+      }
+    }
+  }
+  if (module.typeAliases.length > 0 && module.leadingAssignments.length + module.functions.length + module.assignments.length > 0) {
+    lines.push('');
+  }
+
   renderStraightLineAssignments(lines, module.leadingAssignments);
   if (module.leadingAssignments.length > 0 && module.functions.length + module.assignments.length > 0) {
     lines.push('');
@@ -334,6 +351,34 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
     lines.push('');
   }
   return lines.join('\n');
+}
+
+function renderTypeAliasValidator(lines: string[], alias: TypeAlias): void {
+  const checks: string[] = [];
+  if (alias.validation?.minLength !== undefined) {
+    checks.push(`value.length < ${alias.validation.minLength}`);
+  }
+  if (alias.validation?.maxLength !== undefined) {
+    checks.push(`value.length > ${alias.validation.maxLength}`);
+  }
+  if (alias.validation?.pattern !== undefined) {
+    checks.push(`!${alias.validation.pattern}.test(value)`);
+  }
+  if (alias.validation?.ge !== undefined) {
+    checks.push(`value < ${alias.validation.ge}`);
+  }
+  if (alias.validation?.le !== undefined) {
+    checks.push(`value > ${alias.validation.le}`);
+  }
+
+  lines.push(`function validate${alias.name}(value: ${alias.typeExpression}): ${alias.name} {`);
+  if (checks.length > 0) {
+    lines.push(`  if (${checks.join(' || ')}) {`);
+    lines.push(`    throw new Error('invalid ${alias.name}');`);
+    lines.push('  }');
+  }
+  lines.push('  return value;');
+  lines.push('}');
 }
 
 function renderStraightLineAssignments(lines: string[], assignments: StraightLineModule['assignments']): void {
