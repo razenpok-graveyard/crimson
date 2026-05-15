@@ -1,14 +1,8 @@
 // Port of crimson/sim/tick_runner.py
 
 import { TickResult } from './hooks.ts';
-import type {
-  FrameContext,
-  InputProvider,
-} from './input-providers.ts';
-import {
-  InputStatus,
-  ResolvedTick,
-} from './input-providers.ts';
+import type { FrameContext, InputProvider } from './input-providers.ts';
+import { InputStatus, ResolvedTick } from './input-providers.ts';
 import type { GameCommand } from './input-providers.ts';
 import type { DeterministicSession } from './sessions.ts';
 import type { PlayerInput } from './input.ts';

@@ -11,16 +11,8 @@ import { f32 } from '@crimson/math-parity.ts';
 import { OwnerRef } from '@crimson/owner-ref.ts';
 import { RngCallerStatic } from '@crimson/rng-caller-static.ts';
 import { weaponEntryForProjectileTypeId } from '@crimson/weapons.ts';
-import {
-  spawnIonHitEffects,
-  spawnPlasmaCannonHitEffects,
-  spawnShrinkifierHitEffects,
-  spawnSplitterHitEffects,
-} from '@crimson/projectiles/effects.ts';
-import {
-  Projectile,
-  ProjectileTemplateId,
-} from '@crimson/projectiles/types.ts';
+import { spawnIonHitEffects, spawnPlasmaCannonHitEffects, spawnShrinkifierHitEffects, spawnSplitterHitEffects } from '@crimson/projectiles/effects.ts';
+import { Projectile, ProjectileTemplateId } from '@crimson/projectiles/types.ts';
 import { applyDamageToCreature, hitRadiusFor } from './collision.ts';
 import type { CreatureState } from '@crimson/creatures/runtime.ts';
 import type { GameplayState } from '@crimson/gameplay.ts';

@@ -7,12 +7,7 @@ import * as wgl from '@wgl';
 import { PerkId } from '@crimson/perks/ids.ts';
 import { perkActive } from '@crimson/perks/helpers.ts';
 import { KNOWN_PROJ_FRAMES } from '@crimson/sim/world-defs.ts';
-import {
-  ProjectileDrawCtx,
-  SecondaryProjectileDrawCtx,
-  drawProjectileFromRegistry,
-  drawSecondaryProjectileFromRegistry,
-} from '@crimson/render/projectile-draw/index.ts';
+import { ProjectileDrawCtx, SecondaryProjectileDrawCtx, drawProjectileFromRegistry, drawSecondaryProjectileFromRegistry } from '@crimson/render/projectile-draw/index.ts';
 import { knownProjRgb } from '@crimson/render/projectile-render-registry.ts';
 import { WorldRenderCtx } from './context.ts';
 import type { Projectile, SecondaryProjectile } from '@crimson/projectiles/types.ts';

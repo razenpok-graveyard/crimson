@@ -4,13 +4,7 @@ import { Vec2 } from '@grim/geom.ts';
 import { SpawnId } from '@crimson/creatures/spawn.ts';
 import { PerkId } from '@crimson/perks/ids.ts';
 import { WeaponId } from '@crimson/weapons.ts';
-import {
-  centerPoint,
-  edgeMidpoints,
-  ringPoints,
-  spawn,
-  spawnAt,
-} from './helpers.ts';
+import { centerPoint, edgeMidpoints, ringPoints, spawn, spawnAt } from './helpers.ts';
 import { registerQuest } from './registry.ts';
 import type { QuestContext, SpawnEntry as SpawnEntryType } from './types.ts';
 

@@ -1,12 +1,7 @@
 // Port of crimson/persistence/save_status.py
 
 import { GameMode } from '@crimson/game-modes.ts';
-import {
-  WEAPON_USAGE_SLOT_COUNT,
-  ZERO_WEAPON_USAGE_COUNTS,
-  type WeaponUsageCounts,
-  weaponUsageSlotForWeaponId,
-} from '@crimson/weapon-usage.ts';
+import { WEAPON_USAGE_SLOT_COUNT, ZERO_WEAPON_USAGE_COUNTS, type WeaponUsageCounts, weaponUsageSlotForWeaponId } from '@crimson/weapon-usage.ts';
 
 export const GAME_CFG_NAME = 'game.cfg';
 

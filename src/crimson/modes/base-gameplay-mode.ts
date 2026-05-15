@@ -23,33 +23,13 @@ import { WorldRenderer } from '@crimson/render/world/renderer.ts';
 import type { HighScoreRecord } from '@crimson/persistence/highscores.ts';
 import { RtxRenderMode } from '@crimson/render/rtx/mode.ts';
 import { GameOverUi } from '@crimson/screens/results/game-over.ts';
-import {
-  type PresentationTickOutput,
-  applyPresentationOutputs,
-  applySimMetadataTickResult,
-} from '@crimson/sim/batch-apply.ts';
+import { type PresentationTickOutput, applyPresentationOutputs, applySimMetadataTickResult } from '@crimson/sim/batch-apply.ts';
 import { FixedStepClock } from '@crimson/sim/clock.ts';
 import { advanceTickRunnerFrame } from '@crimson/sim/frame-pump.ts';
-import {
-  type LanFrameSample,
-  type LanSyncCallbacks,
-  type TickResult,
-} from '@crimson/sim/hooks.ts';
+import { type LanFrameSample, type LanSyncCallbacks, type TickResult } from '@crimson/sim/hooks.ts';
 import { PlayerInput } from '@crimson/sim/input.ts';
-import {
-  type FrameContext,
-  type GameCommand,
-  InputStatus,
-  LocalInputProvider,
-  PerkMenuOpenCommand,
-  PerkPickCommand,
-  TickSupply,
-} from '@crimson/sim/input-providers.ts';
-import {
-  PostApplyReaction,
-  applyPostApplyReaction,
-  buildPostApplyReaction,
-} from '@crimson/sim/presentation-reactions.ts';
+import { type FrameContext, type GameCommand, InputStatus, LocalInputProvider, PerkMenuOpenCommand, PerkPickCommand, TickSupply } from '@crimson/sim/input-providers.ts';
+import { PostApplyReaction, applyPostApplyReaction, buildPostApplyReaction } from '@crimson/sim/presentation-reactions.ts';
 import type { DeterministicSession, DeterministicSessionTick } from '@crimson/sim/sessions.ts';
 import { TickBatchResult, TickRunner } from '@crimson/sim/tick-runner.ts';
 import type { TerrainSlotTriplet } from '@crimson/terrain-slots.ts';

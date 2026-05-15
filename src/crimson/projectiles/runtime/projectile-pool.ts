@@ -11,20 +11,8 @@ import { OwnerRef } from '@crimson/owner-ref.ts';
 import { PerkId } from '@crimson/perks/ids.ts';
 import { RngCallerStatic } from '@crimson/rng-caller-static.ts';
 import { weaponEntryForProjectileTypeId } from '@crimson/weapons.ts';
-import {
-  MAIN_PROJECTILE_POOL_SIZE,
-  type CreatureDamageApplier,
-  Projectile,
-  ProjectileCollisionProfile,
-  ProjectileHit,
-  ProjectileTemplateId,
-} from '@crimson/projectiles/types.ts';
-import {
-  PROJECTILE_HIT_PERK_HOOKS,
-  ProjectileHitInfo,
-  ProjectileUpdateCtx,
-  ProjectileHitPerkCtx,
-} from './behaviors.ts';
+import { MAIN_PROJECTILE_POOL_SIZE, type CreatureDamageApplier, Projectile, ProjectileCollisionProfile, ProjectileHit, ProjectileTemplateId } from '@crimson/projectiles/types.ts';
+import { PROJECTILE_HIT_PERK_HOOKS, ProjectileHitInfo, ProjectileUpdateCtx, ProjectileHitPerkCtx } from './behaviors.ts';
 import { applyDamageToCreature, hitRadiusFor, withinNativeFindRadius } from './collision.ts';
 import { primaryRuleForTypeId } from './primary-rules.ts';
 import { CreatureSpatialHash } from './spatial-hash.ts';

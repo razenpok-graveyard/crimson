@@ -5,11 +5,7 @@ import { Vec2 } from '@grim/geom.ts';
 import * as wgl from '@wgl';
 import { _AIM_KEYBOARD_TURN_RATE, _AIM_JOYSTICK_TURN_RATE } from './aim-constants';
 import { AimScheme } from './aim-schemes.ts';
-import {
-  inputCodeIsDown,
-  inputCodeIsPressed,
-  inputAxisValue,
-} from './input-codes.ts';
+import { inputCodeIsDown, inputCodeIsPressed, inputAxisValue } from './input-codes.ts';
 import { MovementControlType } from './movement-controls.ts';
 import { PlayerInput } from './sim/input.ts';
 import type { PlayerState } from './sim/state-types.ts';

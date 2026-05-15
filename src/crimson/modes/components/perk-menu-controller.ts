@@ -11,19 +11,7 @@ import { PerkId, perkDisplayName, perkDisplayDescription } from '@crimson/perks/
 import { type PlayerState } from '@crimson/sim/state-types.ts';
 import { uiOrigin, uiScale } from '@crimson/ui/layout.ts';
 import { drawClassicMenuPanel } from '@crimson/ui/menu-panel.ts';
-import {
-  PERK_MENU_TRANSITION_MS,
-  PerkMenuLayout,
-  UiButtonState,
-  buttonDraw,
-  buttonUpdate,
-  buttonWidth,
-  drawMenuItem,
-  drawUiText,
-  menuItemHitRect,
-  perkMenuComputeLayout,
-  perkMenuPanelSlideX,
-} from '@crimson/ui/perk-menu.ts';
+import { PERK_MENU_TRANSITION_MS, PerkMenuLayout, UiButtonState, buttonDraw, buttonUpdate, buttonWidth, drawMenuItem, drawUiText, menuItemHitRect, perkMenuComputeLayout, perkMenuPanelSlideX } from '@crimson/ui/perk-menu.ts';
 
 export type PlaySfxFn = (sfxId: SfxId) => void;
 export type OnCloseFn = () => void;

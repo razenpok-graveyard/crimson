@@ -18,65 +18,12 @@ import { UI_SHADOW_OFFSET, drawUiQuadShadow } from '@crimson/ui/shadow.ts';
 import type { GameState } from '@crimson/game/types.ts';
 import { GameMode } from '@crimson/game-modes.ts';
 import { drawClassicMenuPanel } from '@crimson/ui/menu-panel.ts';
-import {
-  UiButtonState,
-  buttonDraw,
-  buttonUpdate,
-  buttonWidth,
-} from '@crimson/ui/perk-menu.ts';
+import { UiButtonState, buttonDraw, buttonUpdate, buttonWidth } from '@crimson/ui/perk-menu.ts';
 import { requireRuntimeResources } from '@crimson/screens/assets.ts';
-import {
-  MENU_PANEL_OFFSET_Y,
-  MENU_PANEL_WIDTH,
-  MENU_SIGN_WIDTH,
-  MENU_SIGN_HEIGHT,
-  MENU_SIGN_OFFSET_X,
-  MENU_SIGN_OFFSET_Y,
-  MENU_SIGN_POS_Y,
-  MENU_SIGN_POS_Y_SMALL,
-  MENU_SIGN_POS_X_PAD,
-  MENU_SCALE_SMALL_THRESHOLD,
-  uiElementAnim,
-  signLayoutScale,
-  drawMenuCursorHelper,
-  ensureMenuGround,
-  menuGroundCamera,
-} from '@crimson/screens/menu.ts';
-import {
-  FADE_TO_GAME_ACTIONS,
-  PANEL_TIMELINE_START_MS,
-  PANEL_TIMELINE_END_MS,
-} from '@crimson/screens/panels/base.ts';
+import { MENU_PANEL_OFFSET_Y, MENU_PANEL_WIDTH, MENU_SIGN_WIDTH, MENU_SIGN_HEIGHT, MENU_SIGN_OFFSET_X, MENU_SIGN_OFFSET_Y, MENU_SIGN_POS_Y, MENU_SIGN_POS_Y_SMALL, MENU_SIGN_POS_X_PAD, MENU_SCALE_SMALL_THRESHOLD, uiElementAnim, signLayoutScale, drawMenuCursorHelper, ensureMenuGround, menuGroundCamera } from '@crimson/screens/menu.ts';
+import { FADE_TO_GAME_ACTIONS, PANEL_TIMELINE_START_MS, PANEL_TIMELINE_END_MS } from '@crimson/screens/panels/base.ts';
 import { drawScreenFade } from '@crimson/screens/transitions.ts';
-import {
-  QUEST_MENU_BASE_X,
-  QUEST_MENU_BASE_Y,
-  QUEST_MENU_PANEL_OFFSET_X,
-  QUEST_TITLE_X_OFFSET,
-  QUEST_TITLE_Y_OFFSET,
-  QUEST_TITLE_W,
-  QUEST_TITLE_H,
-  QUEST_STAGE_ICON_X_OFFSET,
-  QUEST_STAGE_ICON_Y_OFFSET,
-  QUEST_STAGE_ICON_SIZE,
-  QUEST_STAGE_ICON_STEP,
-  QUEST_STAGE_ICON_SCALE_UNSELECTED,
-  QUEST_LIST_Y_OFFSET,
-  QUEST_LIST_ROW_STEP,
-  QUEST_LIST_NAME_X_OFFSET,
-  QUEST_LIST_HOVER_LEFT_PAD,
-  QUEST_LIST_HOVER_RIGHT_PAD,
-  QUEST_LIST_HOVER_TOP_PAD,
-  QUEST_LIST_HOVER_BOTTOM_PAD,
-  QUEST_HARDCORE_UNLOCK_INDEX,
-  QUEST_HARDCORE_CHECKBOX_X_OFFSET,
-  QUEST_HARDCORE_CHECKBOX_Y_OFFSET,
-  QUEST_HARDCORE_LIST_Y_SHIFT,
-  QUEST_BACK_BUTTON_X_OFFSET,
-  QUEST_BACK_BUTTON_Y_OFFSET,
-  QUEST_PANEL_HEIGHT,
-  QuestMenuLayout,
-} from './shared.ts';
+import { QUEST_MENU_BASE_X, QUEST_MENU_BASE_Y, QUEST_MENU_PANEL_OFFSET_X, QUEST_TITLE_X_OFFSET, QUEST_TITLE_Y_OFFSET, QUEST_TITLE_W, QUEST_TITLE_H, QUEST_STAGE_ICON_X_OFFSET, QUEST_STAGE_ICON_Y_OFFSET, QUEST_STAGE_ICON_SIZE, QUEST_STAGE_ICON_STEP, QUEST_STAGE_ICON_SCALE_UNSELECTED, QUEST_LIST_Y_OFFSET, QUEST_LIST_ROW_STEP, QUEST_LIST_NAME_X_OFFSET, QUEST_LIST_HOVER_LEFT_PAD, QUEST_LIST_HOVER_RIGHT_PAD, QUEST_LIST_HOVER_TOP_PAD, QUEST_LIST_HOVER_BOTTOM_PAD, QUEST_HARDCORE_UNLOCK_INDEX, QUEST_HARDCORE_CHECKBOX_X_OFFSET, QUEST_HARDCORE_CHECKBOX_Y_OFFSET, QUEST_HARDCORE_LIST_Y_SHIFT, QUEST_BACK_BUTTON_X_OFFSET, QUEST_BACK_BUTTON_Y_OFFSET, QUEST_PANEL_HEIGHT, QuestMenuLayout } from './shared.ts';
 
 const KEY_ESCAPE = 27;
 const KEY_LEFT = 37;

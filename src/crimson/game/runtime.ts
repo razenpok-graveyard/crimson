@@ -2,23 +2,12 @@
 
 import { loadMusicTrack, queueTrack } from '@grim/music.ts';
 import { ensureCrimsonCfg } from '@grim/config.ts';
-import {
-  type ConsoleState,
-  type CommandHandler,
-  createConsole,
-  registerBootCommands,
-  registerCoreCvars,
-} from '@grim/console.ts';
+import { type ConsoleState, type CommandHandler, createConsole, registerBootCommands, registerCoreCvars } from '@grim/console.ts';
 import { Crand } from '@grim/rand.ts';
 import * as wgl from '@wgl';
 import { downloadMissingPaqs } from '@crimson/assets-fetch.ts';
 import { setDebugEnabled } from '@crimson/debug.ts';
-import {
-  DEMO_QUEST_GRACE_TIME_MS,
-  DEMO_TOTAL_PLAY_TIME_MS,
-  demoTrialOverlayInfo,
-  formatDemoTrialTime,
-} from '@crimson/demo-trial.ts';
+import { DEMO_QUEST_GRACE_TIME_MS, DEMO_TOTAL_PLAY_TIME_MS, demoTrialOverlayInfo, formatDemoTrialTime } from '@crimson/demo-trial.ts';
 import { GameMode } from '@crimson/game-modes.ts';
 import { ensureGameStatus } from '@crimson/persistence/save-status.ts';
 import { cycleRtxRenderMode, modeFromRtxFlag, parseRtxRenderMode } from '@crimson/render/rtx/mode.ts';

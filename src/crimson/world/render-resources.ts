@@ -1,11 +1,6 @@
 // Port of crimson/world/render_resources.py
 
-import {
-  type RuntimeResources,
-  TextureId,
-  getTexture,
-  runtimeResourcesFor,
-} from '@grim/assets.ts';
+import { type RuntimeResources, TextureId, getTexture, runtimeResourcesFor } from '@grim/assets.ts';
 import type { CrimsonConfig } from '@grim/config.ts';
 import { Vec2 } from '@grim/geom.ts';
 import * as wgl from '@wgl';
@@ -15,10 +10,7 @@ import type { CreaturePool } from '@crimson/creatures/runtime.ts';
 import type { GameplayState } from '@crimson/gameplay.ts';
 import { RenderFrame } from '@crimson/render/frame.ts';
 import type { RtxRenderMode } from '@crimson/render/rtx/mode.ts';
-import {
-  FxQueueTextures,
-  bakeTerrainFxBatch,
-} from '@crimson/render/terrain-fx.ts';
+import { FxQueueTextures, bakeTerrainFxBatch } from '@crimson/render/terrain-fx.ts';
 import type { PlayerState } from '@crimson/sim/state-types.ts';
 import type { TerrainFxBatch } from '@crimson/sim/terrain-fx.ts';
 

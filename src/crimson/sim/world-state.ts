@@ -7,43 +7,21 @@ import { bonusUpdate, bonusUpdatePrePickupTimers } from '@crimson/bonuses/update
 import { cameraShakeUpdate } from '@crimson/camera.ts';
 import { creatureAnimAdvancePhase } from '@crimson/creatures/anim.ts';
 import { creatureApplyDamageWithLethalFollowup } from '@crimson/creatures/damage.ts';
-import {
-  CreatureDeath,
-  CreaturePool,
-  CreatureUpdateOptions,
-} from '@crimson/creatures/runtime.ts';
-import {
-  CreatureAiMode,
-  CreatureTypeId,
-  SpawnEnv,
-} from '@crimson/creatures/spawn.ts';
+import { CreatureDeath, CreaturePool, CreatureUpdateOptions } from '@crimson/creatures/runtime.ts';
+import { CreatureAiMode, CreatureTypeId, SpawnEnv } from '@crimson/creatures/spawn.ts';
 import type { FxQueue, FxQueueRotated } from '@crimson/effects.ts';
 import { GameMode } from '@crimson/game-modes.ts';
-import {
-  buildGameplayState,
-  playerUpdate,
-  playerFrameDtAfterRoundtrip,
-  survivalProgressionUpdate,
-  survivalEnforceRewardWeaponGuard,
-} from '@crimson/gameplay.ts';
+import { buildGameplayState, playerUpdate, playerFrameDtAfterRoundtrip, survivalProgressionUpdate, survivalEnforceRewardWeaponGuard } from '@crimson/gameplay.ts';
 import type { OwnerRef } from '@crimson/owner-ref.ts';
 import { perksUpdateEffects } from '@crimson/perks/runtime/effects.ts';
 import { PLAYER_DEATH_HOOKS, WORLD_DT_STEPS } from '@crimson/perks/runtime/manifest.ts';
 import { playerTakeProjectileDamage } from '@crimson/player-damage.ts';
-import {
-  PrimaryStepCtx,
-  ProjectileUpdateOptions,
-} from '@crimson/projectiles/runtime/projectile-pool.ts';
+import { PrimaryStepCtx, ProjectileUpdateOptions } from '@crimson/projectiles/runtime/projectile-pool.ts';
 import { SecondaryStepCtx } from '@crimson/projectiles/runtime/secondary-pool.ts';
 import type { ProjectileHit } from '@crimson/projectiles/types.ts';
 import { PlayerInput } from './input.ts';
 import { normalizeInputFrame } from './input-frame.ts';
-import {
-  type ProjectileDecalPostCtx,
-  planHitSfx,
-  queueProjectileDecalsPostHit,
-  queueProjectileDecalsPreHit,
-} from './presentation-step.ts';
+import { type ProjectileDecalPostCtx, planHitSfx, queueProjectileDecalsPostHit, queueProjectileDecalsPreHit } from './presentation-step.ts';
 import type { BonusPickupEvent, GameplayState, PlayerState } from './state-types.ts';
 import { CREATURE_ANIM } from './world-defs.ts';
 

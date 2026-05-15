@@ -11,18 +11,10 @@ import * as wgl from '@wgl';
 import { GameMode } from '@crimson/game-modes.ts';
 import { advanceUnlockTerrain } from '@crimson/sim/bootstrap.ts';
 import { buildRushSession, enforceRushLoadout } from '@crimson/sim/session-builders.ts';
-import {
-  DeterministicSession,
-  type DeterministicSessionTick,
-  RushSpawnState,
-} from '@crimson/sim/sessions.ts';
+import { DeterministicSession, type DeterministicSessionTick, RushSpawnState } from '@crimson/sim/sessions.ts';
 import { drawMenuCursor } from '@crimson/ui/cursor.ts';
 import { drawHudOverlay, HudRenderContext, hudFlagsForGameMode } from '@crimson/ui/hud.ts';
-import {
-  BaseGameplayMode,
-  type LanSession,
-  type LanStepAction,
-} from './base-gameplay-mode.ts';
+import { BaseGameplayMode, type LanSession, type LanStepAction } from './base-gameplay-mode.ts';
 import { buildHighscoreRecordForGameOver } from './components/highscore-record-builder.ts';
 
 const WORLD_SIZE = 1024.0;

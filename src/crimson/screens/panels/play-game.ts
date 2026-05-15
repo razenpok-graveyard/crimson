@@ -9,25 +9,10 @@ import * as wgl from '@wgl';
 import { debugEnabled } from '@crimson/debug.ts';
 import { type GameState } from '@crimson/game/types.ts';
 import { GameMode } from '@crimson/game-modes.ts';
-import {
-  UiButtonState,
-  buttonDraw,
-  buttonUpdate,
-  buttonWidth,
-} from '@crimson/ui/perk-menu.ts';
+import { UiButtonState, buttonDraw, buttonUpdate, buttonWidth } from '@crimson/ui/perk-menu.ts';
 import { requireRuntimeResources } from '@crimson/screens/assets.ts';
-import {
-  MENU_LABEL_ROW_PLAY_GAME,
-  MENU_LABEL_ROW_HEIGHT,
-  MENU_PANEL_OFFSET_Y,
-  MENU_PANEL_WIDTH,
-  uiElementAnim,
-} from '@crimson/screens/menu.ts';
-import {
-  PanelMenuView,
-  PANEL_TIMELINE_START_MS,
-  PANEL_TIMELINE_END_MS,
-} from './base.ts';
+import { MENU_LABEL_ROW_PLAY_GAME, MENU_LABEL_ROW_HEIGHT, MENU_PANEL_OFFSET_Y, MENU_PANEL_WIDTH, uiElementAnim } from '@crimson/screens/menu.ts';
+import { PanelMenuView, PANEL_TIMELINE_START_MS, PANEL_TIMELINE_END_MS } from './base.ts';
 import { mouseInsideRectWithPadding } from './hit-test.ts';
 
 const KEY_ESCAPE = 27;

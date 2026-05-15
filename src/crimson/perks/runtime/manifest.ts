@@ -28,13 +28,7 @@ import { HOOKS as REFLEX_BOOSTED_HOOKS } from '@crimson/perks/impl/reflex-booste
 import { HOOKS as REGENERATION_HOOKS } from '@crimson/perks/impl/regeneration-effect.ts';
 import { HOOKS as THICK_SKINNED_HOOKS } from '@crimson/perks/impl/thick-skinned.ts';
 import type { PerkApplyHandler } from './apply-context.ts';
-import {
-  PerkHooks,
-  type PerksUpdateEffectsStep,
-  type PlayerDeathHook,
-  type PlayerPerkTickStep,
-  type WorldDtStep,
-} from './hook-types.ts';
+import { PerkHooks, type PerksUpdateEffectsStep, type PlayerDeathHook, type PlayerPerkTickStep, type WorldDtStep } from './hook-types.ts';
 import { updatePlayerBonusTimers } from './player-bonus-timers.ts';
 
 // Order is parity-critical for runtime dispatch.

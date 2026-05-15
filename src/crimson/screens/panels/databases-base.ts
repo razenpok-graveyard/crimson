@@ -16,29 +16,9 @@ import { buttonDraw, buttonUpdate, buttonWidth, UiButtonState, } from "@crimson/
 import { fxDetailEnabled } from "@grim/config.ts";
 import { requireRuntimeResources } from "@crimson/screens/assets.ts";
 import { hsLeftPanelPosX, hsRightPanelPosX, } from "@crimson/screens/high-scores-layout.ts";
-import {
-  MENU_PANEL_OFFSET_X,
-  MENU_PANEL_OFFSET_Y,
-  MENU_PANEL_WIDTH,
-  MENU_SCALE_SMALL_THRESHOLD,
-  MENU_SIGN_HEIGHT,
-  MENU_SIGN_OFFSET_X,
-  MENU_SIGN_OFFSET_Y,
-  MENU_SIGN_POS_X_PAD,
-  MENU_SIGN_POS_Y,
-  MENU_SIGN_POS_Y_SMALL,
-  MENU_SIGN_WIDTH,
-  drawMenuCursorHelper,
-  ensureMenuGround,
-  menuGroundCamera,
-  signLayoutScale,
-  uiElementAnim,
-} from "@crimson/screens/menu.ts";
+import { MENU_PANEL_OFFSET_X, MENU_PANEL_OFFSET_Y, MENU_PANEL_WIDTH, MENU_SCALE_SMALL_THRESHOLD, MENU_SIGN_HEIGHT, MENU_SIGN_OFFSET_X, MENU_SIGN_OFFSET_Y, MENU_SIGN_POS_X_PAD, MENU_SIGN_POS_Y, MENU_SIGN_POS_Y_SMALL, MENU_SIGN_WIDTH, drawMenuCursorHelper, ensureMenuGround, menuGroundCamera, signLayoutScale, uiElementAnim } from "@crimson/screens/menu.ts";
 import { drawScreenFade } from "@crimson/screens/transitions.ts";
-import {
-  PANEL_TIMELINE_END_MS,
-  PANEL_TIMELINE_START_MS,
-} from "./base.ts";
+import { PANEL_TIMELINE_END_MS, PANEL_TIMELINE_START_MS } from "./base.ts";
 
 // Shared panel layout (state_14/15/16 in the oracle): tall left panel + short right panel.
 export const LEFT_PANEL_POS_Y = 185.0;

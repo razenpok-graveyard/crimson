@@ -3,12 +3,7 @@
 import type { GameState, HighScoresRequest } from '@crimson/game/types.ts';
 import { GameMode } from '@crimson/game-modes.ts';
 import { QuestLevel } from '@crimson/quests/level.ts';
-import {
-  type HighScoreRecord,
-  highscoreDateChecksum,
-  readHighscoreTable,
-  scoresPathForMode,
-} from '@crimson/persistence/highscores.ts';
+import { type HighScoreRecord, highscoreDateChecksum, readHighscoreTable, scoresPathForMode } from '@crimson/persistence/highscores.ts';
 
 export function resolveRequest(state: GameState): HighScoresRequest {
   let request = state.pendingHighScores;

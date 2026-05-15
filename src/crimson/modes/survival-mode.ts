@@ -15,21 +15,13 @@ import { survivalCheckLevelUp } from '@crimson/gameplay.ts';
 import { perkSelectionPreparedChoices } from '@crimson/perks/selection.ts';
 import { advanceUnlockTerrain } from '@crimson/sim/bootstrap.ts';
 import { buildSurvivalSession } from '@crimson/sim/session-builders.ts';
-import {
-  DeterministicSession,
-  type DeterministicSessionTick,
-  SurvivalSpawnState,
-} from '@crimson/sim/sessions.ts';
+import { DeterministicSession, type DeterministicSessionTick, SurvivalSpawnState } from '@crimson/sim/sessions.ts';
 import { drawMenuCursor } from '@crimson/ui/cursor.ts';
 import { drawHudOverlay, HudRenderContext, hudFlagsForGameMode } from '@crimson/ui/hud.ts';
 import { PERK_MENU_TRANSITION_MS } from '@crimson/ui/perk-menu.ts';
 import { weaponAssignPlayer } from '@crimson/weapon-runtime/index.ts';
 import { WeaponId, WEAPON_BY_ID } from '@crimson/weapons.ts';
-import {
-  BaseGameplayMode,
-  type LanSession,
-  type LanStepAction,
-} from './base-gameplay-mode.ts';
+import { BaseGameplayMode, type LanSession, type LanStepAction } from './base-gameplay-mode.ts';
 import { buildHighscoreRecordForGameOver } from './components/highscore-record-builder.ts';
 import { PerkMenuController } from './components/perk-menu-controller.ts';
 import { PerkId } from '@crimson/perks/ids.ts';

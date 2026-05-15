@@ -15,28 +15,14 @@ import { perkSelectionPreparedChoices } from '@crimson/perks/selection.ts';
 import { advanceUnlockTerrain } from '@crimson/sim/bootstrap.ts';
 import { PlayerInput } from '@crimson/sim/input.ts';
 import { buildTutorialSession } from '@crimson/sim/session-builders.ts';
-import {
-  DeterministicSession,
-  type DeterministicSessionTick,
-} from '@crimson/sim/sessions.ts';
+import { DeterministicSession, type DeterministicSessionTick } from '@crimson/sim/sessions.ts';
 import { drawMenuCursor } from '@crimson/ui/cursor.ts';
 import { drawHudOverlay, HudRenderContext, hudFlagsForGameMode } from '@crimson/ui/hud.ts';
-import {
-  TUTORIAL_PANEL_POS,
-  tutorialPromptPanelRect,
-  drawTutorialOverlayPanels,
-} from '@crimson/ui/overlays/tutorial-run.ts';
-import {
-  UiButtonState,
-  buttonDraw,
-  buttonUpdate,
-  buttonWidth,
-} from '@crimson/ui/perk-menu.ts';
+import { TUTORIAL_PANEL_POS, tutorialPromptPanelRect, drawTutorialOverlayPanels } from '@crimson/ui/overlays/tutorial-run.ts';
+import { UiButtonState, buttonDraw, buttonUpdate, buttonWidth } from '@crimson/ui/perk-menu.ts';
 import { weaponAssignPlayer } from '@crimson/weapon-runtime/index.ts';
 import { WeaponId } from '@crimson/weapons.ts';
-import {
-  BaseGameplayMode,
-} from './base-gameplay-mode.ts';
+import { BaseGameplayMode } from './base-gameplay-mode.ts';
 import { PerkMenuController } from './components/perk-menu-controller.ts';
 
 const WORLD_SIZE = 1024.0;

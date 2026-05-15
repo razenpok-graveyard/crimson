@@ -4,15 +4,8 @@ import { drawSmallText } from '@grim/fonts/small.ts';
 import { Vec2 } from '@grim/geom.ts';
 import * as wgl from '@wgl';
 import { type GameState } from '@crimson/game/types.ts';
-import {
-  MENU_PANEL_WIDTH,
-  uiElementAnim,
-} from '@crimson/screens/menu.ts';
-import {
-  PANEL_TIMELINE_START_MS,
-  PANEL_TIMELINE_END_MS,
-  PanelMenuView,
-} from './base.ts';
+import { MENU_PANEL_WIDTH, uiElementAnim } from '@crimson/screens/menu.ts';
+import { PANEL_TIMELINE_START_MS, PANEL_TIMELINE_END_MS, PanelMenuView } from './base.ts';
 import { requireRuntimeResources } from '@crimson/screens/assets.ts';
 
 class ModsContentLayout {

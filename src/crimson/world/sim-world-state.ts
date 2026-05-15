@@ -6,10 +6,7 @@ import type { SpawnEnv } from '@crimson/creatures/spawn.ts';
 import { GameplayState } from '@crimson/gameplay.ts';
 import { PresentationStepCommands } from '@crimson/sim/presentation-step.ts';
 import { PlayerState } from '@crimson/sim/state-types.ts';
-import {
-  WorldEvents,
-  WorldState,
-} from '@crimson/sim/world-state.ts';
+import { WorldEvents, WorldState } from '@crimson/sim/world-state.ts';
 import { weaponAssignPlayer, initDefaultAltWeapon } from '@crimson/weapon-runtime/index.ts';
 import { WEAPON_TABLE, WeaponId } from '@crimson/weapons.ts';
 

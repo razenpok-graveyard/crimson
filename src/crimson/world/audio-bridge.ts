@@ -3,10 +3,7 @@
 import type { AudioState } from '@grim/audio.ts';
 import type { CrandLike } from '@grim/rand.ts';
 import { AudioRouter } from '@crimson/audio-router.ts';
-import {
-  type PresentationStepCommands,
-  applyPresentationPlan,
-} from '@crimson/sim/presentation-step.ts';
+import { type PresentationStepCommands, applyPresentationPlan } from '@crimson/sim/presentation-step.ts';
 
 function _zeroReflexBoost(): number {
   return 0.0;

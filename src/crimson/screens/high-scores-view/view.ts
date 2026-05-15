@@ -19,58 +19,9 @@ import { DropdownLayoutBase, menuWidescreenYShift } from '@crimson/ui/layout.ts'
 import { drawClassicMenuPanel } from '@crimson/ui/menu-panel.ts';
 import { UiButtonState, buttonUpdate, buttonWidth } from '@crimson/ui/perk-menu.ts';
 import { requireRuntimeResources } from '@crimson/screens/assets.ts';
-import {
-  HS_LEFT_PANEL_POS_Y,
-  HS_LEFT_PANEL_HEIGHT,
-  HS_RIGHT_PANEL_POS_Y,
-  HS_RIGHT_PANEL_HEIGHT,
-  HS_BACK_BUTTON_X,
-  HS_BACK_BUTTON_Y,
-  HS_BUTTON_STEP_Y,
-  HS_BUTTON_X,
-  HS_BUTTON_Y0,
-  HS_QUEST_ARROW_X,
-  HS_QUEST_ARROW_Y,
-  HS_RIGHT_CHECK_X,
-  HS_RIGHT_CHECK_Y,
-  HS_RIGHT_GAME_MODE_WIDGET_W,
-  HS_RIGHT_GAME_MODE_WIDGET_X,
-  HS_RIGHT_GAME_MODE_WIDGET_Y,
-  HS_RIGHT_PLAYER_COUNT_WIDGET_W,
-  HS_RIGHT_PLAYER_COUNT_WIDGET_X,
-  HS_RIGHT_PLAYER_COUNT_WIDGET_Y,
-  HS_RIGHT_SCORE_LIST_WIDGET_W,
-  HS_RIGHT_SCORE_LIST_WIDGET_X,
-  HS_RIGHT_SCORE_LIST_WIDGET_Y,
-  HS_RIGHT_SHOW_SCORES_WIDGET_W,
-  HS_RIGHT_SHOW_SCORES_WIDGET_X,
-  HS_RIGHT_SHOW_SCORES_WIDGET_Y,
-  hsLeftPanelPosX,
-  hsRightPanelPosX,
-  hsRightOptionsXShift,
-} from '@crimson/screens/high-scores-layout.ts';
-import {
-  MENU_PANEL_WIDTH,
-  MENU_PANEL_OFFSET_X,
-  MENU_PANEL_OFFSET_Y,
-  MENU_SCALE_SMALL_THRESHOLD,
-  MENU_SIGN_WIDTH,
-  MENU_SIGN_HEIGHT,
-  MENU_SIGN_OFFSET_X,
-  MENU_SIGN_OFFSET_Y,
-  MENU_SIGN_POS_X_PAD,
-  MENU_SIGN_POS_Y,
-  MENU_SIGN_POS_Y_SMALL,
-  ensureMenuGround,
-  menuGroundCamera,
-  signLayoutScale,
-  uiElementAnim,
-} from '@crimson/screens/menu.ts';
-import {
-  FADE_TO_GAME_ACTIONS,
-  PANEL_TIMELINE_START_MS,
-  PANEL_TIMELINE_END_MS,
-} from '@crimson/screens/panels/base.ts';
+import { HS_LEFT_PANEL_POS_Y, HS_LEFT_PANEL_HEIGHT, HS_RIGHT_PANEL_POS_Y, HS_RIGHT_PANEL_HEIGHT, HS_BACK_BUTTON_X, HS_BACK_BUTTON_Y, HS_BUTTON_STEP_Y, HS_BUTTON_X, HS_BUTTON_Y0, HS_QUEST_ARROW_X, HS_QUEST_ARROW_Y, HS_RIGHT_CHECK_X, HS_RIGHT_CHECK_Y, HS_RIGHT_GAME_MODE_WIDGET_W, HS_RIGHT_GAME_MODE_WIDGET_X, HS_RIGHT_GAME_MODE_WIDGET_Y, HS_RIGHT_PLAYER_COUNT_WIDGET_W, HS_RIGHT_PLAYER_COUNT_WIDGET_X, HS_RIGHT_PLAYER_COUNT_WIDGET_Y, HS_RIGHT_SCORE_LIST_WIDGET_W, HS_RIGHT_SCORE_LIST_WIDGET_X, HS_RIGHT_SCORE_LIST_WIDGET_Y, HS_RIGHT_SHOW_SCORES_WIDGET_W, HS_RIGHT_SHOW_SCORES_WIDGET_X, HS_RIGHT_SHOW_SCORES_WIDGET_Y, hsLeftPanelPosX, hsRightPanelPosX, hsRightOptionsXShift } from '@crimson/screens/high-scores-layout.ts';
+import { MENU_PANEL_WIDTH, MENU_PANEL_OFFSET_X, MENU_PANEL_OFFSET_Y, MENU_SCALE_SMALL_THRESHOLD, MENU_SIGN_WIDTH, MENU_SIGN_HEIGHT, MENU_SIGN_OFFSET_X, MENU_SIGN_OFFSET_Y, MENU_SIGN_POS_X_PAD, MENU_SIGN_POS_Y, MENU_SIGN_POS_Y_SMALL, ensureMenuGround, menuGroundCamera, signLayoutScale, uiElementAnim } from '@crimson/screens/menu.ts';
+import { FADE_TO_GAME_ACTIONS, PANEL_TIMELINE_START_MS, PANEL_TIMELINE_END_MS } from '@crimson/screens/panels/base.ts';
 import { mouseInsideRectWithPadding } from '@crimson/screens/panels/hit-test.ts';
 import { drawScreenFade } from '@crimson/screens/transitions.ts';
 import { drawMainPanel } from './main-panel.ts';

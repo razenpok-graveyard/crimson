@@ -11,24 +11,15 @@ import * as wgl from '@wgl';
 import { GameMode } from '@crimson/game-modes.ts';
 import { advanceUnlockTerrain } from '@crimson/sim/bootstrap.ts';
 import { PlayerInput } from '@crimson/sim/input.ts';
-import {
-  TypoCharCommand,
-  TypoBackspaceCommand,
-  TypoSubmitCommand,
-} from '@crimson/sim/input-providers.ts';
+import { TypoCharCommand, TypoBackspaceCommand, TypoSubmitCommand } from '@crimson/sim/input-providers.ts';
 import { buildTypoSession } from '@crimson/sim/session-builders.ts';
-import {
-  DeterministicSession,
-  type DeterministicSessionTick,
-} from '@crimson/sim/sessions.ts';
+import { DeterministicSession, type DeterministicSessionTick } from '@crimson/sim/sessions.ts';
 import { buildTypoPlayerInput } from '@crimson/typo/player.ts';
 import { typoShotCounts } from '@crimson/typo/state.ts';
 import { drawMenuCursor } from '@crimson/ui/cursor.ts';
 import { drawHudOverlay, HudRenderContext, hudFlagsForGameMode } from '@crimson/ui/hud.ts';
 import { drawTypingBox, drawTypoNameLabels } from '@crimson/ui/overlays/typo-run.ts';
-import {
-  BaseGameplayMode,
-} from './base-gameplay-mode.ts';
+import { BaseGameplayMode } from './base-gameplay-mode.ts';
 import { buildHighscoreRecordForGameOver } from './components/highscore-record-builder.ts';
 
 const WORLD_SIZE = 1024.0;

@@ -12,36 +12,7 @@ import { UI_SHADOW_OFFSET, drawUiQuadShadow } from '@crimson/ui/shadow.ts';
 import { type GameState } from '@crimson/game/types.ts';
 import { type PauseBackground } from '@crimson/pause-background.ts';
 import { requireRuntimeResources } from './assets.ts';
-import {
-  MENU_LABEL_WIDTH,
-  MENU_LABEL_HEIGHT,
-  MENU_LABEL_BASE_Y,
-  MENU_LABEL_ROW_HEIGHT,
-  MENU_LABEL_ROW_BACK,
-  MENU_LABEL_ROW_OPTIONS,
-  MENU_LABEL_ROW_QUIT,
-  MENU_LABEL_OFFSET_X,
-  MENU_LABEL_OFFSET_Y,
-  MENU_ITEM_OFFSET_X,
-  MENU_ITEM_OFFSET_Y,
-  MENU_LABEL_STEP,
-  MENU_SCALE_SMALL_THRESHOLD,
-  MENU_SIGN_WIDTH,
-  MENU_SIGN_HEIGHT,
-  MENU_SIGN_OFFSET_X,
-  MENU_SIGN_OFFSET_Y,
-  MENU_SIGN_POS_Y,
-  MENU_SIGN_POS_Y_SMALL,
-  MENU_SIGN_POS_X_PAD,
-  MenuEntry,
-  menuSlotEndMs,
-  menuSlotPosX,
-  menuSlotStartMs,
-  uiElementAnim,
-  labelAlpha,
-  signLayoutScale,
-  drawMenuCursorHelper,
-} from './menu.ts';
+import { MENU_LABEL_WIDTH, MENU_LABEL_HEIGHT, MENU_LABEL_BASE_Y, MENU_LABEL_ROW_HEIGHT, MENU_LABEL_ROW_BACK, MENU_LABEL_ROW_OPTIONS, MENU_LABEL_ROW_QUIT, MENU_LABEL_OFFSET_X, MENU_LABEL_OFFSET_Y, MENU_ITEM_OFFSET_X, MENU_ITEM_OFFSET_Y, MENU_LABEL_STEP, MENU_SCALE_SMALL_THRESHOLD, MENU_SIGN_WIDTH, MENU_SIGN_HEIGHT, MENU_SIGN_OFFSET_X, MENU_SIGN_OFFSET_Y, MENU_SIGN_POS_Y, MENU_SIGN_POS_Y_SMALL, MENU_SIGN_POS_X_PAD, MenuEntry, menuSlotEndMs, menuSlotPosX, menuSlotStartMs, uiElementAnim, labelAlpha, signLayoutScale, drawMenuCursorHelper } from './menu.ts';
 import { drawScreenFade } from './transitions.ts';
 
 export const PAUSE_MENU_TO_MAIN_MENU_FADE_MS = 500;

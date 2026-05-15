@@ -13,36 +13,12 @@ import { type GameState } from '@crimson/game/types.ts';
 import { GameMode } from '@crimson/game-modes.ts';
 import { drawClassicMenuPanel } from '@crimson/ui/menu-panel.ts';
 import { menuWidescreenYShift } from '@crimson/ui/layout.ts';
-import {
-  UiButtonState,
-  buttonDraw,
-  buttonUpdate,
-  buttonWidth,
-} from '@crimson/ui/perk-menu.ts';
+import { UiButtonState, buttonDraw, buttonUpdate, buttonWidth } from '@crimson/ui/perk-menu.ts';
 import { requireRuntimeResources } from '@crimson/screens/assets.ts';
 import { drawMenuCursorHelper, ensureMenuGround, menuGroundCamera } from '@crimson/screens/menu.ts';
-import {
-  PANEL_TIMELINE_START_MS,
-  PANEL_TIMELINE_END_MS,
-} from '@crimson/screens/panels/base.ts';
+import { PANEL_TIMELINE_START_MS, PANEL_TIMELINE_END_MS } from '@crimson/screens/panels/base.ts';
 import { drawScreenFade } from '@crimson/screens/transitions.ts';
-import {
-  END_NOTE_AFTER_BODY_Y_GAP,
-  END_NOTE_BODY_X_OFFSET,
-  END_NOTE_BODY_Y_GAP,
-  END_NOTE_BUTTON_STEP_Y,
-  END_NOTE_BUTTON_X_OFFSET,
-  END_NOTE_BUTTON_Y_OFFSET,
-  END_NOTE_HEADER_X_OFFSET,
-  END_NOTE_HEADER_Y_OFFSET,
-  END_NOTE_LINE_STEP_Y,
-  END_NOTE_PANEL_GEOM_X0,
-  END_NOTE_PANEL_GEOM_Y0,
-  END_NOTE_PANEL_H,
-  END_NOTE_PANEL_POS_X,
-  END_NOTE_PANEL_POS_Y,
-  END_NOTE_PANEL_W,
-} from './shared.ts';
+import { END_NOTE_AFTER_BODY_Y_GAP, END_NOTE_BODY_X_OFFSET, END_NOTE_BODY_Y_GAP, END_NOTE_BUTTON_STEP_Y, END_NOTE_BUTTON_X_OFFSET, END_NOTE_BUTTON_Y_OFFSET, END_NOTE_HEADER_X_OFFSET, END_NOTE_HEADER_Y_OFFSET, END_NOTE_LINE_STEP_Y, END_NOTE_PANEL_GEOM_X0, END_NOTE_PANEL_GEOM_Y0, END_NOTE_PANEL_H, END_NOTE_PANEL_POS_X, END_NOTE_PANEL_POS_Y, END_NOTE_PANEL_W } from './shared.ts';
 
 const KEY_ESCAPE = 27;
 const MOUSE_BUTTON_LEFT = 0;

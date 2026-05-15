@@ -15,15 +15,9 @@ import { applyTypoCommand } from '@crimson/typo/runtime.ts';
 import { prepareWeaponAvailability } from '@crimson/weapon-runtime/availability.ts';
 import { PlayerInput } from './input.ts';
 import { normalizeInputFrame } from './input-frame.ts';
-import type {
-  GameCommand,
-} from './input-providers.ts';
+import type { GameCommand } from './input-providers.ts';
 import { planWorldPresentationStep } from './presentation-step.ts';
-import {
-  DeterministicStepResult,
-  PresentationRngTrace,
-  timeScaleReflexBoostFactor,
-} from './step-pipeline.ts';
+import { DeterministicStepResult, PresentationRngTrace, timeScaleReflexBoostFactor } from './step-pipeline.ts';
 import { TerrainFxScratch } from './terrain-fx.ts';
 import { FrameTiming } from './timing.ts';
 import type { WorldState } from './world-state.ts';

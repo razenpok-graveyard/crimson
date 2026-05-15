@@ -7,12 +7,7 @@ import { Vec2 } from '@grim/geom.ts';
 import * as wgl from '@wgl';
 import { SfxId } from '@grim/sfx-map.ts';
 import { type GameState } from '@crimson/game/types.ts';
-import {
-  PerkId,
-  PERK_BY_ID,
-  perkDisplayName,
-  perkDisplayDescription,
-} from '@crimson/perks/ids.ts';
+import { PerkId, PERK_BY_ID, perkDisplayName, perkDisplayDescription } from '@crimson/perks/ids.ts';
 import { buildPerkAvailability } from '@crimson/perks/availability.ts';
 import { perksDbRightDetailXShift } from '@crimson/screens/high-scores-layout.ts';
 import { DatabaseBaseView } from './databases-base.ts';

@@ -13,36 +13,11 @@ import { type GameState } from '@crimson/game/types.ts';
 import { GameMode } from '@crimson/game-modes.ts';
 import { questByLevel } from '@crimson/quests/index.ts';
 import { drawClassicMenuPanel } from '@crimson/ui/menu-panel.ts';
-import {
-  UiButtonState,
-  buttonDraw,
-  buttonUpdate,
-  buttonWidth,
-} from '@crimson/ui/perk-menu.ts';
+import { UiButtonState, buttonDraw, buttonUpdate, buttonWidth } from '@crimson/ui/perk-menu.ts';
 import { requireRuntimeResources } from '@crimson/screens/assets.ts';
 import { drawMenuCursorHelper, ensureMenuGround, MenuView, menuGroundCamera } from '@crimson/screens/menu.ts';
 import { drawScreenFade } from '@crimson/screens/transitions.ts';
-import {
-  QUEST_FAILED_BANNER_H,
-  QUEST_FAILED_BANNER_W,
-  QUEST_FAILED_BANNER_X_OFFSET,
-  QUEST_FAILED_BANNER_Y_OFFSET,
-  QUEST_FAILED_BUTTON_STEP_Y,
-  QUEST_FAILED_BUTTON_X_OFFSET,
-  QUEST_FAILED_BUTTON_Y_OFFSET,
-  QUEST_FAILED_MESSAGE_X_OFFSET,
-  QUEST_FAILED_MESSAGE_Y_OFFSET,
-  QUEST_FAILED_PANEL_GEOM_X0,
-  QUEST_FAILED_PANEL_GEOM_Y0,
-  QUEST_FAILED_PANEL_H,
-  QUEST_FAILED_PANEL_POS_X,
-  QUEST_FAILED_PANEL_POS_Y,
-  QUEST_FAILED_PANEL_SLIDE_DURATION_MS,
-  QUEST_FAILED_PANEL_W,
-  QUEST_FAILED_SCORE_X_OFFSET,
-  QUEST_FAILED_SCORE_Y_OFFSET,
-  playerNameDefault,
-} from './shared.ts';
+import { QUEST_FAILED_BANNER_H, QUEST_FAILED_BANNER_W, QUEST_FAILED_BANNER_X_OFFSET, QUEST_FAILED_BANNER_Y_OFFSET, QUEST_FAILED_BUTTON_STEP_Y, QUEST_FAILED_BUTTON_X_OFFSET, QUEST_FAILED_BUTTON_Y_OFFSET, QUEST_FAILED_MESSAGE_X_OFFSET, QUEST_FAILED_MESSAGE_Y_OFFSET, QUEST_FAILED_PANEL_GEOM_X0, QUEST_FAILED_PANEL_GEOM_Y0, QUEST_FAILED_PANEL_H, QUEST_FAILED_PANEL_POS_X, QUEST_FAILED_PANEL_POS_Y, QUEST_FAILED_PANEL_SLIDE_DURATION_MS, QUEST_FAILED_PANEL_W, QUEST_FAILED_SCORE_X_OFFSET, QUEST_FAILED_SCORE_Y_OFFSET, playerNameDefault } from './shared.ts';
 import { type QuestRunOutcome } from '@crimson/modes/quest-mode.ts';
 import { HighScoreRecord } from '@crimson/persistence/highscores.ts';
 

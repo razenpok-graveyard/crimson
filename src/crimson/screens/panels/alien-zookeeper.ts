@@ -16,27 +16,9 @@ import { RngCallerStatic } from "@crimson/rng-caller-static.ts";
 import { drawClassicMenuPanel } from "@crimson/ui/menu-panel.ts";
 import { buttonDraw, buttonUpdate, buttonWidth, UiButtonState } from "@crimson/ui/perk-menu.ts";
 import { requireRuntimeResources } from "@crimson/screens/assets.ts";
-import {
-  MENU_PANEL_WIDTH,
-  MENU_SCALE_SMALL_THRESHOLD,
-  MENU_SIGN_HEIGHT,
-  MENU_SIGN_OFFSET_X,
-  MENU_SIGN_OFFSET_Y,
-  MENU_SIGN_POS_X_PAD,
-  MENU_SIGN_POS_Y,
-  MENU_SIGN_POS_Y_SMALL,
-  MENU_SIGN_WIDTH,
-  drawMenuCursorHelper,
-  ensureMenuGround,
-  menuGroundCamera,
-  signLayoutScale,
-  uiElementAnim,
-} from "@crimson/screens/menu.ts";
+import { MENU_PANEL_WIDTH, MENU_SCALE_SMALL_THRESHOLD, MENU_SIGN_HEIGHT, MENU_SIGN_OFFSET_X, MENU_SIGN_OFFSET_Y, MENU_SIGN_POS_X_PAD, MENU_SIGN_POS_Y, MENU_SIGN_POS_Y_SMALL, MENU_SIGN_WIDTH, drawMenuCursorHelper, ensureMenuGround, menuGroundCamera, signLayoutScale, uiElementAnim } from "@crimson/screens/menu.ts";
 import { drawScreenFade } from "@crimson/screens/transitions.ts";
-import {
-  PANEL_TIMELINE_END_MS,
-  PANEL_TIMELINE_START_MS,
-} from "./base.ts";
+import { PANEL_TIMELINE_END_MS, PANEL_TIMELINE_START_MS } from "./base.ts";
 
 const _BOARD_SIDE = 6;
 const _BOARD_CELLS = _BOARD_SIDE * _BOARD_SIDE;

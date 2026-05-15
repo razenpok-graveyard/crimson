@@ -3,12 +3,7 @@
 import type { Vec2 } from '@grim/geom.ts';
 import type { GameplayState, PlayerState } from '@crimson/sim/state-types.ts';
 import { PLAYER_PERK_TICK_STEPS } from './manifest.ts';
-import {
-  type OwnerRefForPlayerFn,
-  type OwnerRefForPlayerProjectilesFn,
-  PlayerPerkTickCtx,
-  type ProjectileSpawnFn,
-} from './player-tick-context.ts';
+import { type OwnerRefForPlayerFn, type OwnerRefForPlayerProjectilesFn, PlayerPerkTickCtx, type ProjectileSpawnFn } from './player-tick-context.ts';
 
 const _PLAYER_PERK_TICK_STEPS = PLAYER_PERK_TICK_STEPS;
 

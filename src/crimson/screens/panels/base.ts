@@ -13,35 +13,7 @@ import { UI_SHADOW_OFFSET, drawUiQuadShadow } from '@crimson/ui/shadow.ts';
 import { GameState } from '@crimson/game/types.ts';
 import { drawClassicMenuPanel } from '@crimson/ui/menu-panel.ts';
 import { requireRuntimeResources } from '@crimson/screens/assets.ts';
-import {
-  MENU_ITEM_OFFSET_X,
-  MENU_ITEM_OFFSET_Y,
-  MENU_LABEL_HEIGHT,
-  MENU_LABEL_OFFSET_X,
-  MENU_LABEL_OFFSET_Y,
-  MENU_LABEL_ROW_BACK,
-  MENU_LABEL_ROW_HEIGHT,
-  MENU_LABEL_WIDTH,
-  MENU_PANEL_HEIGHT,
-  MENU_PANEL_OFFSET_X,
-  MENU_PANEL_OFFSET_Y,
-  MENU_PANEL_WIDTH,
-  MENU_SCALE_SMALL_THRESHOLD,
-  MENU_SIGN_HEIGHT,
-  MENU_SIGN_OFFSET_X,
-  MENU_SIGN_OFFSET_Y,
-  MENU_SIGN_POS_X_PAD,
-  MENU_SIGN_POS_Y,
-  MENU_SIGN_POS_Y_SMALL,
-  MENU_SIGN_WIDTH,
-  MenuEntry,
-  drawMenuCursorHelper,
-  ensureMenuGround,
-  labelAlpha,
-  menuGroundCamera,
-  signLayoutScale,
-  uiElementAnim,
-} from '@crimson/screens/menu.ts';
+import { MENU_ITEM_OFFSET_X, MENU_ITEM_OFFSET_Y, MENU_LABEL_HEIGHT, MENU_LABEL_OFFSET_X, MENU_LABEL_OFFSET_Y, MENU_LABEL_ROW_BACK, MENU_LABEL_ROW_HEIGHT, MENU_LABEL_WIDTH, MENU_PANEL_HEIGHT, MENU_PANEL_OFFSET_X, MENU_PANEL_OFFSET_Y, MENU_PANEL_WIDTH, MENU_SCALE_SMALL_THRESHOLD, MENU_SIGN_HEIGHT, MENU_SIGN_OFFSET_X, MENU_SIGN_OFFSET_Y, MENU_SIGN_POS_X_PAD, MENU_SIGN_POS_Y, MENU_SIGN_POS_Y_SMALL, MENU_SIGN_WIDTH, MenuEntry, drawMenuCursorHelper, ensureMenuGround, labelAlpha, menuGroundCamera, signLayoutScale, uiElementAnim } from '@crimson/screens/menu.ts';
 import { drawScreenFade } from '@crimson/screens/transitions.ts';
 
 const PANEL_POS_X = -45.0;

@@ -16,21 +16,8 @@ import { Crand } from '@grim/rand.ts';
 import { SfxId } from '@grim/sfx-map.ts';
 import type { BonusId } from '@crimson/bonuses/ids.ts';
 import type { EffectPool, FxQueue, FxQueueRotated } from '@crimson/effects.ts';
-import {
-  awardExperience,
-  awardExperienceFromReward,
-  survivalRecordRecentDeath,
-} from '@crimson/gameplay.ts';
-import {
-  NATIVE_HALF_PI,
-  NATIVE_PI,
-  NATIVE_TAU,
-  NATIVE_TURN_RATE_SCALE,
-  f32,
-  f32Vec2,
-  headingAddPiF32,
-  headingToDirectionF32,
-} from '@crimson/math-parity.ts';
+import { awardExperience, awardExperienceFromReward, survivalRecordRecentDeath } from '@crimson/gameplay.ts';
+import { NATIVE_HALF_PI, NATIVE_PI, NATIVE_TAU, NATIVE_TURN_RATE_SCALE, f32, f32Vec2, headingAddPiF32, headingToDirectionF32 } from '@crimson/math-parity.ts';
 import { OwnerRef } from '@crimson/owner-ref.ts';
 import { PerkId } from '@crimson/perks/ids.ts';
 import { perkActive } from '@crimson/perks/helpers.ts';
@@ -44,27 +31,8 @@ import { applyFinalRevengeOnPlayerDeath } from '@crimson/perks/impl/final-reveng
 import { creatureAi7TickLinkTimer, creatureAiUpdateTarget } from './ai.ts';
 import { CreatureDamageType } from './damage-types.ts';
 import { creatureApplyDamageWithLethalFollowup } from './damage.ts';
-import {
-  CREATURE_LIFECYCLE_ALIVE,
-  CreatureLifecyclePhase,
-  classifyCreatureLifecycle,
-  creatureLifecycleIsAlive,
-} from './lifecycle.ts';
-import {
-  HAS_SPAWN_SLOT_FLAG,
-  RANDOM_HEADING_SENTINEL,
-  type SpawnEnv,
-  CreatureAiMode,
-  CreatureFlags,
-  CreatureInit,
-  CreatureTypeId,
-  type SpawnId,
-  SpawnSlotInit,
-  type SpawnPlan,
-  buildSpawnPlan,
-  resolveTint,
-  tickSpawnSlot,
-} from './spawn.ts';
+import { CREATURE_LIFECYCLE_ALIVE, CreatureLifecyclePhase, classifyCreatureLifecycle, creatureLifecycleIsAlive } from './lifecycle.ts';
+import { HAS_SPAWN_SLOT_FLAG, RANDOM_HEADING_SENTINEL, type SpawnEnv, CreatureAiMode, CreatureFlags, CreatureInit, CreatureTypeId, type SpawnId, SpawnSlotInit, type SpawnPlan, buildSpawnPlan, resolveTint, tickSpawnSlot } from './spawn.ts';
 
 export { CreatureFlags };
 

@@ -14,13 +14,7 @@ import type { PlayerInput } from '@crimson/sim/input.ts';
 import type { GameplayState, PlayerState } from '@crimson/sim/state-types.ts';
 import { WEAPON_TABLE, WeaponId, weaponEntryForProjectileTypeId } from '@crimson/weapons.ts';
 import { playerStartReload, weaponEntry } from './assign.ts';
-import type {
-  MaskCenteredJitter,
-  ModuloCenteredJitter,
-  ModuloSpeedScale,
-  NoJitter,
-  NoSpeedScale,
-} from './fire-recipes.ts';
+import type { MaskCenteredJitter, ModuloCenteredJitter, ModuloSpeedScale, NoJitter, NoSpeedScale } from './fire-recipes.ts';
 import { resolveFireRecipe } from './fire-recipes.ts';
 import { ownerRefForPlayer, ownerRefForPlayerProjectiles, travelBudgetForTypeId } from './spawn.ts';
 import type { CreatureState } from '@crimson/creatures/runtime.ts';

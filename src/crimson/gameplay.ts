@@ -26,18 +26,8 @@ import { PERK_COUNT_SIZE, type PlayerState } from './sim/state-types.ts';
 import { ftolMsI32 } from './sim/timing.ts';
 import { TutorialState, TutorialOverlayState } from './tutorial/state.ts';
 import { TypoState } from './typo/state.ts';
-import {
-  ownerRefForPlayer,
-  ownerRefForPlayerProjectiles,
-  projectileSpawn,
-  spawnProjectileRing,
-} from './weapon-runtime/spawn.ts';
-import {
-  playerStartReload,
-  playerSwapAltWeapon,
-  weaponAssignPlayer,
-  weaponEntry,
-} from './weapon-runtime/assign.ts';
+import { ownerRefForPlayer, ownerRefForPlayerProjectiles, projectileSpawn, spawnProjectileRing } from './weapon-runtime/spawn.ts';
+import { playerStartReload, playerSwapAltWeapon, weaponAssignPlayer, weaponEntry } from './weapon-runtime/assign.ts';
 import { fireWeapon, WeaponFireCtx } from './weapon-runtime/fire.ts';
 import { WEAPON_TABLE, WeaponId } from './weapons.ts';
 import type { CreatureState } from './creatures/runtime.ts';

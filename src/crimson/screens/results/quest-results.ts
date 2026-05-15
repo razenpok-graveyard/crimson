@@ -9,37 +9,15 @@ import { Crand, type CrandLike } from '@grim/rand.ts';
 import * as wgl from '@wgl';
 import { SfxId } from '@grim/sfx-map.ts';
 import { GameMode } from '@crimson/game-modes.ts';
-import {
-  type HighScoreRecord,
-  TABLE_MAX,
-  NAME_MAX_EDIT,
-  rankIndex,
-  readHighscoreTable,
-  scoresPathForMode,
-  upsertHighscoreRecord,
-} from '@crimson/persistence/highscores.ts';
+import { type HighScoreRecord, TABLE_MAX, NAME_MAX_EDIT, rankIndex, readHighscoreTable, scoresPathForMode, upsertHighscoreRecord } from '@crimson/persistence/highscores.ts';
 import { QuestLevel } from '@crimson/quests/level.ts';
-import {
-  type QuestFinalTime,
-  QuestResultsBreakdownAnim,
-  tickQuestResultsBreakdownAnim,
-} from '@crimson/quests/results.ts';
+import { type QuestFinalTime, QuestResultsBreakdownAnim, tickQuestResultsBreakdownAnim } from '@crimson/quests/results.ts';
 import { drawMenuCursor } from '@crimson/ui/cursor.ts';
 import { formatOrdinal, formatTimeMmSs } from '@crimson/ui/formatting.ts';
 import { menuWidescreenYShift, uiScale } from '@crimson/ui/layout.ts';
 import { drawClassicMenuPanel } from '@crimson/ui/menu-panel.ts';
-import {
-  UiButtonState,
-  buttonDraw,
-  buttonUpdate,
-  buttonWidth,
-  drawUiText,
-} from '@crimson/ui/perk-menu.ts';
-import {
-  flushTextInputEvents,
-  gameplayControlsHeld,
-  updateNameEntryText,
-} from '@crimson/ui/text-input.ts';
+import { UiButtonState, buttonDraw, buttonUpdate, buttonWidth, drawUiText } from '@crimson/ui/perk-menu.ts';
+import { flushTextInputEvents, gameplayControlsHeld, updateNameEntryText } from '@crimson/ui/text-input.ts';
 import { WEAPON_BY_ID, weaponDisplayName } from '@crimson/weapons.ts';
 
 // `quest_results_screen_update` base layout (Crimsonland classic UI panel).

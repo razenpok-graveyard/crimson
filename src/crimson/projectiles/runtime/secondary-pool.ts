@@ -12,23 +12,10 @@ import { EffectId } from '@crimson/effects-atlas.ts';
 import { f32 } from '@crimson/math-parity.ts';
 import { OwnerRef } from '@crimson/owner-ref.ts';
 import { RngCallerStatic } from '@crimson/rng-caller-static.ts';
-import {
-  SECONDARY_PROJECTILE_POOL_SIZE,
-  SecondaryProjectileTypeId,
-  SecondaryProjectile,
-} from '@crimson/projectiles/types.ts';
-import type {
-  CreatureDamageApplier,
-  SecondaryDetonationKillHandler,
-} from '@crimson/projectiles/types.ts';
-import {
-  withinNativeFindRadius,
-  creatureFindNearestForSecondary,
-  applyDamageToCreature,
-} from './collision.ts';
-import {
-  secondaryRuleForTypeId,
-} from './secondary-rules.ts';
+import { SECONDARY_PROJECTILE_POOL_SIZE, SecondaryProjectileTypeId, SecondaryProjectile } from '@crimson/projectiles/types.ts';
+import type { CreatureDamageApplier, SecondaryDetonationKillHandler } from '@crimson/projectiles/types.ts';
+import { withinNativeFindRadius, creatureFindNearestForSecondary, applyDamageToCreature } from './collision.ts';
+import { secondaryRuleForTypeId } from './secondary-rules.ts';
 import { CreatureSpatialHash } from './spatial-hash.ts';
 import type { CreatureState } from '@crimson/creatures/runtime.ts';
 import type { GameplayState } from '@crimson/gameplay.ts';

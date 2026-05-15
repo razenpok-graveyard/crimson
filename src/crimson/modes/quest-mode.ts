@@ -16,42 +16,20 @@ import { questByLevel } from '@crimson/quests/index.ts';
 import { QuestLevel } from '@crimson/quests/level.ts';
 import { buildQuestSpawnTable } from '@crimson/quests/runtime.ts';
 import { trackedQuestGamesCounterIndex } from '@crimson/quests/status.ts';
-import {
-  QuestContext,
-  type QuestDefinition,
-  type SpawnEntry,
-} from '@crimson/quests/types.ts';
+import { QuestContext, type QuestDefinition, type SpawnEntry } from '@crimson/quests/types.ts';
 import { RngCallerStatic } from '@crimson/rng-caller-static.ts';
 import { advanceExplicitTerrain, advanceUnlockTerrain } from '@crimson/sim/bootstrap.ts';
 import { PerkId } from '@crimson/perks/ids.ts';
 import type { TickResult } from '@crimson/sim/hooks.ts';
-import {
-  type PostApplyReaction,
-  buildPostApplyReaction,
-  applyPostApplyReaction,
-} from '@crimson/sim/presentation-reactions.ts';
-import {
-  buildQuestSession,
-} from '@crimson/sim/session-builders.ts';
-import {
-  DeterministicSession,
-  type DeterministicSessionTick,
-  QuestSpawnState,
-} from '@crimson/sim/sessions.ts';
+import { type PostApplyReaction, buildPostApplyReaction, applyPostApplyReaction } from '@crimson/sim/presentation-reactions.ts';
+import { buildQuestSession } from '@crimson/sim/session-builders.ts';
+import { DeterministicSession, type DeterministicSessionTick, QuestSpawnState } from '@crimson/sim/sessions.ts';
 import { drawMenuCursor } from '@crimson/ui/cursor.ts';
 import { drawHudOverlay, HudRenderContext, hudFlagsForGameMode } from '@crimson/ui/hud.ts';
-import {
-  drawQuestTitleTimerOverlay,
-  drawQuestCompleteBannerOverlay,
-} from '@crimson/ui/overlays/quest-run.ts';
+import { drawQuestTitleTimerOverlay, drawQuestCompleteBannerOverlay } from '@crimson/ui/overlays/quest-run.ts';
 import { weaponAssignPlayer, mostUsedWeaponIdForPlayer } from '@crimson/weapon-runtime/index.ts';
 import { WeaponId, WEAPON_BY_ID } from '@crimson/weapons.ts';
-import {
-  BaseGameplayMode,
-  type GameStatus,
-  type LanSession,
-  type LanStepAction,
-} from './base-gameplay-mode.ts';
+import { BaseGameplayMode, type GameStatus, type LanSession, type LanStepAction } from './base-gameplay-mode.ts';
 import { shotsFromState } from './components/highscore-record-builder.ts';
 import { PerkMenuController } from './components/perk-menu-controller.ts';
 import { PerkPromptState } from './components/perk-prompt-controller.ts';

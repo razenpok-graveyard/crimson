@@ -10,20 +10,7 @@ import type { HighScoresRequest } from '@crimson/game/types.ts';
 import { GameMode } from '@crimson/game-modes.ts';
 import { questByLevel } from '@crimson/quests/index.ts';
 import { buttonDraw, buttonWidth } from '@crimson/ui/perk-menu.ts';
-import {
-  HS_BACK_BUTTON_X,
-  HS_BACK_BUTTON_Y,
-  HS_BUTTON_STEP_Y,
-  HS_BUTTON_X,
-  HS_BUTTON_Y0,
-  HS_QUEST_ARROW_X,
-  HS_QUEST_ARROW_Y,
-  HS_SCORE_FRAME_H,
-  HS_SCORE_FRAME_W,
-  HS_SCORE_FRAME_X,
-  HS_SCORE_FRAME_Y,
-  HS_TITLE_UNDERLINE_Y,
-} from '@crimson/screens/high-scores-layout.ts';
+import { HS_BACK_BUTTON_X, HS_BACK_BUTTON_Y, HS_BUTTON_STEP_Y, HS_BUTTON_X, HS_BUTTON_Y0, HS_QUEST_ARROW_X, HS_QUEST_ARROW_Y, HS_SCORE_FRAME_H, HS_SCORE_FRAME_W, HS_SCORE_FRAME_X, HS_SCORE_FRAME_Y, HS_TITLE_UNDERLINE_Y } from '@crimson/screens/high-scores-layout.ts';
 import { modeLabel } from './shared.ts';
 import type { HighScoresView } from './view.ts';
 

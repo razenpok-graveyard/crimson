@@ -1,22 +1,7 @@
 // Port of crimson/projectiles/runtime/primary_rules.py
 
 import { Projectile, ProjectileTemplateId } from '@crimson/projectiles/types.ts';
-import {
-  lingerDefault,
-  lingerGaussGun,
-  lingerIonCannon,
-  lingerIonMinigun,
-  lingerIonRifle,
-  postHitIonCommon,
-  postHitIonRifle,
-  postHitPlagueSpreader,
-  postHitPlasmaCannon,
-  postHitPulseGun,
-  postHitShrinkifier,
-  preHitSplitter,
-  type ProjectileHitInfo,
-  type ProjectileUpdateCtx,
-} from './behaviors.ts';
+import { lingerDefault, lingerGaussGun, lingerIonCannon, lingerIonMinigun, lingerIonRifle, postHitIonCommon, postHitIonRifle, postHitPlagueSpreader, postHitPlasmaCannon, postHitPulseGun, postHitShrinkifier, preHitSplitter, type ProjectileHitInfo, type ProjectileUpdateCtx } from './behaviors.ts';
 
 export type LingerHandler = (ctx: ProjectileUpdateCtx, proj: Projectile) => void;
 export type PreHitHandler = (ctx: ProjectileUpdateCtx, proj: Projectile, hitIdx: number) => void;

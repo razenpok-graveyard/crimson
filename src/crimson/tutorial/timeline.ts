@@ -2,14 +2,7 @@
 
 import { Vec2 } from '@grim/geom.ts';
 import { BonusId } from '@crimson/bonuses/ids.ts';
-import {
-  SpawnId,
-  SpawnTemplateCall,
-  buildTutorialStage3FireSpawns,
-  buildTutorialStage4ClearSpawns,
-  buildTutorialStage5RepeatSpawns,
-  buildTutorialStage6PerksDoneSpawns,
-} from '@crimson/creatures/spawn.ts';
+import { SpawnId, SpawnTemplateCall, buildTutorialStage3FireSpawns, buildTutorialStage4ClearSpawns, buildTutorialStage5RepeatSpawns, buildTutorialStage6PerksDoneSpawns } from '@crimson/creatures/spawn.ts';
 import { TutorialState } from './state.ts';
 
 const _TUTORIAL_STAGE_TEXT: readonly string[] = [

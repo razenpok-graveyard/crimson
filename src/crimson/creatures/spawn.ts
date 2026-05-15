@@ -18,30 +18,10 @@ import { CrandLike } from '@grim/rand.ts';
 import { BonusId } from '@crimson/bonuses/ids.ts';
 import { f32 } from '@crimson/math-parity.ts';
 import { RngCallerStatic } from '@crimson/rng-caller-static.ts';
-import {
-  HAS_SPAWN_SLOT_FLAG,
-  RANDOM_HEADING_SENTINEL,
-  CreatureAiMode,
-  CreatureFlags,
-  CreatureTypeId,
-  SpawnId,
-  type Tint,
-  type TintRGBA,
-} from './spawn-ids.ts';
+import { HAS_SPAWN_SLOT_FLAG, RANDOM_HEADING_SENTINEL, CreatureAiMode, CreatureFlags, CreatureTypeId, SpawnId, type Tint, type TintRGBA } from './spawn-ids.ts';
 import { SPAWN_ID_TO_TEMPLATE, SPAWN_TEMPLATES, TYPE_ID_TO_NAME, type SpawnTemplate } from './spawn-templates.ts';
 
-export {
-  CreatureAiMode,
-  CreatureFlags,
-  CreatureTypeId,
-  HAS_SPAWN_SLOT_FLAG,
-  RANDOM_HEADING_SENTINEL,
-  SPAWN_ID_TO_TEMPLATE,
-  SPAWN_TEMPLATES,
-  SpawnId,
-  TYPE_ID_TO_NAME,
-  type SpawnTemplate,
-};
+export { CreatureAiMode, CreatureFlags, CreatureTypeId, HAS_SPAWN_SLOT_FLAG, RANDOM_HEADING_SENTINEL, SPAWN_ID_TO_TEMPLATE, SPAWN_TEMPLATES, SpawnId, TYPE_ID_TO_NAME, type SpawnTemplate };
 
 
 class ValueError extends Error {

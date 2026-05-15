@@ -5,11 +5,7 @@ import { SfxId } from '@grim/sfx-map.ts';
 import { CreatureTypeId, CreatureAiMode, CreatureFlags, CreatureInit } from '@crimson/creatures/spawn.ts';
 import { RngCallerStatic } from '@crimson/rng-caller-static.ts';
 import { PlayerInput } from '@crimson/sim/input.ts';
-import {
-  TypoCharCommand,
-  TypoBackspaceCommand,
-  TypoSubmitCommand,
-} from '@crimson/sim/input-providers.ts';
+import { TypoCharCommand, TypoBackspaceCommand, TypoSubmitCommand } from '@crimson/sim/input-providers.ts';
 import type { WorldState } from '@crimson/sim/world-state.ts';
 import { enforceTypoPlayerFrame } from './player.ts';
 import { tickTypoSpawns } from './spawns.ts';

@@ -9,31 +9,13 @@ import { Crand, type CrandLike } from '@grim/rand.ts';
 import * as wgl from '@wgl';
 import { SfxId } from '@grim/sfx-map.ts';
 import { GameMode } from '@crimson/game-modes.ts';
-import {
-  NAME_MAX_EDIT,
-  TABLE_MAX,
-  HighScoreRecord,
-  rankIndex,
-  readHighscoreTable,
-  scoresPathForConfig,
-  upsertHighscoreRecord,
-} from '@crimson/persistence/highscores.ts';
+import { NAME_MAX_EDIT, TABLE_MAX, HighScoreRecord, rankIndex, readHighscoreTable, scoresPathForConfig, upsertHighscoreRecord } from '@crimson/persistence/highscores.ts';
 import { drawMenuCursor } from '@crimson/ui/cursor.ts';
 import { formatOrdinal, formatTimeMmSs } from '@crimson/ui/formatting.ts';
 import { menuWidescreenYShift, uiScale } from '@crimson/ui/layout.ts';
 import { drawClassicMenuPanel } from '@crimson/ui/menu-panel.ts';
-import {
-  UiButtonState,
-  buttonDraw,
-  buttonUpdate,
-  buttonWidth,
-  drawUiText,
-} from '@crimson/ui/perk-menu.ts';
-import {
-  flushTextInputEvents,
-  gameplayControlsHeld,
-  updateNameEntryText,
-} from '@crimson/ui/text-input.ts';
+import { UiButtonState, buttonDraw, buttonUpdate, buttonWidth, drawUiText } from '@crimson/ui/perk-menu.ts';
+import { flushTextInputEvents, gameplayControlsHeld, updateNameEntryText } from '@crimson/ui/text-input.ts';
 import { WEAPON_BY_ID, weaponDisplayName } from '@crimson/weapons.ts';
 
 export { HighScoreRecord };

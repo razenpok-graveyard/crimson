@@ -8,11 +8,7 @@ import { type View } from '@grim/view.ts';
 import { InputState } from '@grim/input.ts';
 import { debugEnabled } from '@crimson/debug.ts';
 import { DemoView } from '@crimson/demo.ts';
-import {
-  type DemoTrialOverlayInfo,
-  demoTrialOverlayInfo,
-  tickDemoTrialTimers,
-} from '@crimson/demo-trial.ts';
+import { type DemoTrialOverlayInfo, demoTrialOverlayInfo, tickDemoTrialTimers } from '@crimson/demo-trial.ts';
 import { GameMode } from '@crimson/game-modes.ts';
 import { inputBeginFrame } from '@crimson/input-codes.ts';
 import { QuestMode } from '@crimson/modes/quest-mode.ts';
@@ -28,10 +24,7 @@ import { AlienZooKeeperView } from '@crimson/screens/panels/alien-zookeeper.ts';
 import { PanelMenuView } from '@crimson/screens/panels/base.ts';
 import { ControlsMenuView } from '@crimson/screens/panels/controls.ts';
 import { CreditsView } from '@crimson/screens/panels/credits.ts';
-import {
-  UnlockedPerksDatabaseView,
-  UnlockedWeaponsDatabaseView,
-} from '@crimson/screens/panels/databases.ts';
+import { UnlockedPerksDatabaseView, UnlockedWeaponsDatabaseView } from '@crimson/screens/panels/databases.ts';
 import { ModsMenuView } from '@crimson/screens/panels/mods.ts';
 import { OptionsMenuView } from '@crimson/screens/panels/options.ts';
 import { PlayGameMenuView } from '@crimson/screens/panels/play-game.ts';
