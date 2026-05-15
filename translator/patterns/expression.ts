@@ -665,7 +665,7 @@ export function translateExpression(
       if (/^__CRIMSON_STRING_\d+__$/.test(name)) {
         return name;
       }
-      return nameMap.get(name) ?? tsExportNameForPythonName(name);
+      return translateIdentifierName(name, nameMap);
     });
   return replaceTranslatedRaylibConstructors(translated)
     .replaceAll(/__CRIMSON_STRING_(\d+)__/g, (_match, index: string) => stringLiterals[Number(index)] ?? _match)
@@ -675,6 +675,18 @@ export function translateExpression(
     .replaceAll(/\.BLEND_ALPHA\b/g, '.ALPHA')
     .replaceAll(/\.BLEND_MULTIPLIED\b/g, '.MULTIPLY')
     .replaceAll(/\.BLEND_NONE\b/g, '.NONE');
+}
+
+function translateIdentifierName(name: string, nameMap: Map<string, string>): string {
+  if (!name.includes('.')) {
+    return nameMap.get(name) ?? tsExportNameForPythonName(name);
+  }
+  const parts = name.split('.');
+  const root = nameMap.get(parts[0]) ?? tsExportNameForPythonName(parts[0]);
+  return [
+    root,
+    ...parts.slice(1).map((part) => nameMap.get(part) ?? tsExportNameForPythonName(part)),
+  ].join('.');
 }
 
 export function translateMapKeyExpression(mapName: string, keyExpression: string): string {

@@ -522,6 +522,18 @@ export function parsePlainClass(
     if (!lines[nextIndex].startsWith('    ')) {
       break;
     }
+    if (trimmed === '@property') {
+      const propertyMethod = parsePlainClassMethod(lines, nextIndex + 1, fieldNameMap);
+      if (propertyMethod === null || propertyMethod.method.parameters.length > 0 || propertyMethod.method.optsParams.length > 0) {
+        return null;
+      }
+      methods.push({
+        ...propertyMethod.method,
+        name: `get ${propertyMethod.method.name}`,
+      });
+      nextIndex = propertyMethod.nextIndex;
+      continue;
+    }
     const method = parsePlainClassMethod(lines, nextIndex, fieldNameMap);
     if (method === null) {
       return null;
@@ -533,9 +545,9 @@ export function parsePlainClass(
   const mutableFields = new Set<string>();
   for (const method of methods) {
     for (const statement of method.statements) {
-      const assignment = /this\.([A-Za-z_][A-Za-z0-9_]*) = /.exec(statement);
+      const assignment = /this\.([A-Za-z_][A-Za-z0-9_]*) (?:\+=|-=|\*=|\/=|=)|this\.([A-Za-z_][A-Za-z0-9_]*)(?:\+\+|--)/.exec(statement);
       if (assignment !== null) {
-        mutableFields.add(assignment[1]);
+        mutableFields.add(assignment[1] ?? assignment[2]);
       }
     }
   }
@@ -562,6 +574,9 @@ export function parsePlainClass(
 function inferPlainClassFieldType(valueText: string, fieldTypes: ReadonlyMap<string, string>): string | null {
   if (/^Path\([A-Za-z_][A-Za-z0-9_]*\)$/.test(valueText)) {
     return 'string';
+  }
+  if (/^-?\d+(?:\.\d+)?(?:\s*[+\-*/]\s*(?:-?\d+(?:\.\d+)?|(?:int|float)\(.+\)|[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?))*$/.test(valueText.trim())) {
+    return 'number';
   }
   const directParameterType = fieldTypes.get(tsExportNameForPythonName(valueText));
   if (directParameterType !== undefined) {
@@ -600,6 +615,13 @@ function parsePlainClassMethod(
   ));
   const reassignedNames = reassignedLocalNames(lines, header.nextIndex);
   let nextIndex = header.nextIndex;
+  const docstring = parseIndentedDocstring(lines, nextIndex, '        ');
+  if (docstring !== null) {
+    for (const line of docstring.value.split('\n')) {
+      statements.push(line === '' ? '//' : `// ${line}`);
+    }
+    nextIndex = docstring.nextIndex;
+  }
   while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, '        ')) {
     if (lines[nextIndex].trim() === '') {
       statements.push('');
