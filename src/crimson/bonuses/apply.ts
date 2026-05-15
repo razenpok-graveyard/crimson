@@ -1,26 +1,26 @@
 // Port of crimson/bonuses/apply.py
 
 import type { Vec2 } from '@grim/geom.ts';
-import { PerkId } from '@crimson/perks/ids.ts';
+import { PerkId } from '@crimson/perks/index.ts';
 import { perkCountGet } from '@crimson/perks/helpers.ts';
 import type { GameplayState, PlayerState } from '@crimson/sim/state-types.ts';
-import type { BonusApplyHandler } from './apply-context.ts';
-import { BonusApplyCtx } from './apply-context.ts';
-import { applyDoubleExperience } from './double-experience.ts';
-import { applyEnergizer } from './energizer.ts';
-import { applyFireBullets } from './fire-bullets.ts';
-import { applyFireblast } from './fireblast.ts';
-import { applyFreeze } from './freeze.ts';
-import { BONUS_BY_ID, BonusId } from './ids.ts';
-import { applyMedikit } from './medikit.ts';
-import { applyNuke } from './nuke.ts';
-import { applyPoints } from './points.ts';
-import { applyReflexBoost } from './reflex-boost.ts';
-import { applyShield } from './shield.ts';
-import { applyShockChain } from './shock-chain.ts';
-import { applySpeed } from './speed.ts';
-import { applyWeapon } from './weapon.ts';
-import { applyWeaponPowerUp } from './weapon-power-up.ts';
+import type { BonusApplyHandler } from '@crimson/bonuses/apply-context.ts';
+import { BonusApplyCtx } from '@crimson/bonuses/apply-context.ts';
+import { applyDoubleExperience } from '@crimson/bonuses/double-experience.ts';
+import { applyEnergizer } from '@crimson/bonuses/energizer.ts';
+import { applyFireBullets } from '@crimson/bonuses/fire-bullets.ts';
+import { applyFireblast } from '@crimson/bonuses/fireblast.ts';
+import { applyFreeze } from '@crimson/bonuses/freeze.ts';
+import { BONUS_BY_ID, BonusId } from '@crimson/bonuses/ids.ts';
+import { applyMedikit } from '@crimson/bonuses/medikit.ts';
+import { applyNuke } from '@crimson/bonuses/nuke.ts';
+import { applyPoints } from '@crimson/bonuses/points.ts';
+import { applyReflexBoost } from '@crimson/bonuses/reflex-boost.ts';
+import { applyShield } from '@crimson/bonuses/shield.ts';
+import { applyShockChain } from '@crimson/bonuses/shock-chain.ts';
+import { applySpeed } from '@crimson/bonuses/speed.ts';
+import { applyWeapon } from '@crimson/bonuses/weapon.ts';
+import { applyWeaponPowerUp } from '@crimson/bonuses/weapon-power-up.ts';
 import type { CreatureState } from '@crimson/creatures/runtime.ts';
 
 const _BONUS_APPLY_HANDLERS: Map<BonusId, BonusApplyHandler> = new Map([
@@ -40,57 +40,30 @@ const _BONUS_APPLY_HANDLERS: Map<BonusId, BonusApplyHandler> = new Map([
   [BonusId.NUKE, applyNuke],
 ]);
 
-// Apply a bonus to player + global timers (subset of `bonus_apply`).
-export function bonusApply(
-  state: GameplayState,
-  player: PlayerState,
-  bonusId: BonusId,
-  opts: {
-    amount?: number | null;
-    origin: Vec2;
-    creatures: readonly CreatureState[];
-    players: PlayerState[];
-    detailPreset?: number;
-    deferFreezeCorpseFx?: boolean;
-    freezeCorpseIndices?: Set<number> | null;
-  },
-): void {
+export function bonusApply(state: GameplayState, player: PlayerState, bonusId: BonusId, opts: { amount?: number | null; origin: Vec2; creatures: readonly CreatureState[]; players: PlayerState[]; detailPreset?: number; deferFreezeCorpseFx?: boolean; freezeCorpseIndices?: Set<number> | null }): void {
+  // Apply a bonus to player + global timers (subset of `bonus_apply`).
+
+  let amount = opts.amount ?? null;
   const origin = opts.origin;
   const creatures = opts.creatures;
   const players = opts.players;
-  let amount = opts.amount ?? null;
   const detailPreset = opts.detailPreset ?? 5;
   const deferFreezeCorpseFx = opts.deferFreezeCorpseFx ?? false;
   const freezeCorpseIndices = opts.freezeCorpseIndices ?? null;
-
-  const meta = BONUS_BY_ID.get(bonusId);
-  if (meta === undefined) {
+  const meta = BONUS_BY_ID.get(bonusId) ?? null;
+  if (meta === null) {
     return;
   }
   if (amount === null) {
-    amount = int(meta.nativeAmount ?? 0);
+    amount = int(meta.nativeAmount || 0);
   }
 
   const economistMultiplier = perkCountGet(player, PerkId.BONUS_ECONOMIST) !== 0 ? 1.5 : 1.0;
   const iconId = meta.iconId !== null ? int(meta.iconId) : -1;
   const label = meta.name;
-  const ctx = new BonusApplyCtx({
-    state,
-    player,
-    bonusId,
-    amount: int(amount),
-    originPos: origin,
-    creatures,
-    players,
-    detailPreset: int(detailPreset),
-    economistMultiplier,
-    label,
-    iconId: int(iconId),
-    deferFreezeCorpseFx,
-    freezeCorpseIndices,
-  });
-  const handler = _BONUS_APPLY_HANDLERS.get(bonusId);
-  if (handler !== undefined) {
+  const ctx = new BonusApplyCtx({ state: state, player: player, bonusId: bonusId, amount: int(amount), originPos: origin, creatures: creatures, players: players, detailPreset: int(detailPreset), economistMultiplier: economistMultiplier, label: label, iconId: int(iconId), deferFreezeCorpseFx: deferFreezeCorpseFx, freezeCorpseIndices: freezeCorpseIndices });
+  const handler = _BONUS_APPLY_HANDLERS.get(bonusId) ?? null;
+  if (handler !== null) {
     handler(ctx);
   }
 

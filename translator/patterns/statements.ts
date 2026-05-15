@@ -1572,14 +1572,23 @@ export function parseTopLevelAssignment(
   const value = annotatedAssignment?.[3] ?? plainAssignment?.[2] ?? '';
   const annotatedType = annotatedAssignment?.[2] ?? null;
   const publicUppercaseName = !pythonName.startsWith('_') && /^[A-Z0-9_]+$/.test(pythonName);
+  const dictKeyType = /^dict\[([^,\]]+), .+\]$/.exec(annotatedType?.trim() ?? '')?.[1] ?? null;
+  const privateUppercaseName = (
+    pythonName.startsWith('_')
+    && /^[A-Z0-9_]+$/.test(pythonName.replace(/^_+/, ''))
+    && (
+      /^frozenset\[/.test(annotatedType?.trim() ?? '')
+      || (dictKeyType !== null && mapKeyTypeHasStableIdentity(dictKeyType))
+    )
+  );
   const name = annotatedType === null
     ? pythonName.startsWith('_') ? tsExportNameForPythonName(pythonName) : tsPublicNameForPythonName(pythonName)
-    : publicUppercaseName ? tsPublicNameForPythonName(pythonName) : tsMutableNameForPythonName(pythonName);
+    : publicUppercaseName ? tsPublicNameForPythonName(pythonName) : privateUppercaseName ? tsExportNameForPythonName(pythonName) : tsMutableNameForPythonName(pythonName);
   const typeExpression = annotatedType === null ? undefined : tsTopLevelAssignmentTypeExpression(annotatedType);
   const baseAssignment = {
     pythonName,
     name,
-    declaration: annotatedType === null || publicUppercaseName ? 'const' as const : 'let' as const,
+    declaration: annotatedType === null || publicUppercaseName || privateUppercaseName ? 'const' as const : 'let' as const,
     exported: !pythonName.startsWith('_'),
     typeExpression,
     trailingComment: parsedLine.comment ?? undefined,
@@ -1792,6 +1801,10 @@ export function parseTopLevelAssignment(
   }
 
   return null;
+}
+
+function mapKeyTypeHasStableIdentity(pythonType: string): boolean {
+  return ['str', 'int', 'float', 'bool'].includes(pythonType.trim()) || /Id$/.test(pythonType.trim());
 }
 
 function splitInlineComment(line: string): { code: string; comment: string | null } {
