@@ -65,7 +65,11 @@ function tsPathForPython(relativePath: string): string {
 }
 
 async function translateFile(job: TranslationJob): Promise<string> {
-  const trimmed = job.python.trim();
+  const trimmed = stripIgnorablePythonLines(job.python).trim();
+  if (trimmed === '') {
+    return renderEmptyModule(job.relativePath);
+  }
+
   const docstring = parseModuleDocstring(trimmed);
   if (docstring !== null && trimmed === docstring.raw) {
     return renderModuleDocOnly(job.relativePath, docstring.value);
@@ -74,6 +78,17 @@ async function translateFile(job: TranslationJob): Promise<string> {
   throw new Error(
     `translator not implemented for ${job.relativePath} -> ${path.relative(repoRoot, job.targetPath)}`,
   );
+}
+
+function stripIgnorablePythonLines(python: string): string {
+  return python
+    .split(/\r?\n/)
+    .filter((line) => line.trim() !== 'from __future__ import annotations')
+    .join('\n');
+}
+
+function renderEmptyModule(relativePath: string): string {
+  return `// Port of ${relativePath}\n`;
 }
 
 function parseModuleDocstring(trimmedPython: string): { raw: string; value: string } | null {
