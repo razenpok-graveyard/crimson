@@ -3729,6 +3729,31 @@ function translateExpression(
   if (trimmed === '()') {
     return '[]';
   }
+
+  for (const sequenceConstructor of ['list', 'tuple']) {
+    const sequenceCall = parseCallPrefix(trimmed, sequenceConstructor);
+    if (sequenceCall !== null && sequenceCall.rest === '') {
+      const argsText = sequenceCall.argsText.trim();
+      return argsText === ''
+        ? '[]'
+        : `Array.from(${translateExpression(argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
+  }
+
+  const rangeCall = parseCallPrefix(trimmed, 'range');
+  if (rangeCall !== null && rangeCall.rest === '') {
+    const args = splitTopLevelComma(rangeCall.argsText);
+    if (args.length === 1) {
+      const stop = translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      return `Array.from({ length: Math.max(0, ${stop}) }, (_, i) => i)`;
+    }
+    if (args.length === 2) {
+      const start = translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const stop = translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      return `Array.from({ length: Math.max(0, ${stop} - ${start}) }, (_, i) => ${start} + i)`;
+    }
+  }
+
   const fStringLiteral = /^f(["'])([\s\S]*)\1$/.exec(trimmed);
   if (fStringLiteral !== null) {
     return `\`${tsFStringTemplateContent(fStringLiteral[2], nameMap, arrayNames, validatedTypeAliases)}\``;
