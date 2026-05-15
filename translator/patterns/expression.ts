@@ -98,6 +98,9 @@ export function translatePositionalCallExpression(
 ): string {
   const callee = translateCallCalleeExpression(pythonCallee, nameMap, arrayNames, validatedTypeAliases);
   const args = positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases));
+  if (pythonCallee.endsWith('.extend') && args.length === 1) {
+    return `${callee}(...${args[0]})`;
+  }
   const reorderedArgs = callee === 'rl.rlSetBlendFactorsSeparate' && args.length === 6
     ? [args[0], args[1], args[4], args[2], args[3], args[5]]
     : args;
@@ -122,7 +125,8 @@ function translateCallCalleeExpression(
   validatedTypeAliases: ReadonlySet<string>,
 ): string {
   return translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases)
-    .replace(/\.append$/, '.push');
+    .replace(/\.append$/, '.push')
+    .replace(/\.extend$/, '.push');
 }
 
 function translateBoundMethodReference(
@@ -152,6 +156,9 @@ export function vectorNameMarker(name: string): string {
 export function translatedExpressionLooksVector(tsExpression: string): boolean {
   const trimmed = tsExpression.trim();
   if (/^(?:Vec2\.|new Vec2\b)/.test(trimmed) && !/\.(?:length|toHeading)\(\)$/.test(trimmed)) {
+    return true;
+  }
+  if (/\.(?:aim|pos|vel)$/.test(trimmed)) {
     return true;
   }
   return finalVectorMethodCall(trimmed);
@@ -497,6 +504,14 @@ export function translateExpression(
   ) {
     return `${translateExpression(vectorAdditive.parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames)}.add(${translateExpression(vectorAdditive.parts[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
+  if (
+    vectorAdditive !== null
+    && vectorAdditive.parts.length === 2
+    && vectorAdditive.operators[0] === '-'
+    && (expressionIsKnownVector(vectorAdditive.parts[0], nameMap, arrayNames) || expressionIsKnownVector(vectorAdditive.parts[1], nameMap, arrayNames))
+  ) {
+    return `${translateExpression(vectorAdditive.parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames)}.sub(${translateExpression(vectorAdditive.parts[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
 
   const vectorScale = splitTopLevelMultiplicative(trimmed);
   if (vectorScale !== null && expressionIsKnownVector(vectorScale.left, nameMap, arrayNames)) {
@@ -767,6 +782,7 @@ export function translateExpression(
     .replaceAll(/\b(?:float|str|bool)\(([^()]*)\)/g, '$1')
     .replaceAll(/\blen\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, '$1.length')
     .replaceAll(/\.append\(/g, '.push(')
+    .replaceAll(/\.extend\(/g, '.push(...')
     .replaceAll(/\.strip\(\)/g, '.trim()')
     .replaceAll(/\.lower\(\)/g, '.toLowerCase()')
     .replaceAll(/\bmath\.pi\b/g, 'Math.PI')
@@ -1223,6 +1239,9 @@ function expressionIsKnownVector(
 ): boolean {
   const trimmed = stripBalancedOuterParens(pythonExpression);
   if (trimmed.startsWith('Vec2.')) {
+    return true;
+  }
+  if (/\.(?:aim|pos|vel)$/.test(trimmed)) {
     return true;
   }
   const identifier = /^[A-Za-z_][A-Za-z0-9_]*$/.exec(trimmed);

@@ -9,34 +9,21 @@ import type { GameplayState, PlayerState } from '@crimson/sim/state-types.ts';
 import { perkActive } from '@crimson/perks/helpers.ts';
 import { PerkId } from '@crimson/perks/ids.ts';
 import { PerkHooks } from '@crimson/perks/runtime/hook-types.ts';
-import type { CreaturePool, CreatureDeath } from '@crimson/creatures/runtime.ts';
+import type { CreatureDeath, CreaturePool } from '@crimson/creatures/runtime.ts';
 import { creatureApplyDamageWithLethalFollowup } from '@crimson/creatures/damage.ts';
 
-export function applyFinalRevengeOnPlayerDeath(opts: {
-  state: GameplayState;
-  creatures: CreaturePool;
-  players: PlayerState[];
-  player: PlayerState;
-  dt: number;
-  worldSize: number;
-  detailPreset: number;
-  fxQueue: FxQueue | null;
-  deaths: CreatureDeath[];
-}): void {
+export function applyFinalRevengeOnPlayerDeath(opts: { state: GameplayState; creatures: CreaturePool; players: PlayerState[]; player: PlayerState; dt: number; worldSize: number; detailPreset: number; fxQueue: FxQueue | null; deaths: CreatureDeath[] }): void {
   // Apply Final Revenge perk behavior when a player dies.
 
-  const {
-    state,
-    creatures,
-    players,
-    player,
-    dt,
-    worldSize,
-    detailPreset,
-    fxQueue,
-    deaths
-  } = opts;
-
+  const state = opts.state;
+  const creatures = opts.creatures;
+  const players = opts.players;
+  const player = opts.player;
+  const dt = opts.dt;
+  const worldSize = opts.worldSize;
+  const detailPreset = opts.detailPreset;
+  const fxQueue = opts.fxQueue;
+  const deaths = opts.deaths;
   if (!perkActive(player, PerkId.FINAL_REVENGE)) {
     return;
   }
@@ -51,8 +38,7 @@ export function applyFinalRevengeOnPlayerDeath(opts: {
 
   const prevGuard = state.bonusSpawnGuard;
   state.bonusSpawnGuard = true;
-  for (let creatureIdx = 0; creatureIdx < creatures.entries.length; creatureIdx++) {
-    const creature = creatures.entries[creatureIdx];
+  for (const [creatureIdx, creature] of creatures.entries.entries()) {
     if (!creature.active) {
       continue;
     }
@@ -71,36 +57,7 @@ export function applyFinalRevengeOnPlayerDeath(opts: {
     const deathCreatureIdx = int(creatureIdx);
     creatureApplyDamageWithLethalFollowup(
       creature,
-      {
-        damageAmount: damage,
-        damageType: CreatureDamageType.EXPLOSION,
-        impulse: new Vec2(),
-        owner: OwnerRef.fromPlayer(int(player.index)),
-        dt,
-        players,
-        rng: state.rng,
-        preserveBugs: state.preserveBugs,
-        effects: state.effects,
-        detailPreset: int(detailPreset),
-        onLethal: (deathSfx: SfxId[]) => {
-          deaths.push(
-            creatures.handleDeath(
-              deathCreatureIdx,
-              {
-                state,
-                players,
-                rng: state.rng,
-                dt,
-                detailPreset: int(detailPreset),
-                worldWidth: worldSize,
-                worldHeight: worldSize,
-                fxQueue,
-              },
-            ),
-          );
-          state.sfxQueue.push(...deathSfx);
-        },
-      },
+      { damageAmount: damage, damageType: CreatureDamageType.EXPLOSION, impulse: new Vec2(), owner: OwnerRef.fromPlayer(int(player.index)), dt: dt, players: players, rng: state.rng, preserveBugs: state.preserveBugs, effects: state.effects, detailPreset: int(detailPreset), onLethal: (deathSfx) => { deaths.push(creatures.handleDeath(int(deathCreatureIdx), { state: state, players: players, rng: state.rng, dt: dt, detailPreset: int(detailPreset), worldWidth: worldSize, worldHeight: worldSize, fxQueue: fxQueue })); state.sfxQueue.push(...deathSfx); } },
     );
   }
 

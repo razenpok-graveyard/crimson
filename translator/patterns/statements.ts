@@ -1142,6 +1142,25 @@ export function translateStraightLineStatement(
       }
 
       const arg = trimmed.replace(/,$/, '');
+      const lambdaKeyword = /^([A-Za-z_][A-Za-z0-9_]*)=lambda (.+): \($/.exec(arg);
+      if (lambdaKeyword !== null) {
+        const lambdaExpression = parseMultilineLambdaTupleExpression(
+          lines,
+          nextIndex + 1,
+          lambdaKeyword[2],
+          nameMap,
+          arrayNames,
+          validatedTypeAliases,
+          mapNames,
+        );
+        if (lambdaExpression === null) {
+          return null;
+        }
+        keywordParts.push(`${tsExportNameForPythonName(lambdaKeyword[1])}: ${lambdaExpression.expression}`);
+        nextIndex = lambdaExpression.nextIndex;
+        sawKeyword = true;
+        continue;
+      }
       if (arg === '{') {
         const dictLiteral = collectMultilineDictLiteral(lines, nextIndex + 1);
         if (dictLiteral === null) {
@@ -1271,6 +1290,82 @@ function collectMultilineDictLiteral(
   return null;
 }
 
+function parseMultilineLambdaTupleExpression(
+  lines: string[],
+  startIndex: number,
+  paramsText: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): { expression: string; nextIndex: number } | null {
+  const lambdaNameMap = new Map(nameMap);
+  const params: string[] = [];
+  for (const paramText of splitTopLevelComma(paramsText)) {
+    const defaulted = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(paramText);
+    if (defaulted !== null) {
+      const tsName = tsExportNameForPythonName(defaulted[1]);
+      const defaultValue = translateExpression(defaulted[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      if (defaultValue === tsName) {
+        lambdaNameMap.set(defaulted[1], tsName);
+      } else {
+        const paramName = `${tsName}Param`;
+        params.push(`${paramName} = ${defaultValue}`);
+        lambdaNameMap.set(defaulted[1], paramName);
+      }
+      continue;
+    }
+    const plain = /^([A-Za-z_][A-Za-z0-9_]*)$/.exec(paramText);
+    if (plain === null) {
+      return null;
+    }
+    const tsName = tsExportNameForPythonName(plain[1]);
+    params.push(tsName);
+    lambdaNameMap.set(plain[1], tsName);
+  }
+
+  const statements: string[] = [];
+  let nextIndex = startIndex;
+  while (nextIndex < lines.length) {
+    const trimmed = lines[nextIndex].trim();
+    if (trimmed === '),') {
+      return {
+        expression: `(${params.join(', ')}) => { ${statements.join(' ')} }`,
+        nextIndex: nextIndex + 1,
+      };
+    }
+    if (trimmed === '') {
+      nextIndex += 1;
+      continue;
+    }
+    const multilineCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(trimmed);
+    if (multilineCall !== null) {
+      const callExpression = parseMultilineCallExpression(
+        lines,
+        nextIndex + 1,
+        multilineCall[1],
+        lambdaNameMap,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+      );
+      if (callExpression === null) {
+        return null;
+      }
+      statements.push(`${callExpression.expression};`);
+      nextIndex = callExpression.nextIndex;
+      continue;
+    }
+    const expressionItem = /^(.+),$/.exec(trimmed);
+    if (expressionItem === null) {
+      return null;
+    }
+    statements.push(`${translateExpression(expressionItem[1], lambdaNameMap, arrayNames, validatedTypeAliases, mapNames)};`);
+    nextIndex += 1;
+  }
+  return null;
+}
+
 function parseMultilineCallExpression(
   lines: string[],
   startIndex: number,
@@ -1369,6 +1464,25 @@ function parseMultilineCallParts(
     }
 
     const arg = trimmed.replace(/,$/, '');
+    const lambdaKeyword = /^([A-Za-z_][A-Za-z0-9_]*)=lambda (.+): \($/.exec(arg);
+    if (lambdaKeyword !== null) {
+      const lambdaExpression = parseMultilineLambdaTupleExpression(
+        lines,
+        nextIndex + 1,
+        lambdaKeyword[2],
+        nameMap,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+      );
+      if (lambdaExpression === null) {
+        return null;
+      }
+      keywordParts.push(`${tsExportNameForPythonName(lambdaKeyword[1])}: ${lambdaExpression.expression}`);
+      nextIndex = lambdaExpression.nextIndex;
+      sawKeyword = true;
+      continue;
+    }
     if (arg === '{') {
       const dictLiteral = collectMultilineDictLiteral(lines, nextIndex + 1);
       if (dictLiteral === null) {
