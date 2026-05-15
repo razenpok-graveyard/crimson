@@ -30,6 +30,13 @@ export interface EnumDefinition {
   name: string;
   docstring: string | null;
   members: EnumMember[];
+  valueFunction?: EnumValueFunction;
+}
+
+export interface EnumValueFunction {
+  name: string;
+  parameterName: string;
+  fallbackMember: string;
 }
 
 export interface ConstantDefinition {

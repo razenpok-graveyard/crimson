@@ -273,6 +273,7 @@ export function parseIntEnumModule(trimmedPython: string): EnumDefinition | null
 
   let docstring: string | null = null;
   const members: { name: string; value: string }[] = [];
+  let valueFunction: EnumDefinition['valueFunction'] | undefined;
   while (index < lines.length) {
     const line = lines[index];
     const trimmed = line.trim();
@@ -308,10 +309,60 @@ export function parseIntEnumModule(trimmedPython: string): EnumDefinition | null
       continue;
     }
 
+    if (trimmed.startsWith('def ')) {
+      const parsedValueFunction = parseIntEnumValueFunction(lines, index, header[1]);
+      if (parsedValueFunction === null) {
+        return null;
+      }
+      valueFunction = parsedValueFunction.valueFunction;
+      index = parsedValueFunction.nextIndex;
+      continue;
+    }
+
     return null;
   }
 
-  return members.length > 0 ? { name: header[1], docstring, members } : null;
+  return members.length > 0 ? { name: header[1], docstring, members, valueFunction } : null;
+}
+
+function parseIntEnumValueFunction(
+  lines: string[],
+  index: number,
+  enumName: string,
+): { valueFunction: NonNullable<EnumDefinition['valueFunction']>; nextIndex: number } | null {
+  const header = /^def ([A-Za-z_][A-Za-z0-9_]*)\($/.exec(lines[index] ?? '');
+  if (header === null) {
+    return null;
+  }
+
+  const parameter = /^    ([A-Za-z_][A-Za-z0-9_]*): int,$/.exec(lines[index + 1] ?? '');
+  if (parameter === null || lines[index + 2] !== `) -> ${enumName}:`) {
+    return null;
+  }
+
+  if ((lines[index + 3] ?? '').trim() !== 'try:') {
+    return null;
+  }
+  const returnConverted = new RegExp(`^        return ${enumName}\\(int\\(${parameter[1]}\\)\\)$`).exec(lines[index + 4] ?? '');
+  if (returnConverted === null) {
+    return null;
+  }
+  if ((lines[index + 5] ?? '').trim() !== 'except (TypeError, ValueError):') {
+    return null;
+  }
+  const fallbackReturn = new RegExp(`^        return ${enumName}\\.([A-Z][A-Z0-9_]*)$`).exec(lines[index + 6] ?? '');
+  if (fallbackReturn === null) {
+    return null;
+  }
+
+  return {
+    valueFunction: {
+      name: tsExportNameForPythonName(header[1]),
+      parameterName: tsExportNameForPythonName(parameter[1]),
+      fallbackMember: fallbackReturn[1],
+    },
+    nextIndex: index + 7,
+  };
 }
 
 export function parseTypeAliases(trimmedPython: string): TypeAlias[] | null {

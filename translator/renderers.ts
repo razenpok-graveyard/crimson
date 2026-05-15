@@ -84,6 +84,27 @@ export function renderIntEnumModule(relativePath: string, enumDefinition: EnumDe
     lines.push(`  ${member.name} = ${member.value},`);
   }
   lines.push('}');
+  if (enumDefinition.valueFunction !== undefined) {
+    const fn = enumDefinition.valueFunction;
+    const fallback = fn.fallbackMember;
+    const caseMembers = [
+      ...enumDefinition.members.filter((member) => member.name !== fallback),
+      ...enumDefinition.members.filter((member) => member.name === fallback),
+    ];
+    lines.push('');
+    lines.push(`export function ${fn.name}(`);
+    lines.push(`  ${fn.parameterName}: number,`);
+    lines.push(`): ${enumDefinition.name} {`);
+    lines.push(`  switch (int(${fn.parameterName})) {`);
+    for (const member of caseMembers) {
+      lines.push(`    case ${enumDefinition.name}.${member.name}:`);
+      lines.push(`      return ${enumDefinition.name}.${member.name};`);
+    }
+    lines.push('    default:');
+    lines.push(`      return ${enumDefinition.name}.${fallback};`);
+    lines.push('  }');
+    lines.push('}');
+  }
   lines.push('');
   return lines.join('\n');
 }
