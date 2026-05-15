@@ -37,6 +37,7 @@ import {
   parseIndentedDocstring,
   parseOneLineAllNames,
   parseTypeCheckingImports,
+  parseTypeCheckingTypeAliasFallback,
   splitTopLevelComma,
   stripTypeOnlyStatementSyntax,
 } from './common.js';
@@ -120,6 +121,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
     if (trimmed === 'if TYPE_CHECKING:') {
+      const typeCheckingAlias = parseTypeCheckingTypeAliasFallback(lines, index, relativePath);
+      if (typeCheckingAlias !== null) {
+        imports.push(...typeCheckingAlias.imports);
+        typeAliases.push(...typeCheckingAlias.typeAliases);
+        index = typeCheckingAlias.nextIndex;
+        continue;
+      }
       const typeCheckingImports = parseTypeCheckingImports(lines, index, relativePath);
       if (typeCheckingImports === null) {
         return null;
@@ -252,6 +260,23 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     if ((lines[index] ?? '').trim().startsWith('__all__ = ')) {
       break;
+    }
+
+    const typeCheckingAlias = parseTypeCheckingTypeAliasFallback(lines, index, relativePath);
+    if (typeCheckingAlias !== null) {
+      imports.push(...typeCheckingAlias.imports);
+      typeAliases.push(...typeCheckingAlias.typeAliases);
+      index = typeCheckingAlias.nextIndex;
+      continue;
+    }
+    if ((lines[index] ?? '').trim() === 'if TYPE_CHECKING:') {
+      const typeCheckingImports = parseTypeCheckingImports(lines, index, relativePath);
+      if (typeCheckingImports === null) {
+        return null;
+      }
+      imports.push(...typeCheckingImports.imports);
+      index = typeCheckingImports.nextIndex;
+      continue;
     }
 
     const interleavedAssignment = parseTopLevelAssignment(lines, index);
@@ -408,6 +433,23 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       }
       allNames.push(...allAssignment.names);
       index = allAssignment.nextIndex;
+      continue;
+    }
+
+    const typeCheckingAlias = parseTypeCheckingTypeAliasFallback(lines, index, relativePath);
+    if (typeCheckingAlias !== null) {
+      imports.push(...typeCheckingAlias.imports);
+      typeAliases.push(...typeCheckingAlias.typeAliases);
+      index = typeCheckingAlias.nextIndex;
+      continue;
+    }
+    if (trimmed === 'if TYPE_CHECKING:') {
+      const typeCheckingImports = parseTypeCheckingImports(lines, index, relativePath);
+      if (typeCheckingImports === null) {
+        return null;
+      }
+      imports.push(...typeCheckingImports.imports);
+      index = typeCheckingImports.nextIndex;
       continue;
     }
 

@@ -17,9 +17,11 @@ import {
   inferPythonExpressionType,
   isCollectionsAbcTypeImport,
   isIndentedBlockLine,
+  isTypingOnlyImport,
   isTypeAliasExpression,
   parseIndentedFunctionHeader,
   parseTypeCheckingImports,
+  parseTypeCheckingTypeAliasFallback,
   splitTopLevelComma,
   stripTypeOnlyStatementSyntax,
 } from './common.js';
@@ -54,18 +56,18 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       index += 1;
       continue;
     }
-    if (
-      isCollectionsAbcTypeImport(trimmed)
-      || trimmed === 'from pathlib import Path'
-      || trimmed === 'from typing import Protocol'
-      || trimmed === 'from typing import TYPE_CHECKING'
-      || trimmed === 'from typing import TYPE_CHECKING, Protocol'
-      || trimmed === 'from typing import cast'
-    ) {
+    if (isCollectionsAbcTypeImport(trimmed) || isTypingOnlyImport(trimmed) || trimmed === 'from pathlib import Path') {
       index += 1;
       continue;
     }
     if (trimmed === 'if TYPE_CHECKING:') {
+      const typeCheckingAlias = parseTypeCheckingTypeAliasFallback(lines, index, relativePath);
+      if (typeCheckingAlias !== null) {
+        imports.push(...typeCheckingAlias.imports);
+        typeAliases.push(...typeCheckingAlias.typeAliases);
+        index = typeCheckingAlias.nextIndex;
+        continue;
+      }
       const typeCheckingImports = parseTypeCheckingImports(lines, index, relativePath);
       if (typeCheckingImports === null) {
         return null;
@@ -110,6 +112,22 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
         }
       }
       index += 1;
+      continue;
+    }
+    if (trimmed === 'if TYPE_CHECKING:') {
+      const typeCheckingAlias = parseTypeCheckingTypeAliasFallback(lines, index, relativePath);
+      if (typeCheckingAlias !== null) {
+        imports.push(...typeCheckingAlias.imports);
+        typeAliases.push(...typeCheckingAlias.typeAliases);
+        index = typeCheckingAlias.nextIndex;
+        continue;
+      }
+      const typeCheckingImports = parseTypeCheckingImports(lines, index, relativePath);
+      if (typeCheckingImports === null) {
+        return null;
+      }
+      imports.push(...typeCheckingImports.imports);
+      index = typeCheckingImports.nextIndex;
       continue;
     }
 
@@ -907,9 +925,9 @@ function markStructTypeOnlyImports(
 
   for (let index = 0; index < imports.length; index += 1) {
     const importDefinition = imports[index];
-    const valueNames = importDefinition.names.filter((name) => identifierPattern(name).test(valueText));
+    const valueNames = importDefinition.names.filter((name) => identifierPattern(importedBindingName(name)).test(valueText));
     const typeOnlyNames = importDefinition.names.filter((name) => (
-      !identifierPattern(name).test(valueText) && identifierPattern(name).test(typeText)
+      !identifierPattern(importedBindingName(name)).test(valueText) && identifierPattern(importedBindingName(name)).test(typeText)
     ));
     if (valueNames.length + typeOnlyNames.length === 0) {
       imports.splice(index, 1);
@@ -934,4 +952,8 @@ function markStructTypeOnlyImports(
     );
     index += 1;
   }
+}
+
+function importedBindingName(importName: string): string {
+  return /^.+ as ([A-Za-z_$][A-Za-z0-9_$]*)$/.exec(importName)?.[1] ?? importName;
 }

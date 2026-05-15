@@ -1,4 +1,4 @@
-import type { ImportDefinition } from '../model.js';
+import type { ImportDefinition, TypeAlias } from '../model.js';
 import { tsExportNameForPythonName } from '../naming.js';
 import { tsImportPathForPythonImport } from '../paths.js';
 
@@ -54,17 +54,155 @@ export function parseTypeCheckingImports(
     if (!line.startsWith('    ')) {
       break;
     }
-    const fromImport = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(line.trim());
+    const fromImport = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import (.+)$/.exec(line.trim());
     if (fromImport === null) {
+      return null;
+    }
+    const names = parseImportNames(fromImport[2]);
+    if (names === null) {
       return null;
     }
     imports.push({
       modulePath: tsImportPathForPythonImport(fromImport[1], relativePath),
-      names: fromImport[2].split(', ').map(tsExportNameForPythonName),
+      names,
     });
     nextIndex += 1;
   }
   return { imports, nextIndex };
+}
+
+export function parseTypeCheckingTypeAliasFallback(
+  lines: string[],
+  index: number,
+  relativePath: string,
+): { imports: ImportDefinition[]; typeAliases: TypeAlias[]; nextIndex: number } | null {
+  if ((lines[index] ?? '').trim() !== 'if TYPE_CHECKING:') {
+    return null;
+  }
+
+  const importedBindings = new Map<string, { modulePath: string; importedName: string }>();
+  const importedRecords: Array<{ modulePath: string; imported: string; binding: string }> = [];
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length) {
+    const line = lines[nextIndex];
+    if (line.trim() === '') {
+      nextIndex += 1;
+      continue;
+    }
+    if (!line.startsWith('    ')) {
+      break;
+    }
+    const fromImport = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import (.+)$/.exec(line.trim());
+    if (fromImport === null) {
+      return null;
+    }
+    const modulePath = tsImportPathForPythonImport(fromImport[1], relativePath);
+    const names = parsePythonImportNames(fromImport[2]);
+    if (names === null) {
+      return null;
+    }
+    for (const name of names) {
+      importedBindings.set(name.binding, {
+        modulePath,
+        importedName: tsExportNameForPythonName(name.imported),
+      });
+      importedRecords.push({ modulePath, imported: name.imported, binding: name.binding });
+    }
+    nextIndex += 1;
+  }
+
+  while (nextIndex < lines.length && lines[nextIndex].trim() === '') {
+    nextIndex += 1;
+  }
+  if ((lines[nextIndex] ?? '').trim() !== 'else:') {
+    return null;
+  }
+
+  const importsByPath = new Map<string, string[]>();
+  const fallbackBindings = new Set<string>();
+  const typeAliases: TypeAlias[] = [];
+  nextIndex += 1;
+  while (nextIndex < lines.length) {
+    const line = lines[nextIndex];
+    if (line.trim() === '') {
+      nextIndex += 1;
+      continue;
+    }
+    if (!line.startsWith('    ')) {
+      break;
+    }
+    const fallbackAlias = /^    ([A-Za-z_][A-Za-z0-9_]*): TypeAlias = object$/.exec(line);
+    if (fallbackAlias === null) {
+      return null;
+    }
+    const imported = importedBindings.get(fallbackAlias[1]);
+    if (imported === undefined) {
+      return null;
+    }
+    fallbackBindings.add(fallbackAlias[1]);
+    const aliasName = tsExportNameForPythonName(fallbackAlias[1]);
+    const importAlias = `${aliasName}Type`;
+    addImportName(importsByPath, imported.modulePath, `${imported.importedName} as ${importAlias}`);
+    typeAliases.push({
+      name: aliasName,
+      typeExpression: importAlias,
+    });
+    nextIndex += 1;
+  }
+
+  if (typeAliases.length === 0) {
+    return null;
+  }
+
+  for (const record of importedRecords) {
+    if (fallbackBindings.has(record.binding)) {
+      continue;
+    }
+    addImportName(importsByPath, record.modulePath, parseImportNames(`${record.imported}${record.imported === record.binding ? '' : ` as ${record.binding}`}`)?.[0] ?? '');
+  }
+
+  return {
+    imports: [...importsByPath.entries()].map(([modulePath, names]) => ({ modulePath, names })),
+    typeAliases,
+    nextIndex,
+  };
+}
+
+function addImportName(importsByPath: Map<string, string[]>, modulePath: string, name: string): void {
+  if (name === '') {
+    return;
+  }
+  const names = importsByPath.get(modulePath) ?? [];
+  names.push(name);
+  importsByPath.set(modulePath, names);
+}
+
+function parseImportNames(importsText: string): string[] | null {
+  const names = parsePythonImportNames(importsText);
+  if (names === null) {
+    return null;
+  }
+  return names.map((name) => (
+    tsExportNameForPythonName(name.imported) === tsExportNameForPythonName(name.binding)
+      ? tsExportNameForPythonName(name.imported)
+      : `${tsExportNameForPythonName(name.imported)} as ${tsExportNameForPythonName(name.binding)}`
+  ));
+}
+
+function parsePythonImportNames(importsText: string): Array<{ imported: string; binding: string }> | null {
+  const names: Array<{ imported: string; binding: string }> = [];
+  for (const part of importsText.split(', ')) {
+    const aliasedName = /^([A-Za-z_][A-Za-z0-9_]*) as ([A-Za-z_][A-Za-z0-9_]*)$/.exec(part);
+    if (aliasedName !== null) {
+      names.push({ imported: aliasedName[1], binding: aliasedName[2] });
+      continue;
+    }
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(part)) {
+      return null;
+    }
+    names.push({ imported: part, binding: part });
+  }
+  return names;
 }
 export function parseIndentedFunctionHeader(
   lines: string[],

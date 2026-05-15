@@ -5,6 +5,8 @@ import type { BonusId } from '@crimson/bonuses/ids.ts';
 import { WeaponId } from '@crimson/weapons.ts';
 import type { GameplayState as GameplayStateType } from '@crimson/gameplay.ts';
 
+export type GameplayState = GameplayStateType;
+
 export const PERK_COUNT_SIZE = 0x80;
 
 export class WeaponSlot {
@@ -38,48 +40,40 @@ export class WeaponSlot {
 export class PlayerState {
   index: number;
   pos: Vec2;
-  health = 100.0;
-  size = 48.0;
-
-  speedMultiplier = 2.0;
-  moveSpeed = 0.0;
-  movePhase = 0.0;
-  heading = 0.0;
-  turnSpeed = 1.0;
-  deathTimer = 16.0;
-  lowHealthTimer = 100.0;
-
-  aim = new Vec2();
-  aimHeading = 0.0;
-  aimDir = new Vec2(1.0, 0.0);
-  evilEyesTargetCreature = -1;
-  autoTarget = -1;
-
-  bonusAimHoverIndex = -1;
-  bonusAimHoverTimerMs = 0.0;
-
+  health: number;
+  size: number;
+  speedMultiplier: number;
+  moveSpeed: number;
+  movePhase: number;
+  heading: number;
+  turnSpeed: number;
+  deathTimer: number;
+  lowHealthTimer: number;
+  aim: Vec2;
+  aimHeading: number;
+  aimDir: Vec2;
+  evilEyesTargetCreature: number;
+  autoTarget: number;
+  bonusAimHoverIndex: number;
+  bonusAimHoverTimerMs: number;
   weapon: WeaponSlot;
-  altWeapon: WeaponSlot | null = null;
-
-  shotSeq = 0;
-  weaponResetLatch = 0;
-  auxTimer = 0.0;
-  spreadHeat = 0.01;
-  muzzleFlashAlpha = 0.0;
-
-  experience = 0;
-  level = 1;
-
+  altWeapon: WeaponSlot | null;
+  shotSeq: number;
+  weaponResetLatch: number;
+  auxTimer: number;
+  spreadHeat: number;
+  muzzleFlashAlpha: number;
+  experience: number;
+  level: number;
   perkCounts: number[];
-  plaguebearerActive = false;
-  hotTemperedTimer = 0.0;
-  manBombTimer = 0.0;
-  livingFortressTimer = 0.0;
-  fireCoughTimer = 0.0;
-
-  speedBonusTimer = 0.0;
-  shieldTimer = 0.0;
-  fireBulletsTimer = 0.0;
+  plaguebearerActive: boolean;
+  hotTemperedTimer: number;
+  manBombTimer: number;
+  livingFortressTimer: number;
+  fireCoughTimer: number;
+  speedBonusTimer: number;
+  shieldTimer: number;
+  fireBulletsTimer: number;
 
   constructor(opts: {
     index: number;
@@ -121,40 +115,40 @@ export class PlayerState {
   }) {
     this.index = opts.index;
     this.pos = opts.pos;
-    this.health = opts.health ?? this.health;
-    this.size = opts.size ?? this.size;
-    this.speedMultiplier = opts.speedMultiplier ?? this.speedMultiplier;
-    this.moveSpeed = opts.moveSpeed ?? this.moveSpeed;
-    this.movePhase = opts.movePhase ?? this.movePhase;
-    this.heading = opts.heading ?? this.heading;
-    this.turnSpeed = opts.turnSpeed ?? this.turnSpeed;
-    this.deathTimer = opts.deathTimer ?? this.deathTimer;
-    this.lowHealthTimer = opts.lowHealthTimer ?? this.lowHealthTimer;
-    this.aim = opts.aim ?? this.aim;
-    this.aimHeading = opts.aimHeading ?? this.aimHeading;
-    this.aimDir = opts.aimDir ?? this.aimDir;
-    this.evilEyesTargetCreature = opts.evilEyesTargetCreature ?? this.evilEyesTargetCreature;
-    this.autoTarget = opts.autoTarget ?? this.autoTarget;
-    this.bonusAimHoverIndex = opts.bonusAimHoverIndex ?? this.bonusAimHoverIndex;
-    this.bonusAimHoverTimerMs = opts.bonusAimHoverTimerMs ?? this.bonusAimHoverTimerMs;
+    this.health = opts.health ?? 100.0;
+    this.size = opts.size ?? 48.0;
+    this.speedMultiplier = opts.speedMultiplier ?? 2.0;
+    this.moveSpeed = opts.moveSpeed ?? 0.0;
+    this.movePhase = opts.movePhase ?? 0.0;
+    this.heading = opts.heading ?? 0.0;
+    this.turnSpeed = opts.turnSpeed ?? 1.0;
+    this.deathTimer = opts.deathTimer ?? 16.0;
+    this.lowHealthTimer = opts.lowHealthTimer ?? 100.0;
+    this.aim = opts.aim ?? new Vec2();
+    this.aimHeading = opts.aimHeading ?? 0.0;
+    this.aimDir = opts.aimDir ?? new Vec2(1.0, 0.0);
+    this.evilEyesTargetCreature = opts.evilEyesTargetCreature ?? -1;
+    this.autoTarget = opts.autoTarget ?? -1;
+    this.bonusAimHoverIndex = opts.bonusAimHoverIndex ?? -1;
+    this.bonusAimHoverTimerMs = opts.bonusAimHoverTimerMs ?? 0.0;
     this.weapon = opts.weapon ?? new WeaponSlot({ weaponId: WeaponId.PISTOL });
-    this.altWeapon = opts.altWeapon ?? this.altWeapon;
-    this.shotSeq = opts.shotSeq ?? this.shotSeq;
-    this.weaponResetLatch = opts.weaponResetLatch ?? this.weaponResetLatch;
-    this.auxTimer = opts.auxTimer ?? this.auxTimer;
-    this.spreadHeat = opts.spreadHeat ?? this.spreadHeat;
-    this.muzzleFlashAlpha = opts.muzzleFlashAlpha ?? this.muzzleFlashAlpha;
-    this.experience = opts.experience ?? this.experience;
-    this.level = opts.level ?? this.level;
-    this.perkCounts = opts.perkCounts ?? new Array(PERK_COUNT_SIZE).fill(0);
-    this.plaguebearerActive = opts.plaguebearerActive ?? this.plaguebearerActive;
-    this.hotTemperedTimer = opts.hotTemperedTimer ?? this.hotTemperedTimer;
-    this.manBombTimer = opts.manBombTimer ?? this.manBombTimer;
-    this.livingFortressTimer = opts.livingFortressTimer ?? this.livingFortressTimer;
-    this.fireCoughTimer = opts.fireCoughTimer ?? this.fireCoughTimer;
-    this.speedBonusTimer = opts.speedBonusTimer ?? this.speedBonusTimer;
-    this.shieldTimer = opts.shieldTimer ?? this.shieldTimer;
-    this.fireBulletsTimer = opts.fireBulletsTimer ?? this.fireBulletsTimer;
+    this.altWeapon = opts.altWeapon ?? null;
+    this.shotSeq = opts.shotSeq ?? 0;
+    this.weaponResetLatch = opts.weaponResetLatch ?? 0;
+    this.auxTimer = opts.auxTimer ?? 0.0;
+    this.spreadHeat = opts.spreadHeat ?? 0.01;
+    this.muzzleFlashAlpha = opts.muzzleFlashAlpha ?? 0.0;
+    this.experience = opts.experience ?? 0;
+    this.level = opts.level ?? 1;
+    this.perkCounts = opts.perkCounts ?? Array.from({ length: PERK_COUNT_SIZE }, () => 0);
+    this.plaguebearerActive = opts.plaguebearerActive ?? false;
+    this.hotTemperedTimer = opts.hotTemperedTimer ?? 0.0;
+    this.manBombTimer = opts.manBombTimer ?? 0.0;
+    this.livingFortressTimer = opts.livingFortressTimer ?? 0.0;
+    this.fireCoughTimer = opts.fireCoughTimer ?? 0.0;
+    this.speedBonusTimer = opts.speedBonusTimer ?? 0.0;
+    this.shieldTimer = opts.shieldTimer ?? 0.0;
+    this.fireBulletsTimer = opts.fireBulletsTimer ?? 0.0;
   }
 }
 
@@ -164,12 +158,15 @@ export class BonusPickupEvent {
   readonly amount: number;
   readonly pos: Vec2;
 
-  constructor(opts: { playerIndex: number; bonusId: BonusId; amount: number; pos: Vec2 }) {
+  constructor(opts: {
+    playerIndex: number;
+    bonusId: BonusId;
+    amount: number;
+    pos: Vec2;
+  }) {
     this.playerIndex = opts.playerIndex;
     this.bonusId = opts.bonusId;
     this.amount = opts.amount;
     this.pos = opts.pos;
   }
 }
-
-export type GameplayState = GameplayStateType;
