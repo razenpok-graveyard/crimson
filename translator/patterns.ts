@@ -1250,9 +1250,9 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       return null;
     }
     leadingAssignments.push(assignment.assignment);
-    const annotatedAssignment = /^([A-Za-z_][A-Za-z0-9_]*): /.exec(lines[index] ?? '');
-    if (annotatedAssignment !== null) {
-      moduleNameMap.set(annotatedAssignment[1], assignment.assignment.name);
+    const namedAssignment = /^([A-Za-z_][A-Za-z0-9_]*)(?:: .+?)? = /.exec(lines[index] ?? '');
+    if (namedAssignment !== null) {
+      moduleNameMap.set(namedAssignment[1], assignment.assignment.name);
     }
     index = assignment.nextIndex;
   }
@@ -1387,7 +1387,11 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       fn.exported = exportedNames.has(fn.name);
     }
     for (const assignment of [...leadingAssignments, ...assignments]) {
-      assignment.exported = exportedNames.has(assignment.name);
+      const publicName = tsPublicNameForPythonName(assignment.pythonName ?? assignment.name);
+      assignment.exported = exportedNames.has(publicName);
+      if (assignment.exported) {
+        assignment.name = publicName;
+      }
     }
   }
 
@@ -1521,6 +1525,10 @@ function isIndentedBlockLine(lines: string[], index: number, indent: string): bo
 
 function indentStatementLine(line: string): string {
   return line === '' ? '' : `  ${line}`;
+}
+
+function operatorIsAssignment(operator: string): boolean {
+  return operator === '=';
 }
 
 function translateStraightLineStatement(
@@ -1719,6 +1727,33 @@ function translateStraightLineStatement(
 
   const assignment = /^(.+?) (\+=|-=|\*=|\/=|=) (.+)$/.exec(statement);
   if (assignment !== null) {
+    const multilineCallAssignment = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(assignment[3]);
+    if (
+      operatorIsAssignment(assignment[2])
+      && multilineCallAssignment !== null
+      && !['float', 'str', 'bool'].includes(multilineCallAssignment[1])
+    ) {
+      const callExpression = parseMultilineCallExpression(
+        lines,
+        index + 1,
+        multilineCallAssignment[1],
+        nameMap,
+        arrayNames,
+      );
+      if (callExpression === null) {
+        return null;
+      }
+      return translateStraightLineAssignment(
+        assignment[1],
+        assignment[2],
+        callExpression.expression,
+        callExpression.nextIndex,
+        nameMap,
+        declaredNames,
+        reassignedNames,
+        arrayNames,
+      );
+    }
     if (assignment[3] === '(') {
       const expressionLines: string[] = [];
       let nextIndex = index + 1;
@@ -1832,6 +1867,59 @@ function translateStraightLineStatement(
   return null;
 }
 
+function parseMultilineCallExpression(
+  lines: string[],
+  startIndex: number,
+  pythonCallee: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+): { expression: string; nextIndex: number } | null {
+  const positionalParts: string[] = [];
+  const keywordParts: string[] = [];
+  let sawKeyword = false;
+  let nextIndex = startIndex;
+  while (nextIndex < lines.length) {
+    const trimmed = lines[nextIndex].trim();
+    if (trimmed === ')') {
+      const callee = translateExpression(pythonCallee, nameMap, arrayNames);
+      const callPrefix = /^[A-Z]/.test(callee) ? `new ${callee}` : callee;
+      if (keywordParts.length === 0) {
+        return {
+          expression: `${callPrefix}(${positionalParts.map((part) => translateExpression(part, nameMap, arrayNames)).join(', ')})`,
+          nextIndex: nextIndex + 1,
+        };
+      }
+      if (positionalParts.length === 0) {
+        return {
+          expression: `${callPrefix}({ ${keywordParts.join(', ')} })`,
+          nextIndex: nextIndex + 1,
+        };
+      }
+      return {
+        expression: `${callPrefix}(${[
+          ...positionalParts.map((part) => translateExpression(part, nameMap, arrayNames)),
+          `{ ${keywordParts.join(', ')} }`,
+        ].join(', ')})`,
+        nextIndex: nextIndex + 1,
+      };
+    }
+
+    const arg = trimmed.replace(/,$/, '');
+    const keywordArg = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(arg);
+    if (keywordArg === null) {
+      if (sawKeyword) {
+        return null;
+      }
+      positionalParts.push(arg);
+    } else {
+      sawKeyword = true;
+      keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${translateExpression(keywordArg[2], nameMap, arrayNames)}`);
+    }
+    nextIndex += 1;
+  }
+  return null;
+}
+
 function translateStraightLineAssignment(
   pythonLeft: string,
   operator: string,
@@ -1913,12 +2001,13 @@ function parseTopLevelAssignment(
   const value = annotatedAssignment?.[3] ?? plainAssignment?.[2] ?? '';
   const annotatedType = annotatedAssignment?.[2] ?? null;
   const name = annotatedType === null
-    ? tsPublicNameForPythonName(pythonName)
+    ? pythonName.startsWith('_') ? tsExportNameForPythonName(pythonName) : tsPublicNameForPythonName(pythonName)
     : tsMutableNameForPythonName(pythonName);
   const baseAssignment = {
+    pythonName,
     name,
     declaration: annotatedType === null ? 'const' as const : 'let' as const,
-    exported: annotatedType === null || !pythonName.startsWith('_'),
+    exported: !pythonName.startsWith('_'),
     typeExpression: annotatedType === null ? undefined : tsTypeExpression(annotatedType),
   };
   if (value === '(') {

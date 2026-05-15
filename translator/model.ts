@@ -177,6 +177,7 @@ export interface SimpleModuleFunction {
 }
 
 export interface SimpleModuleAssignment {
+  pythonName?: string;
   name: string;
   declaration: 'const' | 'let';
   exported: boolean;
