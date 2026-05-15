@@ -17,7 +17,7 @@ import {
   parseStraightLineModule,
   parseTypeAliases,
   parseTyperCliModule,
-} from './patterns.js';
+} from './patterns/index.js';
 import { pythonProjectRoot, repoRoot } from './paths.js';
 import { parseModuleDocstring, stripFutureImports, stripIgnorablePythonLines } from './python-utils.js';
 import {
@@ -38,7 +38,7 @@ import {
   renderStraightLineModule,
   renderTypeAliases,
   renderTyperCliModule,
-} from './renderers.js';
+} from './renderers/index.js';
 
 export async function translateFile(job: TranslationJob): Promise<string> {
   const futureStripped = stripFutureImports(job.python).trim();

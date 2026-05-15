@@ -11,5 +11,5 @@
     "rootDir": ".",
     "outDir": "../.tmp/translator"
   },
-  "include": ["*.ts"]
+  "include": ["**/*.ts"]
 }
