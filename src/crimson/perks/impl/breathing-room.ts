@@ -4,7 +4,7 @@ import { PerkId } from '@crimson/perks/ids.ts';
 import type { PerkApplyCtx } from '@crimson/perks/runtime/apply-context.ts';
 import { PerkHooks } from '@crimson/perks/runtime/hook-types.ts';
 
-function applyBreathingRoom(ctx: PerkApplyCtx): void {
+export function applyBreathingRoom(ctx: PerkApplyCtx): void {
   for (const player of ctx.players) {
     player.health -= player.health * (2.0 / 3.0);
   }
