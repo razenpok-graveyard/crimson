@@ -354,25 +354,25 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
     lines.push('');
   }
 
-  for (let index = 0; index < module.enums.length; index += 1) {
-    renderEnumDefinition(lines, module.enums[index]);
-    if (index < module.enums.length - 1) {
-      lines.push('');
-    }
-  }
-  if (module.enums.length > 0 && module.leadingAssignments.length + module.leadingStatements.length + module.classes.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
-    lines.push('');
-  }
-
   renderStraightLineAssignments(lines, module.leadingAssignments);
-  if (module.leadingAssignments.length > 0 && module.leadingStatements.length + module.classes.length + module.functions.length + module.assignments.length > 0) {
+  if (module.leadingAssignments.length > 0 && module.leadingStatements.length + module.enums.length + module.classes.length + module.functions.length + module.assignments.length > 0) {
     lines.push('');
   }
 
   for (const statement of module.leadingStatements) {
     lines.push(statement);
   }
-  if (module.leadingStatements.length > 0 && module.classes.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
+  if (module.leadingStatements.length > 0 && module.enums.length + module.classes.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
+    lines.push('');
+  }
+
+  for (let index = 0; index < module.enums.length; index += 1) {
+    renderEnumDefinition(lines, module.enums[index]);
+    if (index < module.enums.length - 1) {
+      lines.push('');
+    }
+  }
+  if (module.enums.length > 0 && module.classes.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
     lines.push('');
   }
 

@@ -375,10 +375,11 @@ function parseStringEnumClass(
   lines: string[],
   index: number,
 ): { enumDefinition: EnumDefinition; nextIndex: number } | null {
-  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\(str, Enum\):$/.exec(lines[index] ?? '');
+  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\((str, Enum|IntEnum)\):$/.exec(lines[index] ?? '');
   if (header === null) {
     return null;
   }
+  const stringValued = header[2] === 'str, Enum';
 
   let nextIndex = index + 1;
   let docstring: string | null = null;
@@ -401,13 +402,15 @@ function parseStringEnumClass(
       continue;
     }
 
-    const member = /^    ([A-Z][A-Z0-9_]*) = (["'][^"']*["'])$/.exec(line);
+    const member = stringValued
+      ? /^    ([A-Z][A-Z0-9_]*) = (["'][^"']*["'])$/.exec(line)
+      : /^    ([A-Z][A-Z0-9_]*) = (-?(?:0x[0-9A-Fa-f]+|\d+))$/.exec(line);
     if (member === null) {
       return null;
     }
     members.push({
       name: member[1],
-      value: translateExpression(member[2]),
+      value: stringValued ? translateExpression(member[2]) : member[2],
     });
     nextIndex += 1;
   }
@@ -1526,6 +1529,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     if (
       isCollectionsAbcTypeImport(trimmed)
       || trimmed === 'from enum import Enum'
+      || trimmed === 'from enum import IntEnum'
       || trimmed === 'from pathlib import Path'
       || trimmed === 'from typing import Annotated, TypeAlias'
       || trimmed === 'from typing import TYPE_CHECKING'
