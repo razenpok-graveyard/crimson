@@ -1464,6 +1464,15 @@ function reexportsForAllNames(imports: ImportDefinition[], allNames: string[]): 
   return [...byModule.entries()].map(([modulePath, names]) => ({ modulePath, names }));
 }
 
+function isIndentedBlockLine(lines: string[], index: number, indent: string): boolean {
+  const line = lines[index] ?? '';
+  return line.startsWith(indent) || (line.trim() === '' && (lines[index + 1] ?? '').startsWith(indent));
+}
+
+function indentStatementLine(line: string): string {
+  return line === '' ? '' : `  ${line}`;
+}
+
 function translateStraightLineStatement(
   lines: string[],
   index: number,
@@ -1499,7 +1508,12 @@ function translateStraightLineStatement(
     const innerIndent = `${indent}    `;
     const innerStatements: string[] = [];
     let nextIndex = index + 1;
-    while (nextIndex < lines.length && lines[nextIndex].startsWith(innerIndent)) {
+    while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, innerIndent)) {
+      if (lines[nextIndex].trim() === '') {
+        innerStatements.push('');
+        nextIndex += 1;
+        continue;
+      }
       const innerStatement = translateStraightLineStatement(
         lines,
         nextIndex,
@@ -1512,7 +1526,7 @@ function translateStraightLineStatement(
       if (innerStatement === null) {
         return null;
       }
-      innerStatements.push(...innerStatement.statements.map((innerLine) => `  ${innerLine}`));
+      innerStatements.push(...innerStatement.statements.map(indentStatementLine));
       nextIndex = innerStatement.nextIndex;
     }
     if (innerStatements.length === 0) {
@@ -1527,7 +1541,12 @@ function translateStraightLineStatement(
       const elseIndent = `${indent}    `;
       const elseStatements: string[] = [];
       nextIndex += 1;
-      while (nextIndex < lines.length && lines[nextIndex].startsWith(elseIndent)) {
+      while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, elseIndent)) {
+        if (lines[nextIndex].trim() === '') {
+          elseStatements.push('');
+          nextIndex += 1;
+          continue;
+        }
         const elseStatement = translateStraightLineStatement(
           lines,
           nextIndex,
@@ -1540,7 +1559,7 @@ function translateStraightLineStatement(
         if (elseStatement === null) {
           return null;
         }
-        elseStatements.push(...elseStatement.statements.map((elseLine) => `  ${elseLine}`));
+        elseStatements.push(...elseStatement.statements.map(indentStatementLine));
         nextIndex = elseStatement.nextIndex;
       }
       if (elseStatements.length === 0) {
@@ -1561,7 +1580,12 @@ function translateStraightLineStatement(
     const innerIndent = `${indent}    `;
     const innerStatements: string[] = [];
     let nextIndex = index + 1;
-    while (nextIndex < lines.length && lines[nextIndex].startsWith(innerIndent)) {
+    while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, innerIndent)) {
+      if (lines[nextIndex].trim() === '') {
+        innerStatements.push('');
+        nextIndex += 1;
+        continue;
+      }
       const innerStatement = translateStraightLineStatement(
         lines,
         nextIndex,
@@ -1574,7 +1598,7 @@ function translateStraightLineStatement(
       if (innerStatement === null) {
         return null;
       }
-      innerStatements.push(...innerStatement.statements.map((innerLine) => `  ${innerLine}`));
+      innerStatements.push(...innerStatement.statements.map(indentStatementLine));
       nextIndex = innerStatement.nextIndex;
     }
     if (innerStatements.length === 0) {
@@ -1931,6 +1955,11 @@ function translateExpression(
   if (notIdentifier !== null) {
     const value = translateExpression(notIdentifier[1], nameMap, arrayNames);
     return arrayNames.has(notIdentifier[1]) ? `!${value}.length` : `!${value}`;
+  }
+
+  const notPlayersCollection = /^not ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\.players)$/.exec(trimmed);
+  if (notPlayersCollection !== null) {
+    return `${translateExpression(notPlayersCollection[1], nameMap, arrayNames)}.length === 0`;
   }
 
   const notExpression = /^not (.+)$/.exec(trimmed);
