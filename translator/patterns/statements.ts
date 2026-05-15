@@ -1635,11 +1635,28 @@ export function parseTopLevelAssignment(
       }
 
       const dictItem = /^(.+): (.+),$/.exec(trimmed);
-      if (dictItem === null) {
+      if (dictItem !== null) {
+        valueLines.push(`  [${translateExpression(dictItem[1])}, ${translateExpression(dictItem[2])}],`);
+        nextIndex += 1;
+        continue;
+      }
+
+      const multilineDictItem = /^(.+): ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(trimmed);
+      if (multilineDictItem === null) {
         return null;
       }
-      valueLines.push(`  [${translateExpression(dictItem[1])}, ${translateExpression(dictItem[2])}],`);
-      nextIndex += 1;
+      const callExpression = parseMultilineCallExpression(
+        lines,
+        nextIndex + 1,
+        multilineDictItem[2],
+        new Map(),
+        new Set(),
+      );
+      if (callExpression === null) {
+        return null;
+      }
+      valueLines.push(`  [${translateExpression(multilineDictItem[1])}, ${callExpression.expression}],`);
+      nextIndex = callExpression.nextIndex;
     }
 
     return null;

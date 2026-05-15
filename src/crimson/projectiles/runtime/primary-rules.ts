@@ -1,19 +1,13 @@
 // Port of crimson/projectiles/runtime/primary_rules.py
 
-import { Projectile, ProjectileTemplateId } from '@crimson/projectiles/types.ts';
-import { lingerDefault, lingerGaussGun, lingerIonCannon, lingerIonMinigun, lingerIonRifle, postHitIonCommon, postHitIonRifle, postHitPlagueSpreader, postHitPlasmaCannon, postHitPulseGun, postHitShrinkifier, preHitSplitter, type ProjectileHitInfo, type ProjectileUpdateCtx } from './behaviors.ts';
+import type { Projectile } from '@crimson/projectiles/types.ts';
+import { ProjectileTemplateId } from '@crimson/projectiles/types.ts';
+import { lingerDefault, lingerGaussGun, lingerIonCannon, lingerIonMinigun, lingerIonRifle, postHitIonCommon, postHitIonRifle, postHitPlagueSpreader, postHitPlasmaCannon, postHitPulseGun, postHitShrinkifier, preHitSplitter } from '@crimson/projectiles/runtime/behaviors.ts';
+import type { ProjectileHitInfo, ProjectileUpdateCtx } from '@crimson/projectiles/runtime/behaviors.ts';
 
-export type LingerHandler = (ctx: ProjectileUpdateCtx, proj: Projectile) => void;
-export type PreHitHandler = (ctx: ProjectileUpdateCtx, proj: Projectile, hitIdx: number) => void;
-export type PostHitHandler = (ctx: ProjectileUpdateCtx, hit: ProjectileHitInfo) => void;
-
-function preHitNone(_ctx: ProjectileUpdateCtx, _proj: Projectile, _hitIdx: number): void {
-  return;
-}
-
-function postHitNone(_ctx: ProjectileUpdateCtx, _hit: ProjectileHitInfo): void {
-  return;
-}
+type LingerHandler = (arg0: ProjectileUpdateCtx, arg1: Projectile) => void;
+type PreHitHandler = (arg0: ProjectileUpdateCtx, arg1: Projectile, arg2: number) => void;
+type PostHitHandler = (arg0: ProjectileUpdateCtx, arg1: ProjectileHitInfo) => void;
 
 export class PrimaryProjectileRule {
   readonly linger: LingerHandler;
@@ -40,59 +34,29 @@ export class PrimaryProjectileRule {
   }
 }
 
-const _DEFAULT_RULE = new PrimaryProjectileRule({ linger: lingerDefault });
+function preHitNone(ctx: ProjectileUpdateCtx, proj: Projectile, hitIdx: number): void {
+  return;
+}
 
-export const PRIMARY_PROJECTILE_RULE_BY_TYPE_ID: Map<ProjectileTemplateId, PrimaryProjectileRule> = new Map([
-  [ProjectileTemplateId.GAUSS_GUN, new PrimaryProjectileRule({
-    linger: lingerGaussGun,
-    stopOnHit: false,
-    emitDefaultFreezeShard: false,
-  })],
-  [ProjectileTemplateId.FIRE_BULLETS, new PrimaryProjectileRule({
-    linger: lingerDefault,
-    stopOnHit: false,
-    emitDefaultFreezeShard: false,
-  })],
-  [ProjectileTemplateId.BLADE_GUN, new PrimaryProjectileRule({
-    linger: lingerDefault,
-    stopOnHit: false,
-  })],
-  [ProjectileTemplateId.PULSE_GUN, new PrimaryProjectileRule({
-    linger: lingerDefault,
-    postHit: postHitPulseGun,
-  })],
-  [ProjectileTemplateId.ION_RIFLE, new PrimaryProjectileRule({
-    linger: lingerIonRifle,
-    postHit: postHitIonRifle,
-    resetShockChainOnLinger: true,
-  })],
-  [ProjectileTemplateId.ION_MINIGUN, new PrimaryProjectileRule({
-    linger: lingerIonMinigun,
-    postHit: postHitIonCommon,
-    resetShockChainOnLinger: true,
-  })],
-  [ProjectileTemplateId.ION_CANNON, new PrimaryProjectileRule({
-    linger: lingerIonCannon,
-    postHit: postHitIonCommon,
-  })],
-  [ProjectileTemplateId.SHRINKIFIER, new PrimaryProjectileRule({
-    linger: lingerDefault,
-    postHit: postHitShrinkifier,
-  })],
-  [ProjectileTemplateId.PLASMA_CANNON, new PrimaryProjectileRule({
-    linger: lingerDefault,
-    postHit: postHitPlasmaCannon,
-  })],
-  [ProjectileTemplateId.SPLITTER_GUN, new PrimaryProjectileRule({
-    linger: lingerDefault,
-    preHit: preHitSplitter,
-  })],
-  [ProjectileTemplateId.PLAGUE_SPREADER, new PrimaryProjectileRule({
-    linger: lingerDefault,
-    postHit: postHitPlagueSpreader,
-  })],
-]);
+function postHitNone(ctx: ProjectileUpdateCtx, hit: ProjectileHitInfo): void {
+  return;
+}
 
 export function primaryRuleForTypeId(typeId: ProjectileTemplateId): PrimaryProjectileRule {
   return PRIMARY_PROJECTILE_RULE_BY_TYPE_ID.get(typeId) ?? _DEFAULT_RULE;
 }
+
+const _DEFAULT_RULE = new PrimaryProjectileRule({ linger: lingerDefault });
+export const PRIMARY_PROJECTILE_RULE_BY_TYPE_ID: Map<ProjectileTemplateId, PrimaryProjectileRule> = new Map([
+  [ProjectileTemplateId.GAUSS_GUN, new PrimaryProjectileRule({ linger: lingerGaussGun, stopOnHit: false, emitDefaultFreezeShard: false })],
+  [ProjectileTemplateId.FIRE_BULLETS, new PrimaryProjectileRule({ linger: lingerDefault, stopOnHit: false, emitDefaultFreezeShard: false })],
+  [ProjectileTemplateId.BLADE_GUN, new PrimaryProjectileRule({ linger: lingerDefault, stopOnHit: false })],
+  [ProjectileTemplateId.PULSE_GUN, new PrimaryProjectileRule({ linger: lingerDefault, postHit: postHitPulseGun })],
+  [ProjectileTemplateId.ION_RIFLE, new PrimaryProjectileRule({ linger: lingerIonRifle, postHit: postHitIonRifle, resetShockChainOnLinger: true })],
+  [ProjectileTemplateId.ION_MINIGUN, new PrimaryProjectileRule({ linger: lingerIonMinigun, postHit: postHitIonCommon, resetShockChainOnLinger: true })],
+  [ProjectileTemplateId.ION_CANNON, new PrimaryProjectileRule({ linger: lingerIonCannon, postHit: postHitIonCommon })],
+  [ProjectileTemplateId.SHRINKIFIER, new PrimaryProjectileRule({ linger: lingerDefault, postHit: postHitShrinkifier })],
+  [ProjectileTemplateId.PLASMA_CANNON, new PrimaryProjectileRule({ linger: lingerDefault, postHit: postHitPlasmaCannon })],
+  [ProjectileTemplateId.SPLITTER_GUN, new PrimaryProjectileRule({ linger: lingerDefault, preHit: preHitSplitter })],
+  [ProjectileTemplateId.PLAGUE_SPREADER, new PrimaryProjectileRule({ linger: lingerDefault, postHit: postHitPlagueSpreader })],
+]);
