@@ -86,6 +86,11 @@ async function translateFile(job: TranslationJob): Promise<string> {
     return renderConstantsModule(job.relativePath, constantsModule);
   }
 
+  const functionsModule = parseFunctionsModule(futureStripped);
+  if (functionsModule !== null) {
+    return renderFunctionsModule(job.relativePath, functionsModule);
+  }
+
   const trimmed = stripIgnorablePythonLines(job.python).trim();
   if (trimmed === '') {
     return renderEmptyModule(job.relativePath);
@@ -187,6 +192,19 @@ interface ConstantDefinition {
 interface ConstantsModule {
   docstring: string | null;
   constants: ConstantDefinition[];
+}
+
+interface FunctionParameter {
+  name: string;
+  typeExpression: string;
+}
+
+interface FunctionDefinition {
+  name: string;
+  optsParams: FunctionParameter[];
+  returnType: string;
+  ignoredParam: string | null;
+  returnExpression: string;
 }
 
 interface InitReexports {
@@ -493,6 +511,89 @@ function renderConstantsModule(relativePath: string, constantsModule: ConstantsM
 
   for (const constant of constantsModule.constants) {
     lines.push(`export const ${constant.name} = ${constant.value};`);
+  }
+  lines.push('');
+  return lines.join('\n');
+}
+
+function parseFunctionsModule(trimmedPython: string): FunctionDefinition[] | null {
+  const lines = trimmedPython.split(/\r?\n/);
+  const functions: FunctionDefinition[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    if (lines[index].trim() === '') {
+      index += 1;
+      continue;
+    }
+
+    const header = /^def ([A-Za-z_][A-Za-z0-9_]*)\($/.exec(lines[index]);
+    if (header === null) {
+      return null;
+    }
+    index += 1;
+
+    if (lines[index]?.trim() !== '*,') {
+      return null;
+    }
+    index += 1;
+
+    const optsParams: FunctionParameter[] = [];
+    while (index < lines.length) {
+      const param = /^    ([A-Za-z_][A-Za-z0-9_]*): ([^,]+),$/.exec(lines[index]);
+      if (param === null) {
+        break;
+      }
+      optsParams.push({
+        name: tsExportNameForPythonName(param[1]),
+        typeExpression: tsTypeExpression(param[2]),
+      });
+      index += 1;
+    }
+
+    const close = /^\) -> ([^:]+):$/.exec(lines[index] ?? '');
+    if (close === null) {
+      return null;
+    }
+    index += 1;
+
+    let ignoredParam: string | null = null;
+    const ignored = /^    _ = ([A-Za-z_][A-Za-z0-9_]*)$/.exec(lines[index] ?? '');
+    if (ignored !== null) {
+      ignoredParam = tsExportNameForPythonName(ignored[1]);
+      index += 1;
+    }
+
+    const returnLine = /^    return (.+)$/.exec(lines[index] ?? '');
+    if (returnLine === null) {
+      return null;
+    }
+    index += 1;
+
+    functions.push({
+      name: tsExportNameForPythonName(header[1]),
+      optsParams,
+      returnType: tsTypeExpression(close[1]),
+      ignoredParam,
+      returnExpression: tsLiteralExpression(returnLine[1]),
+    });
+  }
+
+  return functions.length > 0 ? functions : null;
+}
+
+function renderFunctionsModule(relativePath: string, functions: FunctionDefinition[]): string {
+  const lines = [`// Port of ${relativePath}`, ''];
+  for (const fn of functions) {
+    const optsType = fn.optsParams.map((param) => `${param.name}: ${param.typeExpression}`).join('; ');
+    lines.push(`export function ${fn.name}(`);
+    lines.push(`  opts: { ${optsType} },`);
+    lines.push(`): ${fn.returnType} {`);
+    if (fn.ignoredParam !== null) {
+      lines.push(`  const _ = opts.${fn.ignoredParam};`);
+    }
+    lines.push(`  return ${fn.returnExpression};`);
+    lines.push('}');
   }
   lines.push('');
   return lines.join('\n');
