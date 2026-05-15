@@ -1557,6 +1557,7 @@ function translateStraightLineStatement(
 
   const forOfStatement = /^for ([A-Za-z_][A-Za-z0-9_]*) in (.+):$/.exec(statement);
   if (forOfStatement !== null) {
+    const rangeLoop = /^range\((.+)\)$/.exec(forOfStatement[2]);
     const innerIndent = `${indent}    `;
     const innerStatements: string[] = [];
     let nextIndex = index + 1;
@@ -1579,6 +1580,23 @@ function translateStraightLineStatement(
     if (innerStatements.length === 0) {
       return null;
     }
+    if (rangeLoop !== null) {
+      const rangeArgs = splitTopLevelComma(rangeLoop[1]);
+      if (rangeArgs.length < 1 || rangeArgs.length > 2) {
+        return null;
+      }
+      const loopName = forOfStatement[1] === '_' ? 'i' : tsExportNameForPythonName(forOfStatement[1]);
+      const start = rangeArgs.length === 1 ? '0' : translateExpression(rangeArgs[0], nameMap, arrayNames);
+      const stop = translateExpression(rangeArgs.at(-1) ?? '', nameMap, arrayNames);
+      return {
+        statements: [
+          `for (let ${loopName} = ${start}; ${loopName} < ${stop}; ${loopName}++) {`,
+          ...innerStatements,
+          '}',
+        ],
+        nextIndex,
+      };
+    }
     return {
       statements: [
         `for (const ${tsExportNameForPythonName(forOfStatement[1])} of ${translateExpression(forOfStatement[2], nameMap, arrayNames)}) {`,
@@ -1591,6 +1609,12 @@ function translateStraightLineStatement(
 
   if (statement === 'return') {
     return { statements: ['return;'], nextIndex: index + 1 };
+  }
+  if (statement === 'break') {
+    return { statements: ['break;'], nextIndex: index + 1 };
+  }
+  if (statement === 'continue') {
+    return { statements: ['continue;'], nextIndex: index + 1 };
   }
 
   if (statement === 'return (') {

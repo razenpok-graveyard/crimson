@@ -7,7 +7,7 @@ import { PerkId } from '@crimson/perks/ids.ts';
 import type { PerkApplyCtx } from '@crimson/perks/runtime/apply-context.ts';
 import { PerkHooks } from '@crimson/perks/runtime/hook-types.ts';
 
-function applyRandomWeapon(ctx: PerkApplyCtx): void {
+export function applyRandomWeapon(ctx: PerkApplyCtx): void {
   const current = ctx.owner.weapon.weaponId;
   let weaponId = current;
   for (let i = 0; i < 100; i++) {
