@@ -1106,6 +1106,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
 
     const parameters: FunctionParameter[] = [];
     const optsParams: OptionalFunctionParameter[] = [];
+    const arrayNames = new Set<string>();
     let keywordOnly = false;
     if (header[2] !== '') {
       for (const parameterText of header[2].split(', ')) {
@@ -1121,10 +1122,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
           name: tsExportNameForPythonName(parameter[1]),
           typeExpression: tsTypeExpression(parameter[2]),
         };
+        if (parsedParameter.typeExpression.endsWith('[]')) {
+          arrayNames.add(parameter[1]);
+        }
         if (keywordOnly) {
           optsParams.push({
             ...parsedParameter,
-            defaultValue: parameter[3] === undefined ? null : translateExpression(parameter[3]),
+            defaultValue: parameter[3] === undefined ? null : translateExpression(parameter[3], undefined, arrayNames),
           });
         } else {
           if (parameter[3] !== undefined) {
@@ -1138,6 +1142,11 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     const statements: string[] = [];
     const nameMap = new Map(moduleNameMap);
     const declaredNames = new Set<string>();
+    const docstring = /^    """(.*)"""$/.exec(lines[index] ?? '');
+    if (docstring !== null) {
+      statements.push(`// ${docstring[1]}`);
+      index += 1;
+    }
     const reassignedNames = reassignedLocalNames(lines, index);
     while (index < lines.length) {
       const line = lines[index];
@@ -1157,6 +1166,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         nameMap,
         declaredNames,
         reassignedNames,
+        arrayNames,
       );
       if (statement === null) {
         return null;
@@ -1246,6 +1256,7 @@ function translateStraightLineStatement(
   nameMap: Map<string, string>,
   declaredNames: Set<string>,
   reassignedNames: Set<string>,
+  arrayNames: Set<string>,
 ): { statements: string[]; nextIndex: number } | null {
   const line = lines[index];
   if (line === undefined || !line.startsWith(indent)) {
@@ -1281,6 +1292,7 @@ function translateStraightLineStatement(
         nameMap,
         declaredNames,
         reassignedNames,
+        arrayNames,
       );
       if (innerStatement === null) {
         return null;
@@ -1292,7 +1304,7 @@ function translateStraightLineStatement(
       return null;
     }
     const statements = [
-      `if (${translateExpression(ifStatement[1], nameMap)}) {`,
+      `if (${translateExpression(ifStatement[1], nameMap, arrayNames)}) {`,
       ...innerStatements,
       '}',
     ];
@@ -1308,6 +1320,7 @@ function translateStraightLineStatement(
           nameMap,
           declaredNames,
           reassignedNames,
+          arrayNames,
         );
         if (elseStatement === null) {
           return null;
@@ -1340,6 +1353,7 @@ function translateStraightLineStatement(
         nameMap,
         declaredNames,
         reassignedNames,
+        arrayNames,
       );
       if (innerStatement === null) {
         return null;
@@ -1352,7 +1366,7 @@ function translateStraightLineStatement(
     }
     return {
       statements: [
-        `for (const ${tsExportNameForPythonName(forOfStatement[1])} of ${translateExpression(forOfStatement[2], nameMap)}) {`,
+        `for (const ${tsExportNameForPythonName(forOfStatement[1])} of ${translateExpression(forOfStatement[2], nameMap, arrayNames)}) {`,
         ...innerStatements,
         '}',
       ],
@@ -1366,7 +1380,7 @@ function translateStraightLineStatement(
 
   const returnStatement = /^return (.+)$/.exec(statement);
   if (returnStatement !== null) {
-    return { statements: [`return ${translateExpression(returnStatement[1], nameMap)};`], nextIndex: index + 1 };
+    return { statements: [`return ${translateExpression(returnStatement[1], nameMap, arrayNames)};`], nextIndex: index + 1 };
   }
 
   const assignment = /^(.+?) (\+=|-=|\*=|\/=|=) (.+)$/.exec(statement);
@@ -1379,27 +1393,29 @@ function translateStraightLineStatement(
       return translateStraightLineAssignment(
         assignment[1],
         assignment[2],
-        translateExpression(valueLine, nameMap),
+        translateExpression(valueLine, nameMap, arrayNames),
         index + 3,
         nameMap,
         declaredNames,
         reassignedNames,
+        arrayNames,
       );
     }
     return translateStraightLineAssignment(
       assignment[1],
       assignment[2],
-      translateExpression(assignment[3], nameMap),
+      translateExpression(assignment[3], nameMap, arrayNames),
       index + 1,
       nameMap,
       declaredNames,
       reassignedNames,
+      arrayNames,
     );
   }
 
   const callStatement = /^(.+\))$/.exec(statement);
   if (callStatement !== null) {
-    return { statements: [`${translateExpression(callStatement[1], nameMap)};`], nextIndex: index + 1 };
+    return { statements: [`${translateExpression(callStatement[1], nameMap, arrayNames)};`], nextIndex: index + 1 };
   }
 
   return null;
@@ -1413,6 +1429,7 @@ function translateStraightLineAssignment(
   nameMap: Map<string, string>,
   declaredNames: Set<string>,
   reassignedNames: Set<string>,
+  arrayNames: Set<string>,
 ): { statements: string[]; nextIndex: number } {
   const localAssignment = /^([A-Za-z_][A-Za-z0-9_]*)$/.exec(pythonLeft);
   if (operator === '=' && localAssignment !== null) {
@@ -1439,7 +1456,7 @@ function translateStraightLineAssignment(
     };
   }
   return {
-    statements: [`${translateExpression(pythonLeft, nameMap)} ${operator} ${tsRight};`],
+    statements: [`${translateExpression(pythonLeft, nameMap, arrayNames)} ${operator} ${tsRight};`],
     nextIndex,
   };
 }
@@ -1573,7 +1590,11 @@ function markTypeOnlyImports(
   }
 }
 
-function translateExpression(pythonExpression: string, nameMap: Map<string, string> = new Map()): string {
+function translateExpression(
+  pythonExpression: string,
+  nameMap: Map<string, string> = new Map(),
+  arrayNames: Set<string> = new Set(),
+): string {
   const trimmed = pythonExpression.trim();
   const envComparison = /^os\.environ\.get\("([A-Za-z_][A-Za-z0-9_]*)"\) == "([^"]*)"$/.exec(trimmed);
   if (envComparison !== null) {
@@ -1582,8 +1603,23 @@ function translateExpression(pythonExpression: string, nameMap: Map<string, stri
 
   const lowerBoundLengthComparison = /^(.+?) <= (.+?) < len\((.+)\)$/.exec(trimmed);
   if (lowerBoundLengthComparison !== null) {
-    const value = translateExpression(lowerBoundLengthComparison[2], nameMap);
-    return `${value} >= ${translateExpression(lowerBoundLengthComparison[1], nameMap)} && ${value} < ${translateExpression(lowerBoundLengthComparison[3], nameMap)}.length`;
+    const value = translateExpression(lowerBoundLengthComparison[2], nameMap, arrayNames);
+    return `${value} >= ${translateExpression(lowerBoundLengthComparison[1], nameMap, arrayNames)} && ${value} < ${translateExpression(lowerBoundLengthComparison[3], nameMap, arrayNames)}.length`;
+  }
+
+  const notIdentifier = /^not ([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);
+  if (notIdentifier !== null) {
+    const value = translateExpression(notIdentifier[1], nameMap, arrayNames);
+    return arrayNames.has(notIdentifier[1]) ? `!${value}.length` : `!${value}`;
+  }
+
+  const notExpression = /^not (.+)$/.exec(trimmed);
+  if (notExpression !== null) {
+    const value = translateExpression(notExpression[1], nameMap, arrayNames);
+    if (/^[A-Za-z_$][A-Za-z0-9_.$]*\(.*\)$/.test(value)) {
+      return `!${value}`;
+    }
+    return /^[A-Za-z_$][A-Za-z0-9_.$()[\]]*$/.test(value) ? `!${value}` : `!(${value})`;
   }
 
   const tupleLiteral = /^\((.*)\)$/.exec(trimmed);
@@ -1592,7 +1628,7 @@ function translateExpression(pythonExpression: string, nameMap: Map<string, stri
       .split(',')
       .map((part) => part.trim())
       .filter((part) => part !== '')
-      .map((part) => translateExpression(part, nameMap));
+      .map((part) => translateExpression(part, nameMap, arrayNames));
     return `[${values.join(', ')}]`;
   }
 
@@ -1611,7 +1647,7 @@ function translateExpression(pythonExpression: string, nameMap: Map<string, stri
     .replaceAll(
       /\b([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\(([A-Za-z_][A-Za-z0-9_]*)=([^)]+)\)/g,
       (_match, callee: string, argName: string, argValue: string) => (
-        `${translateExpression(callee, nameMap)}({ ${tsExportNameForPythonName(argName)}: ${translateExpression(argValue, nameMap)} })`
+        `${translateExpression(callee, nameMap, arrayNames)}({ ${tsExportNameForPythonName(argName)}: ${translateExpression(argValue, nameMap, arrayNames)} })`
       ),
     )
     .replaceAll(/\b(?:float|str|bool)\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, '$1')

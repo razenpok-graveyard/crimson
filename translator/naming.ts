@@ -26,6 +26,10 @@ export function tsTypeExpression(pythonType: string): string {
       .map((part) => part === 'None' ? 'null' : tsTypeExpression(part))
       .join(' | ');
   }
+  const listType = /^list\[(.+)\]$/.exec(trimmed);
+  if (listType !== null) {
+    return `${tsTypeExpression(listType[1])}[]`;
+  }
   if (trimmed === 'None') {
     return 'void';
   }

@@ -5,18 +5,20 @@ import { perkActive } from '@crimson/perks/helpers.ts';
 import { PerkId } from '@crimson/perks/ids.ts';
 import { PerkHooks } from '@crimson/perks/runtime/hook-types.ts';
 
-function applyReflexBoostedDt(opts: { dt: number; players: PlayerState[] }): number {
+export function applyReflexBoostedDt(opts: { dt: number; players: PlayerState[] }): number {
+  const dt = opts.dt;
+  const players = opts.players;
   // Apply Reflex Boosted dt scaling from perk effects.
-  if (opts.dt <= 0.0) {
-    return opts.dt;
+  if (dt <= 0.0) {
+    return dt;
   }
-  if (!opts.players.length) {
-    return opts.dt;
+  if (!players.length) {
+    return dt;
   }
-  if (!perkActive(opts.players[0], PerkId.REFLEX_BOOSTED)) {
-    return opts.dt;
+  if (!perkActive(players[0], PerkId.REFLEX_BOOSTED)) {
+    return dt;
   }
-  return opts.dt * 0.9;
+  return dt * 0.9;
 }
 
 export const HOOKS = new PerkHooks({
