@@ -812,6 +812,7 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
   const lines = flattenFromImportBlocks(trimmedPython.split(/\r?\n/));
   const imports: ImportDefinition[] = [];
   const typeAliases: TypeAlias[] = [];
+  const functions: SimpleModuleFunction[] = [];
   const classes: StructModule['classes'] = [];
   const protocols: StructModule['protocols'] = [];
   let sawMsgspecImport = false;
@@ -893,6 +894,13 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       continue;
     }
 
+    const fn = parseStructModuleFunction(lines, index);
+    if (fn !== null) {
+      functions.push(fn.fn);
+      index = fn.nextIndex;
+      continue;
+    }
+
     const protocol = parseSimpleProtocolClass(lines, index);
     if (protocol !== null) {
       protocols.push(protocol.protocol);
@@ -908,8 +916,8 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
     index = structClass.nextIndex;
   }
 
-  markStructTypeOnlyImports(imports, typeAliases, classes, protocols);
-  return typeAliases.length + classes.length + protocols.length > 0 ? { imports, typeAliases, classes, protocols } : null;
+  markStructTypeOnlyImports(imports, typeAliases, functions, classes, protocols);
+  return typeAliases.length + functions.length + classes.length + protocols.length > 0 ? { imports, typeAliases, functions, classes, protocols } : null;
 }
 
 function isTypeAliasExpression(pythonExpression: string): boolean {
@@ -959,6 +967,70 @@ function parseTypeCheckingImports(
   return { imports, nextIndex };
 }
 
+function parseStructModuleFunction(
+  lines: string[],
+  index: number,
+): { fn: SimpleModuleFunction; nextIndex: number } | null {
+  const header = parseStraightLineFunctionHeader(lines, index);
+  if (header === null) {
+    return null;
+  }
+
+  const arrayNames = new Set<string>();
+  const parsedParams = parseFunctionParametersText(header.parametersText, arrayNames);
+  if (parsedParams === null) {
+    return null;
+  }
+
+  const statements: string[] = [];
+  const nameMap = new Map<string, string>();
+  const declaredNames = new Set<string>();
+  let nextIndex = header.nextIndex;
+  const docstring = parseIndentedDocstring(lines, nextIndex);
+  if (docstring !== null) {
+    for (const line of docstring.value.split('\n')) {
+      statements.push(line === '' ? '//' : `// ${line}`);
+    }
+    nextIndex = docstring.nextIndex;
+  }
+
+  const reassignedNames = reassignedLocalNames(lines, nextIndex);
+  while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, '    ')) {
+    if (lines[nextIndex].trim() === '') {
+      statements.push('');
+      nextIndex += 1;
+      continue;
+    }
+    const statement = translateStraightLineStatement(
+      lines,
+      nextIndex,
+      '    ',
+      nameMap,
+      declaredNames,
+      reassignedNames,
+      arrayNames,
+    );
+    if (statement === null) {
+      return null;
+    }
+    statements.push(...statement.statements);
+    nextIndex = statement.nextIndex;
+  }
+
+  return {
+    fn: {
+      name: tsExportNameForPythonName(header.name),
+      exported: !header.name.startsWith('_'),
+      async: statements.some((statement) => statement.includes('await ')),
+      parameters: parsedParams.parameters,
+      optsParams: parsedParams.optsParams,
+      returnType: tsTypeExpression(header.returnType),
+      statements,
+    },
+    nextIndex,
+  };
+}
+
 function parseStructClass(
   lines: string[],
   index: number,
@@ -981,6 +1053,7 @@ function parseStructClass(
 
   const fields: StructModule['classes'][number]['fields'] = [];
   const methods: SimpleModuleFunction[] = [];
+  let postInitStatements: string[] = [];
   while (nextIndex < lines.length) {
     const line = lines[nextIndex];
     const trimmedField = line.trim();
@@ -994,7 +1067,11 @@ function parseStructClass(
 
     const method = parseStructMethod(lines, nextIndex);
     if (method !== null) {
-      methods.push(method.method);
+      if (method.method.name === '__post_init__') {
+        postInitStatements = method.method.statements;
+      } else {
+        methods.push(method.method);
+      }
       nextIndex = method.nextIndex;
       continue;
     }
@@ -1021,6 +1098,7 @@ function parseStructClass(
       docstring: docstring?.value ?? null,
       readonlyFields,
       fields,
+      postInitStatements,
       methods,
     },
     nextIndex,
@@ -1151,7 +1229,7 @@ function parseStructMethod(
 
   return {
     method: {
-      name: tsExportNameForPythonName(header.name),
+      name: header.name === '__post_init__' ? '__post_init__' : tsExportNameForPythonName(header.name),
       exported: false,
       async: statements.some((statement) => statement.includes('await ')),
       parameters,
@@ -1611,17 +1689,25 @@ function tsStructFieldDefaultValue(pythonValue: string): string | null {
 function markStructTypeOnlyImports(
   imports: ImportDefinition[],
   typeAliases: TypeAlias[],
+  functions: SimpleModuleFunction[],
   classes: StructModule['classes'],
   protocols: StructModule['protocols'],
 ): void {
-  const valueText = classes
-    .flatMap((structClass) => [
+  const valueText = stripTypeOnlyStatementSyntax([
+    ...classes.flatMap((structClass) => [
       ...structClass.fields.map((field) => field.defaultValue ?? ''),
+      ...structClass.postInitStatements,
       ...structClass.methods.flatMap((method) => method.statements),
-    ])
-    .join('\n');
+    ]),
+    ...functions.flatMap((fn) => fn.statements),
+  ].join('\n'));
   const typeText = [
     ...typeAliases.map((alias) => alias.typeExpression),
+    ...functions.flatMap((fn) => [
+      fn.returnType,
+      ...fn.parameters.map((parameter) => parameter.typeExpression),
+      ...fn.optsParams.map((parameter) => parameter.typeExpression),
+    ]),
     ...classes.flatMap((structClass) => structClass.fields.map((field) => field.typeExpression)),
     ...classes.flatMap((structClass) => structClass.methods.flatMap((method) => [
       method.returnType,

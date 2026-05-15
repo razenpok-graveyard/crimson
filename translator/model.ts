@@ -125,6 +125,7 @@ export interface SimpleExportModule {
 export interface StructModule {
   imports: ImportDefinition[];
   typeAliases: TypeAlias[];
+  functions: SimpleModuleFunction[];
   classes: StructClassDefinition[];
   protocols: ProtocolDefinition[];
 }
@@ -134,6 +135,7 @@ export interface StructClassDefinition {
   docstring: string | null;
   readonlyFields: boolean;
   fields: StructFieldDefinition[];
+  postInitStatements: string[];
   methods: SimpleModuleFunction[];
 }
 

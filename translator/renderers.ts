@@ -10,6 +10,7 @@ import type {
   PlatformDirsModule,
   ProtocolDefinition,
   SimpleExportModule,
+  SimpleModuleFunction,
   StraightLineModule,
   StructModule,
   TypeAlias,
@@ -236,16 +237,18 @@ export function renderMsgspecStructModule(relativePath: string, module: StructMo
       lines.push('');
     }
   }
-  if (callableProtocols.length > 0 && module.typeAliases.length + module.classes.length + interfaceProtocols.length > 0) {
+  if (callableProtocols.length > 0 && module.typeAliases.length + module.functions.length + module.classes.length + interfaceProtocols.length > 0) {
     lines.push('');
   }
 
   for (const alias of module.typeAliases) {
     lines.push(`${alias.exported === false ? '' : 'export '}type ${alias.name} = ${alias.typeExpression};`);
   }
-  if (module.typeAliases.length > 0 && module.classes.length + interfaceProtocols.length > 0) {
+  if (module.typeAliases.length > 0 && module.functions.length + module.classes.length + interfaceProtocols.length > 0) {
     lines.push('');
   }
+
+  renderSimpleModuleFunctions(lines, module.functions, module.classes.length + interfaceProtocols.length > 0);
 
   renderStructClasses(lines, module.classes);
   if (module.classes.length > 0 && interfaceProtocols.length > 0) {
@@ -327,6 +330,9 @@ function renderStructClasses(lines: string[], classes: StructModule['classes']):
       } else {
         lines.push(`    this.${field.name} = opts.${field.name} ?? ${field.defaultValue};`);
       }
+    }
+    for (const statement of structClass.postInitStatements) {
+      lines.push(statement === '' ? '' : `    ${statement}`);
     }
     lines.push('  }');
     for (const method of structClass.methods) {
@@ -421,6 +427,48 @@ function renderFunctionReturnType(fn: { async?: boolean; returnType: string }): 
   return fn.async === true ? `Promise<${fn.returnType}>` : fn.returnType;
 }
 
+function renderSimpleModuleFunctions(
+  lines: string[],
+  functions: SimpleModuleFunction[],
+  hasFollowingContent: boolean,
+): void {
+  for (let index = 0; index < functions.length; index += 1) {
+    const fn = functions[index];
+    const params = fn.parameters.map(renderParameter);
+    if (fn.optsParams.length > 0) {
+      const optsType = fn.optsParams
+        .map((param) => `${param.name}${param.defaultValue === null ? '' : '?'}: ${param.typeExpression}`)
+        .join('; ');
+      const allOptsHaveDefaults = fn.optsParams.every((param) => param.defaultValue !== null);
+      params.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
+    }
+    lines.push(`${fn.exported ? 'export ' : ''}${fn.async === true ? 'async ' : ''}function ${fn.name}(${params.join(', ')}): ${renderFunctionReturnType(fn)} {`);
+    let statementIndex = 0;
+    while (
+      statementIndex < fn.statements.length
+      && (fn.statements[statementIndex] === '' || fn.statements[statementIndex].startsWith('//'))
+    ) {
+      const statement = fn.statements[statementIndex];
+      lines.push(statement === '' ? '' : `  ${statement}`);
+      statementIndex += 1;
+    }
+    for (const param of fn.optsParams) {
+      if (param.defaultValue === null) {
+        lines.push(`  const ${param.name} = opts.${param.name};`);
+      } else {
+        lines.push(`  const ${param.name} = opts.${param.name} ?? ${param.defaultValue};`);
+      }
+    }
+    for (const statement of fn.statements.slice(statementIndex)) {
+      lines.push(statement === '' ? '' : `  ${statement}`);
+    }
+    lines.push('}');
+    if (index < functions.length - 1 || hasFollowingContent) {
+      lines.push('');
+    }
+  }
+}
+
 export function renderStraightLineModule(relativePath: string, module: StraightLineModule): string {
   const lines = [`// Port of ${relativePath}`, ''];
   if (module.docstring !== null) {
@@ -494,41 +542,7 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
     lines.push('');
   }
 
-  for (let index = 0; index < module.functions.length; index += 1) {
-    const fn = module.functions[index];
-    const params = fn.parameters.map(renderParameter);
-    if (fn.optsParams.length > 0) {
-      const optsType = fn.optsParams
-        .map((param) => `${param.name}${param.defaultValue === null ? '' : '?'}: ${param.typeExpression}`)
-        .join('; ');
-      const allOptsHaveDefaults = fn.optsParams.every((param) => param.defaultValue !== null);
-      params.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
-    }
-    lines.push(`${fn.exported ? 'export ' : ''}${fn.async === true ? 'async ' : ''}function ${fn.name}(${params.join(', ')}): ${renderFunctionReturnType(fn)} {`);
-    let statementIndex = 0;
-    while (
-      statementIndex < fn.statements.length
-      && (fn.statements[statementIndex] === '' || fn.statements[statementIndex].startsWith('//'))
-    ) {
-      const statement = fn.statements[statementIndex];
-      lines.push(statement === '' ? '' : `  ${statement}`);
-      statementIndex += 1;
-    }
-    for (const param of fn.optsParams) {
-      if (param.defaultValue === null) {
-        lines.push(`  const ${param.name} = opts.${param.name};`);
-      } else {
-        lines.push(`  const ${param.name} = opts.${param.name} ?? ${param.defaultValue};`);
-      }
-    }
-    for (const statement of fn.statements.slice(statementIndex)) {
-      lines.push(statement === '' ? '' : `  ${statement}`);
-    }
-    lines.push('}');
-    if (index < module.functions.length - 1 || module.trailingStatements.length + module.assignments.length > 0) {
-      lines.push('');
-    }
-  }
+  renderSimpleModuleFunctions(lines, module.functions, module.trailingStatements.length + module.assignments.length > 0);
 
   for (const statement of module.trailingStatements) {
     lines.push(statement);
