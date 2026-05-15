@@ -165,6 +165,11 @@ export function translateExpression(
     return `${translateExpression(listComprehension[3], nameMap, arrayNames, validatedTypeAliases, mapNames)}.map((${itemName}) => ${translateExpression(listComprehension[1], itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
+  const listUnpack = /^\[\*(.+)\]$/.exec(trimmed);
+  if (listUnpack !== null) {
+    return `[...${translateExpression(listUnpack[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}]`;
+  }
+
   const sortedCasefoldCall = /^sorted\((.+), key=str\.casefold\)$/.exec(trimmed);
   if (sortedCasefoldCall !== null) {
     const mapKeys = /^([A-Za-z_][A-Za-z0-9_]*)\.keys\(\)$/.exec(sortedCasefoldCall[1]);
@@ -404,6 +409,10 @@ export function translateExpression(
   const mixedKeywordCall = translateMixedKeywordCall(trimmed, nameMap, arrayNames, validatedTypeAliases);
   if (mixedKeywordCall !== null) {
     return mixedKeywordCall;
+  }
+  const mixedKeywordCallWithRest = translateMixedKeywordCallWithRest(trimmed, nameMap, arrayNames, validatedTypeAliases);
+  if (mixedKeywordCallWithRest !== null) {
+    return mixedKeywordCallWithRest;
   }
 
   const enumModeConditional = /^(.+) if isinstance\((.+), ([A-Z][A-Za-z0-9_]*Mode)\) else ([A-Z][A-Za-z0-9_]*Mode)\((.+)\)$/.exec(trimmed);
@@ -1028,6 +1037,40 @@ function translateMixedKeywordCall(
     ...positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases)),
     `{ ${keywordParts.join(', ')} }`,
   ].join(', ')})`;
+}
+
+function translateMixedKeywordCallWithRest(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string> = new Set(),
+): string | null {
+  const call = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\(/.exec(pythonExpression);
+  if (call === null) {
+    return null;
+  }
+  const closeIndex = matchingCloseParen(pythonExpression, call[1].length);
+  if (closeIndex === null) {
+    return null;
+  }
+  const rest = pythonExpression.slice(closeIndex + 1);
+  if (!rest.startsWith('.') || !pythonExpression.slice(call[1].length + 1, closeIndex).includes('=')) {
+    return null;
+  }
+  const translatedCall = translateMixedKeywordCall(
+    pythonExpression.slice(0, closeIndex + 1),
+    nameMap,
+    arrayNames,
+    validatedTypeAliases,
+  );
+  if (translatedCall === null) {
+    return null;
+  }
+  return `${translatedCall}${translateAttributeRest(rest)}`;
+}
+
+function translateAttributeRest(rest: string): string {
+  return rest.replaceAll(/\b[A-Za-z_][A-Za-z0-9_]*\b/g, tsExportNameForPythonName);
 }
 
 function parseCallPrefix(expression: string, callee: string): { argsText: string; rest: string } | null {
