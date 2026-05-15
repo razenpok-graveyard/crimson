@@ -48,6 +48,10 @@ export interface FunctionParameter {
   typeExpression: string;
 }
 
+export interface OptionalFunctionParameter extends FunctionParameter {
+  defaultValue: string | null;
+}
+
 export interface FunctionDefinition {
   name: string;
   optsParams: FunctionParameter[];
@@ -130,6 +134,7 @@ export interface SimpleModuleFunction {
   name: string;
   exported: boolean;
   parameters: FunctionParameter[];
+  optsParams: OptionalFunctionParameter[];
   returnType: string;
   statements: string[];
 }

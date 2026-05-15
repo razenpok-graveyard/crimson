@@ -9,6 +9,7 @@ import type {
   InitReexports,
   LazyWrapperModule,
   NamespaceReexport,
+  OptionalFunctionParameter,
   PackageVersionModule,
   ProtocolDefinition,
   ProtocolMethod,
@@ -748,16 +749,33 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     index += 1;
 
     const parameters: FunctionParameter[] = [];
+    const optsParams: OptionalFunctionParameter[] = [];
+    let keywordOnly = false;
     if (header[2] !== '') {
       for (const parameterText of header[2].split(', ')) {
-        const parameter = /^([A-Za-z_][A-Za-z0-9_]*): (.+)$/.exec(parameterText);
+        if (parameterText === '*') {
+          keywordOnly = true;
+          continue;
+        }
+        const parameter = /^([A-Za-z_][A-Za-z0-9_]*): ([^=]+?)(?: = (.+))?$/.exec(parameterText);
         if (parameter === null) {
           return null;
         }
-        parameters.push({
+        const parsedParameter = {
           name: tsExportNameForPythonName(parameter[1]),
           typeExpression: tsTypeExpression(parameter[2]),
-        });
+        };
+        if (keywordOnly) {
+          optsParams.push({
+            ...parsedParameter,
+            defaultValue: parameter[3] === undefined ? null : translateExpression(parameter[3]),
+          });
+        } else {
+          if (parameter[3] !== undefined) {
+            return null;
+          }
+          parameters.push(parsedParameter);
+        }
       }
     }
 
@@ -780,6 +798,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       name: tsExportNameForPythonName(header[1]),
       exported: !header[1].startsWith('_'),
       parameters,
+      optsParams,
       returnType: tsTypeExpression(header[3]),
       statements,
     });
@@ -914,6 +933,13 @@ function translateStraightLineStatement(
 
   const assignment = /^(.+?) (\+=|-=|\*=|\/=|=) (.+)$/.exec(statement);
   if (assignment !== null) {
+    const localAssignment = /^([A-Za-z_][A-Za-z0-9_]*)$/.exec(assignment[1]);
+    if (assignment[2] === '=' && localAssignment !== null) {
+      return {
+        statements: [`const ${tsExportNameForPythonName(localAssignment[1])} = ${translateExpression(assignment[3])};`],
+        nextIndex: index + 1,
+      };
+    }
     return {
       statements: [`${translateExpression(assignment[1])} ${assignment[2]} ${translateExpression(assignment[3])};`],
       nextIndex: index + 1,
@@ -983,9 +1009,17 @@ function markTypeOnlyImports(
 }
 
 function translateExpression(pythonExpression: string): string {
-  return pythonExpression
+  const trimmed = pythonExpression.trim();
+  const lowerBoundLengthComparison = /^(.+?) <= (.+?) < len\((.+)\)$/.exec(trimmed);
+  if (lowerBoundLengthComparison !== null) {
+    const value = translateExpression(lowerBoundLengthComparison[2]);
+    return `${value} >= ${translateExpression(lowerBoundLengthComparison[1])} && ${value} < ${translateExpression(lowerBoundLengthComparison[3])}.length`;
+  }
+
+  return trimmed
     .trim()
     .replaceAll(/\b(?:float|str|bool)\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, '$1')
+    .replaceAll(/\blen\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, '$1.length')
     .replaceAll(/\bmin\(/g, 'Math.min(')
     .replaceAll(/\bmax\(/g, 'Math.max(')
     .replaceAll(/\babs\(/g, 'Math.abs(')
@@ -1014,6 +1048,7 @@ function escapeRegExp(value: string): string {
 function tsSimpleExpression(pythonExpression: string, parameters: SimpleFunctionParameter[]): string | null {
   let expression = pythonExpression
     .replaceAll(/\b(?:float|str|bool)\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, '$1')
+    .replaceAll(/\blen\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, '$1.length')
     .replaceAll(/\bmin\(/g, 'Math.min(')
     .replaceAll(/\bmax\(/g, 'Math.max(')
     .replaceAll(/\babs\(/g, 'Math.abs(');

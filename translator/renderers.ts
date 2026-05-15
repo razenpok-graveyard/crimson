@@ -199,8 +199,22 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
 
   for (let index = 0; index < module.functions.length; index += 1) {
     const fn = module.functions[index];
-    const params = fn.parameters.map((param) => `${param.name}: ${param.typeExpression}`).join(', ');
-    lines.push(`${fn.exported ? 'export ' : ''}function ${fn.name}(${params}): ${fn.returnType} {`);
+    const params = fn.parameters.map((param) => `${param.name}: ${param.typeExpression}`);
+    if (fn.optsParams.length > 0) {
+      const optsType = fn.optsParams
+        .map((param) => `${param.name}${param.defaultValue === null ? '' : '?'}: ${param.typeExpression}`)
+        .join('; ');
+      const allOptsHaveDefaults = fn.optsParams.every((param) => param.defaultValue !== null);
+      params.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
+    }
+    lines.push(`${fn.exported ? 'export ' : ''}function ${fn.name}(${params.join(', ')}): ${fn.returnType} {`);
+    for (const param of fn.optsParams) {
+      if (param.defaultValue === null) {
+        lines.push(`  const ${param.name} = opts.${param.name};`);
+      } else {
+        lines.push(`  const ${param.name} = opts.${param.name} ?? ${param.defaultValue};`);
+      }
+    }
     for (const statement of fn.statements) {
       lines.push(`  ${statement}`);
     }
