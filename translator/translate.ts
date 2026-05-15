@@ -65,6 +65,10 @@ function tsPathForPython(relativePath: string): string {
 }
 
 async function translateFile(job: TranslationJob): Promise<string> {
+  if (isIntentionallyExcludedPath(job.relativePath)) {
+    return renderEmptyModule(job.relativePath);
+  }
+
   const futureStripped = stripFutureImports(job.python).trim();
   const initReexports = parseInitReexports(futureStripped);
   if (initReexports !== null) {
@@ -74,6 +78,11 @@ async function translateFile(job: TranslationJob): Promise<string> {
   const namespaceReexports = parseNamespaceReexports(futureStripped);
   if (namespaceReexports !== null) {
     return renderNamespaceReexports(job.relativePath, namespaceReexports);
+  }
+
+  const lazyWrapperModule = parseLazyWrapperModule(futureStripped);
+  if (lazyWrapperModule !== null) {
+    return renderLazyWrapperModule(job.relativePath, lazyWrapperModule);
   }
 
   const typeAliases = parseTypeAliases(futureStripped);
@@ -147,6 +156,10 @@ function renderEmptyModule(relativePath: string): string {
   return `// Port of ${relativePath}\n`;
 }
 
+function isIntentionallyExcludedPath(relativePath: string): boolean {
+  return relativePath.startsWith('crimson/debug_views/');
+}
+
 function parseModuleDocstring(trimmedPython: string): { raw: string; value: string } | null {
   for (const quote of ['"""', "'''"]) {
     if (!trimmedPython.startsWith(quote) || !trimmedPython.endsWith(quote)) {
@@ -207,14 +220,26 @@ interface FunctionDefinition {
   returnExpression: string;
 }
 
+interface LazyWrapperModule {
+  typeName: string;
+  typeModulePath: string;
+  functionName: string;
+  parameter: FunctionParameter;
+  runtimeModulePath: string;
+  runtimeFunctionName: string;
+  comments: string[];
+}
+
 interface InitReexports {
   docstring: string | null;
+  namespaceReexports: NamespaceReexport[];
   reexports: Reexport[];
 }
 
 function parseInitReexports(trimmedPython: string): InitReexports | null {
   const docstring = splitLeadingModuleDocstring(trimmedPython);
   const body = docstring === null ? trimmedPython : docstring.remainder.trim();
+  const namespaceReexports: NamespaceReexport[] = [];
   const reexports: Reexport[] = [];
   let sawAll = false;
   const lines = flattenFromImportBlocks(body.split(/\r?\n/));
@@ -236,6 +261,17 @@ function parseInitReexports(trimmedPython: string): InitReexports | null {
       continue;
     }
 
+    const fromPackageImport = /^from \. import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
+    if (fromPackageImport !== null) {
+      for (const name of fromPackageImport[1].split(', ')) {
+        namespaceReexports.push({
+          alias: tsExportNameForPythonName(name),
+          modulePath: `./${name.replaceAll('_', '-')}.ts`,
+        });
+      }
+      continue;
+    }
+
     const fromImport = /^from ((?:\.)?[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
     if (fromImport === null) {
       return null;
@@ -247,7 +283,9 @@ function parseInitReexports(trimmedPython: string): InitReexports | null {
     });
   }
 
-  return sawAll && reexports.length > 0 ? { docstring: docstring?.value ?? null, reexports } : null;
+  return sawAll && namespaceReexports.length + reexports.length > 0
+    ? { docstring: docstring?.value ?? null, namespaceReexports, reexports }
+    : null;
 }
 
 function flattenFromImportBlocks(lines: string[]): string[] {
@@ -378,6 +416,96 @@ function renderNamespaceReexports(relativePath: string, reexports: NamespaceReex
   for (const reexport of reexports) {
     lines.push(`export * as ${reexport.alias} from '${reexport.modulePath}';`);
   }
+  lines.push('');
+  return lines.join('\n');
+}
+
+function parseLazyWrapperModule(trimmedPython: string): LazyWrapperModule | null {
+  const lines = stripAllAssignments(trimmedPython.split(/\r?\n/));
+  let index = 0;
+
+  while (index < lines.length && lines[index].trim() === '') {
+    index += 1;
+  }
+
+  const typeImport = /^from ((?:\.)?[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*)$/.exec(lines[index] ?? '');
+  if (typeImport === null) {
+    return null;
+  }
+  index += 1;
+
+  while (index < lines.length && lines[index].trim() === '') {
+    index += 1;
+  }
+
+  const header = /^def ([A-Za-z_][A-Za-z0-9_]*)\(([A-Za-z_][A-Za-z0-9_]*): ([^)]+)\) -> ([^:]+):$/.exec(lines[index] ?? '');
+  if (header === null || header[4] !== 'None') {
+    return null;
+  }
+  index += 1;
+
+  const comments: string[] = [];
+  while (index < lines.length && lines[index].trim().startsWith('#')) {
+    comments.push(lines[index].trim().replace(/^# ?/, ''));
+    index += 1;
+  }
+
+  const runtimeImport = /^    from ((?:\.)?[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*) as _[A-Za-z_][A-Za-z0-9_]*$/.exec(lines[index] ?? '');
+  if (runtimeImport === null) {
+    return null;
+  }
+  index += 1;
+
+  while (index < lines.length && lines[index].trim() === '') {
+    index += 1;
+  }
+
+  const call = /^    _[A-Za-z_][A-Za-z0-9_]*\(([A-Za-z_][A-Za-z0-9_]*)\)$/.exec(lines[index] ?? '');
+  if (call === null || call[1] !== header[2]) {
+    return null;
+  }
+  index += 1;
+
+  while (index < lines.length && lines[index].trim() === '') {
+    index += 1;
+  }
+  if (index !== lines.length) {
+    return null;
+  }
+
+  return {
+    typeName: typeImport[2],
+    typeModulePath: tsImportPathForPythonModule(typeImport[1]),
+    functionName: tsExportNameForPythonName(header[1]),
+    parameter: {
+      name: tsExportNameForPythonName(header[2]),
+      typeExpression: tsTypeExpression(header[3]),
+    },
+    runtimeModulePath: tsImportPathForPythonModule(runtimeImport[1]),
+    runtimeFunctionName: tsExportNameForPythonName(runtimeImport[2]),
+    comments,
+  };
+}
+
+function renderLazyWrapperModule(relativePath: string, module: LazyWrapperModule): string {
+  const runtimeAlias = `${module.runtimeFunctionName}Runtime`;
+  const lines = [
+    `// Port of ${relativePath}`,
+    '',
+    `import type { ${module.typeName} } from '${module.typeModulePath}';`,
+    '',
+    `export type { ${module.typeName} };`,
+    '',
+    `export function ${module.functionName}(${module.parameter.name}: ${module.parameter.typeExpression}): void {`,
+  ];
+
+  for (const comment of module.comments) {
+    lines.push(`  // ${comment}`);
+  }
+  lines.push(`  void import('${module.runtimeModulePath}').then(({ ${module.runtimeFunctionName}: ${runtimeAlias} }) => {`);
+  lines.push(`    ${runtimeAlias}(${module.parameter.name});`);
+  lines.push('  });');
+  lines.push('}');
   lines.push('');
   return lines.join('\n');
 }
@@ -605,6 +733,13 @@ function renderInitReexports(relativePath: string, initReexports: InitReexports)
     for (const line of initReexports.docstring.split(/\r?\n/)) {
       lines.push(line === '' ? '//' : `// ${line}`);
     }
+    lines.push('');
+  }
+
+  for (const reexport of initReexports.namespaceReexports) {
+    lines.push(`export * as ${reexport.alias} from '${reexport.modulePath}';`);
+  }
+  if (initReexports.namespaceReexports.length > 0 && initReexports.reexports.length > 0) {
     lines.push('');
   }
 
