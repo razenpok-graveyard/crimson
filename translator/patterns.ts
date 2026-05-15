@@ -716,6 +716,7 @@ export function parseSimpleExportModule(trimmedPython: string, relativePath: str
 export function parseMsgspecStructModule(trimmedPython: string, relativePath: string): StructModule | null {
   const lines = flattenFromImportBlocks(trimmedPython.split(/\r?\n/));
   const imports: ImportDefinition[] = [];
+  const typeAliases: TypeAlias[] = [];
   const classes: StructModule['classes'] = [];
   const protocols: StructModule['protocols'] = [];
   let sawMsgspecImport = false;
@@ -732,7 +733,7 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       index += 1;
       continue;
     }
-    if (trimmed === 'from pathlib import Path' || trimmed === 'from typing import Protocol') {
+    if (trimmed === 'from collections.abc import Callable' || trimmed === 'from pathlib import Path' || trimmed === 'from typing import Protocol') {
       index += 1;
       continue;
     }
@@ -768,6 +769,16 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       continue;
     }
 
+    const typeAlias = /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(trimmed);
+    if (typeAlias !== null) {
+      typeAliases.push({
+        name: tsExportNameForPythonName(typeAlias[1]),
+        typeExpression: tsTypeExpression(typeAlias[2]),
+      });
+      index += 1;
+      continue;
+    }
+
     const protocol = parseSimpleProtocolClass(lines, index);
     if (protocol !== null) {
       protocols.push(protocol.protocol);
@@ -799,14 +810,11 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
         break;
       }
 
-      const field = /^    ([A-Za-z_][A-Za-z0-9_]*): (.+?) = (.+)$/.exec(line);
+      const field = /^    ([A-Za-z_][A-Za-z0-9_]*): (.+?)(?: = (.+))?$/.exec(line);
       if (field === null) {
         return null;
       }
-      const defaultValue = tsStructFieldDefaultValue(field[3]);
-      if (defaultValue === null) {
-        return null;
-      }
+      const defaultValue = field[3] === undefined ? null : tsStructFieldDefaultValue(field[3]);
       fields.push({
         name: tsExportNameForPythonName(field[1]),
         typeExpression: tsStructFieldType(field[2]),
@@ -826,8 +834,8 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
     });
   }
 
-  markStructTypeOnlyImports(imports, classes, protocols);
-  return classes.length + protocols.length > 0 ? { imports, classes, protocols } : null;
+  markStructTypeOnlyImports(imports, typeAliases, classes, protocols);
+  return typeAliases.length + classes.length + protocols.length > 0 ? { imports, typeAliases, classes, protocols } : null;
 }
 
 function parseSimpleProtocolClass(
@@ -976,13 +984,15 @@ function tsStructFieldDefaultValue(pythonValue: string): string | null {
 
 function markStructTypeOnlyImports(
   imports: ImportDefinition[],
+  typeAliases: TypeAlias[],
   classes: StructModule['classes'],
   protocols: StructModule['protocols'],
 ): void {
   const valueText = classes
-    .flatMap((structClass) => structClass.fields.map((field) => field.defaultValue))
+    .flatMap((structClass) => structClass.fields.map((field) => field.defaultValue ?? ''))
     .join('\n');
   const typeText = [
+    ...typeAliases.map((alias) => alias.typeExpression),
     ...classes.flatMap((structClass) => structClass.fields.map((field) => field.typeExpression)),
     ...protocols.flatMap((protocol) => protocol.methods.flatMap((method) => [
       method.returnType,

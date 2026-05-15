@@ -108,6 +108,7 @@ export interface SimpleExportModule {
 
 export interface StructModule {
   imports: ImportDefinition[];
+  typeAliases: TypeAlias[];
   classes: StructClassDefinition[];
   protocols: ProtocolDefinition[];
 }
@@ -122,7 +123,7 @@ export interface StructClassDefinition {
 export interface StructFieldDefinition {
   name: string;
   typeExpression: string;
-  defaultValue: string;
+  defaultValue: string | null;
 }
 
 export interface PackageVersionModule {

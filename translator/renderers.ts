@@ -226,6 +226,13 @@ export function renderMsgspecStructModule(relativePath: string, module: StructMo
     lines.push('');
   }
 
+  for (const alias of module.typeAliases) {
+    lines.push(`export type ${alias.name} = ${alias.typeExpression};`);
+  }
+  if (module.typeAliases.length > 0 && module.classes.length + module.protocols.length > 0) {
+    lines.push('');
+  }
+
   for (let index = 0; index < module.classes.length; index += 1) {
     const structClass = module.classes[index];
     if (structClass.docstring !== null) {
@@ -240,11 +247,16 @@ export function renderMsgspecStructModule(relativePath: string, module: StructMo
     lines.push('');
     lines.push('  constructor(opts: {');
     for (const field of structClass.fields) {
-      lines.push(`    ${field.name}?: ${field.typeExpression};`);
+      lines.push(`    ${field.name}${field.defaultValue === null ? '' : '?'}: ${field.typeExpression};`);
     }
-    lines.push('  } = {}) {');
+    const allFieldsHaveDefaults = structClass.fields.every((field) => field.defaultValue !== null);
+    lines.push(`  }${allFieldsHaveDefaults ? ' = {}' : ''}) {`);
     for (const field of structClass.fields) {
-      lines.push(`    this.${field.name} = opts.${field.name} ?? ${field.defaultValue};`);
+      if (field.defaultValue === null) {
+        lines.push(`    this.${field.name} = opts.${field.name};`);
+      } else {
+        lines.push(`    this.${field.name} = opts.${field.name} ?? ${field.defaultValue};`);
+      }
     }
     lines.push('  }');
     lines.push('}');
