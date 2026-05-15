@@ -164,6 +164,10 @@ export function renderSimpleExportModule(relativePath: string, module: SimpleExp
   return lines.join('\n');
 }
 
+export function renderPackageVersionModule(relativePath: string, version: string): string {
+  return `// Port of ${relativePath}\n\nexport const VERSION = '${version}';\n`;
+}
+
 export function renderInitReexports(relativePath: string, initReexports: InitReexports): string {
   const lines = [`// Port of ${relativePath}`, ''];
   if (initReexports.docstring !== null) {

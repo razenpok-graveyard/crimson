@@ -82,6 +82,10 @@ export interface SimpleExportModule {
   functions: SimpleFunctionDefinition[];
 }
 
+export interface PackageVersionModule {
+  packageName: string;
+}
+
 export interface LazyWrapperModule {
   typeName: string;
   typeModulePath: string;

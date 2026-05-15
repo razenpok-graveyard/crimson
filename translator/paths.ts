@@ -5,6 +5,7 @@ export const translatorDir = path.join(repoRoot, 'translator');
 export const filesPath = path.join(translatorDir, 'files.txt');
 export const progressPath = path.join(translatorDir, 'progress.txt');
 export const pythonSourceRoot = path.resolve(process.env.PY_SOURCE_ROOT ?? path.join(repoRoot, '..', 'crimson', 'src'));
+export const pythonProjectRoot = path.dirname(pythonSourceRoot);
 export const tsTargetRoot = path.resolve(process.env.TS_TARGET_ROOT ?? path.join(repoRoot, 'src'));
 
 export function parseFileList(text: string): string[] {

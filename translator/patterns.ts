@@ -8,6 +8,7 @@ import type {
   InitReexports,
   LazyWrapperModule,
   NamespaceReexport,
+  PackageVersionModule,
   ProtocolDefinition,
   ProtocolMethod,
   Reexport,
@@ -577,6 +578,43 @@ export function parseSimpleExportModule(trimmedPython: string, relativePath: str
       exported: exportedNames.has(fn.name),
     })),
   };
+}
+
+export function parsePackageVersionModule(trimmedPython: string): PackageVersionModule | null {
+  const lines = trimmedPython.split(/\r?\n/);
+  let packageName: string | null = null;
+  let sawImport = false;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const trimmed = lines[index].trim();
+    if (trimmed === '') {
+      continue;
+    }
+
+    if (trimmed === 'from importlib.metadata import version') {
+      sawImport = true;
+      continue;
+    }
+
+    const versionAssignment = /^__version__ = version\("([^"]+)"\)$/.exec(trimmed);
+    if (versionAssignment !== null) {
+      packageName = versionAssignment[1];
+      continue;
+    }
+
+    if (trimmed.startsWith('__all__ = ')) {
+      if (!isOneLineAllAssignment(trimmed)) {
+        while (index < lines.length && lines[index].trim() !== ']') {
+          index += 1;
+        }
+      }
+      continue;
+    }
+
+    return null;
+  }
+
+  return sawImport && packageName !== null ? { packageName } : null;
 }
 
 function parseOneLineAllNames(trimmedLine: string): string[] | null {

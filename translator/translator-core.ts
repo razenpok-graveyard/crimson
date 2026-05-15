@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { TranslationJob } from './model.js';
 import {
@@ -7,11 +8,12 @@ import {
   parseInitReexports,
   parseLazyWrapperModule,
   parseNamespaceReexports,
+  parsePackageVersionModule,
   parseProtocolModule,
   parseSimpleExportModule,
   parseTypeAliases,
 } from './patterns.js';
-import { repoRoot } from './paths.js';
+import { pythonProjectRoot, repoRoot } from './paths.js';
 import { isIntentionallyExcludedPath, parseModuleDocstring, stripFutureImports, stripIgnorablePythonLines } from './python-utils.js';
 import {
   renderConstantsModule,
@@ -22,6 +24,7 @@ import {
   renderLazyWrapperModule,
   renderModuleDocOnly,
   renderNamespaceReexports,
+  renderPackageVersionModule,
   renderProtocolModule,
   renderSimpleExportModule,
   renderTypeAliases,
@@ -63,6 +66,12 @@ export async function translateFile(job: TranslationJob): Promise<string> {
     return renderConstantsModule(job.relativePath, constantsModule);
   }
 
+  const packageVersionModule = parsePackageVersionModule(futureStripped);
+  if (packageVersionModule !== null) {
+    const version = await readPythonProjectVersion(packageVersionModule.packageName);
+    return renderPackageVersionModule(job.relativePath, version);
+  }
+
   const guardedAttributeModule = parseGuardedAttributeModule(futureStripped, job.relativePath);
   if (guardedAttributeModule !== null) {
     return renderGuardedAttributeModule(job.relativePath, guardedAttributeModule);
@@ -91,4 +100,33 @@ export async function translateFile(job: TranslationJob): Promise<string> {
   throw new Error(
     `translator not implemented for ${job.relativePath} -> ${path.relative(repoRoot, job.targetPath)}`,
   );
+}
+
+async function readPythonProjectVersion(packageName: string): Promise<string> {
+  const pyprojectPath = path.join(pythonProjectRoot, 'pyproject.toml');
+  const pyproject = await readFile(pyprojectPath, 'utf8');
+  const projectLines: string[] = [];
+  let inProject = false;
+  for (const line of pyproject.split(/\r?\n/)) {
+    if (/^\[[^\]]+\]$/.test(line)) {
+      if (inProject) {
+        break;
+      }
+      inProject = line === '[project]';
+      continue;
+    }
+    if (inProject) {
+      projectLines.push(line);
+    }
+  }
+  if (!inProject || projectLines.length === 0) {
+    throw new Error(`failed to find [project] in ${path.join(pythonProjectRoot, 'pyproject.toml')}`);
+  }
+  const projectBlock = projectLines.join('\n');
+  const name = /^name = "([^"]+)"$/m.exec(projectBlock)?.[1] ?? null;
+  const version = /^version = "([^"]+)"$/m.exec(projectBlock)?.[1] ?? null;
+  if (name !== packageName || version === null) {
+    throw new Error(`failed to resolve version for Python package ${packageName}`);
+  }
+  return version;
 }
