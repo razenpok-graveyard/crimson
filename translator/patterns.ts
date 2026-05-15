@@ -3863,6 +3863,9 @@ function translateStraightLineAssignment(
       };
     }
     declaredNames.add(localAssignment[1]);
+    if (/\.(?:creatures|pickups|players)\b/.test(assignedRight)) {
+      arrayNames.add(localAssignment[1]);
+    }
     return {
       statements: [
         `${reassignedNames.has(localAssignment[1]) ? 'let' : 'const'} ${tsName} = ${assignedRight};`,
@@ -4437,6 +4440,11 @@ function translateExpression(
         ? `validate${typeExpression}(${valueExpression})`
         : `${valueExpression} as ${typeExpression}`;
     }
+  }
+
+  const vectorSubMethod = /^\((.+) - (.+)\)\.to_heading\(\)$/.exec(trimmed);
+  if (vectorSubMethod !== null) {
+    return `${translateExpression(vectorSubMethod[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.sub(${translateExpression(vectorSubMethod[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}).toHeading()`;
   }
 
   const mixedKeywordCall = translateMixedKeywordCall(trimmed, nameMap, arrayNames, validatedTypeAliases);

@@ -6,11 +6,11 @@ import { creatureLifecycleIsAlive } from '@crimson/creatures/lifecycle.ts';
 import { OwnerRef } from '@crimson/owner-ref.ts';
 import { ProjectileTemplateId } from '@crimson/projectiles/types.ts';
 import { ownerRefForPlayer, projectileSpawn } from '@crimson/weapon-runtime/spawn.ts';
-import type { BonusApplyCtx } from './apply-context.ts';
+import type { BonusApplyCtx } from '@crimson/bonuses/apply-context.ts';
 
 export function applyShockChain(ctx: BonusApplyCtx): void {
   const creatures = ctx.creatures;
-  if (creatures.length === 0) {
+  if (!creatures.length) {
     return;
   }
 
@@ -21,8 +21,7 @@ export function applyShockChain(ctx: BonusApplyCtx): void {
   const origin = ctx.originPos;
   let bestIdx = ctx.state.preserveBugs ? 0 : -1;
   let bestDistSq = 1e12;
-  for (let idx = 0; idx < creatures.length; idx++) {
-    const creature = creatures[idx];
+  for (const [idx, creature] of creatures.entries()) {
     if (!creature.active) {
       continue;
     }
@@ -42,16 +41,11 @@ export function applyShockChain(ctx: BonusApplyCtx): void {
 
   const target = creatures[bestIdx];
   const angle = target.pos.sub(origin).toHeading();
-  const owner = ctx.state.friendlyFireEnabled
-    ? ownerRefForPlayer(ctx.player.index)
-    : OwnerRef.fromLocalPlayer(0);
+  const owner = ctx.state.friendlyFireEnabled ? ownerRefForPlayer(ctx.player.index) : OwnerRef.fromLocalPlayer(0);
 
   ctx.state.bonusSpawnGuard = true;
   ctx.state.shockChainLinksLeft = 0x20;
-  ctx.state.shockChainProjectileId = projectileSpawn(
-    ctx.state,
-    { players: ctx.players, pos: origin, angle, typeId: ProjectileTemplateId.ION_RIFLE, owner, ownerPlayerIndex: ctx.player.index },
-  );
+  ctx.state.shockChainProjectileId = projectileSpawn(ctx.state, { players: ctx.players, pos: origin, angle: angle, typeId: ProjectileTemplateId.ION_RIFLE, owner: owner, ownerPlayerIndex: ctx.player.index });
   ctx.state.bonusSpawnGuard = false;
   ctx.state.sfxQueue.push(SfxId.SHOCK_HIT_01);
 }
