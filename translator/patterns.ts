@@ -289,6 +289,16 @@ export function parseIntEnumModule(trimmedPython: string): EnumDefinition | null
       continue;
     }
 
+    if (trimmed.startsWith('__all__ = ')) {
+      if (!isOneLineAllAssignment(trimmed)) {
+        while (index < lines.length && lines[index].trim() !== ']') {
+          index += 1;
+        }
+      }
+      index += 1;
+      continue;
+    }
+
     return null;
   }
 
