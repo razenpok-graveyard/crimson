@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "translate": "tsc -p translator/tsconfig.json && node .tmp/translator/translate.js",
     "preview": "vite preview"
   },
   "devDependencies": {
