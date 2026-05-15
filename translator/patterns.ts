@@ -816,6 +816,7 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
   const functions: SimpleModuleFunction[] = [];
   const classes: StructModule['classes'] = [];
   const protocols: StructModule['protocols'] = [];
+  const structConstructorFields = new Map<string, string[]>();
   let sawMsgspecImport = false;
   let index = 0;
 
@@ -895,7 +896,7 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       continue;
     }
 
-    const fn = parseStructModuleFunction(lines, index);
+    const fn = parseStructModuleFunction(lines, index, structConstructorFields);
     if (fn !== null) {
       functions.push(fn.fn);
       index = fn.nextIndex;
@@ -914,6 +915,10 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       return null;
     }
     classes.push(structClass.structClass);
+    structConstructorFields.set(
+      structClass.structClass.name,
+      structClass.structClass.fields.map((field) => field.name),
+    );
     index = structClass.nextIndex;
   }
 
@@ -986,6 +991,7 @@ function parseTypeCheckingImports(
 function parseStructModuleFunction(
   lines: string[],
   index: number,
+  structConstructorFields: ReadonlyMap<string, string[]> = new Map(),
 ): { fn: SimpleModuleFunction; nextIndex: number } | null {
   const header = parseStraightLineFunctionHeader(lines, index);
   if (header === null) {
@@ -1041,7 +1047,7 @@ function parseStructModuleFunction(
       parameters: parsedParams.parameters,
       optsParams: parsedParams.optsParams,
       returnType: tsTypeExpression(header.returnType),
-      statements,
+      statements: statements.map((statement) => rewriteStructPositionalConstructors(statement, structConstructorFields)),
     },
     nextIndex,
   };
@@ -2709,7 +2715,9 @@ function tsFStringTemplateContent(
         const baseExpression = translateExpression(expressionText, nameMap, arrayNames, validatedTypeAliases);
         const translatedExpression = conversion?.[2] === 'r' || conversion?.[2] === 'a'
           ? `JSON.stringify(${baseExpression})`
-          : baseExpression;
+          : baseExpression === 'exc'
+            ? 'exc instanceof Error ? exc.message : String(exc)'
+            : baseExpression;
         const zeroPaddedInteger = format === null ? null : /^0(\d+)d$/.exec(format);
         if (zeroPaddedInteger !== null) {
           translated += `\${String(${translatedExpression}).padStart(${zeroPaddedInteger[1]}, '0')}`;
@@ -3215,19 +3223,20 @@ function translateStraightLineStatement(
         nextIndex: finallyBlock.nextIndex,
       };
     }
-    if (
-      afterTry === 'except Exception:'
-      || /^except \([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+\):$/.test(afterTry)
-    ) {
+    const exceptStatement = /^except (?:(?:[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)|\([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+\))(?: as ([A-Za-z_][A-Za-z0-9_]*))?:$/.exec(afterTry);
+    if (exceptStatement !== null) {
       const exceptBlock = translateBlock(tryBlock.nextIndex + 1);
       if (exceptBlock === null) {
         return null;
       }
+      const hoistedTry = hoistTryBlockDeclarations(tryBlock.statements);
+      const catchName = tsExportNameForPythonName(exceptStatement[1] ?? 'exc');
       return {
         statements: [
+          ...hoistedTry.declarations,
           'try {',
-          ...tryBlock.statements,
-          '} catch (exc) {',
+          ...hoistedTry.statements,
+          `} catch (${catchName}) {`,
           ...exceptBlock.statements,
           '}',
         ],
@@ -3347,6 +3356,13 @@ function translateStraightLineStatement(
   }
   if (statement === 'continue') {
     return { statements: ['continue;'], nextIndex: index + 1 };
+  }
+
+  if (/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\.mkdir\(parents=True, exist_ok=True\)$/.test(statement)) {
+    return {
+      statements: ['// Browser/WebGL builds cannot create filesystem directories.'],
+      nextIndex: index + 1,
+    };
   }
 
   if (statement === 'return (') {
@@ -3907,8 +3923,95 @@ function translateRaiseExpression(
   return `new ${translatedCallee}(${message})`;
 }
 
+function hoistTryBlockDeclarations(statements: string[]): { declarations: string[]; statements: string[] } {
+  const declarations: string[] = [];
+  const rewritten = statements.map((statement) => {
+    const declaration = /^(\s*)const ([A-Za-z_$][A-Za-z0-9_$]*) = (.+);$/.exec(statement);
+    if (declaration === null) {
+      return statement;
+    }
+    const typeExpression = tsTypeForAssignedExpression(declaration[3]);
+    if (typeExpression === null) {
+      return statement;
+    }
+    declarations.push(`let ${declaration[2]}: ${typeExpression};`);
+    return `${declaration[1]}${declaration[2]} = ${declaration[3]};`;
+  });
+  return { declarations, statements: rewritten };
+}
+
+function tsTypeForAssignedExpression(expression: string): string | null {
+  const trimmed = expression.trim();
+  const awaited = /^await (.+)$/.exec(trimmed);
+  if (awaited !== null) {
+    const innerType = tsTypeForAssignedExpression(awaited[1]);
+    return innerType === null ? null : `Awaited<${innerType}>`;
+  }
+  const constructor = /^new ([A-Za-z_$][A-Za-z0-9_$]*)\(/.exec(trimmed);
+  if (constructor !== null) {
+    return constructor[1];
+  }
+  const call = /^([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\(/.exec(trimmed);
+  if (call !== null) {
+    return `ReturnType<typeof ${call[1]}>`;
+  }
+  if (/^(?:true|false)$/.test(trimmed)) {
+    return 'boolean';
+  }
+  if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) {
+    return 'number';
+  }
+  if (/^(?:"[^"]*"|'[^']*'|`[^`]*`)$/.test(trimmed)) {
+    return 'string';
+  }
+  return null;
+}
+
+function rewriteStructPositionalConstructors(
+  statement: string,
+  structConstructorFields: ReadonlyMap<string, string[]>,
+): string {
+  if (structConstructorFields.size === 0) {
+    return statement;
+  }
+
+  let output = '';
+  let index = 0;
+  const constructorPattern = /new ([A-Za-z_$][A-Za-z0-9_$]*)\(/g;
+  while (index < statement.length) {
+    constructorPattern.lastIndex = index;
+    const match = constructorPattern.exec(statement);
+    if (match === null) {
+      output += statement.slice(index);
+      break;
+    }
+
+    const fields = structConstructorFields.get(match[1]);
+    const argsStart = constructorPattern.lastIndex;
+    const closeIndex = matchingCloseParen(statement, argsStart - 1);
+    if (fields === undefined || closeIndex === null) {
+      output += statement.slice(index, constructorPattern.lastIndex);
+      index = constructorPattern.lastIndex;
+      continue;
+    }
+
+    const argsText = statement.slice(argsStart, closeIndex);
+    const args = splitTopLevelComma(argsText);
+    if (args.length !== fields.length || args[0]?.trim().startsWith('{') === true) {
+      output += statement.slice(index, closeIndex + 1);
+      index = closeIndex + 1;
+      continue;
+    }
+
+    output += statement.slice(index, match.index);
+    output += `new ${match[1]}({ ${fields.map((field, argIndex) => `${field}: ${args[argIndex]}`).join(', ')} })`;
+    index = closeIndex + 1;
+  }
+  return output;
+}
+
 function maybeAwaitAsyncCall(tsExpression: string): string {
-  return /^load[A-Z][A-Za-z0-9_]*\(.*\)$/.test(tsExpression) ? `await ${tsExpression}` : tsExpression;
+  return /^(?:load[A-Z][A-Za-z0-9_]*|initAudioState)\(.*\)$/.test(tsExpression) ? `await ${tsExpression}` : tsExpression;
 }
 
 function reassignedLocalNames(lines: string[], startIndex: number): Set<string> {
@@ -4495,10 +4598,10 @@ function translateExpression(
 
   const stringLiterals: string[] = [];
   const masked = trimmed.replaceAll(
-    /"[^"\\]*(?:\\.[^"\\]*)*"|'[^'\\]*(?:\\.[^'\\]*)*'/g,
+    /[fF]?"[^"\\]*(?:\\.[^"\\]*)*"|[fF]?'[^'\\]*(?:\\.[^'\\]*)*'/g,
     (literal) => {
       const placeholder = `__CRIMSON_STRING_${stringLiterals.length}__`;
-      stringLiterals.push(tsStringLiteral(literal));
+      stringLiterals.push(/^[fF]/.test(literal) ? translateExpression(literal, nameMap, arrayNames, validatedTypeAliases, mapNames) : tsStringLiteral(literal));
       return placeholder;
     },
   );
