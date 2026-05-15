@@ -1189,7 +1189,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       index += 1;
       continue;
     }
-    if (trimmed === 'import tempfile' || trimmed === 'from pathlib import Path') {
+    if (trimmed === 'from collections.abc import Callable' || trimmed === 'import tempfile' || trimmed === 'from pathlib import Path') {
       index += 1;
       continue;
     }
@@ -1236,7 +1236,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     const arrayNames = new Set<string>();
     let keywordOnly = false;
     if (header.parametersText !== '') {
-      for (const parameterText of header.parametersText.split(', ')) {
+      for (const parameterText of splitTopLevelComma(header.parametersText)) {
         if (parameterText === '*') {
           keywordOnly = true;
           continue;
@@ -1707,6 +1707,27 @@ function translateStraightLineStatement(
     );
   }
 
+  const multilineKeywordCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(statement);
+  if (multilineKeywordCall !== null) {
+    const statements = [`${translateExpression(multilineKeywordCall[1], nameMap, arrayNames)}({`];
+    let nextIndex = index + 1;
+    while (nextIndex < lines.length) {
+      const trimmed = lines[nextIndex].trim();
+      if (trimmed === ')') {
+        statements.push('});');
+        return { statements, nextIndex: nextIndex + 1 };
+      }
+
+      const keywordArg = /^([A-Za-z_][A-Za-z0-9_]*)=(.+),$/.exec(trimmed);
+      if (keywordArg === null) {
+        return null;
+      }
+      statements.push(`  ${tsExportNameForPythonName(keywordArg[1])}: ${translateExpression(keywordArg[2], nameMap, arrayNames)},`);
+      nextIndex += 1;
+    }
+    return null;
+  }
+
   const callStatement = /^(.+\))$/.exec(statement);
   if (callStatement !== null) {
     return { statements: [`${translateExpression(callStatement[1], nameMap, arrayNames)};`], nextIndex: index + 1 };
@@ -1964,6 +1985,14 @@ function translateExpression(
   if (chainedLessEqualComparison !== null) {
     const middle = translateExpression(chainedLessEqualComparison[2], nameMap, arrayNames);
     return `${translateExpression(chainedLessEqualComparison[1], nameMap, arrayNames)} <= ${middle} && ${middle} <= ${translateExpression(chainedLessEqualComparison[3], nameMap, arrayNames)}`;
+  }
+
+  const notInTuple = /^(.+?) not in \((.*)\)$/.exec(trimmed);
+  if (notInTuple !== null) {
+    const value = translateExpression(notInTuple[1], nameMap, arrayNames);
+    return splitTopLevelComma(notInTuple[2])
+      .map((item) => `${value} !== ${translateExpression(item, nameMap, arrayNames)}`)
+      .join(' && ');
   }
 
   const binaryComparison = /^(.+?) (<=|>=|<|>|==|!=) (.+)$/.exec(trimmed);

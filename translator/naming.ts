@@ -31,7 +31,10 @@ export function tsTypeExpression(pythonType: string): string {
   if (trimmed.includes(' | ')) {
     return trimmed
       .split(' | ')
-      .map((part) => part === 'None' ? 'null' : tsTypeExpression(part))
+      .map((part) => {
+        const typeExpression = part === 'None' ? 'null' : tsTypeExpression(part);
+        return typeExpression.includes('=>') ? `(${typeExpression})` : typeExpression;
+      })
       .join(' | ');
   }
   const listType = /^list\[(.+)\]$/.exec(trimmed);
