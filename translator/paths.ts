@@ -68,7 +68,7 @@ export function tsImportPathForPythonModule(moduleName: string): string {
     return `@${root}/${rest.join('/')}.ts`;
   }
 
-  return `${tsParts.join('/')}.ts`;
+  return tsParts.join('/');
 }
 
 export function tsImportPathForPythonImport(moduleName: string, importerRelativePath: string): string {

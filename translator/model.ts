@@ -16,6 +16,11 @@ export interface NamespaceReexport {
   modulePath: string;
 }
 
+export interface NamespaceImportDefinition {
+  alias: string;
+  modulePath: string;
+}
+
 export interface TypeAlias {
   name: string;
   typeExpression: string;
@@ -64,6 +69,7 @@ export interface ConstantsModule {
 export interface FunctionParameter {
   name: string;
   typeExpression: string;
+  defaultValue?: string | null;
 }
 
 export interface OptionalFunctionParameter extends FunctionParameter {
@@ -199,9 +205,11 @@ export interface SimpleModuleAssignment {
 
 export interface StraightLineModule {
   imports: ImportDefinition[];
+  namespaceImports: NamespaceImportDefinition[];
   reexports: Reexport[];
   typeAliases: TypeAlias[];
   leadingAssignments: SimpleModuleAssignment[];
+  leadingStatements: string[];
   classes: StructClassDefinition[];
   functions: SimpleModuleFunction[];
   assignments: SimpleModuleAssignment[];

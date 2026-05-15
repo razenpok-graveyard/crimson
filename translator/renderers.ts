@@ -1,6 +1,7 @@
 import type {
   ConstantsModule,
   EnumDefinition,
+  FunctionParameter,
   FunctionDefinition,
   GuardedAttributeModule,
   InitReexports,
@@ -13,6 +14,11 @@ import type {
   StructModule,
   TypeAlias,
 } from './model.js';
+
+function renderParameter(param: FunctionParameter): string {
+  const defaultValue = param.defaultValue === undefined || param.defaultValue === null ? '' : ` = ${param.defaultValue}`;
+  return `${param.name}: ${param.typeExpression}${defaultValue}`;
+}
 
 export function renderEmptyModule(relativePath: string): string {
   return `// Port of ${relativePath}\n`;
@@ -65,7 +71,7 @@ export function renderProtocolModule(relativePath: string, protocol: ProtocolDef
     const optsType = method.optsParams
       .map((param) => `${param.name}${method.optsOptional ? '?' : ''}: ${param.typeExpression}`)
       .join('; ');
-    const params = method.parameters.map((param) => `${param.name}: ${param.typeExpression}`);
+    const params = method.parameters.map(renderParameter);
     if (method.optsParams.length > 0) {
       params.push(`opts${method.optsOptional ? '?' : ''}: { ${optsType} }`);
     }
@@ -241,7 +247,7 @@ export function renderMsgspecStructModule(relativePath: string, module: StructMo
     const protocol = module.protocols[index];
     lines.push(`export interface ${protocol.name} {`);
     for (const method of protocol.methods) {
-      const params = method.parameters.map((param) => `${param.name}: ${param.typeExpression}`);
+      const params = method.parameters.map(renderParameter);
       lines.push(`  ${method.name}(${params.join(', ')}): ${method.returnType};`);
     }
     lines.push('}');
@@ -282,7 +288,7 @@ function renderStructClasses(lines: string[], classes: StructModule['classes']):
     lines.push('  }');
     for (const method of structClass.methods) {
       lines.push('');
-      const params = method.parameters.map((param) => `${param.name}: ${param.typeExpression}`);
+      const params = method.parameters.map(renderParameter);
       if (method.optsParams.length > 0) {
         const optsType = method.optsParams
           .map((param) => `${param.name}${param.defaultValue === null ? '' : '?'}: ${param.typeExpression}`)
@@ -317,10 +323,13 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
       `import ${importDefinition.typeOnly ? 'type ' : ''}{ ${importDefinition.names.join(', ')} } from '${importDefinition.modulePath}';`,
     );
   }
+  for (const namespaceImport of module.namespaceImports) {
+    lines.push(`import * as ${namespaceImport.alias} from '${namespaceImport.modulePath}';`);
+  }
   for (const reexport of module.reexports) {
     lines.push(`export { ${reexport.names.join(', ')} } from '${reexport.modulePath}';`);
   }
-  if (module.imports.length + module.reexports.length > 0) {
+  if (module.imports.length + module.namespaceImports.length + module.reexports.length > 0) {
     lines.push('');
   }
 
@@ -342,7 +351,14 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
   }
 
   renderStraightLineAssignments(lines, module.leadingAssignments);
-  if (module.leadingAssignments.length > 0 && module.classes.length + module.functions.length + module.assignments.length > 0) {
+  if (module.leadingAssignments.length > 0 && module.leadingStatements.length + module.classes.length + module.functions.length + module.assignments.length > 0) {
+    lines.push('');
+  }
+
+  for (const statement of module.leadingStatements) {
+    lines.push(statement);
+  }
+  if (module.leadingStatements.length > 0 && module.classes.length + module.functions.length + module.assignments.length > 0) {
     lines.push('');
   }
 
@@ -353,7 +369,7 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
 
   for (let index = 0; index < module.functions.length; index += 1) {
     const fn = module.functions[index];
-    const params = fn.parameters.map((param) => `${param.name}: ${param.typeExpression}`);
+    const params = fn.parameters.map(renderParameter);
     if (fn.optsParams.length > 0) {
       const optsType = fn.optsParams
         .map((param) => `${param.name}${param.defaultValue === null ? '' : '?'}: ${param.typeExpression}`)

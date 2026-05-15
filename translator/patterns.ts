@@ -8,6 +8,7 @@ import type {
   ImportDefinition,
   InitReexports,
   LazyWrapperModule,
+  NamespaceImportDefinition,
   NamespaceReexport,
   OptionalFunctionParameter,
   PackageVersionModule,
@@ -1361,7 +1362,9 @@ export function parsePlatformDirsModule(trimmedPython: string): PlatformDirsModu
 export function parseStraightLineModule(trimmedPython: string, relativePath: string): StraightLineModule | null {
   const lines = flattenFromImportBlocks(trimmedPython.split(/\r?\n/));
   const imports: ImportDefinition[] = [];
+  const namespaceImports: NamespaceImportDefinition[] = [];
   const leadingAssignments: SimpleModuleAssignment[] = [];
+  const leadingStatements: string[] = [];
   const typeAliases: TypeAlias[] = [];
   const validatedTypeAliases = new Set<string>();
   const classes: StructModule['classes'] = [];
@@ -1448,9 +1451,35 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
 
+    const namespaceImport = /^from (\.+) import ([A-Za-z_][A-Za-z0-9_]*) as ([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);
+    if (namespaceImport !== null) {
+      const alias = tsExportNameForPythonName(namespaceImport[3]);
+      namespaceImports.push({
+        alias,
+        modulePath: tsImportPathForPythonImport(`${namespaceImport[1]}${namespaceImport[2]}`, relativePath),
+      });
+      moduleNameMap.set(namespaceImport[3], alias);
+      index += 1;
+      continue;
+    }
+
     const assignment = parseTopLevelAssignment(lines, index);
     if (assignment === null) {
-      return null;
+      const topLevelStatement = translateStraightLineStatement(
+        lines,
+        index,
+        '',
+        moduleNameMap,
+        new Set(),
+        new Set(),
+        new Set(),
+      );
+      if (topLevelStatement === null) {
+        return null;
+      }
+      leadingStatements.push(...topLevelStatement.statements);
+      index = topLevelStatement.nextIndex;
+      continue;
     }
     attachPendingAssignmentComments(assignment.assignment, pendingAssignmentComments);
     avoidImportedPrivateNameCollision(assignment.assignment, imports);
@@ -1490,11 +1519,12 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         if (parameter === null) {
           return null;
         }
+        const baseTypeExpression = tsTypeExpression(parameter[2]);
         const parsedParameter = {
           name: tsExportNameForPythonName(parameter[1]),
-          typeExpression: tsTypeExpression(parameter[2]),
+          typeExpression: baseTypeExpression,
         };
-        if (parsedParameter.typeExpression.endsWith('[]')) {
+        if (baseTypeExpression.endsWith('[]')) {
           arrayNames.add(parameter[1]);
         }
         if (keywordOnly) {
@@ -1503,10 +1533,12 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
             defaultValue: parameter[3] === undefined ? null : translateExpression(parameter[3], undefined, arrayNames),
           });
         } else {
-          if (parameter[3] !== undefined) {
-            return null;
-          }
-          parameters.push(parsedParameter);
+          parameters.push(parameter[3] === undefined
+            ? parsedParameter
+            : {
+              ...parsedParameter,
+              defaultValue: translateExpression(parameter[3], undefined, arrayNames),
+            });
         }
       }
     }
@@ -1588,7 +1620,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   }
 
   const reexports = reexportsForAllNames(imports, allNames);
-  markTypeOnlyImports(imports, typeAliases, classes, functions, [...leadingAssignments, ...assignments]);
+  markTypeOnlyImports(imports, typeAliases, classes, leadingStatements, functions, [...leadingAssignments, ...assignments]);
   if (allNames.length > 0) {
     const exportedNames = new Set(allNames.map(tsPublicNameForPythonName));
     for (const alias of typeAliases) {
@@ -1606,8 +1638,8 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
   }
 
-  return typeAliases.length + leadingAssignments.length + classes.length + functions.length + assignments.length + reexports.length > 0
-    ? { imports, reexports, typeAliases, leadingAssignments, classes, functions, assignments }
+  return typeAliases.length + leadingAssignments.length + leadingStatements.length + classes.length + functions.length + assignments.length + reexports.length > 0
+    ? { imports, namespaceImports, reexports, typeAliases, leadingAssignments, leadingStatements, classes, functions, assignments }
     : null;
 }
 
@@ -1621,6 +1653,15 @@ function parseStraightLineFunctionHeader(
       name: oneLine[1],
       parametersText: oneLine[2],
       returnType: oneLine[3],
+      nextIndex: index + 1,
+    };
+  }
+  const oneLineWithoutReturn = /^def ([A-Za-z_][A-Za-z0-9_]*)\((.*)\):$/.exec(lines[index] ?? '');
+  if (oneLineWithoutReturn !== null) {
+    return {
+      name: oneLineWithoutReturn[1],
+      parametersText: oneLineWithoutReturn[2],
+      returnType: 'any',
       nextIndex: index + 1,
     };
   }
@@ -2100,6 +2141,22 @@ function translateStraightLineStatement(
     return null;
   }
 
+  const multilineReturnCall = /^return ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(statement);
+  if (multilineReturnCall !== null) {
+    const callExpression = parseMultilineCallExpression(
+      lines,
+      index + 1,
+      multilineReturnCall[1],
+      nameMap,
+      arrayNames,
+      validatedTypeAliases,
+    );
+    if (callExpression === null) {
+      return null;
+    }
+    return { statements: [`return ${callExpression.expression};`], nextIndex: callExpression.nextIndex };
+  }
+
   const returnStatement = /^return (.+)$/.exec(statement);
   if (returnStatement !== null) {
     return { statements: [`return ${translateExpression(returnStatement[1], nameMap, arrayNames, validatedTypeAliases)};`], nextIndex: index + 1 };
@@ -2498,6 +2555,7 @@ function markTypeOnlyImports(
   imports: ImportDefinition[],
   typeAliases: TypeAlias[],
   classes: StructModule['classes'],
+  leadingStatements: string[],
   functions: SimpleModuleFunction[],
   assignments: SimpleModuleAssignment[],
 ): void {
@@ -2511,6 +2569,7 @@ function markTypeOnlyImports(
     ]),
     ...classes.flatMap((structClass) => structClass.fields.map((field) => field.defaultValue ?? '')),
     ...classes.flatMap((structClass) => structClass.methods.flatMap((method) => method.statements)),
+    ...leadingStatements,
     ...functions.flatMap((fn) => fn.statements),
     ...assignments.flatMap((assignment) => assignment.valueLines),
   ].join('\n');
