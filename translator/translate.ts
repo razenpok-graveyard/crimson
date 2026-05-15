@@ -144,7 +144,7 @@ async function main(): Promise<void> {
   }
 
   for (const job of jobs) {
-    console.log(`[${job.index}/${files.length}] ${job.relativePath}`);
+    console.log(`Translating ${job.relativePath} => ${path.relative(repoRoot, job.targetPath)}`);
     const ts = await translateFile(job);
     await mkdir(path.dirname(job.targetPath), { recursive: true });
     await writeFile(job.targetPath, ts);
