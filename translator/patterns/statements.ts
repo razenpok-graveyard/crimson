@@ -1455,14 +1455,30 @@ export function rewriteStructPositionalConstructors(
 
     const argsText = statement.slice(argsStart, closeIndex);
     const args = splitTopLevelComma(argsText);
-    if (args.length !== fields.length || args[0]?.trim().startsWith('{') === true) {
+    if (args.length > fields.length || args[0]?.trim().startsWith('{') === true) {
       output += statement.slice(index, closeIndex + 1);
       index = closeIndex + 1;
       continue;
     }
 
+    const lastArg = args.at(-1)?.trim() ?? '';
+    const keywordObject = /^\{ (.+) \}$/.exec(lastArg);
+    const positionalArgs = keywordObject === null ? args : args.slice(0, -1);
+    if (positionalArgs.length > fields.length) {
+      output += statement.slice(index, closeIndex + 1);
+      index = closeIndex + 1;
+      continue;
+    }
+
+    const fieldAssignments = fields
+      .slice(0, positionalArgs.length)
+      .map((field, argIndex) => `${field}: ${positionalArgs[argIndex]}`);
+    if (keywordObject !== null) {
+      fieldAssignments.push(keywordObject[1]);
+    }
+
     output += statement.slice(index, match.index);
-    output += `new ${match[1]}({ ${fields.map((field, argIndex) => `${field}: ${args[argIndex]}`).join(', ')} })`;
+    output += `new ${match[1]}({ ${fieldAssignments.join(', ')} })`;
     index = closeIndex + 1;
   }
   return output;

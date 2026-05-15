@@ -83,6 +83,13 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       modulePath: tsImportPathForPythonImport(fromImport[1], relativePath),
       names: fromImport[2].split(', ').map(tsExportNameForPythonName),
     });
+    if (tsImportPathForPythonImport(fromImport[1], relativePath) === '@crimson/bonuses/hud.ts') {
+      for (const name of fromImport[2].split(', ')) {
+        if (name === '_TimerRef') {
+          structConstructorFields.set('TimerRef', ['kind', 'key', 'playerIndex']);
+        }
+      }
+    }
     index += 1;
   }
 
@@ -137,16 +144,30 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
     if (structClass === null) {
       return null;
     }
-    classes.push(structClass.structClass);
     structConstructorFields.set(
       structClass.structClass.name,
       structClass.structClass.fields.map((field) => field.name),
     );
+    classes.push(rewriteStructClassConstructorCalls(structClass.structClass, structConstructorFields));
     index = structClass.nextIndex;
   }
 
   markStructTypeOnlyImports(imports, typeAliases, functions, classes, protocols);
   return typeAliases.length + functions.length + classes.length + protocols.length > 0 ? { imports, typeAliases, functions, classes, protocols } : null;
+}
+
+function rewriteStructClassConstructorCalls(
+  structClass: StructModule['classes'][number],
+  structConstructorFields: ReadonlyMap<string, string[]>,
+): StructModule['classes'][number] {
+  return {
+    ...structClass,
+    postInitStatements: structClass.postInitStatements.map((statement) => rewriteStructPositionalConstructors(statement, structConstructorFields)),
+    methods: structClass.methods.map((method) => ({
+      ...method,
+      statements: method.statements.map((statement) => rewriteStructPositionalConstructors(statement, structConstructorFields)),
+    })),
+  };
 }
 
 function parseStructModuleFunction(

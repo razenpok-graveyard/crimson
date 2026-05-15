@@ -52,6 +52,10 @@ export function tsTypeExpression(pythonType: string): string {
   if (dictType !== null) {
     return `Map<${tsTypeExpression(dictType[1])}, ${tsTypeExpression(dictType[2])}>`;
   }
+  const setType = /^set\[(.+)\]$/.exec(trimmed);
+  if (setType !== null) {
+    return `Set<${tsTypeExpression(setType[1])}>`;
+  }
   const fixedTupleType = /^tuple\[(.+)\]$/.exec(trimmed);
   if (fixedTupleType !== null && !fixedTupleType[1].endsWith(', ...')) {
     return `[${fixedTupleType[1].split(topLevelCommaPattern()).map(tsTypeExpression).join(', ')}]`;

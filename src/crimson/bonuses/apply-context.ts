@@ -2,9 +2,20 @@
 
 import type { Vec2 } from '@grim/geom.ts';
 import type { GameplayState, PlayerState } from '@crimson/sim/state-types.ts';
-import { timerRef } from './hud.ts';
-import { BONUS_BY_ID, BonusId } from './ids.ts';
+import { TimerRef } from '@crimson/bonuses/hud.ts';
+import type { BonusId } from '@crimson/bonuses/ids.ts';
+import { BONUS_BY_ID } from '@crimson/bonuses/ids.ts';
 import type { CreatureState } from '@crimson/creatures/runtime.ts';
+
+export type BonusApplyHandler = (arg0: BonusApplyCtx) => void;
+
+export function bonusApplySeconds(ctx: BonusApplyCtx): number {
+  const meta = BONUS_BY_ID.get(ctx.bonusId) ?? null;
+  if (meta !== null && meta.applySeconds !== null) {
+    return meta.applySeconds;
+  }
+  return ctx.amount;
+}
 
 export class BonusApplyCtx {
   state: GameplayState;
@@ -54,11 +65,7 @@ export class BonusApplyCtx {
   registerGlobal(timerKey: string): void {
     this.state.bonusHud.register(
       this.bonusId,
-      {
-        label: this.label,
-        iconId: this.iconId,
-        timerRef: timerRef('global', String(timerKey)),
-      },
+      { label: this.label, iconId: this.iconId, timerRef: new TimerRef({ kind: 'global', key: timerKey }) },
     );
   }
 
@@ -66,32 +73,13 @@ export class BonusApplyCtx {
     if (this.players.length > 1) {
       this.state.bonusHud.register(
         this.bonusId,
-        {
-          label: this.label,
-          iconId: this.iconId,
-          timerRef: timerRef('player', String(timerKey), 0),
-          timerRefAlt: timerRef('player', String(timerKey), 1),
-        },
+        { label: this.label, iconId: this.iconId, timerRef: new TimerRef({ kind: 'player', key: timerKey, playerIndex: 0 }), timerRefAlt: new TimerRef({ kind: 'player', key: timerKey, playerIndex: 1 }) },
       );
     } else {
       this.state.bonusHud.register(
         this.bonusId,
-        {
-          label: this.label,
-          iconId: this.iconId,
-          timerRef: timerRef('player', String(timerKey), int(this.player.index)),
-        },
+        { label: this.label, iconId: this.iconId, timerRef: new TimerRef({ kind: 'player', key: timerKey, playerIndex: int(this.player.index) }) },
       );
     }
   }
-}
-
-export type BonusApplyHandler = (ctx: BonusApplyCtx) => void;
-
-export function bonusApplySeconds(ctx: BonusApplyCtx): number {
-  const meta = BONUS_BY_ID.get(ctx.bonusId);
-  if (meta !== undefined && meta.applySeconds !== null && meta.applySeconds !== undefined) {
-    return meta.applySeconds;
-  }
-  return ctx.amount;
 }

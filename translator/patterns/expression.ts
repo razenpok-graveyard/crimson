@@ -583,6 +583,14 @@ export function translateExpression(
     return `(() => { const value = ${value}; if (!Object.values(${enumName}).includes(value as ${enumName})) { throw new Error('invalid ${enumName}'); } return value as ${enumName}; })()`;
   }
 
+  const privatePositionalConstructor = /^_([A-Z][A-Za-z0-9_]*)\((.*)\)$/.exec(trimmed);
+  if (privatePositionalConstructor !== null) {
+    const args = splitTopLevelComma(privatePositionalConstructor[2]);
+    if (args.every((arg) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(arg))) {
+      return `new ${tsExportNameForPythonName(`_${privatePositionalConstructor[1]}`)}(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;
+    }
+  }
+
   const positionalConstructor = /^([A-Z][A-Za-z0-9_]*)\((.*)\)$/.exec(trimmed);
   if (positionalConstructor !== null) {
     const args = splitTopLevelComma(positionalConstructor[2]);
