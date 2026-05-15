@@ -65,6 +65,12 @@ function tsPathForPython(relativePath: string): string {
 }
 
 async function translateFile(job: TranslationJob): Promise<string> {
+  const futureStripped = stripFutureImports(job.python).trim();
+  const reexports = parseInitReexports(futureStripped);
+  if (reexports !== null) {
+    return renderInitReexports(job.relativePath, reexports);
+  }
+
   const trimmed = stripIgnorablePythonLines(job.python).trim();
   if (trimmed === '') {
     return renderEmptyModule(job.relativePath);
@@ -81,10 +87,21 @@ async function translateFile(job: TranslationJob): Promise<string> {
 }
 
 function stripIgnorablePythonLines(python: string): string {
+  return stripFutureImports(python)
+    .split(/\r?\n/)
+    .filter((line) => !isOneLineAllAssignment(line.trim()))
+    .join('\n');
+}
+
+function stripFutureImports(python: string): string {
   return python
     .split(/\r?\n/)
     .filter((line) => line.trim() !== 'from __future__ import annotations')
     .join('\n');
+}
+
+function isOneLineAllAssignment(trimmedLine: string): boolean {
+  return /^__all__ = \[[^\]]*\]$/.test(trimmedLine);
 }
 
 function renderEmptyModule(relativePath: string): string {
@@ -108,6 +125,49 @@ function renderModuleDocOnly(relativePath: string, docstring: string): string {
   const lines = [`// Port of ${relativePath}`, ''];
   for (const line of docstring.split(/\r?\n/)) {
     lines.push(line === '' ? '//' : `// ${line}`);
+  }
+  lines.push('');
+  return lines.join('\n');
+}
+
+interface Reexport {
+  names: string[];
+  modulePath: string;
+}
+
+function parseInitReexports(trimmedPython: string): Reexport[] | null {
+  const reexports: Reexport[] = [];
+  let sawAll = false;
+
+  for (const line of trimmedPython.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed === '') {
+      continue;
+    }
+
+    if (trimmed.startsWith('__all__ = ')) {
+      sawAll = true;
+      continue;
+    }
+
+    const fromImport = /^from \.([A-Za-z_][A-Za-z0-9_]*) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
+    if (fromImport === null) {
+      return null;
+    }
+
+    reexports.push({
+      modulePath: `./${fromImport[1].replaceAll('_', '-')}.ts`,
+      names: fromImport[2].split(', '),
+    });
+  }
+
+  return sawAll && reexports.length > 0 ? reexports : null;
+}
+
+function renderInitReexports(relativePath: string, reexports: Reexport[]): string {
+  const lines = [`// Port of ${relativePath}`, ''];
+  for (const reexport of reexports) {
+    lines.push(`export { ${reexport.names.join(', ')} } from '${reexport.modulePath}';`);
   }
   lines.push('');
   return lines.join('\n');
