@@ -1495,6 +1495,15 @@ function translateStraightLineAssignment(
   reassignedNames: Set<string>,
   arrayNames: Set<string>,
 ): { statements: string[]; nextIndex: number } {
+  const fullSliceAssignment = /^(.+)\[:\]$/.exec(pythonLeft);
+  if (operator === '=' && fullSliceAssignment !== null) {
+    const tsLeft = translateExpression(fullSliceAssignment[1], nameMap, arrayNames);
+    return {
+      statements: [`${tsLeft}.splice(0, ${tsLeft}.length, ...${tsRight});`],
+      nextIndex,
+    };
+  }
+
   const localAssignment = /^([A-Za-z_][A-Za-z0-9_]*)$/.exec(pythonLeft);
   if (operator === '=' && localAssignment !== null) {
     const globalName = nameMap.get(localAssignment[1]);
@@ -1631,16 +1640,33 @@ function markTypeOnlyImports(
     ...functions.flatMap((fn) => fn.statements),
     ...assignments.flatMap((assignment) => assignment.valueLines),
   ].join('\n');
+  const typeText = [
+    ...functions.flatMap((fn) => [
+      fn.returnType,
+      ...fn.parameters.map((parameter) => parameter.typeExpression),
+      ...fn.optsParams.map((parameter) => parameter.typeExpression),
+    ]),
+    ...assignments.flatMap((assignment) => assignment.typeExpression ?? []),
+  ].join('\n');
 
   for (let index = 0; index < imports.length; index += 1) {
     const importDefinition = imports[index];
     const valueNames = importDefinition.names.filter((name) => identifierPattern(name).test(valueText));
-    const typeOnlyNames = importDefinition.names.filter((name) => !identifierPattern(name).test(valueText));
+    const typeOnlyNames = importDefinition.names.filter((name) => (
+      !identifierPattern(name).test(valueText) && identifierPattern(name).test(typeText)
+    ));
+    if (valueNames.length + typeOnlyNames.length === 0) {
+      imports.splice(index, 1);
+      index -= 1;
+      continue;
+    }
     if (valueNames.length === 0) {
+      importDefinition.names = typeOnlyNames;
       importDefinition.typeOnly = true;
       continue;
     }
     if (typeOnlyNames.length === 0) {
+      importDefinition.names = valueNames;
       importDefinition.typeOnly = false;
       continue;
     }
@@ -1663,6 +1689,11 @@ function translateExpression(
   const envComparison = /^os\.environ\.get\("([A-Za-z_][A-Za-z0-9_]*)"\) == "([^"]*)"$/.exec(trimmed);
   if (envComparison !== null) {
     return `typeof process !== 'undefined' && process.env?.${envComparison[1]} === '${envComparison[2]}'`;
+  }
+
+  const mixedKeywordCall = translateMixedKeywordCall(trimmed, nameMap, arrayNames);
+  if (mixedKeywordCall !== null) {
+    return mixedKeywordCall;
   }
 
   if (trimmed.includes(' and ')) {
@@ -1697,6 +1728,16 @@ function translateExpression(
       return `!${value}`;
     }
     return /^[A-Za-z_$][A-Za-z0-9_.$()[\]]*$/.test(value) ? `!${value}` : `!(${value})`;
+  }
+
+  const openEndedSlice = /^(.+)\[(\d+):\]$/.exec(trimmed);
+  if (openEndedSlice !== null) {
+    return `${translateExpression(openEndedSlice[1], nameMap, arrayNames)}.slice(${openEndedSlice[2]})`;
+  }
+
+  const enumIdCast = /^([A-Z][A-Za-z0-9_]*Id)\((.+)\)$/.exec(trimmed);
+  if (enumIdCast !== null) {
+    return translateExpression(enumIdCast[2], nameMap, arrayNames);
   }
 
   const tupleLiteral = /^\((.*)\)$/.exec(trimmed);
@@ -1752,6 +1793,76 @@ function translateExpression(
       return nameMap.get(name) ?? tsExportNameForPythonName(name);
     });
   return translated.replaceAll(/__CRIMSON_STRING_(\d+)__/g, (_match, index: string) => stringLiterals[Number(index)] ?? _match);
+}
+
+function translateMixedKeywordCall(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+): string | null {
+  const call = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\((.*)\)$/.exec(pythonExpression);
+  if (call === null || !call[2].includes('=')) {
+    return null;
+  }
+
+  const parts = splitTopLevelComma(call[2]);
+  const keywordParts: string[] = [];
+  const positionalParts: string[] = [];
+  let sawKeyword = false;
+  for (const part of parts) {
+    const keyword = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(part);
+    if (keyword === null) {
+      if (sawKeyword) {
+        return null;
+      }
+      positionalParts.push(part);
+      continue;
+    }
+    sawKeyword = true;
+    keywordParts.push(`${tsExportNameForPythonName(keyword[1])}: ${translateExpression(keyword[2], nameMap, arrayNames)}`);
+  }
+  if (keywordParts.length === 0 || positionalParts.length === 0) {
+    return null;
+  }
+
+  return `${translateExpression(call[1], nameMap, arrayNames)}(${[
+    ...positionalParts.map((part) => translateExpression(part, nameMap, arrayNames)),
+    `{ ${keywordParts.join(', ')} }`,
+  ].join(', ')})`;
+}
+
+function splitTopLevelComma(value: string): string[] {
+  const parts: string[] = [];
+  let start = 0;
+  let depth = 0;
+  let quote: string | null = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      if (char === quote && value[index - 1] !== '\\') {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char === ')' || char === ']' || char === '}') {
+      depth -= 1;
+      continue;
+    }
+    if (char === ',' && depth === 0) {
+      parts.push(value.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  parts.push(value.slice(start).trim());
+  return parts.filter((part) => part !== '');
 }
 
 function tsStringLiteral(pythonLiteral: string): string {

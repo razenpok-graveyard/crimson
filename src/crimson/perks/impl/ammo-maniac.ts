@@ -5,10 +5,9 @@ import { PerkId } from '@crimson/perks/ids.ts';
 import type { PerkApplyCtx } from '@crimson/perks/runtime/apply-context.ts';
 import { PerkHooks } from '@crimson/perks/runtime/hook-types.ts';
 
-function applyAmmoManiac(ctx: PerkApplyCtx): void {
+export function applyAmmoManiac(ctx: PerkApplyCtx): void {
   if (ctx.players.length > 1) {
-    for (let i = 1; i < ctx.players.length; i++) {
-      const player = ctx.players[i];
+    for (const player of ctx.players.slice(1)) {
       player.perkCounts.splice(0, player.perkCounts.length, ...ctx.owner.perkCounts);
     }
   }
