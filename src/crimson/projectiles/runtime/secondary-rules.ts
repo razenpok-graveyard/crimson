@@ -2,6 +2,8 @@
 
 import { SecondaryProjectileTypeId } from '@crimson/projectiles/types.ts';
 
+export type SecondaryProjectileRule = DetonationRule | RocketRule | HomingRocketRule | RocketMinigunRule;
+
 export class DetonationRule {
   readonly tag = 'DetonationRule';
 }
@@ -126,15 +128,12 @@ export class RocketMinigunRule {
   }
 }
 
-export type SecondaryProjectileRule = DetonationRule | RocketRule | HomingRocketRule | RocketMinigunRule;
-
-export const SECONDARY_RULE_BY_TYPE_ID = new Map<SecondaryProjectileTypeId, SecondaryProjectileRule>([
+export const SECONDARY_RULE_BY_TYPE_ID: Map<SecondaryProjectileTypeId, SecondaryProjectileRule> = new Map([
   [SecondaryProjectileTypeId.DETONATION, new DetonationRule()],
   [SecondaryProjectileTypeId.ROCKET, new RocketRule()],
   [SecondaryProjectileTypeId.HOMING_ROCKET, new HomingRocketRule()],
   [SecondaryProjectileTypeId.ROCKET_MINIGUN, new RocketMinigunRule()],
 ]);
-
 const _DEFAULT_ROCKET_RULE = new RocketRule({
   detonationScale: 0.5,
   damageSpeedMul: 0.0,

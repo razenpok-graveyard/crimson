@@ -133,6 +133,7 @@ export interface StructModule {
 export interface StructClassDefinition {
   name: string;
   docstring: string | null;
+  tagged: boolean;
   readonlyFields: boolean;
   fields: StructFieldDefinition[];
   postInitStatements: string[];

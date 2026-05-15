@@ -247,7 +247,9 @@ export function parseStructClass(
   if (header === null) {
     return null;
   }
-  const readonlyFields = (dataclass?.groups?.options ?? header.groups?.options ?? '').includes('frozen=True');
+  const options = dataclass?.groups?.options ?? header.groups?.options ?? '';
+  const readonlyFields = options.includes('frozen=True');
+  const tagged = options.includes('tag=True');
   let nextIndex = classIndex + 1;
 
   const docstring = parseIndentedDocstring(lines, nextIndex);
@@ -267,6 +269,11 @@ export function parseStructClass(
     }
     if (!line.startsWith('    ')) {
       break;
+    }
+
+    if (trimmedField === 'pass') {
+      nextIndex += 1;
+      continue;
     }
 
     if (trimmedField === '@property') {
@@ -306,13 +313,11 @@ export function parseStructClass(
     nextIndex += 1;
   }
 
-  if (fields.length === 0) {
-    return null;
-  }
   return {
     structClass: {
       name: header[1],
       docstring: docstring?.value ?? null,
+      tagged,
       readonlyFields,
       fields,
       postInitStatements,

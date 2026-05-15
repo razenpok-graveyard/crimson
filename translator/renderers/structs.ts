@@ -67,27 +67,39 @@ export function renderStructClasses(lines: string[], classes: StructModule['clas
       }
     }
     lines.push(`export class ${structClass.name} {`);
+    if (structClass.tagged) {
+      lines.push(`  readonly tag = '${structClass.name}';`);
+    }
     for (const field of structClass.fields) {
       lines.push(`  ${structClass.readonlyFields ? 'readonly ' : ''}${field.name}: ${field.typeExpression};`);
     }
-    lines.push('');
-    lines.push('  constructor(opts: {');
-    for (const field of structClass.fields) {
-      lines.push(`    ${field.name}${field.defaultValue === null ? '' : '?'}: ${field.typeExpression};`);
-    }
-    const allFieldsHaveDefaults = structClass.fields.every((field) => field.defaultValue !== null);
-    lines.push(`  }${allFieldsHaveDefaults ? ' = {}' : ''}) {`);
-    for (const field of structClass.fields) {
-      if (field.defaultValue === null) {
-        lines.push(`    this.${field.name} = opts.${field.name};`);
-      } else {
-        lines.push(`    this.${field.name} = opts.${field.name} ?? ${field.defaultValue};`);
+    const shouldRenderConstructor = structClass.fields.length > 0 || structClass.postInitStatements.length > 0;
+    if (shouldRenderConstructor) {
+      if (structClass.tagged || structClass.fields.length > 0) {
+        lines.push('');
       }
+      if (structClass.fields.length > 0) {
+        lines.push('  constructor(opts: {');
+        for (const field of structClass.fields) {
+          lines.push(`    ${field.name}${field.defaultValue === null ? '' : '?'}: ${field.typeExpression};`);
+        }
+        const allFieldsHaveDefaults = structClass.fields.every((field) => field.defaultValue !== null);
+        lines.push(`  }${allFieldsHaveDefaults ? ' = {}' : ''}) {`);
+        for (const field of structClass.fields) {
+          if (field.defaultValue === null) {
+            lines.push(`    this.${field.name} = opts.${field.name};`);
+          } else {
+            lines.push(`    this.${field.name} = ${defaultedOptionExpression(`opts.${field.name}`, field.typeExpression, field.defaultValue)};`);
+          }
+        }
+      } else {
+        lines.push('  constructor() {');
+      }
+      for (const statement of structClass.postInitStatements) {
+        lines.push(statement === '' ? '' : `    ${statement}`);
+      }
+      lines.push('  }');
     }
-    for (const statement of structClass.postInitStatements) {
-      lines.push(statement === '' ? '' : `    ${statement}`);
-    }
-    lines.push('  }');
     for (const method of structClass.methods) {
       lines.push('');
       const params = method.parameters.map(renderParameter);
@@ -193,6 +205,12 @@ export function renderPlainClasses(lines: string[], classes: StraightLineModule[
 
 function renderFunctionReturnType(fn: { async?: boolean; returnType: string }): string {
   return fn.async === true ? `Promise<${fn.returnType}>` : fn.returnType;
+}
+
+function defaultedOptionExpression(optionExpression: string, typeExpression: string, defaultValue: string): string {
+  return typeExpression.includes('null') && defaultValue !== 'null'
+    ? `${optionExpression} !== undefined ? ${optionExpression} : ${defaultValue}`
+    : `${optionExpression} ?? ${defaultValue}`;
 }
 
 export function renderSimpleModuleFunctions(
