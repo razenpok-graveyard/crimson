@@ -26,7 +26,7 @@ import {
   splitTopLevelComma,
   stripTypeOnlyStatementSyntax,
 } from './common.js';
-import { translateExpression } from './expression.js';
+import { stringNameMarker, translateExpression } from './expression.js';
 import { parseFunctionParametersText, pythonParameterNames } from './parameters.js';
 import {
   parseStraightLineFunctionHeader,
@@ -444,6 +444,10 @@ function parseStructMethod(
       };
       if (parsedParameter.typeExpression.endsWith('[]')) {
         arrayNames.add(parameter[1]);
+      }
+      if (parsedParameter.typeExpression === 'string') {
+        arrayNames.add(stringNameMarker(parameter[1]));
+        arrayNames.add(stringNameMarker(parsedParameter.name));
       }
       if (keywordOnly) {
         optsParams.push({

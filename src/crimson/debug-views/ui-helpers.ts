@@ -3,7 +3,8 @@
 import type { SmallFontData } from '@grim/fonts/small.ts';
 import { drawSmallText } from '@grim/fonts/small.ts';
 import type { Vec2 } from '@grim/geom.ts';
-import { rl } from '@grim/raylib-api.ts';
+import type { rl } from '@grim/raylib-api.ts';
+import * as wgl from '@wgl';
 
 export function uiLineHeight(font: SmallFontData | null, opts: { scale?: number } = {}): number {
   const scale = opts.scale ?? 1.0;
@@ -19,6 +20,6 @@ export function drawUiText(font: SmallFontData | null, text: string, pos: Vec2, 
   if (font !== null) {
     drawSmallText(font, text, pos, color);
   } else {
-    rl.drawText(text, int(pos.x), int(pos.y), int(20 * scale), color);
+    wgl.drawText(text, int(pos.x), int(pos.y), int(20 * scale), color);
   }
 }

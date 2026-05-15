@@ -1849,6 +1849,7 @@ export function reassignedLocalNames(lines: string[], startIndex: number): Set<s
 export function parseTopLevelAssignment(
   lines: string[],
   index: number,
+  nameMap: Map<string, string> = new Map(),
 ): { assignment: SimpleModuleAssignment; nextIndex: number } | null {
   const parsedLine = splitInlineComment(lines[index] ?? '');
   const line = parsedLine.code;
@@ -1900,7 +1901,7 @@ export function parseTopLevelAssignment(
       if (tupleItem === null) {
         return null;
       }
-      valueLines.push(`  ${translateExpression(tupleItem[1])},`);
+      valueLines.push(`  ${translateExpression(tupleItem[1], nameMap)},`);
       nextIndex += 1;
     }
 
@@ -1935,7 +1936,7 @@ export function parseTopLevelAssignment(
 
       const dictItem = /^(.+): (.+),$/.exec(trimmed);
       if (dictItem !== null) {
-        valueLines.push(`  [${translateExpression(dictItem[1])}, ${translateExpression(dictItem[2])}],`);
+        valueLines.push(`  [${translateExpression(dictItem[1], nameMap)}, ${translateExpression(dictItem[2], nameMap)}],`);
         nextIndex += 1;
         continue;
       }
@@ -1948,13 +1949,13 @@ export function parseTopLevelAssignment(
         lines,
         nextIndex + 1,
         multilineDictItem[2],
-        new Map(),
+        nameMap,
         new Set(),
       );
       if (callExpression === null) {
         return null;
       }
-      valueLines.push(`  [${translateExpression(multilineDictItem[1])}, ${callExpression.expression}],`);
+      valueLines.push(`  [${translateExpression(multilineDictItem[1], nameMap)}, ${callExpression.expression}],`);
       nextIndex = callExpression.nextIndex;
     }
 
@@ -1977,7 +1978,7 @@ export function parseTopLevelAssignment(
         typeExpression: baseAssignment.typeExpression ?? 'ReadonlySet<number>',
         valueLines: [
           'new Set([',
-          ...items.map((item) => `  ${translateExpression(item)},`),
+          ...items.map((item) => `  ${translateExpression(item, nameMap)},`),
           '])',
         ],
       },
@@ -2002,7 +2003,7 @@ export function parseTopLevelAssignment(
 
   const setUnion = /^[A-Z][A-Z0-9_]*(?: \| [A-Z][A-Z0-9_]*)+$/.exec(value);
   if (setUnion !== null) {
-    const setNames = value.split(' | ').map((setName) => translateExpression(setName));
+    const setNames = value.split(' | ').map((setName) => translateExpression(setName, nameMap));
     return {
       assignment: {
         ...baseAssignment,
@@ -2045,7 +2046,7 @@ export function parseTopLevelAssignment(
     }
     const prefixValues = splitTopLevelComma(tuplePlusTupleGeneratorCall[1])
       .filter((part) => part !== '')
-      .map((part) => translateExpression(part));
+      .map((part) => translateExpression(part, nameMap));
     return {
       assignment: {
         ...baseAssignment,
@@ -2080,7 +2081,7 @@ export function parseTopLevelAssignment(
       if (arg === null) {
         return null;
       }
-      valueLines.push(`  ${translateExpression(arg[1])},`);
+      valueLines.push(`  ${translateExpression(arg[1], nameMap)},`);
       nextIndex += 1;
     }
     return null;
@@ -2089,7 +2090,7 @@ export function parseTopLevelAssignment(
   const keywordCall = /^([A-Za-z_][A-Za-z0-9_]*)\($/.exec(value);
   if (keywordCall === null) {
     return {
-      assignment: { ...baseAssignment, valueLines: [translateExpression(value)] },
+      assignment: { ...baseAssignment, valueLines: [translateExpression(value, nameMap)] },
       nextIndex: index + 1,
     };
   }
@@ -2112,7 +2113,7 @@ export function parseTopLevelAssignment(
     if (keywordArg === null) {
       return null;
     }
-    valueLines.push(`  ${tsExportNameForPythonName(keywordArg[1])}: ${translateExpression(keywordArg[2])},`);
+    valueLines.push(`  ${tsExportNameForPythonName(keywordArg[1])}: ${translateExpression(keywordArg[2], nameMap)},`);
     nextIndex += 1;
   }
 

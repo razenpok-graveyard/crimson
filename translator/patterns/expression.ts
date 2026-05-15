@@ -101,7 +101,7 @@ export function translatePositionalCallExpression(
   if (pythonCallee.endsWith('.extend') && args.length === 1) {
     return `${callee}(...${args[0]})`;
   }
-  const reorderedArgs = callee === 'rl.rlSetBlendFactorsSeparate' && args.length === 6
+  const reorderedArgs = (callee === 'rl.rlSetBlendFactorsSeparate' || callee === 'wgl.rlSetBlendFactorsSeparate') && args.length === 6
     ? [args[0], args[1], args[4], args[2], args[3], args[5]]
     : args;
   const callPrefix = constructUppercase && /^[A-Z]/.test(callee) ? `new ${callee}` : callee;
@@ -151,6 +151,10 @@ function translateBoundMethodReference(
 
 export function vectorNameMarker(name: string): string {
   return `__vector__:${name}`;
+}
+
+export function stringNameMarker(name: string): string {
+  return `__string__:${name}`;
 }
 
 export function translatedExpressionLooksVector(tsExpression: string): boolean {
@@ -420,20 +424,21 @@ export function translateExpression(
     return translateExpression(pathCall.argsText, nameMap, arrayNames, validatedTypeAliases);
   }
 
-  const raylibConstructor = /^rl\.(Color|Vector2|Rectangle)\((.*)\)$/.exec(trimmed);
+  const raylibConstructor = /^(r[dl])\.(Color|Vector2|Rectangle)\((.*)\)$/.exec(trimmed);
   if (raylibConstructor !== null) {
-    const args = splitTopLevelComma(raylibConstructor[2]);
-    if (raylibConstructor[1] === 'Color' && args.length === 4) {
-      return `rl.makeColor(${args.map((arg) => translateRaylibColorArg(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;
+    const namespaceName = translateExpression(raylibConstructor[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const args = splitTopLevelComma(raylibConstructor[3]);
+    if (raylibConstructor[2] === 'Color' && args.length === 4) {
+      return `${namespaceName}.makeColor(${args.map((arg) => translateRaylibColorArg(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;
     }
-    if (raylibConstructor[1] === 'Vector2' && args.length === 2) {
-      return `rl.makeVector2(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;
+    if (raylibConstructor[2] === 'Vector2' && args.length === 2) {
+      return `${namespaceName}.makeVector2(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;
     }
-    if (raylibConstructor[1] === 'Rectangle' && args.length === 1 && args[0].trim().startsWith('*')) {
+    if (raylibConstructor[2] === 'Rectangle' && args.length === 1 && args[0].trim().startsWith('*')) {
       return translateExpression(args[0].trim().slice(1), nameMap, arrayNames, validatedTypeAliases);
     }
-    if (raylibConstructor[1] === 'Rectangle' && args.length === 4) {
-      return `rl.makeRectangle(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;
+    if (raylibConstructor[2] === 'Rectangle' && args.length === 4) {
+      return `${namespaceName}.makeRectangle(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;
     }
   }
 
@@ -780,7 +785,12 @@ export function translateExpression(
     )
     .replaceAll(/\b(?:list|tuple)\(([^()]*)\)/g, 'Array.from($1)')
     .replaceAll(/\b(?:float|str|bool)\(([^()]*)\)/g, '$1')
-    .replaceAll(/\blen\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, '$1.length')
+    .replaceAll(/\blen\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, (_match, name: string) => {
+      const translatedName = translateExpression(name, nameMap, arrayNames, validatedTypeAliases, mapNames);
+      return arrayNames.has(stringNameMarker(name)) || arrayNames.has(stringNameMarker(translatedName))
+        ? `Array.from(${translatedName}).length`
+        : `${translatedName}.length`;
+    })
     .replaceAll(/\.append\(/g, '.push(')
     .replaceAll(/\.extend\(/g, '.push(...')
     .replaceAll(/\.strip\(\)/g, '.trim()')
@@ -895,7 +905,7 @@ function sortedIterableExpression(
 function replaceTranslatedRaylibConstructors(value: string): string {
   let output = '';
   let index = 0;
-  const constructorPattern = /rl\.(Color|Vector2|Rectangle)\(/g;
+  const constructorPattern = /(r[dl]|wgl)\.(Color|Vector2|Rectangle)\(/g;
   while (index < value.length) {
     constructorPattern.lastIndex = index;
     const match = constructorPattern.exec(value);
@@ -913,12 +923,12 @@ function replaceTranslatedRaylibConstructors(value: string): string {
 
     output += value.slice(index, match.index);
     const args = splitTopLevelComma(value.slice(argsStart, closeIndex));
-    if (match[1] === 'Color' && args.length === 4) {
-      output += `rl.makeColor(${args.map((arg) => /\.[rgba]$/.test(arg.trim()) ? arg.trim() : `${arg.trim()} / 255`).join(', ')})`;
-    } else if (match[1] === 'Vector2' && args.length === 2) {
-      output += `rl.makeVector2(${args.map((arg) => arg.trim()).join(', ')})`;
-    } else if (match[1] === 'Rectangle' && args.length === 4) {
-      output += `rl.makeRectangle(${args.map((arg) => arg.trim()).join(', ')})`;
+    if (match[2] === 'Color' && args.length === 4) {
+      output += `${match[1]}.makeColor(${args.map((arg) => /\.[rgba]$/.test(arg.trim()) ? arg.trim() : `${arg.trim()} / 255`).join(', ')})`;
+    } else if (match[2] === 'Vector2' && args.length === 2) {
+      output += `${match[1]}.makeVector2(${args.map((arg) => arg.trim()).join(', ')})`;
+    } else if (match[2] === 'Rectangle' && args.length === 4) {
+      output += `${match[1]}.makeRectangle(${args.map((arg) => arg.trim()).join(', ')})`;
     } else {
       output += value.slice(match.index, closeIndex + 1);
     }

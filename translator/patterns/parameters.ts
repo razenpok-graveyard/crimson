@@ -5,7 +5,7 @@ import type {
 } from '../model.js';
 import { tsExportNameForPythonName, tsTypeExpression } from '../naming.js';
 import { splitTopLevelComma } from './common.js';
-import { translateExpression } from './expression.js';
+import { stringNameMarker, translateExpression } from './expression.js';
 
 export function parseFunctionParametersText(
   parametersText: string,
@@ -48,6 +48,11 @@ export function parseFunctionParameterText(
     if (typeExpression.endsWith('[]')) {
       arrayNames.add(typedParameter[1]);
     }
+    if (typeExpression === 'string') {
+      const parameterName = tsExportNameForPythonName(typedParameter[1]);
+      arrayNames.add(stringNameMarker(typedParameter[1]));
+      arrayNames.add(stringNameMarker(parameterName));
+    }
     return {
       name: tsExportNameForPythonName(typedParameter[1]),
       typeExpression,
@@ -84,9 +89,16 @@ export function pythonParameterNames(parametersText: string): string[] {
   return names;
 }
 export function tsSimpleExpression(pythonExpression: string, parameters: SimpleFunctionParameter[]): string | null {
+  const stringParameterNames = new Set(
+    parameters
+      .filter((parameter) => parameter.typeExpression === 'string')
+      .map((parameter) => parameter.name),
+  );
   let expression = pythonExpression
     .replaceAll(/\b(?:float|str|bool)\(([^()]*)\)/g, '$1')
-    .replaceAll(/\blen\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, '$1.length')
+    .replaceAll(/\blen\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, (_match, name: string) => (
+      stringParameterNames.has(tsExportNameForPythonName(name)) ? `Array.from(${name}).length` : `${name}.length`
+    ))
     .replaceAll(/\bmath\.pi\b/g, 'Math.PI')
     .replaceAll(/\bmin\(/g, 'Math.min(')
     .replaceAll(/\bmax\(/g, 'Math.max(')
@@ -101,7 +113,7 @@ export function tsSimpleExpression(pythonExpression: string, parameters: SimpleF
   }
 
   const firstIdentifier = /\b[A-Za-z_][A-Za-z0-9_]*\b/.exec(expression)?.[0] ?? null;
-  return firstIdentifier === null || emittedParameterNames.has(firstIdentifier) || /^[A-Z0-9_]+$/.test(firstIdentifier)
+  return firstIdentifier === null || firstIdentifier === 'Array' || emittedParameterNames.has(firstIdentifier) || /^[A-Z0-9_]+$/.test(firstIdentifier)
     ? expression
     : null;
 }

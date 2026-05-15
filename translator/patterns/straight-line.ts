@@ -207,6 +207,24 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
 
+    const raylibApiImport = /^from grim\.raylib_api import ((?:r[dl])(?:, r[dl])*)$/.exec(trimmed);
+    if (raylibApiImport !== null) {
+      const names = raylibApiImport[1].split(', ');
+      pushUniqueImportDefinition(imports, {
+        modulePath: tsImportPathForPythonImport('grim.raylib_api', relativePath),
+        names,
+      });
+      pushUniqueNamespaceImport(namespaceImports, {
+        alias: 'wgl',
+        modulePath: '@wgl',
+      });
+      for (const name of names) {
+        moduleNameMap.set(name, 'wgl');
+      }
+      index += 1;
+      continue;
+    }
+
     const fromImport = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
     if (fromImport !== null) {
       const names = fromImport[2].split(', ').map(tsExportNameForPythonName);
@@ -230,7 +248,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
 
-    const assignment = parseTopLevelAssignment(lines, index);
+    const assignment = parseTopLevelAssignment(lines, index, moduleNameMap);
     if (assignment === null) {
       const topLevelStatement = translateStraightLineStatement(
         lines,
@@ -299,7 +317,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
 
-    const interleavedAssignment = parseTopLevelAssignment(lines, index);
+    const interleavedAssignment = parseTopLevelAssignment(lines, index, moduleNameMap);
     if (interleavedAssignment !== null) {
       attachPendingAssignmentComments(interleavedAssignment.assignment, pendingAssignmentComments);
       avoidImportedPrivateNameCollision(interleavedAssignment.assignment, imports);
@@ -483,7 +501,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
 
-    const assignment = parseTopLevelAssignment(lines, index);
+    const assignment = parseTopLevelAssignment(lines, index, moduleNameMap);
     if (assignment === null) {
       const trailingStatement = translateStraightLineStatement(
         lines,
@@ -559,6 +577,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
 
   const reexports = reexportsForAllNames(imports, allNames, relativePath);
   markTypeOnlyImports(imports, typeAliases, protocols, classes, plainClasses, [...leadingStatements, ...trailingStatements], functions, [...leadingAssignments, ...assignments]);
+  markNamespaceImports(namespaceImports, moduleValueUsageText(typeAliases, protocols, classes, plainClasses, [...leadingStatements, ...trailingStatements], functions, [...leadingAssignments, ...assignments]));
   if (allNames.length > 0) {
     const exportedNames = new Set(allNames.map(tsPublicNameForPythonName));
     for (const alias of typeAliases) {
@@ -1045,6 +1064,19 @@ function pushUniqueImportDefinition(imports: ImportDefinition[], importDefinitio
   }
 }
 
+function pushUniqueNamespaceImport(
+  namespaceImports: NamespaceImportDefinition[],
+  namespaceImport: NamespaceImportDefinition,
+): void {
+  if (namespaceImports.some((candidate) => (
+    candidate.modulePath === namespaceImport.modulePath
+    && candidate.alias === namespaceImport.alias
+  ))) {
+    return;
+  }
+  namespaceImports.push(namespaceImport);
+}
+
 function avoidImportedPrivateNameCollision(assignment: SimpleModuleAssignment, imports: ImportDefinition[]): void {
   if (!(assignment.pythonName?.startsWith('_') ?? false)) {
     return;
@@ -1147,6 +1179,15 @@ function markTypeOnlyImports(
       { ...importDefinition, names: valueNames, typeOnly: false },
     );
     index += 1;
+  }
+}
+
+function markNamespaceImports(namespaceImports: NamespaceImportDefinition[], valueText: string): void {
+  for (let index = 0; index < namespaceImports.length; index += 1) {
+    if (!identifierPattern(namespaceImports[index].alias).test(valueText)) {
+      namespaceImports.splice(index, 1);
+      index -= 1;
+    }
   }
 }
 
