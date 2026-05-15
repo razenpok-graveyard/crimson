@@ -5,7 +5,7 @@
 import { RGBA } from '@grim/color.ts';
 import { f32 } from '@crimson/math-parity.ts';
 import type { BonusPickupEvent, GameplayState } from '@crimson/sim/state-types.ts';
-import type { BonusApplyCtx } from './apply-context.ts';
+import type { BonusApplyCtx } from '@crimson/bonuses/apply-context.ts';
 
 export function applyReflexBoost(ctx: BonusApplyCtx): void {
   const old = ctx.state.bonuses.reflexBoost;
@@ -22,13 +22,14 @@ export function applyReflexBoost(ctx: BonusApplyCtx): void {
   }
 }
 
-export function applyReflexBoostPickupFx(
-  opts: { state: GameplayState; pickup: BonusPickupEvent; detailPreset: number },
-): void {
+export function applyReflexBoostPickupFx(opts: { state: GameplayState; pickup: BonusPickupEvent; detailPreset: number }): void {
   // Spawn the blue ring used by Reflex Boost bonus pickups.
-  opts.state.effects.spawnRing({
-    pos: opts.pickup.pos,
-    detailPreset: int(opts.detailPreset),
+  const state = opts.state;
+  const pickup = opts.pickup;
+  const detailPreset = opts.detailPreset;
+  state.effects.spawnRing({
+    pos: pickup.pos,
+    detailPreset: int(detailPreset),
     color: new RGBA(0.6, 0.6, 1.0, 1.0),
   });
 }

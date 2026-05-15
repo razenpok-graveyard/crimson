@@ -1482,7 +1482,8 @@ export function parsePlatformDirsModule(trimmedPython: string): PlatformDirsModu
 }
 
 export function parseStraightLineModule(trimmedPython: string, relativePath: string): StraightLineModule | null {
-  const lines = flattenFromImportBlocks(trimmedPython.split(/\r?\n/));
+  const moduleDocstring = splitLeadingModuleDocstring(trimmedPython);
+  const lines = flattenFromImportBlocks((moduleDocstring?.remainder.trim() ?? trimmedPython).split(/\r?\n/));
   const imports: ImportDefinition[] = [];
   const namespaceImports: NamespaceImportDefinition[] = [];
   const leadingAssignments: SimpleModuleAssignment[] = [];
@@ -1802,7 +1803,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   }
 
   return typeAliases.length + enums.length + leadingAssignments.length + leadingStatements.length + classes.length + functions.length + trailingStatements.length + assignments.length + reexports.length > 0
-    ? { imports, namespaceImports, reexports, typeAliases, enums, leadingAssignments, leadingStatements, classes, functions, trailingStatements, assignments }
+    ? { docstring: moduleDocstring?.value ?? null, imports, namespaceImports, reexports, typeAliases, enums, leadingAssignments, leadingStatements, classes, functions, trailingStatements, assignments }
     : null;
 }
 
@@ -3192,6 +3193,14 @@ function translateExpression(
   const enumIdCast = /^([A-Z][A-Za-z0-9_]*Id)\((.+)\)$/.exec(trimmed);
   if (enumIdCast !== null) {
     return translateExpression(enumIdCast[2], nameMap, arrayNames, validatedTypeAliases);
+  }
+
+  const positionalConstructor = /^([A-Z][A-Za-z0-9_]*)\((.*)\)$/.exec(trimmed);
+  if (positionalConstructor !== null) {
+    const args = splitTopLevelComma(positionalConstructor[2]);
+    if (args.every((arg) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(arg))) {
+      return `new ${tsExportNameForPythonName(positionalConstructor[1])}(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;
+    }
   }
 
   const tupleLiteral = /^\((.*)\)$/.exec(trimmed);

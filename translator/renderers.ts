@@ -322,6 +322,13 @@ function renderStructClasses(lines: string[], classes: StructModule['classes']):
 
 export function renderStraightLineModule(relativePath: string, module: StraightLineModule): string {
   const lines = [`// Port of ${relativePath}`, ''];
+  if (module.docstring !== null) {
+    for (const line of module.docstring.split(/\r?\n/)) {
+      lines.push(line === '' ? '//' : `// ${line}`);
+    }
+    lines.push('');
+  }
+
   for (const importDefinition of module.imports) {
     lines.push(
       `import ${importDefinition.typeOnly ? 'type ' : ''}{ ${importDefinition.names.join(', ')} } from '${importDefinition.modulePath}';`,

@@ -204,6 +204,7 @@ export interface SimpleModuleAssignment {
 }
 
 export interface StraightLineModule {
+  docstring: string | null;
   imports: ImportDefinition[];
   namespaceImports: NamespaceImportDefinition[];
   reexports: Reexport[];
