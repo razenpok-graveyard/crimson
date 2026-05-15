@@ -362,6 +362,15 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
       params.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
     }
     lines.push(`${fn.exported ? 'export ' : ''}function ${fn.name}(${params.join(', ')}): ${fn.returnType} {`);
+    let statementIndex = 0;
+    while (
+      statementIndex < fn.statements.length
+      && (fn.statements[statementIndex] === '' || fn.statements[statementIndex].startsWith('//'))
+    ) {
+      const statement = fn.statements[statementIndex];
+      lines.push(statement === '' ? '' : `  ${statement}`);
+      statementIndex += 1;
+    }
     for (const param of fn.optsParams) {
       if (param.defaultValue === null) {
         lines.push(`  const ${param.name} = opts.${param.name};`);
@@ -369,7 +378,7 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
         lines.push(`  const ${param.name} = opts.${param.name} ?? ${param.defaultValue};`);
       }
     }
-    for (const statement of fn.statements) {
+    for (const statement of fn.statements.slice(statementIndex)) {
       lines.push(statement === '' ? '' : `  ${statement}`);
     }
     lines.push('}');
@@ -415,6 +424,9 @@ function renderTypeAliasValidator(lines: string[], alias: TypeAlias): void {
 
 function renderStraightLineAssignments(lines: string[], assignments: StraightLineModule['assignments']): void {
   for (const assignment of assignments) {
+    for (const comment of assignment.comments ?? []) {
+      lines.push(`// ${comment}`);
+    }
     const exportPrefix = assignment.exported ? 'export ' : '';
     const typeSuffix = assignment.typeExpression === undefined ? '' : `: ${assignment.typeExpression}`;
     if (assignment.valueLines.length === 1) {

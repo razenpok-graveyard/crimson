@@ -194,6 +194,7 @@ export interface SimpleModuleAssignment {
   exported: boolean;
   typeExpression?: string;
   valueLines: string[];
+  comments?: string[];
 }
 
 export interface StraightLineModule {

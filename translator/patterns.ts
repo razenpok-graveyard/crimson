@@ -1369,11 +1369,17 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   const assignments: SimpleModuleAssignment[] = [];
   const allNames: string[] = [];
   const moduleNameMap = new Map<string, string>();
+  const pendingAssignmentComments: string[] = [];
   let index = 0;
 
   while (index < lines.length) {
     const trimmed = lines[index].trim();
     if (trimmed === '') {
+      index += 1;
+      continue;
+    }
+    if (trimmed.startsWith('#')) {
+      pendingAssignmentComments.push(trimmed.replace(/^# ?/, ''));
       index += 1;
       continue;
     }
@@ -1397,10 +1403,20 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       isCollectionsAbcTypeImport(trimmed)
       || trimmed === 'from pathlib import Path'
       || trimmed === 'from typing import Annotated, TypeAlias'
+      || trimmed === 'from typing import TYPE_CHECKING'
       || trimmed === 'import msgspec'
       || trimmed === 'import tempfile'
     ) {
       index += 1;
+      continue;
+    }
+    if (trimmed === 'if TYPE_CHECKING:') {
+      const typeCheckingImports = parseTypeCheckingImports(lines, index, relativePath);
+      if (typeCheckingImports === null) {
+        return null;
+      }
+      imports.push(...typeCheckingImports.imports);
+      index = typeCheckingImports.nextIndex;
       continue;
     }
 
@@ -1436,6 +1452,8 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     if (assignment === null) {
       return null;
     }
+    attachPendingAssignmentComments(assignment.assignment, pendingAssignmentComments);
+    avoidImportedPrivateNameCollision(assignment.assignment, imports);
     leadingAssignments.push(assignment.assignment);
     const namedAssignment = /^([A-Za-z_][A-Za-z0-9_]*)(?:: .+?)? = /.exec(lines[index] ?? '');
     if (namedAssignment !== null) {
@@ -1563,6 +1581,8 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     if (assignment === null) {
       return null;
     }
+    attachPendingAssignmentComments(assignment.assignment, pendingAssignmentComments);
+    avoidImportedPrivateNameCollision(assignment.assignment, imports);
     assignments.push(assignment.assignment);
     index = assignment.nextIndex;
   }
@@ -1854,6 +1874,24 @@ function reexportsForAllNames(imports: ImportDefinition[], allNames: string[]): 
   }
 
   return [...byModule.entries()].map(([modulePath, names]) => ({ modulePath, names }));
+}
+
+function attachPendingAssignmentComments(assignment: SimpleModuleAssignment, pendingComments: string[]): void {
+  if (pendingComments.length === 0) {
+    return;
+  }
+  assignment.comments = [...pendingComments];
+  pendingComments.length = 0;
+}
+
+function avoidImportedPrivateNameCollision(assignment: SimpleModuleAssignment, imports: ImportDefinition[]): void {
+  if (!(assignment.pythonName?.startsWith('_') ?? false)) {
+    return;
+  }
+  const importedNames = new Set(imports.flatMap((importDefinition) => importDefinition.names));
+  if (importedNames.has(assignment.name)) {
+    assignment.name = `_${assignment.name}`;
+  }
 }
 
 function isIndentedBlockLine(lines: string[], index: number, indent: string): boolean {
@@ -2298,6 +2336,9 @@ function translateStraightLineAssignment(
       };
     }
     const tsName = tsExportNameForPythonName(localAssignment[1]);
+    if (tsRight === tsName) {
+      return { statements: [], nextIndex };
+    }
     if (declaredNames.has(localAssignment[1])) {
       return {
         statements: [`${tsName} = ${tsRight};`],

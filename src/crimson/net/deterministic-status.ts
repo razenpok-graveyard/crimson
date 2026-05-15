@@ -12,7 +12,6 @@ export function statusDataFromStatus(status: GameStatus | null): GameStatusData 
 }
 
 export function buildLanDeterministicStatus(opts: { status?: GameStatusData | null } = {}): GameStatus {
-  const status = opts.status ?? null;
   // Return a session-local `GameStatus` for deterministic LAN simulation.
   //
   // The host sends its save status in `MatchStart`, and all peers use it as the
@@ -22,6 +21,7 @@ export function buildLanDeterministicStatus(opts: { status?: GameStatusData | nu
   // This status object should never overwrite the on-disk save. Give it a
   // safe temp path so accidental `save_if_dirty()` calls don't clobber
   // `game.cfg`.
+  const status = opts.status ?? null;
   const path = '/tmp/crimson-lan-sim-game.cfg';
   const data = status === null ? defaultStatusData() : status;
   return GameStatus.fromData({ path: path, data: data, dirty: false });
