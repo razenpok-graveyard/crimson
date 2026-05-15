@@ -962,12 +962,16 @@ function parseStructClass(
   lines: string[],
   index: number,
 ): { structClass: StructModule['classes'][number]; nextIndex: number } | null {
-  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\(msgspec\.Struct(?<options>(?:, [^)]+)?)\):$/.exec(lines[index] ?? '');
+  const dataclass = /^@dataclass\((?<options>[^)]*)\)$/.exec(lines[index] ?? '');
+  const classIndex = dataclass === null ? index : index + 1;
+  const header = dataclass === null
+    ? /^class ([A-Za-z_][A-Za-z0-9_]*)\(msgspec\.Struct(?<options>(?:, [^)]+)?)\):$/.exec(lines[classIndex] ?? '')
+    : /^class ([A-Za-z_][A-Za-z0-9_]*):$/.exec(lines[classIndex] ?? '');
   if (header === null) {
     return null;
   }
-  const readonlyFields = header.groups?.options?.includes('frozen=True') ?? false;
-  let nextIndex = index + 1;
+  const readonlyFields = (dataclass?.groups?.options ?? header.groups?.options ?? '').includes('frozen=True');
+  let nextIndex = classIndex + 1;
 
   const docstring = parseIndentedDocstring(lines, nextIndex);
   if (docstring !== null) {
@@ -1808,6 +1812,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       isCollectionsAbcTypeImport(trimmed)
       || trimmed === 'from enum import Enum'
       || trimmed === 'from enum import IntEnum'
+      || trimmed === 'from dataclasses import dataclass'
       || trimmed === 'from pathlib import Path'
       || trimmed === 'from typing import Annotated, TypeAlias'
       || trimmed === 'from typing import TYPE_CHECKING'

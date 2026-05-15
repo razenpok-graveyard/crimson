@@ -1,7 +1,8 @@
 // Port of crimson/sim/hooks.py
 
-import type { GameCommand, ResolvedTick } from './input-providers.ts';
-import type { DeterministicSessionTick } from './sessions.ts';
+import type { ResolvedTick } from '@crimson/sim/input-providers.ts';
+import type { DeterministicSessionTick } from '@crimson/sim/sessions.ts';
+import type { GameCommand } from '@crimson/sim/input-providers.ts';
 
 export class TickResult {
   sourceTick: ResolvedTick;
@@ -53,21 +54,13 @@ export class LanTickSync {
 
 export class LanSyncCallbacks {
   role: string;
-  takeFrameSample: (tickIndex: number) => LanFrameSample | null;
-  broadcastTickFrame: ((
-    tickIndex: number,
-    frameInputs: readonly number[][],
-    commands: readonly GameCommand[],
-  ) => void) | null;
+  takeFrameSample: (arg0: number) => LanFrameSample | null;
+  broadcastTickFrame: ((arg0: number, arg1: readonly number[][], arg2: readonly GameCommand[]) => void) | null;
 
   constructor(opts: {
     role: string;
-    takeFrameSample: (tickIndex: number) => LanFrameSample | null;
-    broadcastTickFrame?: ((
-      tickIndex: number,
-      frameInputs: readonly number[][],
-      commands: readonly GameCommand[],
-    ) => void) | null;
+    takeFrameSample: (arg0: number) => LanFrameSample | null;
+    broadcastTickFrame?: ((arg0: number, arg1: readonly number[][], arg2: readonly GameCommand[]) => void) | null;
   }) {
     this.role = opts.role;
     this.takeFrameSample = opts.takeFrameSample;
