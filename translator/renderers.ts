@@ -192,14 +192,17 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
   }
   lines.push('');
 
-  for (const fn of module.functions) {
+  for (let index = 0; index < module.functions.length; index += 1) {
+    const fn = module.functions[index];
     const params = fn.parameters.map((param) => `${param.name}: ${param.typeExpression}`).join(', ');
-    lines.push(`function ${fn.name}(${params}): ${fn.returnType} {`);
+    lines.push(`${fn.exported ? 'export ' : ''}function ${fn.name}(${params}): ${fn.returnType} {`);
     for (const statement of fn.statements) {
       lines.push(`  ${statement}`);
     }
     lines.push('}');
-    lines.push('');
+    if (index < module.functions.length - 1 || module.assignments.length > 0) {
+      lines.push('');
+    }
   }
 
   for (const assignment of module.assignments) {
@@ -214,7 +217,9 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
     }
     lines.push(`${assignment.valueLines.at(-1)};`);
   }
-  lines.push('');
+  if (lines.at(-1) !== '') {
+    lines.push('');
+  }
   return lines.join('\n');
 }
 

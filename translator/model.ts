@@ -128,6 +128,7 @@ export interface InitReexports {
 
 export interface SimpleModuleFunction {
   name: string;
+  exported: boolean;
   parameters: FunctionParameter[];
   returnType: string;
   statements: string[];

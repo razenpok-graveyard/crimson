@@ -752,16 +752,17 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         index += 1;
         break;
       }
-      const statement = translateStraightLineStatement(line);
+      const statement = translateStraightLineStatement(lines, index, '    ');
       if (statement === null) {
         return null;
       }
-      statements.push(statement);
-      index += 1;
+      statements.push(...statement.statements);
+      index = statement.nextIndex;
     }
 
     functions.push({
       name: tsExportNameForPythonName(header[1]),
+      exported: !header[1].startsWith('_'),
       parameters,
       returnType: tsTypeExpression(header[3]),
       statements,
@@ -810,20 +811,61 @@ function parseOneLineAllNames(trimmedLine: string): string[] | null {
   return names;
 }
 
-function translateStraightLineStatement(line: string): string | null {
-  const statement = /^    (.+)$/.exec(line)?.[1] ?? null;
-  if (statement === null || statement.startsWith(' ')) {
+function translateStraightLineStatement(
+  lines: string[],
+  index: number,
+  indent: string,
+): { statements: string[]; nextIndex: number } | null {
+  const line = lines[index];
+  if (line === undefined || !line.startsWith(indent)) {
     return null;
+  }
+  const statement = line.slice(indent.length);
+  if (statement.trim() === '' || statement.startsWith(' ')) {
+    return null;
+  }
+
+  const ifStatement = /^if (.+):$/.exec(statement);
+  if (ifStatement !== null) {
+    const innerIndent = `${indent}    `;
+    const innerStatements: string[] = [];
+    let nextIndex = index + 1;
+    while (nextIndex < lines.length && lines[nextIndex].startsWith(innerIndent)) {
+      const innerStatement = translateStraightLineStatement(lines, nextIndex, innerIndent);
+      if (innerStatement === null) {
+        return null;
+      }
+      innerStatements.push(...innerStatement.statements.map((innerLine) => `  ${innerLine}`));
+      nextIndex = innerStatement.nextIndex;
+    }
+    if (innerStatements.length === 0) {
+      return null;
+    }
+    return {
+      statements: [
+        `if (${translateExpression(ifStatement[1])}) {`,
+        ...innerStatements,
+        '}',
+      ],
+      nextIndex,
+    };
+  }
+
+  if (statement === 'return') {
+    return { statements: ['return;'], nextIndex: index + 1 };
   }
 
   const returnStatement = /^return (.+)$/.exec(statement);
   if (returnStatement !== null) {
-    return `return ${translateExpression(returnStatement[1])};`;
+    return { statements: [`return ${translateExpression(returnStatement[1])};`], nextIndex: index + 1 };
   }
 
   const assignment = /^(.+?) (\+=|-=|\*=|\/=|=) (.+)$/.exec(statement);
   if (assignment !== null) {
-    return `${translateExpression(assignment[1])} ${assignment[2]} ${translateExpression(assignment[3])};`;
+    return {
+      statements: [`${translateExpression(assignment[1])} ${assignment[2]} ${translateExpression(assignment[3])};`],
+      nextIndex: index + 1,
+    };
   }
 
   return null;
@@ -891,7 +933,10 @@ function markTypeOnlyImports(
 function translateExpression(pythonExpression: string): string {
   return pythonExpression
     .trim()
-    .replaceAll(/\b(?:float|str|bool)\(([A-Za-z_][A-Za-z0-9_]*)\)/g, '$1')
+    .replaceAll(/\b(?:float|str|bool)\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, '$1')
+    .replaceAll(/\bmin\(/g, 'Math.min(')
+    .replaceAll(/\bmax\(/g, 'Math.max(')
+    .replaceAll(/\babs\(/g, 'Math.abs(')
     .replaceAll(/\b[A-Za-z_][A-Za-z0-9_]*\b/g, (name) => {
       if (name === 'True') {
         return 'true';
@@ -915,7 +960,11 @@ function escapeRegExp(value: string): string {
 }
 
 function tsSimpleExpression(pythonExpression: string, parameters: SimpleFunctionParameter[]): string | null {
-  let expression = pythonExpression.replaceAll(/\b(?:float|str|bool)\(([A-Za-z_][A-Za-z0-9_]*)\)/g, '$1');
+  let expression = pythonExpression
+    .replaceAll(/\b(?:float|str|bool)\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, '$1')
+    .replaceAll(/\bmin\(/g, 'Math.min(')
+    .replaceAll(/\bmax\(/g, 'Math.max(')
+    .replaceAll(/\babs\(/g, 'Math.abs(');
   expression = expression.replaceAll(/\b[A-Za-z_][A-Za-z0-9_]*\b/g, (name) => tsExportNameForPythonName(name));
   const emittedParameterNames = new Set(parameters.map((parameter) => parameter.ignored ? `_${parameter.name}` : parameter.name));
   for (const parameter of parameters) {

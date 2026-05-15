@@ -1,6 +1,6 @@
 // Port of crimson/bonuses/medikit.py
 
-import type { BonusApplyCtx } from './apply-context.ts';
+import type { BonusApplyCtx } from '@crimson/bonuses/apply-context.ts';
 
 export function applyMedikit(ctx: BonusApplyCtx): void {
   if (ctx.player.health >= 100.0) {
