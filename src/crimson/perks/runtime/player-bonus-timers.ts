@@ -1,6 +1,6 @@
 // Port of crimson/perks/runtime/player_bonus_timers.py
 
-import type { PerksUpdateEffectsCtx } from './effects-context.ts';
+import type { PerksUpdateEffectsCtx } from '@crimson/perks/runtime/effects-context.ts';
 
 export function updatePlayerBonusTimers(ctx: PerksUpdateEffectsCtx): void {
   // Native `perks_update_effects` decrements per-player shield/fire-bullets/speed
