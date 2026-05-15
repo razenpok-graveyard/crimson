@@ -66,9 +66,9 @@ function tsPathForPython(relativePath: string): string {
 
 async function translateFile(job: TranslationJob): Promise<string> {
   const futureStripped = stripFutureImports(job.python).trim();
-  const reexports = parseInitReexports(futureStripped);
-  if (reexports !== null) {
-    return renderInitReexports(job.relativePath, reexports);
+  const initReexports = parseInitReexports(futureStripped);
+  if (initReexports !== null) {
+    return renderInitReexports(job.relativePath, initReexports);
   }
 
   const trimmed = stripIgnorablePythonLines(job.python).trim();
@@ -87,10 +87,7 @@ async function translateFile(job: TranslationJob): Promise<string> {
 }
 
 function stripIgnorablePythonLines(python: string): string {
-  return stripFutureImports(python)
-    .split(/\r?\n/)
-    .filter((line) => !isOneLineAllAssignment(line.trim()))
-    .join('\n');
+  return stripAllAssignments(stripFutureImports(python).split(/\r?\n/)).join('\n');
 }
 
 function stripFutureImports(python: string): string {
@@ -102,6 +99,28 @@ function stripFutureImports(python: string): string {
 
 function isOneLineAllAssignment(trimmedLine: string): boolean {
   return /^__all__ = \[[^\]]*\]$/.test(trimmedLine);
+}
+
+function stripAllAssignments(lines: string[]): string[] {
+  const stripped: string[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const trimmed = lines[index].trim();
+    if (!trimmed.startsWith('__all__ = ')) {
+      stripped.push(lines[index]);
+      continue;
+    }
+
+    if (isOneLineAllAssignment(trimmed)) {
+      continue;
+    }
+
+    while (index < lines.length && lines[index].trim() !== ']') {
+      index += 1;
+    }
+  }
+
+  return stripped;
 }
 
 function renderEmptyModule(relativePath: string): string {
@@ -135,11 +154,20 @@ interface Reexport {
   modulePath: string;
 }
 
-function parseInitReexports(trimmedPython: string): Reexport[] | null {
+interface InitReexports {
+  docstring: string | null;
+  reexports: Reexport[];
+}
+
+function parseInitReexports(trimmedPython: string): InitReexports | null {
+  const docstring = splitLeadingModuleDocstring(trimmedPython);
+  const body = docstring === null ? trimmedPython : docstring.remainder.trim();
   const reexports: Reexport[] = [];
   let sawAll = false;
+  const lines = body.split(/\r?\n/);
 
-  for (const line of trimmedPython.split(/\r?\n/)) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
     const trimmed = line.trim();
     if (trimmed === '') {
       continue;
@@ -147,6 +175,11 @@ function parseInitReexports(trimmedPython: string): Reexport[] | null {
 
     if (trimmed.startsWith('__all__ = ')) {
       sawAll = true;
+      if (!isOneLineAllAssignment(trimmed)) {
+        while (index < lines.length && lines[index].trim() !== ']') {
+          index += 1;
+        }
+      }
       continue;
     }
 
@@ -157,11 +190,39 @@ function parseInitReexports(trimmedPython: string): Reexport[] | null {
 
     reexports.push({
       modulePath: tsImportPathForPythonModule(fromImport[1]),
-      names: fromImport[2].split(', '),
+      names: fromImport[2].split(', ').map(tsExportNameForPythonName),
     });
   }
 
-  return sawAll && reexports.length > 0 ? reexports : null;
+  return sawAll && reexports.length > 0 ? { docstring: docstring?.value ?? null, reexports } : null;
+}
+
+function splitLeadingModuleDocstring(trimmedPython: string): { value: string; remainder: string } | null {
+  for (const quote of ['"""', "'''"]) {
+    if (!trimmedPython.startsWith(quote)) {
+      continue;
+    }
+
+    const closeIndex = trimmedPython.indexOf(quote, quote.length);
+    if (closeIndex === -1) {
+      return null;
+    }
+
+    return {
+      value: trimmedPython.slice(quote.length, closeIndex),
+      remainder: trimmedPython.slice(closeIndex + quote.length),
+    };
+  }
+
+  return null;
+}
+
+function tsExportNameForPythonName(pythonName: string): string {
+  if (!pythonName.includes('_') || /^[A-Z0-9_]+$/.test(pythonName)) {
+    return pythonName;
+  }
+
+  return pythonName.replaceAll(/_([a-zA-Z0-9])/g, (_match, letter: string) => letter.toUpperCase());
 }
 
 function tsImportPathForPythonModule(moduleName: string): string {
@@ -179,9 +240,16 @@ function tsImportPathForPythonModule(moduleName: string): string {
   return `${tsParts.join('/')}.ts`;
 }
 
-function renderInitReexports(relativePath: string, reexports: Reexport[]): string {
+function renderInitReexports(relativePath: string, initReexports: InitReexports): string {
   const lines = [`// Port of ${relativePath}`, ''];
-  for (const reexport of reexports) {
+  if (initReexports.docstring !== null) {
+    for (const line of initReexports.docstring.split(/\r?\n/)) {
+      lines.push(line === '' ? '//' : `// ${line}`);
+    }
+    lines.push('');
+  }
+
+  for (const reexport of initReexports.reexports) {
     lines.push(`export { ${reexport.names.join(', ')} } from '${reexport.modulePath}';`);
   }
   lines.push('');
