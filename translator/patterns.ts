@@ -1808,6 +1808,10 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       index += 1;
       continue;
     }
+    if (trimmed === 'import math') {
+      index += 1;
+      continue;
+    }
     if (
       isCollectionsAbcTypeImport(trimmed)
       || trimmed === 'from enum import Enum'
@@ -3563,6 +3567,11 @@ function translateExpression(
   mapNames: ReadonlySet<string> = new Set(),
 ): string {
   const trimmed = pythonExpression.trim();
+  const mathIsFinite = /^math\.isfinite\((.+)\)$/.exec(trimmed);
+  if (mathIsFinite !== null) {
+    return `Number.isFinite(${translateExpression(mathIsFinite[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
   const listComprehension = /^\[(.+) for ([A-Za-z_][A-Za-z0-9_]*) in (.+)\]$/.exec(trimmed);
   if (listComprehension !== null) {
     const itemName = tsExportNameForPythonName(listComprehension[2]);

@@ -2,15 +2,16 @@
 
 import { f32 } from '@crimson/math-parity.ts';
 
-function _fieldLabel(field: string | null = null): string {
-  if (field && String(field).trim()) {
-    return String(field);
+function fieldLabel(field: string | null): string {
+  if (field && field.trim()) {
+    return field;
   }
   return 'value';
 }
 
 export function wireF32(value: number, opts: { field?: string | null } = {}): number {
-  const label = _fieldLabel(opts.field ?? null);
+  const field = opts.field ?? null;
+  const label = fieldLabel(field);
   const narrowed = f32(value);
   if (!Number.isFinite(narrowed)) {
     throw new Error(`${label} must be finite`);
@@ -19,18 +20,23 @@ export function wireF32(value: number, opts: { field?: string | null } = {}): nu
 }
 
 export function wireF32Opt(value: number | null, opts: { field?: string | null } = {}): number | null {
-  if (value === null) return null;
-  return wireF32(value, opts);
+  const field = opts.field ?? null;
+  if (value === null) {
+    return null;
+  }
+  return wireF32(value, { field: field });
 }
 
 export function assertWireF32(value: number, opts: { field?: string | null } = {}): number {
-  const label = _fieldLabel(opts.field ?? null);
-  if (!Number.isFinite(value)) {
+  const field = opts.field ?? null;
+  const label = fieldLabel(field);
+  const candidate = value;
+  if (!Number.isFinite(candidate)) {
     throw new Error(`${label} must be finite`);
   }
-  const narrowed = f32(value);
-  if (value !== narrowed) {
+  const narrowed = f32(candidate);
+  if (candidate !== narrowed) {
     throw new Error(`${label} must be f32-canonical`);
   }
-  return value;
+  return candidate;
 }
