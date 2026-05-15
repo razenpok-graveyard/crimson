@@ -371,6 +371,59 @@ function parseIntEnumValueFunction(
   };
 }
 
+function parseStringEnumClass(
+  lines: string[],
+  index: number,
+): { enumDefinition: EnumDefinition; nextIndex: number } | null {
+  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\(str, Enum\):$/.exec(lines[index] ?? '');
+  if (header === null) {
+    return null;
+  }
+
+  let nextIndex = index + 1;
+  let docstring: string | null = null;
+  const members: EnumDefinition['members'] = [];
+  while (nextIndex < lines.length) {
+    const line = lines[nextIndex];
+    const trimmed = line.trim();
+    if (trimmed === '') {
+      nextIndex += 1;
+      continue;
+    }
+    if (!line.startsWith('    ')) {
+      break;
+    }
+
+    const docstringMatch = /^    """(.*)"""$/.exec(line);
+    if (docstringMatch !== null && members.length === 0 && docstring === null) {
+      docstring = docstringMatch[1];
+      nextIndex += 1;
+      continue;
+    }
+
+    const member = /^    ([A-Z][A-Z0-9_]*) = (["'][^"']*["'])$/.exec(line);
+    if (member === null) {
+      return null;
+    }
+    members.push({
+      name: member[1],
+      value: translateExpression(member[2]),
+    });
+    nextIndex += 1;
+  }
+
+  return members.length > 0
+    ? {
+      enumDefinition: {
+        name: header[1],
+        docstring,
+        members,
+      },
+      nextIndex,
+    }
+    : null;
+}
+
 export function parseTypeAliases(trimmedPython: string): TypeAlias[] | null {
   const aliases: TypeAlias[] = [];
   let sawTypeAliasImport = false;
@@ -1433,6 +1486,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   const leadingStatements: string[] = [];
   const trailingStatements: string[] = [];
   const typeAliases: TypeAlias[] = [];
+  const enums: EnumDefinition[] = [];
   const validatedTypeAliases = new Set<string>();
   const classes: StructModule['classes'] = [];
   const functions: SimpleModuleFunction[] = [];
@@ -1471,6 +1525,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     if (
       isCollectionsAbcTypeImport(trimmed)
+      || trimmed === 'from enum import Enum'
       || trimmed === 'from pathlib import Path'
       || trimmed === 'from typing import Annotated, TypeAlias'
       || trimmed === 'from typing import TYPE_CHECKING'
@@ -1497,6 +1552,14 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         validatedTypeAliases.add(annotatedTypeAlias.alias.name);
       }
       index = annotatedTypeAlias.nextIndex;
+      continue;
+    }
+
+    const stringEnumClass = parseStringEnumClass(lines, index);
+    if (stringEnumClass !== null) {
+      enums.push(stringEnumClass.enumDefinition);
+      moduleNameMap.set(stringEnumClass.enumDefinition.name, stringEnumClass.enumDefinition.name);
+      index = stringEnumClass.nextIndex;
       continue;
     }
 
@@ -1728,8 +1791,8 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
   }
 
-  return typeAliases.length + leadingAssignments.length + leadingStatements.length + classes.length + functions.length + trailingStatements.length + assignments.length + reexports.length > 0
-    ? { imports, namespaceImports, reexports, typeAliases, leadingAssignments, leadingStatements, classes, functions, trailingStatements, assignments }
+  return typeAliases.length + enums.length + leadingAssignments.length + leadingStatements.length + classes.length + functions.length + trailingStatements.length + assignments.length + reexports.length > 0
+    ? { imports, namespaceImports, reexports, typeAliases, enums, leadingAssignments, leadingStatements, classes, functions, trailingStatements, assignments }
     : null;
 }
 
@@ -1947,9 +2010,14 @@ function tsFStringTemplateContent(
       if (closeIndex !== -1) {
         const expression = content.slice(index + 1, closeIndex).trim();
         const formatSeparator = expression.indexOf(':');
-        const expressionText = formatSeparator === -1 ? expression : expression.slice(0, formatSeparator).trim();
+        let expressionText = formatSeparator === -1 ? expression : expression.slice(0, formatSeparator).trim();
         const format = formatSeparator === -1 ? null : expression.slice(formatSeparator + 1).trim();
-        const translatedExpression = translateExpression(expressionText, nameMap, arrayNames, validatedTypeAliases);
+        const conversion = /^(.*)!([rsa])$/.exec(expressionText);
+        expressionText = conversion === null ? expressionText : conversion[1].trim();
+        const baseExpression = translateExpression(expressionText, nameMap, arrayNames, validatedTypeAliases);
+        const translatedExpression = conversion?.[2] === 'r' || conversion?.[2] === 'a'
+          ? `JSON.stringify(${baseExpression})`
+          : baseExpression;
         const zeroPaddedInteger = format === null ? null : /^0(\d+)d$/.exec(format);
         if (zeroPaddedInteger !== null) {
           translated += `\${String(${translatedExpression}).padStart(${zeroPaddedInteger[1]}, '0')}`;
@@ -2383,6 +2451,14 @@ function translateStraightLineStatement(
   const returnStatement = /^return (.+)$/.exec(statement);
   if (returnStatement !== null) {
     return { statements: [`return ${translateExpression(returnStatement[1], nameMap, arrayNames, validatedTypeAliases)};`], nextIndex: index + 1 };
+  }
+
+  const raiseStatement = /^raise ([A-Za-z_][A-Za-z0-9_]*)\((.*)\)$/.exec(statement);
+  if (raiseStatement !== null) {
+    return {
+      statements: [`throw new Error(${translateExpression(raiseStatement[2], nameMap, arrayNames, validatedTypeAliases)});`],
+      nextIndex: index + 1,
+    };
   }
 
   const assignment = /^(.+?) (\+=|-=|\*=|\/=|=) (.+)$/.exec(statement);
@@ -3061,6 +3137,11 @@ function translateExpression(
   const floorDivision = /^(.+) \/\/ (.+)$/.exec(trimmed);
   if (floorDivision !== null) {
     return `Math.floor(${translateExpression(floorDivision[1], nameMap, arrayNames, validatedTypeAliases)} / ${translateExpression(floorDivision[2], nameMap, arrayNames, validatedTypeAliases)})`;
+  }
+
+  const identityComparison = /^(.+?) is( not)? (.+)$/.exec(trimmed);
+  if (identityComparison !== null) {
+    return `${translateExpression(identityComparison[1], nameMap, arrayNames, validatedTypeAliases)} ${identityComparison[2] === undefined ? '===' : '!=='} ${translateExpression(identityComparison[3], nameMap, arrayNames, validatedTypeAliases)}`;
   }
 
   const binaryComparison = /^(.+?) (<=|>=|<|>|==|!=) (.+)$/.exec(trimmed);

@@ -84,17 +84,7 @@ export function renderProtocolModule(relativePath: string, protocol: ProtocolDef
 
 export function renderIntEnumModule(relativePath: string, enumDefinition: EnumDefinition): string {
   const lines = [`// Port of ${relativePath}`, ''];
-  if (enumDefinition.docstring !== null) {
-    for (const line of enumDefinition.docstring.split(/\r?\n/)) {
-      lines.push(line === '' ? '//' : `// ${line}`);
-    }
-  }
-
-  lines.push(`export enum ${enumDefinition.name} {`);
-  for (const member of enumDefinition.members) {
-    lines.push(`  ${member.name} = ${member.value},`);
-  }
-  lines.push('}');
+  renderEnumDefinition(lines, enumDefinition);
   if (enumDefinition.valueFunction !== undefined) {
     const fn = enumDefinition.valueFunction;
     const fallback = fn.fallbackMember;
@@ -123,6 +113,20 @@ export function renderIntEnumModule(relativePath: string, enumDefinition: EnumDe
   }
   lines.push('');
   return lines.join('\n');
+}
+
+function renderEnumDefinition(lines: string[], enumDefinition: EnumDefinition): void {
+  if (enumDefinition.docstring !== null) {
+    for (const line of enumDefinition.docstring.split(/\r?\n/)) {
+      lines.push(line === '' ? '//' : `// ${line}`);
+    }
+  }
+
+  lines.push(`export enum ${enumDefinition.name} {`);
+  for (const member of enumDefinition.members) {
+    lines.push(`  ${member.name} = ${member.value},`);
+  }
+  lines.push('}');
 }
 
 export function renderTypeAliases(relativePath: string, aliases: TypeAlias[]): string {
@@ -346,7 +350,17 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
       }
     }
   }
-  if (module.typeAliases.length > 0 && module.leadingAssignments.length + module.leadingStatements.length + module.classes.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
+  if (module.typeAliases.length > 0 && module.enums.length + module.leadingAssignments.length + module.leadingStatements.length + module.classes.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
+    lines.push('');
+  }
+
+  for (let index = 0; index < module.enums.length; index += 1) {
+    renderEnumDefinition(lines, module.enums[index]);
+    if (index < module.enums.length - 1) {
+      lines.push('');
+    }
+  }
+  if (module.enums.length > 0 && module.leadingAssignments.length + module.leadingStatements.length + module.classes.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
     lines.push('');
   }
 

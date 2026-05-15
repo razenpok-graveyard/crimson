@@ -7,9 +7,13 @@ export enum RtxRenderMode {
 
 export function parseRtxRenderMode(raw: string): RtxRenderMode {
   const value = raw.trim().toLowerCase();
-  if (value === 'classic') return RtxRenderMode.CLASSIC;
-  if (value === 'rtx') return RtxRenderMode.RTX;
-  throw new Error(`unsupported render mode '${raw}'; expected classic|rtx`);
+  if (value === 'classic') {
+    return RtxRenderMode.CLASSIC;
+  }
+  if (value === 'rtx') {
+    return RtxRenderMode.RTX;
+  }
+  throw new Error(`unsupported render mode ${JSON.stringify(raw)}; expected classic|rtx`);
 }
 
 export function modeFromRtxFlag(enabled: boolean): RtxRenderMode {
