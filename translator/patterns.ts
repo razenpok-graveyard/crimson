@@ -371,16 +371,33 @@ function parseIntEnumValueFunction(
 
 export function parseTypeAliases(trimmedPython: string): TypeAlias[] | null {
   const aliases: TypeAlias[] = [];
-  let sawCallableImport = false;
+  let sawTypeAliasImport = false;
+  const lines = trimmedPython.split(/\r?\n/);
 
-  for (const line of trimmedPython.split(/\r?\n/)) {
-    const trimmed = line.trim();
+  for (let index = 0; index < lines.length; index += 1) {
+    const trimmed = lines[index].trim();
     if (trimmed === '') {
       continue;
     }
 
     if (trimmed === 'from collections.abc import Callable') {
-      sawCallableImport = true;
+      sawTypeAliasImport = true;
+      continue;
+    }
+    const typingImport = /^from typing import (.+)$/.exec(trimmed);
+    if (typingImport !== null && typingImport[1].split(', ').includes('TypeAlias')) {
+      sawTypeAliasImport = true;
+      continue;
+    }
+    if (trimmed === 'import msgspec') {
+      continue;
+    }
+    if (trimmed.startsWith('__all__ = ')) {
+      if (!isOneLineAllAssignment(trimmed)) {
+        while (index < lines.length && lines[index].trim() !== ']') {
+          index += 1;
+        }
+      }
       continue;
     }
 
@@ -393,10 +410,28 @@ export function parseTypeAliases(trimmedPython: string): TypeAlias[] | null {
       continue;
     }
 
+    const annotatedAlias = /^([A-Za-z_][A-Za-z0-9_]*): TypeAlias = Annotated\[(.+?), msgspec\.Meta\(.+\)\]$/.exec(trimmed);
+    if (annotatedAlias !== null) {
+      aliases.push({
+        name: annotatedAlias[1],
+        typeExpression: tsTypeExpression(annotatedAlias[2]),
+      });
+      continue;
+    }
+
+    const plainTypeAlias = /^([A-Za-z_][A-Za-z0-9_]*): TypeAlias = (.+)$/.exec(trimmed);
+    if (plainTypeAlias !== null) {
+      aliases.push({
+        name: plainTypeAlias[1],
+        typeExpression: tsTypeExpression(plainTypeAlias[2]),
+      });
+      continue;
+    }
+
     return null;
   }
 
-  return sawCallableImport && aliases.length > 0 ? aliases : null;
+  return sawTypeAliasImport && aliases.length > 0 ? aliases : null;
 }
 
 export function parseConstantsModule(trimmedPython: string): ConstantsModule | null {
