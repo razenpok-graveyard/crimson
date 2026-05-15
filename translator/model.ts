@@ -105,6 +105,23 @@ export interface SimpleExportModule {
   functions: SimpleFunctionDefinition[];
 }
 
+export interface StructModule {
+  imports: ImportDefinition[];
+  classes: StructClassDefinition[];
+}
+
+export interface StructClassDefinition {
+  name: string;
+  docstring: string | null;
+  fields: StructFieldDefinition[];
+}
+
+export interface StructFieldDefinition {
+  name: string;
+  typeExpression: string;
+  defaultValue: string;
+}
+
 export interface PackageVersionModule {
   packageName: string;
 }

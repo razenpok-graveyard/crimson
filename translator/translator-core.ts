@@ -12,6 +12,7 @@ import {
   parsePackageVersionModule,
   parsePlatformDirsModule,
   parseProtocolModule,
+  parseMsgspecStructModule,
   parseSimpleExportModule,
   parseStraightLineModule,
   parseTypeAliases,
@@ -31,6 +32,7 @@ import {
   renderPackageVersionModule,
   renderPlatformDirsModule,
   renderProtocolModule,
+  renderMsgspecStructModule,
   renderSimpleExportModule,
   renderStraightLineModule,
   renderTypeAliases,
@@ -96,6 +98,11 @@ export async function translateFile(job: TranslationJob): Promise<string> {
   const simpleExportModule = parseSimpleExportModule(futureStripped, job.relativePath);
   if (simpleExportModule !== null) {
     return renderSimpleExportModule(job.relativePath, simpleExportModule);
+  }
+
+  const msgspecStructModule = parseMsgspecStructModule(futureStripped, job.relativePath);
+  if (msgspecStructModule !== null) {
+    return renderMsgspecStructModule(job.relativePath, msgspecStructModule);
   }
 
   const straightLineModule = parseStraightLineModule(futureStripped, job.relativePath);

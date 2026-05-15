@@ -1,6 +1,6 @@
 // Port of crimson/perks/state.py
 
-import { PerkId } from './ids.ts';
+import type { PerkId } from '@crimson/perks/ids.ts';
 
 // Global thresholds used by perk timers in `player_update`.
 //

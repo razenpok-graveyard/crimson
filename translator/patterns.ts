@@ -21,6 +21,7 @@ import type {
   SimpleModuleAssignment,
   SimpleModuleFunction,
   StraightLineModule,
+  StructModule,
   TypeAlias,
 } from './model.js';
 import {
@@ -707,6 +708,191 @@ export function parseSimpleExportModule(trimmedPython: string, relativePath: str
       exported: exportedNames.has(fn.name),
     })),
   };
+}
+
+export function parseMsgspecStructModule(trimmedPython: string, relativePath: string): StructModule | null {
+  const lines = flattenFromImportBlocks(trimmedPython.split(/\r?\n/));
+  const imports: ImportDefinition[] = [];
+  const classes: StructModule['classes'] = [];
+  let sawMsgspecImport = false;
+  let index = 0;
+
+  while (index < lines.length) {
+    const trimmed = lines[index].trim();
+    if (trimmed === '') {
+      index += 1;
+      continue;
+    }
+    if (trimmed === 'import msgspec') {
+      sawMsgspecImport = true;
+      index += 1;
+      continue;
+    }
+
+    const fromImport = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
+    if (fromImport === null) {
+      break;
+    }
+    imports.push({
+      modulePath: tsImportPathForPythonImport(fromImport[1], relativePath),
+      names: fromImport[2].split(', ').map(tsExportNameForPythonName),
+    });
+    index += 1;
+  }
+
+  if (!sawMsgspecImport) {
+    return null;
+  }
+
+  while (index < lines.length) {
+    const trimmed = lines[index].trim();
+    if (trimmed === '') {
+      index += 1;
+      continue;
+    }
+
+    const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\(msgspec\.Struct\):$/.exec(lines[index] ?? '');
+    if (header === null) {
+      return null;
+    }
+    index += 1;
+
+    const docstring = parseIndentedDocstring(lines, index);
+    if (docstring !== null) {
+      index = docstring.nextIndex;
+    }
+
+    const fields: StructModule['classes'][number]['fields'] = [];
+    while (index < lines.length) {
+      const line = lines[index];
+      const trimmedField = line.trim();
+      if (trimmedField === '') {
+        index += 1;
+        continue;
+      }
+      if (!line.startsWith('    ')) {
+        break;
+      }
+
+      const field = /^    ([A-Za-z_][A-Za-z0-9_]*): (.+?) = (.+)$/.exec(line);
+      if (field === null) {
+        return null;
+      }
+      const defaultValue = tsStructFieldDefaultValue(field[3]);
+      if (defaultValue === null) {
+        return null;
+      }
+      fields.push({
+        name: tsExportNameForPythonName(field[1]),
+        typeExpression: tsStructFieldType(field[2]),
+        defaultValue,
+      });
+      index += 1;
+    }
+
+    if (fields.length === 0) {
+      return null;
+    }
+    classes.push({
+      name: header[1],
+      docstring: docstring?.value ?? null,
+      fields,
+    });
+  }
+
+  markStructTypeOnlyImports(imports, classes);
+  return classes.length > 0 ? { imports, classes } : null;
+}
+
+function parseIndentedDocstring(
+  lines: string[],
+  index: number,
+): { value: string; nextIndex: number } | null {
+  const start = /^    """(.*)$/.exec(lines[index] ?? '');
+  if (start === null) {
+    return null;
+  }
+  if (start[1].endsWith('"""')) {
+    return {
+      value: start[1].slice(0, -3),
+      nextIndex: index + 1,
+    };
+  }
+
+  const docLines = [start[1]];
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length) {
+    const line = lines[nextIndex];
+    if (line === '    """') {
+      return {
+        value: docLines.join('\n'),
+        nextIndex: nextIndex + 1,
+      };
+    }
+    if (line === '') {
+      docLines.push('');
+      nextIndex += 1;
+      continue;
+    }
+    if (!line.startsWith('    ')) {
+      return null;
+    }
+    docLines.push(line.slice(4));
+    nextIndex += 1;
+  }
+  return null;
+}
+
+function tsStructFieldType(pythonType: string): string {
+  const listType = /^list\[(.+)\]$/.exec(pythonType.trim());
+  if (listType !== null) {
+    return `${tsTypeExpression(listType[1])}[]`;
+  }
+  return tsTypeExpression(pythonType);
+}
+
+function tsStructFieldDefaultValue(pythonValue: string): string | null {
+  const trimmed = pythonValue.trim();
+  if (trimmed === 'msgspec.field(default_factory=list)') {
+    return '[]';
+  }
+
+  const factory = /^msgspec\.field\(default_factory=([A-Za-z_][A-Za-z0-9_]*)\)$/.exec(trimmed);
+  if (factory !== null) {
+    return `new ${tsExportNameForPythonName(factory[1])}()`;
+  }
+
+  return translateExpression(trimmed);
+}
+
+function markStructTypeOnlyImports(
+  imports: ImportDefinition[],
+  classes: StructModule['classes'],
+): void {
+  const valueText = classes
+    .flatMap((structClass) => structClass.fields.map((field) => field.defaultValue))
+    .join('\n');
+
+  for (let index = 0; index < imports.length; index += 1) {
+    const importDefinition = imports[index];
+    const valueNames = importDefinition.names.filter((name) => identifierPattern(name).test(valueText));
+    const typeOnlyNames = importDefinition.names.filter((name) => !identifierPattern(name).test(valueText));
+    if (valueNames.length === 0) {
+      importDefinition.typeOnly = true;
+      continue;
+    }
+    if (typeOnlyNames.length === 0) {
+      importDefinition.typeOnly = false;
+      continue;
+    }
+    imports.splice(
+      index,
+      1,
+      { ...importDefinition, names: typeOnlyNames, typeOnly: true },
+      { ...importDefinition, names: valueNames, typeOnly: false },
+    );
+    index += 1;
+  }
 }
 
 export function parsePackageVersionModule(trimmedPython: string): PackageVersionModule | null {

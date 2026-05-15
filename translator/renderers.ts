@@ -10,6 +10,7 @@ import type {
   ProtocolDefinition,
   SimpleExportModule,
   StraightLineModule,
+  StructModule,
   TypeAlias,
 } from './model.js';
 
@@ -200,6 +201,47 @@ export function renderSimpleExportModule(relativePath: string, module: SimpleExp
     }
     lines.push(`  return ${fn.returnExpression};`);
     lines.push('}');
+  }
+  lines.push('');
+  return lines.join('\n');
+}
+
+export function renderMsgspecStructModule(relativePath: string, module: StructModule): string {
+  const lines = [`// Port of ${relativePath}`, ''];
+  for (const importDefinition of module.imports) {
+    lines.push(
+      `import ${importDefinition.typeOnly ? 'type ' : ''}{ ${importDefinition.names.join(', ')} } from '${importDefinition.modulePath}';`,
+    );
+  }
+  if (module.imports.length > 0) {
+    lines.push('');
+  }
+
+  for (let index = 0; index < module.classes.length; index += 1) {
+    const structClass = module.classes[index];
+    if (structClass.docstring !== null) {
+      for (const line of structClass.docstring.split(/\r?\n/)) {
+        lines.push(line === '' ? '//' : `// ${line}`);
+      }
+    }
+    lines.push(`export class ${structClass.name} {`);
+    for (const field of structClass.fields) {
+      lines.push(`  ${field.name}: ${field.typeExpression};`);
+    }
+    lines.push('');
+    lines.push('  constructor(opts: {');
+    for (const field of structClass.fields) {
+      lines.push(`    ${field.name}?: ${field.typeExpression};`);
+    }
+    lines.push('  } = {}) {');
+    for (const field of structClass.fields) {
+      lines.push(`    this.${field.name} = opts.${field.name} ?? ${field.defaultValue};`);
+    }
+    lines.push('  }');
+    lines.push('}');
+    if (index < module.classes.length - 1) {
+      lines.push('');
+    }
   }
   lines.push('');
   return lines.join('\n');
