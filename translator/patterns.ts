@@ -979,6 +979,11 @@ function tsStructFieldDefaultValue(pythonValue: string): string | null {
     return `new ${tsExportNameForPythonName(factory[1])}()`;
   }
 
+  const zeroArgConstructor = /^([A-Z][A-Za-z0-9_]*)\(\)$/.exec(trimmed);
+  if (zeroArgConstructor !== null) {
+    return `new ${tsExportNameForPythonName(zeroArgConstructor[1])}()`;
+  }
+
   return translateExpression(trimmed);
 }
 
