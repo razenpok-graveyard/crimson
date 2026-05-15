@@ -2071,6 +2071,26 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
 
+    const aliasedFromImport = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*) as ([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);
+    if (aliasedFromImport !== null) {
+      const importedName = tsExportNameForPythonName(aliasedFromImport[2]);
+      const aliasName = tsExportNameForPythonName(aliasedFromImport[3]);
+      imports.push({
+        modulePath: tsImportPathForPythonImport(aliasedFromImport[1], relativePath),
+        names: [importedName],
+      });
+      leadingAssignments.push({
+        pythonName: aliasedFromImport[3],
+        name: aliasName,
+        declaration: 'const',
+        exported: false,
+        valueLines: [importedName],
+      });
+      moduleNameMap.set(aliasedFromImport[3], aliasName);
+      index += 1;
+      continue;
+    }
+
     const fromImport = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
     if (fromImport !== null) {
       const names = fromImport[2].split(', ').map(tsExportNameForPythonName);
@@ -3407,6 +3427,14 @@ function translateStraightLineStatement(
     return { statements: [`return ${translateExpression(returnStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)};`], nextIndex: index + 1 };
   }
 
+  const raiseFromStatement = /^raise ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\((.*)\) from .+$/.exec(statement);
+  if (raiseFromStatement !== null) {
+    return {
+      statements: [`throw ${translateRaiseExpression(raiseFromStatement[1], raiseFromStatement[2], nameMap, arrayNames, validatedTypeAliases, mapNames)};`],
+      nextIndex: index + 1,
+    };
+  }
+
   const raiseStatement = /^raise ([A-Za-z_][A-Za-z0-9_]*)\((.*)\)$/.exec(statement);
   if (raiseStatement !== null) {
     return {
@@ -3954,6 +3982,10 @@ function tsTypeForAssignedExpression(expression: string): string | null {
   if (constructor !== null) {
     return constructor[1];
   }
+  const enumMode = /\b([A-Z][A-Za-z0-9_]*Mode)\b/.exec(trimmed);
+  if (enumMode !== null) {
+    return enumMode[1];
+  }
   const call = /^([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\(/.exec(trimmed);
   if (call !== null) {
     return `ReturnType<typeof ${call[1]}>`;
@@ -4348,6 +4380,10 @@ function translateExpression(
   if (isinstanceSingleSequence !== null) {
     return `Array.isArray(${translateExpression(isinstanceSingleSequence[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
+  const isinstanceEnumMode = /^isinstance\((.+), ([A-Z][A-Za-z0-9_]*Mode)\)$/.exec(trimmed);
+  if (isinstanceEnumMode !== null) {
+    return `Object.values(${isinstanceEnumMode[2]}).includes(${translateExpression(isinstanceEnumMode[1], nameMap, arrayNames, validatedTypeAliases, mapNames)} as ${isinstanceEnumMode[2]})`;
+  }
 
   const listRepeat = /^\[(.+)\] \* (.+)$/.exec(trimmed);
   if (listRepeat !== null) {
@@ -4357,6 +4393,9 @@ function translateExpression(
   const fStringLiteral = /^f(["'])([\s\S]*)\1$/.exec(trimmed);
   if (fStringLiteral !== null) {
     return `\`${tsFStringTemplateContent(fStringLiteral[2], nameMap, arrayNames, validatedTypeAliases)}\``;
+  }
+  if (/^(["'])([\s\S]*)\1$/.test(trimmed)) {
+    return tsStringLiteral(trimmed);
   }
 
   const strCall = parseCallPrefix(trimmed, 'str');
@@ -4450,6 +4489,13 @@ function translateExpression(
   const mixedKeywordCall = translateMixedKeywordCall(trimmed, nameMap, arrayNames, validatedTypeAliases);
   if (mixedKeywordCall !== null) {
     return mixedKeywordCall;
+  }
+
+  const enumModeConditional = /^(.+) if isinstance\((.+), ([A-Z][A-Za-z0-9_]*Mode)\) else ([A-Z][A-Za-z0-9_]*Mode)\((.+)\)$/.exec(trimmed);
+  if (enumModeConditional !== null && enumModeConditional[3] === enumModeConditional[4]) {
+    const enumName = enumModeConditional[3];
+    const conditionValue = translateExpression(enumModeConditional[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return `Object.values(${enumName}).includes(${conditionValue} as ${enumName}) ? ${translateExpression(enumModeConditional[1], nameMap, arrayNames, validatedTypeAliases, mapNames)} as ${enumName} : ${translateExpression(`${enumName}(${enumModeConditional[5]})`, nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
   }
 
   const conditionalExpression = /^(.+) if (.+) else (.+)$/.exec(trimmed);
@@ -4579,6 +4625,13 @@ function translateExpression(
   const enumIdCast = /^([A-Z][A-Za-z0-9_]*Id)\((.+)\)$/.exec(trimmed);
   if (enumIdCast !== null) {
     return translateExpression(enumIdCast[2], nameMap, arrayNames, validatedTypeAliases);
+  }
+
+  const enumModeCast = /^([A-Z][A-Za-z0-9_]*Mode)\((.+)\)$/.exec(trimmed);
+  if (enumModeCast !== null) {
+    const enumName = enumModeCast[1];
+    const value = translateExpression(enumModeCast[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return `(() => { const value = ${value}; if (!Object.values(${enumName}).includes(value as ${enumName})) { throw new Error('invalid ${enumName}'); } return value as ${enumName}; })()`;
   }
 
   const positionalConstructor = /^([A-Z][A-Za-z0-9_]*)\((.*)\)$/.exec(trimmed);
