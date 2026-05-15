@@ -85,6 +85,11 @@ async function translateFile(job: TranslationJob): Promise<string> {
     return renderLazyWrapperModule(job.relativePath, lazyWrapperModule);
   }
 
+  const protocolModule = parseProtocolModule(futureStripped);
+  if (protocolModule !== null) {
+    return renderProtocolModule(job.relativePath, protocolModule);
+  }
+
   const typeAliases = parseTypeAliases(futureStripped);
   if (typeAliases !== null) {
     return renderTypeAliases(job.relativePath, typeAliases);
@@ -228,6 +233,18 @@ interface LazyWrapperModule {
   runtimeModulePath: string;
   runtimeFunctionName: string;
   comments: string[];
+}
+
+interface ProtocolMethod {
+  name: string;
+  optsParams: FunctionParameter[];
+  optsOptional: boolean;
+  returnType: string;
+}
+
+interface ProtocolDefinition {
+  name: string;
+  methods: ProtocolMethod[];
 }
 
 interface InitReexports {
@@ -505,6 +522,69 @@ function renderLazyWrapperModule(relativePath: string, module: LazyWrapperModule
   lines.push(`  void import('${module.runtimeModulePath}').then(({ ${module.runtimeFunctionName}: ${runtimeAlias} }) => {`);
   lines.push(`    ${runtimeAlias}(${module.parameter.name});`);
   lines.push('  });');
+  lines.push('}');
+  lines.push('');
+  return lines.join('\n');
+}
+
+function parseProtocolModule(trimmedPython: string): ProtocolDefinition | null {
+  const lines = trimmedPython.split(/\r?\n/);
+  let index = 0;
+
+  while (index < lines.length && lines[index].trim() === '') {
+    index += 1;
+  }
+
+  if (lines[index]?.trim() !== 'from typing import Protocol') {
+    return null;
+  }
+  index += 1;
+
+  while (index < lines.length && lines[index].trim() === '') {
+    index += 1;
+  }
+
+  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\(Protocol\):$/.exec(lines[index] ?? '');
+  if (header === null) {
+    return null;
+  }
+  index += 1;
+
+  const methods: ProtocolMethod[] = [];
+  while (index < lines.length) {
+    if (lines[index].trim() === '') {
+      index += 1;
+      continue;
+    }
+
+    const method = /^    def ([A-Za-z_][A-Za-z0-9_]*)\(self, \*, ([A-Za-z_][A-Za-z0-9_]*): ([^=]+) = ([^)]+)\) -> ([^:]+): \.\.\.$/.exec(lines[index]);
+    if (method === null) {
+      return null;
+    }
+
+    methods.push({
+      name: tsExportNameForPythonName(method[1]),
+      optsParams: [{
+        name: tsExportNameForPythonName(method[2]),
+        typeExpression: tsTypeExpression(method[3]),
+      }],
+      optsOptional: true,
+      returnType: tsTypeExpression(method[5]),
+    });
+    index += 1;
+  }
+
+  return methods.length > 0 ? { name: header[1], methods } : null;
+}
+
+function renderProtocolModule(relativePath: string, protocol: ProtocolDefinition): string {
+  const lines = [`// Port of ${relativePath}`, '', `export interface ${protocol.name} {`];
+  for (const method of protocol.methods) {
+    const optsType = method.optsParams
+      .map((param) => `${param.name}${method.optsOptional ? '?' : ''}: ${param.typeExpression}`)
+      .join('; ');
+    lines.push(`  ${method.name}(opts${method.optsOptional ? '?' : ''}: { ${optsType} }): ${method.returnType};`);
+  }
   lines.push('}');
   lines.push('');
   return lines.join('\n');
