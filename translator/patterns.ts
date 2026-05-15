@@ -880,6 +880,9 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
 
     const typeAlias = /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(trimmed);
     if (typeAlias !== null) {
+      if (!isTypeAliasExpression(typeAlias[2])) {
+        return null;
+      }
       typeAliases.push({
         name: tsExportNameForPythonName(typeAlias[1]),
         typeExpression: tsTypeExpression(typeAlias[2]),
@@ -905,6 +908,14 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
 
   markStructTypeOnlyImports(imports, typeAliases, classes, protocols);
   return typeAliases.length + classes.length + protocols.length > 0 ? { imports, typeAliases, classes, protocols } : null;
+}
+
+function isTypeAliasExpression(pythonExpression: string): boolean {
+  const trimmed = pythonExpression.trim();
+  if (/^(?:True|False|None|-?\d+(?:\.\d+)?|["'])/.test(trimmed)) {
+    return false;
+  }
+  return /[\[\]|]/.test(trimmed) || /^(?:Callable|Sequence|dict|list|tuple)\b/.test(trimmed) || /^[A-Z][A-Za-z0-9_]*(?:\.[A-Z][A-Za-z0-9_]*)?$/.test(trimmed);
 }
 
 function isCollectionsAbcTypeImport(trimmedLine: string): boolean {
@@ -3268,6 +3279,11 @@ function translateExpression(
       return `!${value}`;
     }
     return /^[A-Za-z_$][A-Za-z0-9_.$()[\]]*$/.test(value) ? `!${value}` : `!(${value})`;
+  }
+
+  const prefixSlice = /^(.+)\[:(-?\d+)\]$/.exec(trimmed);
+  if (prefixSlice !== null) {
+    return `${translateExpression(prefixSlice[1], nameMap, arrayNames, validatedTypeAliases)}.slice(0, ${prefixSlice[2]})`;
   }
 
   const openEndedSlice = /^(.+)\[(\d+):\]$/.exec(trimmed);
