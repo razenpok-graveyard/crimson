@@ -515,6 +515,80 @@ export function translateStraightLineStatement(
     };
   }
 
+  const multilineTupleForOfStatement = /^for ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+) in \($/.exec(statement);
+  if (multilineTupleForOfStatement !== null) {
+    const iterableItems: string[] = [];
+    let iterableIndex = index + 1;
+    while (iterableIndex < lines.length) {
+      const iterableLine = lines[iterableIndex] ?? '';
+      const trimmed = iterableLine.trim();
+      if (iterableLine.startsWith(indent) && trimmed === '):') {
+        break;
+      }
+      if (!iterableLine.startsWith(`${indent}    `) || trimmed === '') {
+        return null;
+      }
+      const tupleItem = /^(.+),$/.exec(trimmed);
+      if (tupleItem === null) {
+        return null;
+      }
+      const tupleExpression = tupleItem[1].startsWith('(') && tupleItem[1].endsWith(')')
+        ? tupleItem[1].slice(1, -1)
+        : tupleItem[1];
+      const parts = splitTopLevelComma(tupleExpression);
+      iterableItems.push(parts.length > 1
+        ? `[${parts.map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')}]`
+        : translateExpression(tupleExpression, nameMap, arrayNames, validatedTypeAliases, mapNames));
+      iterableIndex += 1;
+    }
+    if ((lines[iterableIndex] ?? '').trim() !== '):') {
+      return null;
+    }
+
+    const innerIndent = `${indent}    `;
+    const innerStatements: string[] = [];
+    let nextIndex = iterableIndex + 1;
+    while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, innerIndent)) {
+      if (lines[nextIndex].trim() === '') {
+        innerStatements.push('');
+        nextIndex += 1;
+        continue;
+      }
+      const innerStatement = translateStraightLineStatement(
+        lines,
+        nextIndex,
+        innerIndent,
+        nameMap,
+        declaredNames,
+        reassignedNames,
+        arrayNames,
+        validatedTypeAliases,
+        relativePath,
+        mapNames,
+      );
+      if (innerStatement === null) {
+        return null;
+      }
+      innerStatements.push(...innerStatement.statements.map(indentStatementLine));
+      nextIndex = innerStatement.nextIndex;
+    }
+    if (innerStatements.length === 0) {
+      return null;
+    }
+
+    const targets = multilineTupleForOfStatement[1].split(', ').map(tsExportNameForPythonName);
+    return {
+      statements: [
+        `for (const [${targets.join(', ')}] of [`,
+        ...iterableItems.map((item) => `  ${item},`),
+        ']) {',
+        ...innerStatements,
+        '}',
+      ],
+      nextIndex,
+    };
+  }
+
   const forOfStatement = /^for ([A-Za-z_][A-Za-z0-9_]*) in (.+):$/.exec(statement);
   if (forOfStatement !== null) {
     const rangeLoop = /^range\((.+)\)$/.exec(forOfStatement[2]);

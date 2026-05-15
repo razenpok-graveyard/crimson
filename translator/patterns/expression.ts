@@ -374,6 +374,11 @@ export function translateExpression(
       .join(' || ');
   }
 
+  const parenthesizedNotExpression = /^\((not .*)\)$/.exec(trimmed);
+  if (parenthesizedNotExpression !== null && matchingCloseParen(trimmed, 0) === trimmed.length - 1) {
+    return translateExpression(parenthesizedNotExpression[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  }
+
   const notIdentifier = /^not ([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);
   if (notIdentifier !== null) {
     const value = translateExpression(notIdentifier[1], nameMap, arrayNames, validatedTypeAliases);
