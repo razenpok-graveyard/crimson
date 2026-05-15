@@ -1,29 +1,28 @@
 // Port of crimson/render/frame.py
 
-import { RuntimeResources } from '@grim/assets.ts';
-import { CrimsonConfig } from '@grim/config.ts';
-import { Vec2 } from '@grim/geom.ts';
-import { GroundRenderer } from '@grim/terrain-render.ts';
-import { CreaturePool } from '@crimson/creatures/runtime.ts';
+import type { RuntimeResources } from '@grim/assets.ts';
+import type { CrimsonConfig } from '@grim/config.ts';
+import type { Vec2 } from '@grim/geom.ts';
+import type { GroundRenderer } from '@grim/terrain-render.ts';
+import type { CreaturePool } from '@crimson/creatures/runtime.ts';
 import type { GameplayState } from '@crimson/gameplay.ts';
-import { PlayerState } from '@crimson/sim/state-types.ts';
-import { RtxRenderMode } from './rtx/mode.ts';
+import type { PlayerState } from '@crimson/sim/state-types.ts';
+import type { RtxRenderMode } from '@crimson/render/rtx/mode.ts';
 
+// Typed world snapshot consumed by render code.
+//
+// This intentionally carries references (not deep copies) so render can be
+// deterministic per frame boundary while remaining allocation-light.
 export class RenderFrame {
-  // Typed world snapshot consumed by render code.
-  // This intentionally carries references (not deep copies) so render can be
-  // deterministic per frame boundary while remaining allocation-light.
   readonly worldSize: number;
   readonly demoModeActive: boolean;
   readonly config: CrimsonConfig | null;
   readonly camera: Vec2;
   readonly ground: GroundRenderer | null;
-
   readonly state: GameplayState;
-  readonly players: readonly PlayerState[];
+  readonly players: PlayerState[];
   readonly creatures: CreaturePool;
   readonly resources: RuntimeResources;
-
   readonly elapsedMs: number;
   readonly bonusAnimPhase: number;
   readonly lanPlayerRingsEnabled: boolean;
@@ -38,7 +37,7 @@ export class RenderFrame {
     camera: Vec2;
     ground: GroundRenderer | null;
     state: GameplayState;
-    players: readonly PlayerState[];
+    players: PlayerState[];
     creatures: CreaturePool;
     resources: RuntimeResources;
     elapsedMs: number;
