@@ -278,7 +278,10 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
       `import ${importDefinition.typeOnly ? 'type ' : ''}{ ${importDefinition.names.join(', ')} } from '${importDefinition.modulePath}';`,
     );
   }
-  if (module.imports.length > 0) {
+  for (const reexport of module.reexports) {
+    lines.push(`export { ${reexport.names.join(', ')} } from '${reexport.modulePath}';`);
+  }
+  if (module.imports.length + module.reexports.length > 0) {
     lines.push('');
   }
 

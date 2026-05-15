@@ -185,6 +185,7 @@ export interface SimpleModuleAssignment {
 
 export interface StraightLineModule {
   imports: ImportDefinition[];
+  reexports: Reexport[];
   leadingAssignments: SimpleModuleAssignment[];
   functions: SimpleModuleFunction[];
   assignments: SimpleModuleAssignment[];

@@ -898,8 +898,14 @@ function parseProtocolParameters(parametersText: string): FunctionParameter[] | 
 function parseIndentedDocstring(
   lines: string[],
   index: number,
+  indent = '    ',
 ): { value: string; nextIndex: number } | null {
-  const start = /^    """(.*)$/.exec(lines[index] ?? '');
+  const line = lines[index];
+  if (line === undefined || !line.startsWith(indent)) {
+    return null;
+  }
+
+  const start = /^"""(.*)$/.exec(line.slice(indent.length));
   if (start === null) {
     return null;
   }
@@ -914,7 +920,7 @@ function parseIndentedDocstring(
   let nextIndex = index + 1;
   while (nextIndex < lines.length) {
     const line = lines[nextIndex];
-    if (line === '    """') {
+    if (line === `${indent}"""`) {
       return {
         value: docLines.join('\n'),
         nextIndex: nextIndex + 1,
@@ -925,10 +931,10 @@ function parseIndentedDocstring(
       nextIndex += 1;
       continue;
     }
-    if (!line.startsWith('    ')) {
+    if (!line.startsWith(indent)) {
       return null;
     }
-    docLines.push(line.slice(4));
+    docLines.push(line.slice(indent.length));
     nextIndex += 1;
   }
   return null;
@@ -1161,18 +1167,19 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       break;
     }
     if (trimmed.startsWith('__all__ = ')) {
-      const parsedAllNames = parseOneLineAllNames(trimmed);
-      if (parsedAllNames === null && !isOneLineAllAssignment(trimmed)) {
-        while (index < lines.length && lines[index].trim() !== ']') {
-          index += 1;
-        }
-      } else if (parsedAllNames !== null) {
-        allNames.push(...parsedAllNames);
+      const allAssignment = parseAllAssignment(lines, index);
+      if (allAssignment === null) {
+        return null;
       }
-      index += 1;
+      allNames.push(...allAssignment.names);
+      index = allAssignment.nextIndex;
       continue;
     }
     if (trimmed === 'import os') {
+      index += 1;
+      continue;
+    }
+    if (trimmed === 'import tempfile' || trimmed === 'from pathlib import Path') {
       index += 1;
       continue;
     }
@@ -1252,10 +1259,12 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     const statements: string[] = [];
     const nameMap = new Map(moduleNameMap);
     const declaredNames = new Set<string>();
-    const docstring = /^    """(.*)"""$/.exec(lines[index] ?? '');
+    const docstring = parseIndentedDocstring(lines, index);
     if (docstring !== null) {
-      statements.push(`// ${docstring[1]}`);
-      index += 1;
+      for (const line of docstring.value.split('\n')) {
+        statements.push(line === '' ? '//' : `// ${line}`);
+      }
+      index = docstring.nextIndex;
     }
     const reassignedNames = reassignedLocalNames(lines, index);
     while (index < lines.length) {
@@ -1303,15 +1312,12 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
 
     if (trimmed.startsWith('__all__ = ')) {
-      const parsedAllNames = parseOneLineAllNames(trimmed);
-      if (parsedAllNames === null && !isOneLineAllAssignment(trimmed)) {
-        while (index < lines.length && lines[index].trim() !== ']') {
-          index += 1;
-        }
-      } else if (parsedAllNames !== null) {
-        allNames.push(...parsedAllNames);
+      const allAssignment = parseAllAssignment(lines, index);
+      if (allAssignment === null) {
+        return null;
       }
-      index += 1;
+      allNames.push(...allAssignment.names);
+      index = allAssignment.nextIndex;
       continue;
     }
 
@@ -1323,6 +1329,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     index = assignment.nextIndex;
   }
 
+  const reexports = reexportsForAllNames(imports, allNames);
   markTypeOnlyImports(imports, functions, [...leadingAssignments, ...assignments]);
   if (allNames.length > 0) {
     const exportedNames = new Set(allNames.map(tsPublicNameForPythonName));
@@ -1334,8 +1341,8 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
   }
 
-  return leadingAssignments.length + functions.length + assignments.length > 0
-    ? { imports, leadingAssignments, functions, assignments }
+  return leadingAssignments.length + functions.length + assignments.length + reexports.length > 0
+    ? { imports, reexports, leadingAssignments, functions, assignments }
     : null;
 }
 
@@ -1382,6 +1389,37 @@ function parseStraightLineFunctionHeader(
   return null;
 }
 
+function parseAllAssignment(
+  lines: string[],
+  index: number,
+): { names: string[]; nextIndex: number } | null {
+  const trimmed = lines[index]?.trim() ?? '';
+  const oneLineNames = parseOneLineAllNames(trimmed);
+  if (oneLineNames !== null) {
+    return { names: oneLineNames, nextIndex: index + 1 };
+  }
+  if (trimmed !== '__all__ = [') {
+    return null;
+  }
+
+  const names: string[] = [];
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length) {
+    const inner = lines[nextIndex].trim();
+    if (inner === ']') {
+      return { names, nextIndex: nextIndex + 1 };
+    }
+    const name = /^"([A-Za-z_][A-Za-z0-9_]*)",?$/.exec(inner);
+    if (name === null) {
+      return null;
+    }
+    names.push(name[1]);
+    nextIndex += 1;
+  }
+
+  return null;
+}
+
 function parseOneLineAllNames(trimmedLine: string): string[] | null {
   const allAssignment = /^__all__ = \[(.*)\]$/.exec(trimmedLine);
   if (allAssignment === null) {
@@ -1400,6 +1438,30 @@ function parseOneLineAllNames(trimmedLine: string): string[] | null {
     names.push(name[1]);
   }
   return names;
+}
+
+function reexportsForAllNames(imports: ImportDefinition[], allNames: string[]): Reexport[] {
+  if (allNames.length === 0) {
+    return [];
+  }
+
+  const exportedNames = new Set(allNames.map(tsPublicNameForPythonName));
+  const byModule = new Map<string, string[]>();
+  for (const importDefinition of imports) {
+    const names = importDefinition.names.filter((name) => exportedNames.has(name));
+    if (names.length === 0) {
+      continue;
+    }
+    const existing = byModule.get(importDefinition.modulePath) ?? [];
+    for (const name of names) {
+      if (!existing.includes(name)) {
+        existing.push(name);
+      }
+    }
+    byModule.set(importDefinition.modulePath, existing);
+  }
+
+  return [...byModule.entries()].map(([modulePath, names]) => ({ modulePath, names }));
 }
 
 function translateStraightLineStatement(
@@ -1801,9 +1863,25 @@ function translateExpression(
     return `typeof process !== 'undefined' && process.env?.${envComparison[1]} === '${envComparison[2]}'`;
   }
 
+  const tempDirPathJoin = /^Path\(tempfile\.gettempdir\(\)\) \/ "([^"\\]*)"$/.exec(trimmed);
+  if (tempDirPathJoin !== null) {
+    return tsStringLiteral(`"/tmp/${tempDirPathJoin[1]}"`);
+  }
+
   const mixedKeywordCall = translateMixedKeywordCall(trimmed, nameMap, arrayNames);
   if (mixedKeywordCall !== null) {
     return mixedKeywordCall;
+  }
+
+  const conditionalExpression = /^(.+) if (.+) else (.+)$/.exec(trimmed);
+  if (conditionalExpression !== null) {
+    return [
+      translateExpression(conditionalExpression[2], nameMap, arrayNames),
+      '?',
+      translateExpression(conditionalExpression[1], nameMap, arrayNames),
+      ':',
+      translateExpression(conditionalExpression[3], nameMap, arrayNames),
+    ].join(' ');
   }
 
   if (trimmed.includes(' and ')) {
@@ -1931,8 +2009,11 @@ function translateMixedKeywordCall(
     sawKeyword = true;
     keywordParts.push(`${tsExportNameForPythonName(keyword[1])}: ${translateExpression(keyword[2], nameMap, arrayNames)}`);
   }
-  if (keywordParts.length === 0 || positionalParts.length === 0) {
+  if (keywordParts.length === 0) {
     return null;
+  }
+  if (positionalParts.length === 0) {
+    return `${translateExpression(call[1], nameMap, arrayNames)}({ ${keywordParts.join(', ')} })`;
   }
 
   return `${translateExpression(call[1], nameMap, arrayNames)}(${[
