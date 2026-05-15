@@ -109,11 +109,13 @@ export interface SimpleExportModule {
 export interface StructModule {
   imports: ImportDefinition[];
   classes: StructClassDefinition[];
+  protocols: ProtocolDefinition[];
 }
 
 export interface StructClassDefinition {
   name: string;
   docstring: string | null;
+  readonlyFields: boolean;
   fields: StructFieldDefinition[];
 }
 
@@ -147,6 +149,7 @@ export interface LazyWrapperModule {
 
 export interface ProtocolMethod {
   name: string;
+  parameters: FunctionParameter[];
   optsParams: FunctionParameter[];
   optsOptional: boolean;
   returnType: string;

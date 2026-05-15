@@ -65,7 +65,11 @@ export function renderProtocolModule(relativePath: string, protocol: ProtocolDef
     const optsType = method.optsParams
       .map((param) => `${param.name}${method.optsOptional ? '?' : ''}: ${param.typeExpression}`)
       .join('; ');
-    lines.push(`  ${method.name}(opts${method.optsOptional ? '?' : ''}: { ${optsType} }): ${method.returnType};`);
+    const params = method.parameters.map((param) => `${param.name}: ${param.typeExpression}`);
+    if (method.optsParams.length > 0) {
+      params.push(`opts${method.optsOptional ? '?' : ''}: { ${optsType} }`);
+    }
+    lines.push(`  ${method.name}(${params.join(', ')}): ${method.returnType};`);
   }
   lines.push('}');
   lines.push('');
@@ -231,7 +235,7 @@ export function renderMsgspecStructModule(relativePath: string, module: StructMo
     }
     lines.push(`export class ${structClass.name} {`);
     for (const field of structClass.fields) {
-      lines.push(`  ${field.name}: ${field.typeExpression};`);
+      lines.push(`  ${structClass.readonlyFields ? 'readonly ' : ''}${field.name}: ${field.typeExpression};`);
     }
     lines.push('');
     lines.push('  constructor(opts: {');
@@ -245,6 +249,21 @@ export function renderMsgspecStructModule(relativePath: string, module: StructMo
     lines.push('  }');
     lines.push('}');
     if (index < module.classes.length - 1) {
+      lines.push('');
+    }
+  }
+  if (module.classes.length > 0 && module.protocols.length > 0) {
+    lines.push('');
+  }
+  for (let index = 0; index < module.protocols.length; index += 1) {
+    const protocol = module.protocols[index];
+    lines.push(`export interface ${protocol.name} {`);
+    for (const method of protocol.methods) {
+      const params = method.parameters.map((param) => `${param.name}: ${param.typeExpression}`);
+      lines.push(`  ${method.name}(${params.join(', ')}): ${method.returnType};`);
+    }
+    lines.push('}');
+    if (index < module.protocols.length - 1) {
       lines.push('');
     }
   }

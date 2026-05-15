@@ -236,6 +236,7 @@ export function parseProtocolModule(trimmedPython: string): ProtocolDefinition |
 
     methods.push({
       name: tsExportNameForPythonName(method[1]),
+      parameters: [],
       optsParams: [{
         name: tsExportNameForPythonName(method[2]),
         typeExpression: tsTypeExpression(method[3]),
@@ -716,6 +717,7 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
   const lines = flattenFromImportBlocks(trimmedPython.split(/\r?\n/));
   const imports: ImportDefinition[] = [];
   const classes: StructModule['classes'] = [];
+  const protocols: StructModule['protocols'] = [];
   let sawMsgspecImport = false;
   let index = 0;
 
@@ -727,6 +729,10 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
     }
     if (trimmed === 'import msgspec') {
       sawMsgspecImport = true;
+      index += 1;
+      continue;
+    }
+    if (trimmed === 'from pathlib import Path' || trimmed === 'from typing import Protocol') {
       index += 1;
       continue;
     }
@@ -762,10 +768,18 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       continue;
     }
 
-    const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\(msgspec\.Struct(?:, [^)]+)?\):$/.exec(lines[index] ?? '');
+    const protocol = parseSimpleProtocolClass(lines, index);
+    if (protocol !== null) {
+      protocols.push(protocol.protocol);
+      index = protocol.nextIndex;
+      continue;
+    }
+
+    const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\(msgspec\.Struct(?<options>(?:, [^)]+)?)\):$/.exec(lines[index] ?? '');
     if (header === null) {
       return null;
     }
+    const readonlyFields = header.groups?.options?.includes('frozen=True') ?? false;
     index += 1;
 
     const docstring = parseIndentedDocstring(lines, index);
@@ -807,12 +821,78 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
     classes.push({
       name: header[1],
       docstring: docstring?.value ?? null,
+      readonlyFields,
       fields,
     });
   }
 
-  markStructTypeOnlyImports(imports, classes);
-  return classes.length > 0 ? { imports, classes } : null;
+  markStructTypeOnlyImports(imports, classes, protocols);
+  return classes.length + protocols.length > 0 ? { imports, classes, protocols } : null;
+}
+
+function parseSimpleProtocolClass(
+  lines: string[],
+  index: number,
+): { protocol: ProtocolDefinition; nextIndex: number } | null {
+  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\(Protocol\):$/.exec(lines[index] ?? '');
+  if (header === null) {
+    return null;
+  }
+
+  const methods: ProtocolMethod[] = [];
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length) {
+    const trimmed = lines[nextIndex].trim();
+    if (trimmed === '') {
+      nextIndex += 1;
+      continue;
+    }
+    if (!lines[nextIndex].startsWith('    ')) {
+      break;
+    }
+
+    const method = /^    def ([A-Za-z_][A-Za-z0-9_]*)\((.*)\) -> ([^:]+): \.\.\.$/.exec(lines[nextIndex] ?? '');
+    if (method === null) {
+      return null;
+    }
+    const parameters = parseProtocolParameters(method[2]);
+    if (parameters === null) {
+      return null;
+    }
+    methods.push({
+      name: tsExportNameForPythonName(method[1]),
+      parameters,
+      optsParams: [],
+      optsOptional: false,
+      returnType: tsTypeExpression(method[3]),
+    });
+    nextIndex += 1;
+  }
+
+  return methods.length > 0
+    ? { protocol: { name: header[1], methods }, nextIndex }
+    : null;
+}
+
+function parseProtocolParameters(parametersText: string): FunctionParameter[] | null {
+  if (parametersText === 'self') {
+    return [];
+  }
+  if (!parametersText.startsWith('self, ')) {
+    return null;
+  }
+  const parameters: FunctionParameter[] = [];
+  for (const parameterText of parametersText.slice('self, '.length).split(', ')) {
+    const parameter = /^([A-Za-z_][A-Za-z0-9_]*): (.+)$/.exec(parameterText);
+    if (parameter === null) {
+      return null;
+    }
+    parameters.push({
+      name: tsExportNameForPythonName(parameter[1]),
+      typeExpression: tsTypeExpression(parameter[2]),
+    });
+  }
+  return parameters;
 }
 
 function parseIndentedDocstring(
@@ -855,6 +935,9 @@ function parseIndentedDocstring(
 }
 
 function tsStructFieldType(pythonType: string): string {
+  if (pythonType.trim() === 'Path') {
+    return 'string';
+  }
   const listType = /^list\[(.+)\]$/.exec(pythonType.trim());
   if (listType !== null) {
     return `${tsTypeExpression(listType[1])}[]`;
@@ -864,6 +947,15 @@ function tsStructFieldType(pythonType: string): string {
 
 function tsStructFieldDefaultValue(pythonValue: string): string | null {
   const trimmed = pythonValue.trim();
+  const joinedPath = /^Path\("([^"]+)"\) \/ "([^"]+)"$/.exec(trimmed);
+  if (joinedPath !== null) {
+    return `'${joinedPath[1]}/${joinedPath[2]}'`;
+  }
+  const pathValue = /^Path\("([^"]+)"\)$/.exec(trimmed);
+  if (pathValue !== null) {
+    return `'${pathValue[1]}'`;
+  }
+
   if (trimmed === 'msgspec.field(default_factory=list)') {
     return '[]';
   }
@@ -879,20 +971,38 @@ function tsStructFieldDefaultValue(pythonValue: string): string | null {
 function markStructTypeOnlyImports(
   imports: ImportDefinition[],
   classes: StructModule['classes'],
+  protocols: StructModule['protocols'],
 ): void {
   const valueText = classes
     .flatMap((structClass) => structClass.fields.map((field) => field.defaultValue))
     .join('\n');
+  const typeText = [
+    ...classes.flatMap((structClass) => structClass.fields.map((field) => field.typeExpression)),
+    ...protocols.flatMap((protocol) => protocol.methods.flatMap((method) => [
+      method.returnType,
+      ...method.parameters.map((parameter) => parameter.typeExpression),
+      ...method.optsParams.map((parameter) => parameter.typeExpression),
+    ])),
+  ].join('\n');
 
   for (let index = 0; index < imports.length; index += 1) {
     const importDefinition = imports[index];
     const valueNames = importDefinition.names.filter((name) => identifierPattern(name).test(valueText));
-    const typeOnlyNames = importDefinition.names.filter((name) => !identifierPattern(name).test(valueText));
+    const typeOnlyNames = importDefinition.names.filter((name) => (
+      !identifierPattern(name).test(valueText) && identifierPattern(name).test(typeText)
+    ));
+    if (valueNames.length + typeOnlyNames.length === 0) {
+      imports.splice(index, 1);
+      index -= 1;
+      continue;
+    }
     if (valueNames.length === 0) {
+      importDefinition.names = typeOnlyNames;
       importDefinition.typeOnly = true;
       continue;
     }
     if (typeOnlyNames.length === 0) {
+      importDefinition.names = valueNames;
       importDefinition.typeOnly = false;
       continue;
     }
