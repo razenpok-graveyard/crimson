@@ -1,5 +1,6 @@
 import type {
   ConstantsModule,
+  EnumDefinition,
   FunctionDefinition,
   GuardedAttributeModule,
   InitReexports,
@@ -63,6 +64,23 @@ export function renderProtocolModule(relativePath: string, protocol: ProtocolDef
       .map((param) => `${param.name}${method.optsOptional ? '?' : ''}: ${param.typeExpression}`)
       .join('; ');
     lines.push(`  ${method.name}(opts${method.optsOptional ? '?' : ''}: { ${optsType} }): ${method.returnType};`);
+  }
+  lines.push('}');
+  lines.push('');
+  return lines.join('\n');
+}
+
+export function renderIntEnumModule(relativePath: string, enumDefinition: EnumDefinition): string {
+  const lines = [`// Port of ${relativePath}`, ''];
+  if (enumDefinition.docstring !== null) {
+    for (const line of enumDefinition.docstring.split(/\r?\n/)) {
+      lines.push(line === '' ? '//' : `// ${line}`);
+    }
+  }
+
+  lines.push(`export enum ${enumDefinition.name} {`);
+  for (const member of enumDefinition.members) {
+    lines.push(`  ${member.name} = ${member.value},`);
   }
   lines.push('}');
   lines.push('');

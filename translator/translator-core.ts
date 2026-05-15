@@ -5,6 +5,7 @@ import {
   parseConstantsModule,
   parseFunctionsModule,
   parseGuardedAttributeModule,
+  parseIntEnumModule,
   parseInitReexports,
   parseLazyWrapperModule,
   parseNamespaceReexports,
@@ -21,6 +22,7 @@ import {
   renderEmptyModule,
   renderFunctionsModule,
   renderGuardedAttributeModule,
+  renderIntEnumModule,
   renderInitReexports,
   renderLazyWrapperModule,
   renderModuleDocOnly,
@@ -56,6 +58,11 @@ export async function translateFile(job: TranslationJob): Promise<string> {
   const protocolModule = parseProtocolModule(futureStripped);
   if (protocolModule !== null) {
     return renderProtocolModule(job.relativePath, protocolModule);
+  }
+
+  const intEnumModule = parseIntEnumModule(futureStripped);
+  if (intEnumModule !== null) {
+    return renderIntEnumModule(job.relativePath, intEnumModule);
   }
 
   const typeAliases = parseTypeAliases(futureStripped);

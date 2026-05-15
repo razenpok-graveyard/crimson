@@ -1,6 +1,7 @@
 import type {
   ConstantDefinition,
   ConstantsModule,
+  EnumDefinition,
   FunctionDefinition,
   FunctionParameter,
   GuardedAttributeModule,
@@ -236,6 +237,62 @@ export function parseProtocolModule(trimmedPython: string): ProtocolDefinition |
   }
 
   return methods.length > 0 ? { name: header[1], methods } : null;
+}
+
+export function parseIntEnumModule(trimmedPython: string): EnumDefinition | null {
+  const lines = trimmedPython.split(/\r?\n/);
+  let index = 0;
+
+  while (index < lines.length && lines[index].trim() === '') {
+    index += 1;
+  }
+
+  if (lines[index]?.trim() !== 'from enum import IntEnum') {
+    return null;
+  }
+  index += 1;
+
+  while (index < lines.length && lines[index].trim() === '') {
+    index += 1;
+  }
+
+  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\(IntEnum\):$/.exec(lines[index] ?? '');
+  if (header === null) {
+    return null;
+  }
+  index += 1;
+
+  let docstring: string | null = null;
+  const members: { name: string; value: string }[] = [];
+  while (index < lines.length) {
+    const line = lines[index];
+    const trimmed = line.trim();
+    if (trimmed === '') {
+      index += 1;
+      continue;
+    }
+
+    const docstringMatch = /^    """(.*)"""$/.exec(line);
+    if (docstringMatch !== null && members.length === 0 && docstring === null) {
+      docstring = docstringMatch[1];
+      index += 1;
+      continue;
+    }
+
+    const member = /^    ([A-Z][A-Z0-9_]*) = (-?(?:0x[0-9A-Fa-f]+|\d+))$/.exec(line);
+    if (member !== null) {
+      members.push({
+        name: member[1],
+        value: member[2],
+      });
+      index += 1;
+      continue;
+    }
+
+    return null;
+  }
+
+  return members.length > 0 ? { name: header[1], docstring, members } : null;
 }
 
 export function parseTypeAliases(trimmedPython: string): TypeAlias[] | null {

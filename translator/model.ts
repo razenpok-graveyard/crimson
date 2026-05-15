@@ -21,6 +21,17 @@ export interface TypeAlias {
   typeExpression: string;
 }
 
+export interface EnumMember {
+  name: string;
+  value: string;
+}
+
+export interface EnumDefinition {
+  name: string;
+  docstring: string | null;
+  members: EnumMember[];
+}
+
 export interface ConstantDefinition {
   name: string;
   value: string;
