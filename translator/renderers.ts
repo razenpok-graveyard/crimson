@@ -66,18 +66,8 @@ export function renderLazyWrapperModule(relativePath: string, module: LazyWrappe
 }
 
 export function renderProtocolModule(relativePath: string, protocol: ProtocolDefinition): string {
-  const lines = [`// Port of ${relativePath}`, '', `export interface ${protocol.name} {`];
-  for (const method of protocol.methods) {
-    const optsType = method.optsParams
-      .map((param) => `${param.name}${method.optsOptional ? '?' : ''}: ${param.typeExpression}`)
-      .join('; ');
-    const params = method.parameters.map(renderParameter);
-    if (method.optsParams.length > 0) {
-      params.push(`opts${method.optsOptional ? '?' : ''}: { ${optsType} }`);
-    }
-    lines.push(`  ${method.name}(${params.join(', ')}): ${method.returnType};`);
-  }
-  lines.push('}');
+  const lines = [`// Port of ${relativePath}`, ''];
+  renderProtocolDefinition(lines, protocol);
   lines.push('');
   return lines.join('\n');
 }
@@ -236,31 +226,80 @@ export function renderMsgspecStructModule(relativePath: string, module: StructMo
     lines.push('');
   }
 
+  const callableProtocols = module.protocols.filter(isCallableProtocol);
+  const interfaceProtocols = module.protocols.filter((protocol) => !isCallableProtocol(protocol));
+
+  for (let index = 0; index < callableProtocols.length; index += 1) {
+    const protocol = callableProtocols[index];
+    renderProtocolDefinition(lines, protocol);
+    if (index < callableProtocols.length - 1) {
+      lines.push('');
+    }
+  }
+  if (callableProtocols.length > 0 && module.typeAliases.length + module.classes.length + interfaceProtocols.length > 0) {
+    lines.push('');
+  }
+
   for (const alias of module.typeAliases) {
     lines.push(`${alias.exported === false ? '' : 'export '}type ${alias.name} = ${alias.typeExpression};`);
   }
-  if (module.typeAliases.length > 0 && module.classes.length + module.protocols.length > 0) {
+  if (module.typeAliases.length > 0 && module.classes.length + interfaceProtocols.length > 0) {
     lines.push('');
   }
 
   renderStructClasses(lines, module.classes);
-  if (module.classes.length > 0 && module.protocols.length > 0) {
+  if (module.classes.length > 0 && interfaceProtocols.length > 0) {
     lines.push('');
   }
-  for (let index = 0; index < module.protocols.length; index += 1) {
-    const protocol = module.protocols[index];
-    lines.push(`export interface ${protocol.name} {`);
-    for (const method of protocol.methods) {
-      const params = method.parameters.map(renderParameter);
-      lines.push(`  ${method.name}(${params.join(', ')}): ${method.returnType};`);
-    }
-    lines.push('}');
-    if (index < module.protocols.length - 1) {
+  for (let index = 0; index < interfaceProtocols.length; index += 1) {
+    const protocol = interfaceProtocols[index];
+    renderProtocolDefinition(lines, protocol);
+    if (index < interfaceProtocols.length - 1) {
       lines.push('');
     }
   }
   lines.push('');
   return lines.join('\n');
+}
+
+function renderProtocolDefinition(lines: string[], protocol: ProtocolDefinition): void {
+  if (isCallableProtocol(protocol)) {
+    const method = protocol.methods[0];
+    const params = method.parameters.map(renderParameter);
+    if (method.optsParams.length > 0) {
+      if (method.parameters.length === 0 && method.optsParams.length > 2) {
+        lines.push(`export type ${protocol.name} = (opts: {`);
+        for (const param of method.optsParams) {
+          lines.push(`  ${param.name}: ${param.typeExpression};`);
+        }
+        lines.push(`}) => ${method.returnType};`);
+        return;
+      }
+      const optsType = method.optsParams
+        .map((param) => `${param.name}: ${param.typeExpression}`)
+        .join('; ');
+      params.push(`opts: { ${optsType} }`);
+    }
+    lines.push(`export type ${protocol.name} = (${params.join(', ')}) => ${method.returnType};`);
+    return;
+  }
+
+  lines.push(`export interface ${protocol.name} {`);
+  for (const method of protocol.methods) {
+    const params = method.parameters.map(renderParameter);
+    if (method.optsParams.length > 0) {
+      const optsType = method.optsParams
+        .map((param) => `${param.name}${method.optsOptional ? '?' : ''}: ${param.typeExpression}`)
+        .join('; ');
+      params.push(`opts${method.optsOptional ? '?' : ''}: { ${optsType} }`);
+    }
+    lines.push(`  ${method.name}(${params.join(', ')}): ${method.returnType};`);
+  }
+  lines.push('}');
+}
+
+function isCallableProtocol(protocol: ProtocolDefinition): boolean {
+  return protocol.methods.length === 1 && protocol.methods[0].name === '__call__';
 }
 
 function renderStructClasses(lines: string[], classes: StructModule['classes']): void {

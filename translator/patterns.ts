@@ -833,6 +833,7 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       || trimmed === 'from pathlib import Path'
       || trimmed === 'from typing import Protocol'
       || trimmed === 'from typing import TYPE_CHECKING'
+      || trimmed === 'from typing import TYPE_CHECKING, Protocol'
       || trimmed === 'from typing import cast'
     ) {
       index += 1;
@@ -1445,22 +1446,22 @@ function parseSimpleProtocolClass(
       break;
     }
 
-    const method = /^    def ([A-Za-z_][A-Za-z0-9_]*)\((.*)\) -> ([^:]+): \.\.\.$/.exec(lines[nextIndex] ?? '');
+    const method = parseProtocolMethodHeader(lines, nextIndex);
     if (method === null) {
       return null;
     }
-    const parameters = parseProtocolParameters(method[2]);
+    const parameters = parseProtocolParameters(method.parametersText);
     if (parameters === null) {
       return null;
     }
     methods.push({
-      name: tsExportNameForPythonName(method[1]),
-      parameters,
-      optsParams: [],
+      name: method.name === '__call__' ? '__call__' : tsExportNameForPythonName(method.name),
+      parameters: parameters.parameters,
+      optsParams: parameters.optsParams,
       optsOptional: false,
-      returnType: tsTypeExpression(method[3]),
+      returnType: tsTypeExpression(method.returnType),
     });
-    nextIndex += 1;
+    nextIndex = method.nextIndex;
   }
 
   return methods.length > 0
@@ -1468,25 +1469,55 @@ function parseSimpleProtocolClass(
     : null;
 }
 
-function parseProtocolParameters(parametersText: string): FunctionParameter[] | null {
+function parseProtocolMethodHeader(
+  lines: string[],
+  index: number,
+): { name: string; parametersText: string; returnType: string; nextIndex: number } | null {
+  const oneLine = /^    def ([A-Za-z_][A-Za-z0-9_]*)\((.*)\) -> ([^:]+): \.\.\.$/.exec(lines[index] ?? '');
+  if (oneLine !== null) {
+    return {
+      name: oneLine[1],
+      parametersText: oneLine[2],
+      returnType: oneLine[3],
+      nextIndex: index + 1,
+    };
+  }
+
+  const start = /^    def ([A-Za-z_][A-Za-z0-9_]*)\($/.exec(lines[index] ?? '');
+  if (start === null) {
+    return null;
+  }
+
+  const parameterLines: string[] = [];
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length) {
+    const close = /^    \) -> ([^:]+): \.\.\.$/.exec(lines[nextIndex] ?? '');
+    if (close !== null) {
+      return {
+        name: start[1],
+        parametersText: parameterLines.join(', '),
+        returnType: close[1],
+        nextIndex: nextIndex + 1,
+      };
+    }
+    const parameter = /^        (.+),$/.exec(lines[nextIndex] ?? '');
+    if (parameter === null) {
+      return null;
+    }
+    parameterLines.push(parameter[1]);
+    nextIndex += 1;
+  }
+  return null;
+}
+
+function parseProtocolParameters(parametersText: string): { parameters: FunctionParameter[]; optsParams: FunctionParameter[] } | null {
   if (parametersText === 'self') {
-    return [];
+    return { parameters: [], optsParams: [] };
   }
   if (!parametersText.startsWith('self, ')) {
     return null;
   }
-  const parameters: FunctionParameter[] = [];
-  for (const parameterText of parametersText.slice('self, '.length).split(', ')) {
-    const parameter = /^([A-Za-z_][A-Za-z0-9_]*): (.+)$/.exec(parameterText);
-    if (parameter === null) {
-      return null;
-    }
-    parameters.push({
-      name: tsExportNameForPythonName(parameter[1]),
-      typeExpression: tsTypeExpression(parameter[2]),
-    });
-  }
-  return parameters;
+  return parseFunctionParametersText(parametersText.slice('self, '.length), new Set());
 }
 
 function parseIndentedDocstring(

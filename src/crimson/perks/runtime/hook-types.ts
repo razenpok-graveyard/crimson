@@ -1,10 +1,10 @@
 // Port of crimson/perks/runtime/hook_types.py
 
 import type { PerkId } from '@crimson/perks/ids.ts';
-import type { PerkApplyHandler } from './apply-context.ts';
-import type { PerksUpdateEffectsCtx } from './effects-context.ts';
-import type { PlayerPerkTickCtx } from './player-tick-context.ts';
-import type { CreaturePool, CreatureDeath } from '@crimson/creatures/runtime.ts';
+import type { PerkApplyHandler } from '@crimson/perks/runtime/apply-context.ts';
+import type { PerksUpdateEffectsCtx } from '@crimson/perks/runtime/effects-context.ts';
+import type { PlayerPerkTickCtx } from '@crimson/perks/runtime/player-tick-context.ts';
+import type { CreatureDeath, CreaturePool } from '@crimson/creatures/runtime.ts';
 import type { FxQueue } from '@crimson/effects.ts';
 import type { GameplayState, PlayerState } from '@crimson/sim/state-types.ts';
 
@@ -22,8 +22,8 @@ export type PlayerDeathHook = (opts: {
   deaths: CreatureDeath[];
 }) => void;
 
-export type PlayerPerkTickStep = (ctx: PlayerPerkTickCtx) => void;
-export type PerksUpdateEffectsStep = (ctx: PerksUpdateEffectsCtx) => void;
+export type PlayerPerkTickStep = (arg0: PlayerPerkTickCtx) => void;
+export type PerksUpdateEffectsStep = (arg0: PerksUpdateEffectsCtx) => void;
 
 export class PerkHooks {
   readonly perkId: PerkId;
