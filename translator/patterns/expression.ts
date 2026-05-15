@@ -401,6 +401,20 @@ export function translateExpression(
     }
   }
 
+  const msgspecStructsReplace = parseCallPrefix(trimmed, 'msgspec.structs.replace');
+  if (msgspecStructsReplace !== null && msgspecStructsReplace.rest === '') {
+    const replacement = translateMsgspecStructsReplace(
+      msgspecStructsReplace.argsText,
+      nameMap,
+      arrayNames,
+      validatedTypeAliases,
+      mapNames,
+    );
+    if (replacement !== null) {
+      return replacement;
+    }
+  }
+
   const vectorSubMethod = /^\((.+) - (.+)\)\.to_heading\(\)$/.exec(trimmed);
   if (vectorSubMethod !== null) {
     return `${translateExpression(vectorSubMethod[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.sub(${translateExpression(vectorSubMethod[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}).toHeading()`;
@@ -653,6 +667,7 @@ export function translateExpression(
         `${translateExpression(callee, nameMap, arrayNames, validatedTypeAliases)}({ ${tsExportNameForPythonName(argName)}: ${translateExpression(argValue, nameMap, arrayNames, validatedTypeAliases)} })`
       ),
     )
+    .replaceAll(/\b(?:list|tuple)\(([^()]*)\)/g, 'Array.from($1)')
     .replaceAll(/\b(?:float|str|bool)\(([^()]*)\)/g, '$1')
     .replaceAll(/\blen\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, '$1.length')
     .replaceAll(/\.append\(/g, '.push(')
@@ -824,6 +839,34 @@ function translateInlineDictMapExpression(
     entries.push(`[${translateExpression(key, nameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(value, nameMap, arrayNames, validatedTypeAliases, mapNames)}]`);
   }
   return `new Map([${entries.join(', ')}])`;
+}
+
+function translateMsgspecStructsReplace(
+  argsText: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  const parts = splitTopLevelComma(argsText);
+  if (parts.length === 0) {
+    return null;
+  }
+
+  const value = translateExpression(parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const updates: string[] = [];
+  for (const part of parts.slice(1)) {
+    const keyword = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(part);
+    if (keyword === null) {
+      return null;
+    }
+    const name = tsExportNameForPythonName(keyword[1]);
+    const translatedValue = translateExpression(keyword[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    updates.push(name === translatedValue ? name : `${name}: ${translatedValue}`);
+  }
+
+  const updateText = updates.length === 0 ? '' : `, ${updates.join(', ')}`;
+  return `(() => { const value = ${value}; return new (value.constructor as new (opts: typeof value) => typeof value)({ ...value${updateText} }); })()`;
 }
 
 function topLevelColonIndex(value: string): number | null {
