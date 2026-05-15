@@ -10,7 +10,7 @@ import { PerkId } from '@crimson/perks/ids.ts';
 import { PerkHooks } from '@crimson/perks/runtime/hook-types.ts';
 import type { PlayerPerkTickCtx } from '@crimson/perks/runtime/player-tick-context.ts';
 
-function tickFireCough(ctx: PlayerPerkTickCtx): void {
+export function tickFireCough(ctx: PlayerPerkTickCtx): void {
   if (!perkActive(ctx.player, PerkId.FIRE_CAUGH)) {
     ctx.player.fireCoughTimer = 0.0;
     return;
@@ -32,37 +32,24 @@ function tickFireCough(ctx: PlayerPerkTickCtx): void {
   const aim = ctx.player.aim;
   const dist = aim.sub(originPos).length();
   const maxOffset = dist * ctx.player.spreadHeat * 0.5;
-  const dirRoll = ctx.state.rng.rand(
-    { caller: RngCallerStatic.PLAYER_UPDATE_FIRE_COUGH_SPREAD_DIR },
-  );
-  const dirAngle = (dirRoll & 0x1ff) * (Math.PI * 2.0 / 512.0);
-  const magRoll = ctx.state.rng.rand(
-    { caller: RngCallerStatic.PLAYER_UPDATE_FIRE_COUGH_SPREAD_MAG },
-  );
-  const mag = (magRoll & 0x1ff) * (1.0 / 512.0);
+  const dirRoll = ctx.state.rng.rand({ caller: RngCallerStatic.PLAYER_UPDATE_FIRE_COUGH_SPREAD_DIR });
+  const dirAngle = (dirRoll & 0x1FF) * ((Math.PI * 2.0) / 512.0);
+  const magRoll = ctx.state.rng.rand({ caller: RngCallerStatic.PLAYER_UPDATE_FIRE_COUGH_SPREAD_MAG });
+  const mag = (magRoll & 0x1FF) * (1.0 / 512.0);
   const offset = maxOffset * mag;
   const jitter = aim.add(Vec2.fromAngle(dirAngle).mul(offset));
   const angle = jitter.sub(originPos).toHeading();
   ctx.projectileSpawn(
     ctx.state,
-    {
-      players: [ctx.player],
-      pos: muzzle,
-      angle,
-      typeId: ProjectileTemplateId.FIRE_BULLETS,
-      owner,
-      ownerPlayerIndex: ctx.player.index,
-    },
+    { players: [ctx.player], pos: muzzle, angle: angle, typeId: ProjectileTemplateId.FIRE_BULLETS, owner: owner, ownerPlayerIndex: ctx.player.index },
   );
 
   const vel = Vec2.fromAngle(aimHeading).mul(25.0);
-  ctx.state.spriteEffects.spawn({ pos: muzzle, vel, scale: 1.0, color: new RGBA(0.5, 0.5, 0.5, 0.413) });
+  ctx.state.spriteEffects.spawn({ pos: muzzle, vel: vel, scale: 1.0, color: new RGBA(0.5, 0.5, 0.5, 0.413) });
 
   ctx.player.fireCoughTimer -= ctx.state.perkIntervals.fireCough;
-  const intervalRoll = ctx.state.rng.rand(
-    { caller: RngCallerStatic.PLAYER_UPDATE_FIRE_COUGH_INTERVAL_RESET },
-  );
-  ctx.state.perkIntervals.fireCough = (intervalRoll % 4) + 2.0;
+  const intervalRoll = ctx.state.rng.rand({ caller: RngCallerStatic.PLAYER_UPDATE_FIRE_COUGH_INTERVAL_RESET });
+  ctx.state.perkIntervals.fireCough = intervalRoll % 4 + 2.0;
 }
 
 export const HOOKS = new PerkHooks({

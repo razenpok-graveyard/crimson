@@ -426,9 +426,23 @@ export function translateExpression(
     }
   }
 
+  const vectorAddWithScaledRight = /^(.+) \+ (Vec2\..+ \* .+)$/.exec(trimmed);
+  if (vectorAddWithScaledRight !== null) {
+    return `${translateExpression(vectorAddWithScaledRight[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.add(${translateExpression(vectorAddWithScaledRight[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
+  const vectorScale = /^(.+) \* (.+)$/.exec(trimmed);
+  if (vectorScale !== null && vectorScale[1].includes('Vec2.')) {
+    return `${translateExpression(vectorScale[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.mul(${translateExpression(vectorScale[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
   const vectorSubMethod = /^\((.+) - (.+)\)\.to_heading\(\)$/.exec(trimmed);
   if (vectorSubMethod !== null) {
     return `${translateExpression(vectorSubMethod[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.sub(${translateExpression(vectorSubMethod[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}).toHeading()`;
+  }
+  const vectorSubLengthMethod = /^\((.+) - (.+)\)\.length\(\)$/.exec(trimmed);
+  if (vectorSubLengthMethod !== null) {
+    return `${translateExpression(vectorSubLengthMethod[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.sub(${translateExpression(vectorSubLengthMethod[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}).length()`;
   }
 
   const mixedKeywordCall = translateMixedKeywordCall(trimmed, nameMap, arrayNames, validatedTypeAliases);
@@ -689,6 +703,7 @@ export function translateExpression(
     .replaceAll(/\.strip\(\)/g, '.trim()')
     .replaceAll(/\.lower\(\)/g, '.toLowerCase()')
     .replaceAll(/\bmath\.pi\b/g, 'Math.PI')
+    .replaceAll(/\bmath\.tau\b/g, '(Math.PI * 2.0)')
     .replaceAll(/\bmath\.trunc\(/g, 'Math.trunc(')
     .replaceAll(/\bmath\.cos\(/g, 'Math.cos(')
     .replaceAll(/\bmath\.sin\(/g, 'Math.sin(')
@@ -937,7 +952,8 @@ function stripPrimitiveCallWrappers(value: string): string {
         index += 1;
         continue;
       }
-      nextOutput += output.slice(openIndex + 1, closeIndex);
+      const inner = output.slice(openIndex + 1, closeIndex);
+      nextOutput += / [|&^] | << | >> /.test(inner) ? `(${inner})` : inner;
       index = closeIndex + 1;
       changed = true;
     }
