@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 
 export const repoRoot = process.cwd();
@@ -65,7 +66,10 @@ export function tsImportPathForPythonModule(moduleName: string): string {
 
   const [root, ...rest] = tsParts;
   if (root === 'crimson' || root === 'grim') {
-    return `@${root}/${rest.join('/')}.ts`;
+    const suffix = fs.existsSync(path.join(pythonSourceRoot, ...parts, '__init__.py'))
+      ? [...rest, 'index']
+      : rest;
+    return `@${root}/${suffix.join('/')}.ts`;
   }
 
   return tsParts.join('/');
