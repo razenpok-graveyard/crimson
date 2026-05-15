@@ -65,9 +65,37 @@ function tsPathForPython(relativePath: string): string {
 }
 
 async function translateFile(job: TranslationJob): Promise<string> {
+  const trimmed = job.python.trim();
+  const docstring = parseModuleDocstring(trimmed);
+  if (docstring !== null && trimmed === docstring.raw) {
+    return renderModuleDocOnly(job.relativePath, docstring.value);
+  }
+
   throw new Error(
     `translator not implemented for ${job.relativePath} -> ${path.relative(repoRoot, job.targetPath)}`,
   );
+}
+
+function parseModuleDocstring(trimmedPython: string): { raw: string; value: string } | null {
+  for (const quote of ['"""', "'''"]) {
+    if (!trimmedPython.startsWith(quote) || !trimmedPython.endsWith(quote)) {
+      continue;
+    }
+    return {
+      raw: trimmedPython,
+      value: trimmedPython.slice(quote.length, -quote.length),
+    };
+  }
+  return null;
+}
+
+function renderModuleDocOnly(relativePath: string, docstring: string): string {
+  const lines = [`// Port of ${relativePath}`, ''];
+  for (const line of docstring.split(/\r?\n/)) {
+    lines.push(line === '' ? '//' : `// ${line}`);
+  }
+  lines.push('');
+  return lines.join('\n');
 }
 
 async function main(): Promise<void> {
