@@ -37,6 +37,14 @@ export function tsTypeExpression(pythonType: string): string {
       })
       .join(' | ');
   }
+  const dictType = /^dict\[([^,\]]+), (.+)\]$/.exec(trimmed);
+  if (dictType !== null) {
+    return `Map<${tsTypeExpression(dictType[1])}, ${tsTypeExpression(dictType[2])}>`;
+  }
+  const variadicTupleType = /^tuple\[(.+), \.\.\.\]$/.exec(trimmed);
+  if (variadicTupleType !== null) {
+    return `readonly ${tsTypeExpression(variadicTupleType[1])}[]`;
+  }
   const listType = /^list\[(.+)\]$/.exec(trimmed);
   if (listType !== null) {
     return `${tsTypeExpression(listType[1])}[]`;

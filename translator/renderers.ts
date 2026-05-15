@@ -122,7 +122,7 @@ export function renderIntEnumModule(relativePath: string, enumDefinition: EnumDe
 export function renderTypeAliases(relativePath: string, aliases: TypeAlias[]): string {
   const lines = [`// Port of ${relativePath}`, ''];
   for (const alias of aliases) {
-    lines.push(`export type ${alias.name} = ${alias.typeExpression};`);
+    lines.push(`${alias.exported === false ? '' : 'export '}type ${alias.name} = ${alias.typeExpression};`);
   }
   lines.push('');
   return lines.join('\n');
@@ -227,7 +227,7 @@ export function renderMsgspecStructModule(relativePath: string, module: StructMo
   }
 
   for (const alias of module.typeAliases) {
-    lines.push(`export type ${alias.name} = ${alias.typeExpression};`);
+    lines.push(`${alias.exported === false ? '' : 'export '}type ${alias.name} = ${alias.typeExpression};`);
   }
   if (module.typeAliases.length > 0 && module.classes.length + module.protocols.length > 0) {
     lines.push('');
@@ -325,7 +325,7 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
   }
 
   for (const alias of module.typeAliases) {
-    lines.push(`export type ${alias.name} = ${alias.typeExpression};`);
+    lines.push(`${alias.exported === false ? '' : 'export '}type ${alias.name} = ${alias.typeExpression};`);
   }
   const validatedAliases = module.typeAliases.filter((alias) => alias.validation !== undefined);
   if (validatedAliases.length > 0) {

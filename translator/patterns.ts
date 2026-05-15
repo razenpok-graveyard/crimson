@@ -1571,6 +1571,9 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   markTypeOnlyImports(imports, typeAliases, classes, functions, [...leadingAssignments, ...assignments]);
   if (allNames.length > 0) {
     const exportedNames = new Set(allNames.map(tsPublicNameForPythonName));
+    for (const alias of typeAliases) {
+      alias.exported = exportedNames.has(alias.name);
+    }
     for (const fn of functions) {
       fn.exported = exportedNames.has(fn.name);
     }
@@ -1707,6 +1710,14 @@ function parseAnnotatedTypeAlias(
   if (plainAlias !== null) {
     return {
       alias: { name: plainAlias[1], typeExpression: tsTypeExpression(plainAlias[2]) },
+      nextIndex: index + 1,
+    };
+  }
+
+  const typeStatement = /^type ([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(lines[index]?.trim() ?? '');
+  if (typeStatement !== null) {
+    return {
+      alias: { name: typeStatement[1], typeExpression: tsTypeExpression(typeStatement[2]) },
       nextIndex: index + 1,
     };
   }
@@ -2338,13 +2349,14 @@ function parseTopLevelAssignment(
   const pythonName = annotatedAssignment?.[1] ?? plainAssignment?.[1] ?? '';
   const value = annotatedAssignment?.[3] ?? plainAssignment?.[2] ?? '';
   const annotatedType = annotatedAssignment?.[2] ?? null;
+  const publicUppercaseName = !pythonName.startsWith('_') && /^[A-Z0-9_]+$/.test(pythonName);
   const name = annotatedType === null
     ? pythonName.startsWith('_') ? tsExportNameForPythonName(pythonName) : tsPublicNameForPythonName(pythonName)
-    : tsMutableNameForPythonName(pythonName);
+    : publicUppercaseName ? tsPublicNameForPythonName(pythonName) : tsMutableNameForPythonName(pythonName);
   const baseAssignment = {
     pythonName,
     name,
-    declaration: annotatedType === null ? 'const' as const : 'let' as const,
+    declaration: annotatedType === null || publicUppercaseName ? 'const' as const : 'let' as const,
     exported: !pythonName.startsWith('_'),
     typeExpression: annotatedType === null ? undefined : tsTypeExpression(annotatedType),
   };
@@ -2366,6 +2378,30 @@ function parseTopLevelAssignment(
         return null;
       }
       valueLines.push(`  ${translateExpression(tupleItem[1])},`);
+      nextIndex += 1;
+    }
+
+    return null;
+  }
+
+  if (value === '{') {
+    const valueLines = ['new Map(['];
+    let nextIndex = index + 1;
+    while (nextIndex < lines.length) {
+      const trimmed = lines[nextIndex].trim();
+      if (trimmed === '}') {
+        valueLines.push('])');
+        return {
+          assignment: { ...baseAssignment, valueLines },
+          nextIndex: nextIndex + 1,
+        };
+      }
+
+      const dictItem = /^(.+): (.+),$/.exec(trimmed);
+      if (dictItem === null) {
+        return null;
+      }
+      valueLines.push(`  [${translateExpression(dictItem[1])}, ${translateExpression(dictItem[2])}],`);
       nextIndex += 1;
     }
 
@@ -2483,6 +2519,9 @@ function translateExpression(
   if (envComparison !== null) {
     return `typeof process !== 'undefined' && process.env?.${envComparison[1]} === '${envComparison[2]}'`;
   }
+  if (trimmed === '()') {
+    return '[]';
+  }
 
   const strCall = parseCallPrefix(trimmed, 'str');
   if (strCall !== null && strCall.rest === '.strip().lower()') {
@@ -2507,6 +2546,15 @@ function translateExpression(
   const zeroArgConstructor = /^([A-Z][A-Za-z0-9_]*)\(\)$/.exec(trimmed);
   if (zeroArgConstructor !== null) {
     return `new ${tsExportNameForPythonName(zeroArgConstructor[1])}()`;
+  }
+
+  const dictGet = /^(.+)\.get\((.*)\)$/.exec(trimmed);
+  if (dictGet !== null) {
+    const parts = splitTopLevelComma(dictGet[2]);
+    if (parts.length === 1 || parts.length === 2) {
+      const value = `${translateExpression(dictGet[1], nameMap, arrayNames, validatedTypeAliases)}.get(${translateExpression(parts[0], nameMap, arrayNames, validatedTypeAliases)})`;
+      return parts.length === 1 ? value : `${value} ?? ${translateExpression(parts[1], nameMap, arrayNames, validatedTypeAliases)}`;
+    }
   }
 
   const msgspecConvert = parseCallPrefix(trimmed, 'msgspec.convert');

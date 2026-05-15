@@ -19,6 +19,7 @@ export interface NamespaceReexport {
 export interface TypeAlias {
   name: string;
   typeExpression: string;
+  exported?: boolean;
   validation?: TypeAliasValidation;
 }
 
