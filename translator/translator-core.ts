@@ -3,6 +3,7 @@ import type { TranslationJob } from './model.js';
 import {
   parseConstantsModule,
   parseFunctionsModule,
+  parseGuardedAttributeModule,
   parseInitReexports,
   parseLazyWrapperModule,
   parseNamespaceReexports,
@@ -15,6 +16,7 @@ import {
   renderConstantsModule,
   renderEmptyModule,
   renderFunctionsModule,
+  renderGuardedAttributeModule,
   renderInitReexports,
   renderLazyWrapperModule,
   renderModuleDocOnly,
@@ -57,6 +59,11 @@ export async function translateFile(job: TranslationJob): Promise<string> {
   const constantsModule = parseConstantsModule(futureStripped);
   if (constantsModule !== null) {
     return renderConstantsModule(job.relativePath, constantsModule);
+  }
+
+  const guardedAttributeModule = parseGuardedAttributeModule(futureStripped, job.relativePath);
+  if (guardedAttributeModule !== null) {
+    return renderGuardedAttributeModule(job.relativePath, guardedAttributeModule);
   }
 
   const functionsModule = parseFunctionsModule(futureStripped);

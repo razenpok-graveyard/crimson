@@ -1,6 +1,7 @@
 import type {
   ConstantsModule,
   FunctionDefinition,
+  GuardedAttributeModule,
   InitReexports,
   LazyWrapperModule,
   NamespaceReexport,
@@ -104,6 +105,24 @@ export function renderFunctionsModule(relativePath: string, functions: FunctionD
     lines.push(`  return ${fn.returnExpression};`);
     lines.push('}');
   }
+  lines.push('');
+  return lines.join('\n');
+}
+
+export function renderGuardedAttributeModule(relativePath: string, module: GuardedAttributeModule): string {
+  const lines = [`// Port of ${relativePath}`, ''];
+  for (const importDefinition of module.imports) {
+    lines.push(`import type { ${importDefinition.names.join(', ')} } from '${importDefinition.modulePath}';`);
+  }
+  lines.push('');
+
+  const fn = module.functionDefinition;
+  lines.push(`export function ${fn.name}(${fn.parameter.name}: ${fn.parameter.typeExpression}): ${fn.returnType} {`);
+  lines.push(`  if (${fn.parameter.name}.${fn.attributeName} === null) {`);
+  lines.push(`    throw new Error('${fn.errorMessage}');`);
+  lines.push('  }');
+  lines.push(`  return ${fn.parameter.name}.${fn.attributeName};`);
+  lines.push('}');
   lines.push('');
   return lines.join('\n');
 }

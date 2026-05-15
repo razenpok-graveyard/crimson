@@ -70,6 +70,19 @@ export function tsImportPathForPythonModule(moduleName: string): string {
   return `${tsParts.join('/')}.ts`;
 }
 
+export function tsImportPathForPythonImport(moduleName: string, importerRelativePath: string): string {
+  if (!moduleName.startsWith('.')) {
+    return tsImportPathForPythonModule(moduleName);
+  }
+
+  const leadingDots = moduleName.match(/^\.+/)?.[0].length ?? 0;
+  const suffix = moduleName.slice(leadingDots);
+  const importerPackageParts = importerRelativePath.split('/').slice(0, -1);
+  const baseParts = importerPackageParts.slice(0, importerPackageParts.length - Math.max(0, leadingDots - 1));
+  const suffixParts = suffix === '' ? [] : suffix.split('.');
+  return tsImportPathForPythonModule([...baseParts, ...suffixParts].join('.'));
+}
+
 export function tsImportPathForPythonNamespace(moduleName: string): string {
   if (moduleName === 'pyray' || moduleName === 'raylib') {
     return '@wgl';

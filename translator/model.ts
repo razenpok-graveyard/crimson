@@ -44,6 +44,24 @@ export interface FunctionDefinition {
   returnExpression: string;
 }
 
+export interface ImportDefinition {
+  modulePath: string;
+  names: string[];
+}
+
+export interface GuardedAttributeFunction {
+  name: string;
+  parameter: FunctionParameter;
+  returnType: string;
+  attributeName: string;
+  errorMessage: string;
+}
+
+export interface GuardedAttributeModule {
+  imports: ImportDefinition[];
+  functionDefinition: GuardedAttributeFunction;
+}
+
 export interface LazyWrapperModule {
   typeName: string;
   typeModulePath: string;

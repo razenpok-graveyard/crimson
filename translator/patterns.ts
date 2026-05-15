@@ -3,6 +3,8 @@ import type {
   ConstantsModule,
   FunctionDefinition,
   FunctionParameter,
+  GuardedAttributeModule,
+  ImportDefinition,
   InitReexports,
   LazyWrapperModule,
   NamespaceReexport,
@@ -12,7 +14,7 @@ import type {
   TypeAlias,
 } from './model.js';
 import { tsCallableType, tsExportNameForPythonName, tsLiteralExpression, tsTypeExpression } from './naming.js';
-import { tsImportPathForPythonModule, tsImportPathForPythonNamespace } from './paths.js';
+import { tsImportPathForPythonImport, tsImportPathForPythonModule, tsImportPathForPythonNamespace } from './paths.js';
 import { flattenFromImportBlocks, isOneLineAllAssignment, splitLeadingModuleDocstring, stripAllAssignments } from './python-utils.js';
 
 export function parseInitReexports(trimmedPython: string): InitReexports | null {
@@ -360,4 +362,76 @@ export function parseFunctionsModule(trimmedPython: string): FunctionDefinition[
   }
 
   return functions.length > 0 ? functions : null;
+}
+
+export function parseGuardedAttributeModule(trimmedPython: string, relativePath: string): GuardedAttributeModule | null {
+  const lines = flattenFromImportBlocks(trimmedPython.split(/\r?\n/));
+  const imports: ImportDefinition[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const trimmed = lines[index].trim();
+    if (trimmed === '') {
+      index += 1;
+      continue;
+    }
+    if (trimmed.startsWith('def ')) {
+      break;
+    }
+
+    const fromImport = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
+    if (fromImport === null) {
+      return null;
+    }
+
+    imports.push({
+      modulePath: tsImportPathForPythonImport(fromImport[1], relativePath),
+      names: fromImport[2].split(', '),
+    });
+    index += 1;
+  }
+
+  const header = /^def ([A-Za-z_][A-Za-z0-9_]*)\(([A-Za-z_][A-Za-z0-9_]*): ([^)]+)\) -> ([^:]+):$/.exec(lines[index] ?? '');
+  if (header === null) {
+    return null;
+  }
+  index += 1;
+
+  const guard = new RegExp(`^    if ${header[2]}\\.([A-Za-z_][A-Za-z0-9_]*) is None:$`).exec(lines[index] ?? '');
+  if (guard === null) {
+    return null;
+  }
+  index += 1;
+
+  const raise = /^        raise RuntimeError\("([^"]*)"\)$/.exec(lines[index] ?? '');
+  if (raise === null) {
+    return null;
+  }
+  index += 1;
+
+  if (lines[index] !== `    return ${header[2]}.${guard[1]}`) {
+    return null;
+  }
+  index += 1;
+
+  while (index < lines.length && lines[index].trim() === '') {
+    index += 1;
+  }
+  if (index !== lines.length) {
+    return null;
+  }
+
+  return {
+    imports,
+    functionDefinition: {
+      name: tsExportNameForPythonName(header[1]),
+      parameter: {
+        name: tsExportNameForPythonName(header[2]),
+        typeExpression: tsTypeExpression(header[3]),
+      },
+      returnType: tsTypeExpression(header[4]),
+      attributeName: tsExportNameForPythonName(guard[1]),
+      errorMessage: raise[1],
+    },
+  };
 }
