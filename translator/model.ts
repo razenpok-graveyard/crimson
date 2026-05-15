@@ -62,6 +62,23 @@ export interface GuardedAttributeModule {
   functionDefinition: GuardedAttributeFunction;
 }
 
+export interface SimpleFunctionParameter extends FunctionParameter {
+  ignored: boolean;
+}
+
+export interface SimpleFunctionDefinition {
+  name: string;
+  parameters: SimpleFunctionParameter[];
+  returnType: string;
+  returnExpression: string;
+}
+
+export interface SimpleExportModule {
+  imports: ImportDefinition[];
+  constants: ConstantDefinition[];
+  functions: SimpleFunctionDefinition[];
+}
+
 export interface LazyWrapperModule {
   typeName: string;
   typeModulePath: string;

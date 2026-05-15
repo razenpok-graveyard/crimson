@@ -11,6 +11,9 @@ import type {
   ProtocolDefinition,
   ProtocolMethod,
   Reexport,
+  SimpleExportModule,
+  SimpleFunctionDefinition,
+  SimpleFunctionParameter,
   TypeAlias,
 } from './model.js';
 import { tsCallableType, tsExportNameForPythonName, tsLiteralExpression, tsTypeExpression } from './naming.js';
@@ -434,4 +437,114 @@ export function parseGuardedAttributeModule(trimmedPython: string, relativePath:
       errorMessage: raise[1],
     },
   };
+}
+
+export function parseSimpleExportModule(trimmedPython: string, relativePath: string): SimpleExportModule | null {
+  const lines = flattenFromImportBlocks(trimmedPython.split(/\r?\n/));
+  const imports: ImportDefinition[] = [];
+  const constants: ConstantDefinition[] = [];
+  const functions: SimpleFunctionDefinition[] = [];
+  let sawAll = false;
+  let index = 0;
+
+  while (index < lines.length) {
+    const trimmed = lines[index].trim();
+    if (trimmed === '') {
+      index += 1;
+      continue;
+    }
+
+    const fromImport = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
+    if (fromImport === null) {
+      break;
+    }
+
+    imports.push({
+      modulePath: tsImportPathForPythonImport(fromImport[1], relativePath),
+      names: fromImport[2].split(', '),
+    });
+    index += 1;
+  }
+
+  while (index < lines.length) {
+    const trimmed = lines[index].trim();
+    if (trimmed === '') {
+      index += 1;
+      continue;
+    }
+
+    if (trimmed.startsWith('__all__ = ')) {
+      sawAll = true;
+      if (!isOneLineAllAssignment(trimmed)) {
+        while (index < lines.length && lines[index].trim() !== ']') {
+          index += 1;
+        }
+      }
+      index += 1;
+      continue;
+    }
+
+    const assignment = /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(trimmed);
+    if (assignment !== null) {
+      constants.push({
+        name: tsExportNameForPythonName(assignment[1]),
+        value: tsLiteralExpression(assignment[2]),
+      });
+      index += 1;
+      continue;
+    }
+
+    const header = /^def ([A-Za-z_][A-Za-z0-9_]*)\((.*)\) -> ([^:]+):$/.exec(lines[index]);
+    if (header === null) {
+      return null;
+    }
+    index += 1;
+
+    const parameters: SimpleFunctionParameter[] = [];
+    if (header[2] !== '') {
+      for (const parameterText of header[2].split(', ')) {
+        const parameter = /^([A-Za-z_][A-Za-z0-9_]*): (.+)$/.exec(parameterText);
+        if (parameter === null) {
+          return null;
+        }
+        parameters.push({
+          name: tsExportNameForPythonName(parameter[1]),
+          typeExpression: tsTypeExpression(parameter[2]),
+          ignored: false,
+        });
+      }
+    }
+
+    const ignored = /^    _ = ([A-Za-z_][A-Za-z0-9_]*)$/.exec(lines[index] ?? '');
+    if (ignored !== null) {
+      const parameter = parameters.find((candidate) => candidate.name === tsExportNameForPythonName(ignored[1]));
+      if (parameter === undefined) {
+        return null;
+      }
+      parameter.ignored = true;
+      index += 1;
+    }
+
+    const returnLine = /^    return ([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(lines[index] ?? '');
+    if (returnLine === null) {
+      return null;
+    }
+    index += 1;
+
+    const receiverName = tsExportNameForPythonName(returnLine[1]);
+    if (!parameters.some((parameter) => parameter.name === receiverName)) {
+      return null;
+    }
+
+    functions.push({
+      name: tsExportNameForPythonName(header[1]),
+      parameters,
+      returnType: tsTypeExpression(header[3]),
+      returnExpression: `${receiverName}.${tsExportNameForPythonName(returnLine[2])}`,
+    });
+  }
+
+  return sawAll && constants.length + functions.length > 0
+    ? { imports, constants, functions }
+    : null;
 }

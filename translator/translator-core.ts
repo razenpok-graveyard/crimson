@@ -8,6 +8,7 @@ import {
   parseLazyWrapperModule,
   parseNamespaceReexports,
   parseProtocolModule,
+  parseSimpleExportModule,
   parseTypeAliases,
 } from './patterns.js';
 import { repoRoot } from './paths.js';
@@ -22,6 +23,7 @@ import {
   renderModuleDocOnly,
   renderNamespaceReexports,
   renderProtocolModule,
+  renderSimpleExportModule,
   renderTypeAliases,
 } from './renderers.js';
 
@@ -64,6 +66,11 @@ export async function translateFile(job: TranslationJob): Promise<string> {
   const guardedAttributeModule = parseGuardedAttributeModule(futureStripped, job.relativePath);
   if (guardedAttributeModule !== null) {
     return renderGuardedAttributeModule(job.relativePath, guardedAttributeModule);
+  }
+
+  const simpleExportModule = parseSimpleExportModule(futureStripped, job.relativePath);
+  if (simpleExportModule !== null) {
+    return renderSimpleExportModule(job.relativePath, simpleExportModule);
   }
 
   const functionsModule = parseFunctionsModule(futureStripped);

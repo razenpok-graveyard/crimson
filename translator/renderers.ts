@@ -6,6 +6,7 @@ import type {
   LazyWrapperModule,
   NamespaceReexport,
   ProtocolDefinition,
+  SimpleExportModule,
   TypeAlias,
 } from './model.js';
 
@@ -123,6 +124,39 @@ export function renderGuardedAttributeModule(relativePath: string, module: Guard
   lines.push('  }');
   lines.push(`  return ${fn.parameter.name}.${fn.attributeName};`);
   lines.push('}');
+  lines.push('');
+  return lines.join('\n');
+}
+
+export function renderSimpleExportModule(relativePath: string, module: SimpleExportModule): string {
+  const lines = [`// Port of ${relativePath}`, ''];
+  for (const importDefinition of module.imports) {
+    lines.push(`import type { ${importDefinition.names.join(', ')} } from '${importDefinition.modulePath}';`);
+  }
+  if (module.imports.length > 0) {
+    lines.push('');
+  }
+
+  for (const constant of module.constants) {
+    lines.push(`export const ${constant.name} = ${constant.value};`);
+  }
+  if (module.constants.length > 0 && module.functions.length > 0) {
+    lines.push('');
+  }
+
+  for (const fn of module.functions) {
+    const params = fn.parameters
+      .map((param) => `${param.ignored ? '_' : ''}${param.name}: ${param.typeExpression}`)
+      .join(', ');
+    lines.push(`export function ${fn.name}(${params}): ${fn.returnType} {`);
+    for (const param of fn.parameters) {
+      if (param.ignored) {
+        lines.push(`  void _${param.name};`);
+      }
+    }
+    lines.push(`  return ${fn.returnExpression};`);
+    lines.push('}');
+  }
   lines.push('');
   return lines.join('\n');
 }
