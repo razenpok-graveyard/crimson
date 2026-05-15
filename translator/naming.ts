@@ -76,10 +76,14 @@ export function tsCallableType(argsText: string, returnText: string): string {
   const params = args === ''
     ? ''
     : args
-      .split(', ')
+      .split(topLevelCommaPattern())
       .map((arg, index) => `arg${index}: ${tsTypeExpression(arg)}`)
       .join(', ');
   return `(${params}) => ${tsTypeExpression(returnText)}`;
+}
+
+function topLevelCommaPattern(): RegExp {
+  return /, (?![^\[]*\])/;
 }
 
 export function tsLiteralExpression(pythonValue: string): string {
