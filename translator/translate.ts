@@ -71,6 +71,11 @@ async function translateFile(job: TranslationJob): Promise<string> {
     return renderInitReexports(job.relativePath, initReexports);
   }
 
+  const namespaceReexports = parseNamespaceReexports(futureStripped);
+  if (namespaceReexports !== null) {
+    return renderNamespaceReexports(job.relativePath, namespaceReexports);
+  }
+
   const trimmed = stripIgnorablePythonLines(job.python).trim();
   if (trimmed === '') {
     return renderEmptyModule(job.relativePath);
@@ -151,6 +156,11 @@ function renderModuleDocOnly(relativePath: string, docstring: string): string {
 
 interface Reexport {
   names: string[];
+  modulePath: string;
+}
+
+interface NamespaceReexport {
+  alias: string;
   modulePath: string;
 }
 
@@ -238,6 +248,68 @@ function tsImportPathForPythonModule(moduleName: string): string {
   }
 
   return `${tsParts.join('/')}.ts`;
+}
+
+function parseNamespaceReexports(trimmedPython: string): NamespaceReexport[] | null {
+  const reexports: NamespaceReexport[] = [];
+  let sawAll = false;
+  const lines = trimmedPython.split(/\r?\n/);
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const trimmed = lines[index].trim();
+    if (trimmed === '') {
+      continue;
+    }
+
+    if (trimmed.startsWith('__all__ = ')) {
+      sawAll = true;
+      if (!isOneLineAllAssignment(trimmed)) {
+        while (index < lines.length && lines[index].trim() !== ']') {
+          index += 1;
+        }
+      }
+      continue;
+    }
+
+    const importAlias = /^import ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) as ([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);
+    if (importAlias !== null) {
+      reexports.push({
+        alias: importAlias[2],
+        modulePath: tsImportPathForPythonNamespace(importAlias[1]),
+      });
+      continue;
+    }
+
+    const fromImportAlias = /^from ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import [A-Za-z_][A-Za-z0-9_]* as ([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);
+    if (fromImportAlias !== null) {
+      reexports.push({
+        alias: fromImportAlias[2],
+        modulePath: tsImportPathForPythonNamespace(fromImportAlias[1]),
+      });
+      continue;
+    }
+
+    return null;
+  }
+
+  return sawAll && reexports.length > 0 ? reexports : null;
+}
+
+function tsImportPathForPythonNamespace(moduleName: string): string {
+  if (moduleName === 'pyray' || moduleName === 'raylib') {
+    return '@wgl';
+  }
+
+  return tsImportPathForPythonModule(moduleName);
+}
+
+function renderNamespaceReexports(relativePath: string, reexports: NamespaceReexport[]): string {
+  const lines = [`// Port of ${relativePath}`, ''];
+  for (const reexport of reexports) {
+    lines.push(`export * as ${reexport.alias} from '${reexport.modulePath}';`);
+  }
+  lines.push('');
+  return lines.join('\n');
 }
 
 function renderInitReexports(relativePath: string, initReexports: InitReexports): string {
