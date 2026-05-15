@@ -7,7 +7,7 @@ import { adjustPerkCount } from '@crimson/perks/runtime/counts.ts';
 import type { PerksUpdateEffectsCtx } from '@crimson/perks/runtime/effects-context.ts';
 import { PerkHooks } from '@crimson/perks/runtime/hook-types.ts';
 
-function applyDeathClock(ctx: PerkApplyCtx): void {
+export function applyDeathClock(ctx: PerkApplyCtx): void {
   adjustPerkCount(
     ctx.owner,
     PerkId.REGENERATION,
@@ -25,7 +25,7 @@ function applyDeathClock(ctx: PerkApplyCtx): void {
   }
 }
 
-function updateDeathClock(ctx: PerksUpdateEffectsCtx): void {
+export function updateDeathClock(ctx: PerksUpdateEffectsCtx): void {
   if (ctx.players.length === 0) {
     return;
   }
