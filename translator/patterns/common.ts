@@ -12,6 +12,9 @@ export function isTypeAliasExpression(pythonExpression: string): boolean {
 
 export function isBareTypeAliasExpression(pythonExpression: string): boolean {
   const trimmed = pythonExpression.trim();
+  if (/^[A-Z][A-Z0-9_]*(?: \| [A-Z][A-Z0-9_]*)+$/.test(trimmed)) {
+    return false;
+  }
   return /[\[\]|]/.test(trimmed) || /^(?:Callable|Literal|Sequence|dict|list|tuple)\b/.test(trimmed);
 }
 

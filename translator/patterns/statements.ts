@@ -1445,6 +1445,11 @@ export function parseTopLevelAssignment(
           nextIndex: nextIndex + 1,
         };
       }
+      if (trimmed.startsWith('#')) {
+        valueLines.push(`  // ${trimmed.replace(/^# ?/, '')}`);
+        nextIndex += 1;
+        continue;
+      }
 
       const dictItem = /^(.+): (.+),$/.exec(trimmed);
       if (dictItem === null) {
@@ -1460,6 +1465,55 @@ export function parseTopLevelAssignment(
   if (value === '{}' && annotatedType?.trim().startsWith('dict[') === true) {
     return {
       assignment: { ...baseAssignment, declaration: 'const', valueLines: ['new Map()'] },
+      nextIndex: index + 1,
+    };
+  }
+
+  const oneLineFrozenSet = /^frozenset\(\{(.*)\}\)$/.exec(value);
+  if (oneLineFrozenSet !== null) {
+    const items = splitTopLevelComma(oneLineFrozenSet[1]).filter((item) => item !== '');
+    return {
+      assignment: {
+        ...baseAssignment,
+        typeExpression: baseAssignment.typeExpression ?? 'ReadonlySet<number>',
+        valueLines: [
+          'new Set([',
+          ...items.map((item) => `  ${translateExpression(item)},`),
+          '])',
+        ],
+      },
+      nextIndex: index + 1,
+    };
+  }
+
+  if (value === 'frozenset(') {
+    const frozenSet = parseMultilineFrozenSet(lines, index + 1);
+    if (frozenSet === null) {
+      return null;
+    }
+    return {
+      assignment: {
+        ...baseAssignment,
+        typeExpression: baseAssignment.typeExpression ?? 'ReadonlySet<number>',
+        valueLines: frozenSet.valueLines,
+      },
+      nextIndex: frozenSet.nextIndex,
+    };
+  }
+
+  const setUnion = /^[A-Z][A-Z0-9_]*(?: \| [A-Z][A-Z0-9_]*)+$/.exec(value);
+  if (setUnion !== null) {
+    const setNames = value.split(' | ').map((setName) => translateExpression(setName));
+    return {
+      assignment: {
+        ...baseAssignment,
+        typeExpression: baseAssignment.typeExpression ?? 'ReadonlySet<number>',
+        valueLines: [
+          'new Set([',
+          ...setNames.map((setName) => `  ...${setName},`),
+          '])',
+        ],
+      },
       nextIndex: index + 1,
     };
   }
@@ -1537,6 +1591,39 @@ export function parseTopLevelAssignment(
     nextIndex += 1;
   }
 
+  return null;
+}
+
+function parseMultilineFrozenSet(
+  lines: string[],
+  startIndex: number,
+): { valueLines: string[]; nextIndex: number } | null {
+  if ((lines[startIndex] ?? '').trim() !== '{') {
+    return null;
+  }
+  const valueLines = ['new Set(['];
+  let nextIndex = startIndex + 1;
+  while (nextIndex < lines.length) {
+    const trimmed = lines[nextIndex].trim();
+    if (trimmed === '}' || trimmed === '},') {
+      if ((lines[nextIndex + 1] ?? '').trim() !== ')') {
+        return null;
+      }
+      valueLines.push('])');
+      return { valueLines, nextIndex: nextIndex + 2 };
+    }
+    if (trimmed.startsWith('#')) {
+      valueLines.push(`  // ${trimmed.replace(/^# ?/, '')}`);
+      nextIndex += 1;
+      continue;
+    }
+    const item = /^(.+),$/.exec(trimmed);
+    if (item === null) {
+      return null;
+    }
+    valueLines.push(`  ${translateExpression(item[1])},`);
+    nextIndex += 1;
+  }
   return null;
 }
 

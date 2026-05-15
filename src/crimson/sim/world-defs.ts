@@ -1,6 +1,6 @@
 // Port of crimson/sim/world_defs.py
 
-import { CreatureTypeId } from '@crimson/creatures/spawn-ids.ts';
+import { CreatureTypeId } from '@crimson/creatures/spawn.ts';
 import { ProjectileTemplateId } from '@crimson/projectiles/types.ts';
 
 export class CreatureAnimInfo {
@@ -19,7 +19,7 @@ export class CreatureAnimInfo {
   }
 }
 
-export const CREATURE_ANIM = new Map<CreatureTypeId, CreatureAnimInfo>([
+export const CREATURE_ANIM: Map<CreatureTypeId, CreatureAnimInfo> = new Map([
   [CreatureTypeId.ZOMBIE, new CreatureAnimInfo({ base: 0x20, animRate: 1.2, mirror: false })],
   [CreatureTypeId.LIZARD, new CreatureAnimInfo({ base: 0x10, animRate: 1.6, mirror: true })],
   [CreatureTypeId.ALIEN, new CreatureAnimInfo({ base: 0x20, animRate: 1.35, mirror: false })],
@@ -27,8 +27,7 @@ export const CREATURE_ANIM = new Map<CreatureTypeId, CreatureAnimInfo>([
   [CreatureTypeId.SPIDER_SP2, new CreatureAnimInfo({ base: 0x10, animRate: 1.5, mirror: true })],
   [CreatureTypeId.TROOPER, new CreatureAnimInfo({ base: 0x00, animRate: 1.0, mirror: false })],
 ]);
-
-export const CREATURE_ASSET = new Map<CreatureTypeId, string>([
+export const CREATURE_ASSET: Map<CreatureTypeId, string> = new Map([
   [CreatureTypeId.ZOMBIE, 'zombie'],
   [CreatureTypeId.LIZARD, 'lizard'],
   [CreatureTypeId.ALIEN, 'alien'],
@@ -36,8 +35,7 @@ export const CREATURE_ASSET = new Map<CreatureTypeId, string>([
   [CreatureTypeId.SPIDER_SP2, 'spider_sp2'],
   [CreatureTypeId.TROOPER, 'trooper'],
 ]);
-
-export const KNOWN_PROJ_FRAMES = new Map<number, [number, number]>([
+export const KNOWN_PROJ_FRAMES: Map<number, [number, number]> = new Map([
   // Based on docs/atlas.md (projectile `type_id` values index the weapon table).
   [ProjectileTemplateId.PULSE_GUN, [2, 0]],
   [ProjectileTemplateId.SPLITTER_GUN, [4, 3]],
@@ -48,7 +46,6 @@ export const KNOWN_PROJ_FRAMES = new Map<number, [number, number]>([
   [ProjectileTemplateId.FIRE_BULLETS, [4, 2]],
   [ProjectileTemplateId.ION_RIFLE, [4, 2]],
 ]);
-
 export const PLASMA_PARTICLE_TYPES: ReadonlySet<number> = new Set([
   ProjectileTemplateId.PLASMA_RIFLE,
   ProjectileTemplateId.PLASMA_MINIGUN,
@@ -56,17 +53,14 @@ export const PLASMA_PARTICLE_TYPES: ReadonlySet<number> = new Set([
   ProjectileTemplateId.SPIDER_PLASMA,
   ProjectileTemplateId.SHRINKIFIER,
 ]);
-
 export const ION_TYPES: ReadonlySet<number> = new Set([
   ProjectileTemplateId.ION_RIFLE,
   ProjectileTemplateId.ION_MINIGUN,
   ProjectileTemplateId.ION_CANNON,
 ]);
-
 export const FIRE_BULLETS_TYPES: ReadonlySet<number> = new Set([
   ProjectileTemplateId.FIRE_BULLETS,
 ]);
-
 // "Beam" in the original renderer is really the Ion/Fire streak + chain UV family.
 export const BEAM_TYPES: ReadonlySet<number> = new Set([
   ...ION_TYPES,

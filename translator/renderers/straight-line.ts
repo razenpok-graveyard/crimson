@@ -47,8 +47,16 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
     lines.push('');
   }
 
+  const renderClassesBeforeLeadingAssignments = leadingAssignmentsReferenceClass(module);
+  if (renderClassesBeforeLeadingAssignments) {
+    renderStructClasses(lines, module.classes);
+    if (module.classes.length > 0 && module.leadingAssignments.length + module.leadingStatements.length + module.enums.length + module.plainClasses.length + module.functions.length + module.assignments.length > 0) {
+      lines.push('');
+    }
+  }
+
   renderStraightLineAssignments(lines, module.leadingAssignments);
-  if (module.leadingAssignments.length > 0 && module.leadingStatements.length + module.enums.length + module.classes.length + module.plainClasses.length + module.functions.length + module.assignments.length > 0) {
+  if (module.leadingAssignments.length > 0 && module.leadingStatements.length + module.enums.length + (renderClassesBeforeLeadingAssignments ? 0 : module.classes.length) + module.plainClasses.length + module.functions.length + module.assignments.length > 0) {
     lines.push('');
   }
 
@@ -69,9 +77,11 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
     lines.push('');
   }
 
-  renderStructClasses(lines, module.classes);
-  if (module.classes.length > 0 && module.plainClasses.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
-    lines.push('');
+  if (!renderClassesBeforeLeadingAssignments) {
+    renderStructClasses(lines, module.classes);
+    if (module.classes.length > 0 && module.plainClasses.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
+      lines.push('');
+    }
   }
 
   renderPlainClasses(lines, module.plainClasses);
@@ -93,6 +103,18 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
     lines.push('');
   }
   return lines.join('\n');
+}
+
+function leadingAssignmentsReferenceClass(module: StraightLineModule): boolean {
+  if (module.classes.length === 0 || module.leadingAssignments.length === 0) {
+    return false;
+  }
+  const assignmentText = module.leadingAssignments.flatMap((assignment) => assignment.valueLines).join('\n');
+  return module.classes.some((structClass) => identifierPattern(structClass.name).test(assignmentText));
+}
+
+function identifierPattern(identifier: string): RegExp {
+  return new RegExp(`\\b${identifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
 }
 
 function renderTypeAliasValidator(lines: string[], alias: TypeAlias): void {
