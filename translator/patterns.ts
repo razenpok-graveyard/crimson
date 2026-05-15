@@ -4371,9 +4371,10 @@ function translateExpression(
         `${translateExpression(callee, nameMap, arrayNames, validatedTypeAliases)}({ ${tsExportNameForPythonName(argName)}: ${translateExpression(argValue, nameMap, arrayNames, validatedTypeAliases)} })`
       ),
     )
-    .replaceAll(/\b(?:float|str|bool)\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, '$1')
+    .replaceAll(/\b(?:float|str|bool)\(([^()]*)\)/g, '$1')
     .replaceAll(/\blen\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, '$1.length')
     .replaceAll(/\.append\(/g, '.push(')
+    .replaceAll(/\bmath\.pi\b/g, 'Math.PI')
     .replaceAll(/ is not None\b/g, ' !== null')
     .replaceAll(/ is None\b/g, ' === null')
     .replaceAll(/ == /g, ' === ')
@@ -4612,8 +4613,9 @@ function escapeRegExp(value: string): string {
 
 function tsSimpleExpression(pythonExpression: string, parameters: SimpleFunctionParameter[]): string | null {
   let expression = pythonExpression
-    .replaceAll(/\b(?:float|str|bool)\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, '$1')
+    .replaceAll(/\b(?:float|str|bool)\(([^()]*)\)/g, '$1')
     .replaceAll(/\blen\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, '$1.length')
+    .replaceAll(/\bmath\.pi\b/g, 'Math.PI')
     .replaceAll(/\bmin\(/g, 'Math.min(')
     .replaceAll(/\bmax\(/g, 'Math.max(')
     .replaceAll(/\babs\(/g, 'Math.abs(');
