@@ -474,6 +474,48 @@ export function translateStraightLineStatement(
     return null;
   }
 
+  const whileStatement = /^while (.+):$/.exec(statement);
+  if (whileStatement !== null) {
+    const innerIndent = `${indent}    `;
+    const innerStatements: string[] = [];
+    let nextIndex = index + 1;
+    while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, innerIndent)) {
+      if (lines[nextIndex].trim() === '') {
+        innerStatements.push('');
+        nextIndex += 1;
+        continue;
+      }
+      const innerStatement = translateStraightLineStatement(
+        lines,
+        nextIndex,
+        innerIndent,
+        nameMap,
+        declaredNames,
+        reassignedNames,
+        arrayNames,
+        validatedTypeAliases,
+        relativePath,
+        mapNames,
+      );
+      if (innerStatement === null) {
+        return null;
+      }
+      innerStatements.push(...innerStatement.statements.map(indentStatementLine));
+      nextIndex = innerStatement.nextIndex;
+    }
+    if (innerStatements.length === 0) {
+      return null;
+    }
+    return {
+      statements: [
+        `while (${translateExpression(whileStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`,
+        ...innerStatements,
+        '}',
+      ],
+      nextIndex,
+    };
+  }
+
   const enumerateStatement = /^for ([A-Za-z_][A-Za-z0-9_]*), ([A-Za-z_][A-Za-z0-9_]*) in enumerate\((.+)\):$/.exec(statement);
   if (enumerateStatement !== null) {
     const innerIndent = `${indent}    `;
@@ -1365,7 +1407,7 @@ export function reassignedLocalNames(lines: string[], startIndex: number): Set<s
     if (lines[index].trim() !== '' && !lines[index].startsWith(baseIndent)) {
       break;
     }
-    const assignment = /^\s+([A-Za-z_][A-Za-z0-9_]*) = /.exec(lines[index]);
+    const assignment = /^\s+([A-Za-z_][A-Za-z0-9_]*) (?:\+=|-=|\*=|\/=|=) /.exec(lines[index]);
     if (assignment !== null) {
       counts.set(assignment[1], (counts.get(assignment[1]) ?? 0) + 1);
     }

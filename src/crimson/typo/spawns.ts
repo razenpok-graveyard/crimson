@@ -10,20 +10,28 @@ export class TypoSpawnCall {
   readonly typeId: CreatureTypeId;
   readonly tintRgba: RGBA;
 
-  constructor(opts: { pos: Vec2; typeId: CreatureTypeId; tintRgba: RGBA }) {
+  constructor(opts: {
+    pos: Vec2;
+    typeId: CreatureTypeId;
+    tintRgba: RGBA;
+  }) {
     this.pos = opts.pos;
     this.typeId = opts.typeId;
     this.tintRgba = opts.tintRgba;
   }
 }
 
-export function tickTypoSpawns(
-  opts: { elapsedMs: number; spawnCooldownMs: number; frameDtMs: number; playerCount: number; worldWidth: number; worldHeight: number },
-): [number, TypoSpawnCall[]] {
-  let elapsedMs = int(opts.elapsedMs);
-  let cooldown = int(opts.spawnCooldownMs);
-  const dtMs = int(opts.frameDtMs);
-  let playerCount = Math.max(1, int(opts.playerCount));
+export function tickTypoSpawns(opts: { elapsedMs: number; spawnCooldownMs: number; frameDtMs: number; playerCount: number; worldWidth: number; worldHeight: number }): [number, TypoSpawnCall[]] {
+  let elapsedMs = opts.elapsedMs;
+  const spawnCooldownMs = opts.spawnCooldownMs;
+  const frameDtMs = opts.frameDtMs;
+  let playerCount = opts.playerCount;
+  const worldWidth = opts.worldWidth;
+  const worldHeight = opts.worldHeight;
+  elapsedMs = int(elapsedMs);
+  let cooldown = int(spawnCooldownMs);
+  const dtMs = int(frameDtMs);
+  playerCount = Math.max(1, int(playerCount));
 
   cooldown -= dtMs * playerCount;
 
@@ -33,7 +41,7 @@ export function tickTypoSpawns(
     cooldown = Math.max(100, cooldown);
 
     const t = elapsedMs * 0.001;
-    const y = Math.cos(t) * 256.0 + opts.worldHeight * 0.5;
+    const y = Math.cos(t) * 256.0 + worldHeight * 0.5;
 
     const tintT = elapsedMs + 1;
     const tintR = clamp(tintT * 0.0000083333334 + 0.3, 0.0, 1.0);
@@ -41,16 +49,8 @@ export function tickTypoSpawns(
     const tintB = clamp(Math.sin(tintT * 0.0001) + 0.3, 0.0, 1.0);
     const tint = new RGBA(tintR, tintG, tintB, 1.0);
 
-    spawns.push(new TypoSpawnCall({
-      pos: new Vec2(opts.worldWidth + 64.0, y),
-      typeId: CreatureTypeId.SPIDER_SP2,
-      tintRgba: tint,
-    }));
-    spawns.push(new TypoSpawnCall({
-      pos: new Vec2(-64.0, y),
-      typeId: CreatureTypeId.ALIEN,
-      tintRgba: tint,
-    }));
+    spawns.push(new TypoSpawnCall({ pos: new Vec2(worldWidth + 64.0, y), typeId: CreatureTypeId.SPIDER_SP2, tintRgba: tint }));
+    spawns.push(new TypoSpawnCall({ pos: new Vec2(-64.0, y), typeId: CreatureTypeId.ALIEN, tintRgba: tint }));
   }
 
   return [cooldown, spawns];

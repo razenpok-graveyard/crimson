@@ -502,6 +502,11 @@ export function translateExpression(
       .join(' || ');
   }
 
+  const additiveWithFloorDivision = /^(.+?) ([+-]) (.+ \/\/ .+)$/.exec(trimmed);
+  if (additiveWithFloorDivision !== null) {
+    return `${translateExpression(additiveWithFloorDivision[1], nameMap, arrayNames, validatedTypeAliases, mapNames)} ${additiveWithFloorDivision[2]} ${translateExpression(additiveWithFloorDivision[3], nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
+  }
+
   const floorDivision = /^(.+) \/\/ (.+)$/.exec(trimmed);
   if (floorDivision !== null) {
     return `Math.floor(${translateExpression(floorDivision[1], nameMap, arrayNames, validatedTypeAliases)} / ${translateExpression(floorDivision[2], nameMap, arrayNames, validatedTypeAliases)})`;
@@ -601,6 +606,8 @@ export function translateExpression(
     .replaceAll(/\.strip\(\)/g, '.trim()')
     .replaceAll(/\.lower\(\)/g, '.toLowerCase()')
     .replaceAll(/\bmath\.pi\b/g, 'Math.PI')
+    .replaceAll(/\bmath\.cos\(/g, 'Math.cos(')
+    .replaceAll(/\bmath\.sin\(/g, 'Math.sin(')
     .replaceAll(/ is not None\b/g, ' !== null')
     .replaceAll(/ is None\b/g, ' === null')
     .replaceAll(/ == /g, ' === ')

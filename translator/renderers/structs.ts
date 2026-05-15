@@ -206,10 +206,11 @@ export function renderSimpleModuleFunctions(
       statementIndex += 1;
     }
     for (const param of fn.optsParams) {
+      const declaration = functionBodyAssignsName(fn.statements, param.name) ? 'let' : 'const';
       if (param.defaultValue === null) {
-        lines.push(`  const ${param.name} = opts.${param.name};`);
+        lines.push(`  ${declaration} ${param.name} = opts.${param.name};`);
       } else {
-        lines.push(`  const ${param.name} = opts.${param.name} ?? ${param.defaultValue};`);
+        lines.push(`  ${declaration} ${param.name} = opts.${param.name} ?? ${param.defaultValue};`);
       }
     }
     for (const statement of fn.statements.slice(statementIndex)) {
@@ -220,4 +221,9 @@ export function renderSimpleModuleFunctions(
       lines.push('');
     }
   }
+}
+
+function functionBodyAssignsName(statements: string[], name: string): boolean {
+  const pattern = new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} (?:\\+=|-=|\\*=|/=|=) `);
+  return statements.some((statement) => pattern.test(statement.trim()));
 }
