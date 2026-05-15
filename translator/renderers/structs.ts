@@ -110,7 +110,7 @@ export function renderStructClasses(lines: string[], classes: StructModule['clas
         const allOptsHaveDefaults = method.optsParams.every((param) => param.defaultValue !== null);
         params.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
       }
-      lines.push(`  ${method.async === true ? 'async ' : ''}${method.name}(${params.join(', ')}): ${renderFunctionReturnType(method)} {`);
+      lines.push(`  ${method.static === true ? 'static ' : ''}${method.async === true ? 'async ' : ''}${method.name}(${params.join(', ')}): ${renderFunctionReturnType(method)} {`);
       for (const param of method.optsParams) {
         if (param.defaultValue === null) {
           lines.push(`    const ${param.name} = opts.${param.name};`);
@@ -183,7 +183,7 @@ export function renderPlainClasses(lines: string[], classes: StraightLineModule[
         const allOptsHaveDefaults = method.optsParams.every((param) => param.defaultValue !== null);
         params.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
       }
-      lines.push(`  ${method.async === true ? 'async ' : ''}${method.name}(${params.join(', ')}): ${renderFunctionReturnType(method)} {`);
+      lines.push(`  ${method.static === true ? 'static ' : ''}${method.async === true ? 'async ' : ''}${method.name}(${params.join(', ')}): ${renderFunctionReturnType(method)} {`);
       for (const param of method.optsParams) {
         if (param.defaultValue === null) {
           lines.push(`    const ${param.name} = opts.${param.name};`);

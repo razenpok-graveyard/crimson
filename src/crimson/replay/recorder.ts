@@ -6,6 +6,34 @@ import { packTickInputs } from '@crimson/replay/input-codec.ts';
 import type { ReplayHeader } from '@crimson/replay/types.ts';
 import { REPLAY_FORMAT_VERSION, Replay, ReplayTick } from '@crimson/replay/types.ts';
 
+function pythonRepr(value: unknown): string {
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) {
+      return 'nan';
+    }
+    if (value === Infinity) {
+      return 'inf';
+    }
+    if (value === -Infinity) {
+      return '-inf';
+    }
+    return String(value);
+  }
+  if (typeof value === 'string') {
+    return JSON.stringify(value);
+  }
+  if (value === true) {
+    return 'True';
+  }
+  if (value === false) {
+    return 'False';
+  }
+  if (value === null) {
+    return 'None';
+  }
+  return String(value);
+}
+
 export class ReplayRecorder {
   private readonly _header: ReplayHeader;
   private readonly _defaultDt: number;
@@ -52,7 +80,7 @@ export class ReplayRecorder {
     const packed = packTickInputs(inputs, { quant: this._header.inputQuantization });
     const tickDt = dt !== null ? dt : this._defaultDt;
     if (!Number.isFinite(tickDt) || tickDt < 0.0) {
-      throw new Error(`dt must be finite and >= 0, got ${JSON.stringify(tickDt)}`);
+      throw new Error(`dt must be finite and >= 0, got ${pythonRepr(tickDt)}`);
     }
 
     const tickIndex = this._tickIndex;

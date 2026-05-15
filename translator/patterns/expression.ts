@@ -52,7 +52,7 @@ export function tsFStringTemplateContent(
         expressionText = conversion === null ? expressionText : conversion[1].trim();
         const baseExpression = translateExpression(expressionText, nameMap, arrayNames, validatedTypeAliases);
         const translatedExpression = conversion?.[2] === 'r' || conversion?.[2] === 'a'
-          ? `JSON.stringify(${baseExpression})`
+          ? `pythonRepr(${baseExpression})`
           : baseExpression === 'exc'
             ? 'exc instanceof Error ? exc.message : String(exc)'
             : baseExpression;
@@ -424,6 +424,13 @@ export function translateExpression(
     ].join(' ');
   }
 
+  if (trimmed.startsWith('(') && matchingCloseParen(trimmed, 0) === trimmed.length - 1) {
+    const inner = trimmed.slice(1, -1).trim();
+    if (!inner.includes(',') && (inner.includes(' and ') || inner.includes(' or '))) {
+      return `(${translateExpression(inner, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
+  }
+
   if (trimmed.includes(' and ')) {
     return trimmed
       .split(' and ')
@@ -643,6 +650,7 @@ export function translateExpression(
     .replaceAll(/\.strip\(\)/g, '.trim()')
     .replaceAll(/\.lower\(\)/g, '.toLowerCase()')
     .replaceAll(/\bmath\.pi\b/g, 'Math.PI')
+    .replaceAll(/\bmath\.trunc\(/g, 'Math.trunc(')
     .replaceAll(/\bmath\.cos\(/g, 'Math.cos(')
     .replaceAll(/\bmath\.sin\(/g, 'Math.sin(')
     .replaceAll(/ is not None\b/g, ' !== null')
@@ -871,11 +879,11 @@ function stripPrimitiveCallWrappers(value: string): string {
 }
 
 function parenthesizeForLogicalAnd(value: string): string {
-  return value.includes(' || ') ? `(${value})` : value;
+  return value.includes(' || ') && matchingCloseParen(value, 0) !== value.length - 1 ? `(${value})` : value;
 }
 
 function parenthesizeForLogicalOr(value: string): string {
-  return value.includes(' && ') ? `(${value})` : value;
+  return value.includes(' && ') && matchingCloseParen(value, 0) !== value.length - 1 ? `(${value})` : value;
 }
 
 function stripBalancedOuterParens(value: string): string {

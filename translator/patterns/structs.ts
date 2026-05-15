@@ -289,6 +289,16 @@ export function parseStructClass(
       continue;
     }
 
+    if (trimmedField === '@staticmethod') {
+      const staticMethod = parseStructMethod(lines, nextIndex + 1, true);
+      if (staticMethod === null) {
+        return null;
+      }
+      methods.push(staticMethod.method);
+      nextIndex = staticMethod.nextIndex;
+      continue;
+    }
+
     const method = parseStructMethod(lines, nextIndex);
     if (method !== null) {
       if (method.method.name === '__post_init__') {
@@ -330,20 +340,23 @@ export function parseStructClass(
 function parseStructMethod(
   lines: string[],
   index: number,
+  staticMethod = false,
 ): { method: SimpleModuleFunction; nextIndex: number } | null {
   const header = parseIndentedFunctionHeader(lines, index, '    ');
   if (header === null) {
     return null;
   }
   const parametersText = header.parametersText;
-  if (parametersText !== 'self' && !parametersText.startsWith('self, ')) {
+  if (!staticMethod && parametersText !== 'self' && !parametersText.startsWith('self, ')) {
     return null;
   }
 
   const parameters: FunctionParameter[] = [];
   const optsParams: OptionalFunctionParameter[] = [];
   const arrayNames = new Set<string>();
-  const extraParameters = parametersText === 'self' ? '' : parametersText.slice('self, '.length);
+  const extraParameters = staticMethod
+    ? parametersText
+    : parametersText === 'self' ? '' : parametersText.slice('self, '.length);
   let keywordOnly = false;
   if (extraParameters !== '') {
     for (const parameterText of splitTopLevelComma(extraParameters)) {
@@ -379,9 +392,9 @@ function parseStructMethod(
   }
 
   const statements: string[] = [];
-  const nameMap = new Map<string, string>([['self', 'this']]);
+  const nameMap = staticMethod ? new Map<string, string>() : new Map<string, string>([['self', 'this']]);
   const declaredNames = new Set<string>(pythonParameterNames(extraParameters));
-  const reassignedNames = reassignedLocalNames(lines, index + 1);
+  const reassignedNames = reassignedLocalNames(lines, header.nextIndex);
   let nextIndex = header.nextIndex;
   while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, '        ')) {
     if (lines[nextIndex].trim() === '') {
@@ -409,6 +422,7 @@ function parseStructMethod(
     method: {
       name: header.name === '__post_init__' ? '__post_init__' : tsExportNameForPythonName(header.name),
       exported: false,
+      static: staticMethod,
       async: statements.some((statement) => statement.includes('await ')),
       parameters,
       optsParams,

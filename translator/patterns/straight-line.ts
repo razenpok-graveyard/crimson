@@ -447,6 +447,14 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
   }
 
+  if (straightLineModuleUsesPythonRepr([...leadingStatements, ...trailingStatements], classes, plainClasses, functions, [...leadingAssignments, ...assignments])) {
+    const helperStatements = pythonReprHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
+
   const reexports = reexportsForAllNames(imports, allNames, relativePath);
   markTypeOnlyImports(imports, typeAliases, protocols, classes, plainClasses, [...leadingStatements, ...trailingStatements], functions, [...leadingAssignments, ...assignments]);
   if (allNames.length > 0) {
@@ -469,6 +477,61 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   return typeAliases.length + protocols.length + enums.length + leadingAssignments.length + leadingStatements.length + classes.length + plainClasses.length + functions.length + trailingStatements.length + assignments.length + reexports.length > 0
     ? { docstring: moduleDocstring?.value ?? null, imports, namespaceImports, reexports, typeAliases, protocols, enums, leadingAssignments, leadingStatements, classes, plainClasses, functions, trailingStatements, assignments }
     : null;
+}
+
+function straightLineModuleUsesPythonRepr(
+  statements: string[],
+  classes: StructModule['classes'],
+  plainClasses: PlainClassDefinition[],
+  functions: SimpleModuleFunction[],
+  assignments: SimpleModuleAssignment[],
+): boolean {
+  return [
+    ...statements,
+    ...classes.flatMap((structClass) => [
+      ...structClass.fields.map((field) => field.defaultValue ?? ''),
+      ...structClass.postInitStatements,
+      ...structClass.methods.flatMap((method) => method.statements),
+    ]),
+    ...plainClasses.flatMap((plainClass) => [
+      ...plainClass.constructorDefinition.statements,
+      ...plainClass.methods.flatMap((method) => method.statements),
+    ]),
+    ...functions.flatMap((fn) => fn.statements),
+    ...assignments.flatMap((assignment) => assignment.valueLines),
+  ].some((line) => line.includes('pythonRepr('));
+}
+
+function pythonReprHelperStatements(): string[] {
+  return [
+    'function pythonRepr(value: unknown): string {',
+    "  if (typeof value === 'number') {",
+    '    if (Number.isNaN(value)) {',
+    "      return 'nan';",
+    '    }',
+    '    if (value === Infinity) {',
+    "      return 'inf';",
+    '    }',
+    '    if (value === -Infinity) {',
+    "      return '-inf';",
+    '    }',
+    '    return String(value);',
+    '  }',
+    "  if (typeof value === 'string') {",
+    '    return JSON.stringify(value);',
+    '  }',
+    '  if (value === true) {',
+    "    return 'True';",
+    '  }',
+    '  if (value === false) {',
+    "    return 'False';",
+    '  }',
+    '  if (value === null) {',
+    "    return 'None';",
+    '  }',
+    '  return String(value);',
+    '}',
+  ];
 }
 
 export function parseTyperCliModule(trimmedPython: string): TyperCliModule | null {

@@ -5,6 +5,34 @@ import { GameConfig, runGame } from '@crimson/game/index.ts';
 export type SessionMode = "survival" | "rush" | "quests";
 export type ParsedNetcodeMode = "rollback" | "lockstep";
 
+function pythonRepr(value: unknown): string {
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) {
+      return 'nan';
+    }
+    if (value === Infinity) {
+      return 'inf';
+    }
+    if (value === -Infinity) {
+      return '-inf';
+    }
+    return String(value);
+  }
+  if (typeof value === 'string') {
+    return JSON.stringify(value);
+  }
+  if (value === true) {
+    return 'True';
+  }
+  if (value === false) {
+    return 'False';
+  }
+  if (value === null) {
+    return 'None';
+  }
+  return String(value);
+}
+
 export function parseSessionMode(mode: string): SessionMode {
   const modeName = mode.trim().toLowerCase();
   if (modeName === 'survival') {
@@ -16,7 +44,7 @@ export function parseSessionMode(mode: string): SessionMode {
   if (modeName === 'quests') {
     return 'quests';
   }
-  throw new Error(`unsupported mode ${JSON.stringify(mode)}; expected one of: survival, rush, quests`);
+  throw new Error(`unsupported mode ${pythonRepr(mode)}; expected one of: survival, rush, quests`);
 }
 
 export function parseNetcodeMode(raw: string): ParsedNetcodeMode {
@@ -27,7 +55,7 @@ export function parseNetcodeMode(raw: string): ParsedNetcodeMode {
   if (value === 'lockstep') {
     return 'lockstep';
   }
-  throw new Error(`unsupported netcode ${JSON.stringify(raw)}; expected rollback|lockstep`);
+  throw new Error(`unsupported netcode ${pythonRepr(raw)}; expected rollback|lockstep`);
 }
 
 export function runGameWithPendingSession(opts: { pending: any; baseDir: string; assetsDir: string | null; width: number | null; height: number | null; fps: number; debug: boolean; rtx: boolean }): void {
