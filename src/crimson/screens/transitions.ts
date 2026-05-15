@@ -1,6 +1,6 @@
 // Port of crimson/screens/transitions.py
 
-import * as wgl from '@wgl';
+import { rl } from '@grim/raylib-api.ts';
 import type { GameState } from '@crimson/game/types.ts';
 
 export const SCREEN_FADE_OUT_RATE = 2.0;
@@ -12,13 +12,18 @@ export function updateScreenFade(state: GameState, dt: number): void {
   } else {
     state.screenFadeAlpha -= dt * SCREEN_FADE_OUT_RATE;
   }
-  if (state.screenFadeAlpha < 0.0) state.screenFadeAlpha = 0.0;
-  else if (state.screenFadeAlpha > 1.0) state.screenFadeAlpha = 1.0;
+  if (state.screenFadeAlpha < 0.0) {
+    state.screenFadeAlpha = 0.0;
+  } else if (state.screenFadeAlpha > 1.0) {
+    state.screenFadeAlpha = 1.0;
+  }
 }
 
 export function drawScreenFade(state: GameState): void {
   const alpha = state.screenFadeAlpha;
-  if (alpha <= 0.0) return;
+  if (alpha <= 0.0) {
+    return;
+  }
   const shade = int(Math.max(0.0, Math.min(1.0, alpha)) * 255.0);
-  wgl.drawRectangle(0, 0, int(wgl.getScreenWidth()), int(wgl.getScreenHeight()), wgl.makeColor(0, 0, 0, shade / 255.0));
+  rl.drawRectangle(0, 0, int(rl.getScreenWidth()), int(rl.getScreenHeight()), rl.makeColor(0 / 255, 0 / 255, 0 / 255, shade / 255));
 }

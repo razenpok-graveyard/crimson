@@ -1772,6 +1772,12 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     index = assignment.nextIndex;
   }
 
+  if (allNames.length === 0 && functions.length > 0 && functions.every((fn) => !fn.exported)) {
+    for (const fn of functions) {
+      fn.exported = true;
+    }
+  }
+
   const reexports = reexportsForAllNames(imports, allNames);
   markTypeOnlyImports(imports, typeAliases, classes, [...leadingStatements, ...trailingStatements], functions, [...leadingAssignments, ...assignments]);
   if (allNames.length > 0) {
@@ -3237,7 +3243,7 @@ function translateExpression(
       }
       return nameMap.get(name) ?? tsExportNameForPythonName(name);
     });
-  return translated
+  return replaceTranslatedRaylibConstructors(translated)
     .replaceAll(/__CRIMSON_STRING_(\d+)__/g, (_match, index: string) => stringLiterals[Number(index)] ?? _match)
     .replaceAll(/\.BLEND_CUSTOM_SEPARATE\b/g, '.CUSTOM')
     .replaceAll(/\.BLEND_CUSTOM\b/g, '.CUSTOM')
@@ -3245,6 +3251,70 @@ function translateExpression(
     .replaceAll(/\.BLEND_ALPHA\b/g, '.ALPHA')
     .replaceAll(/\.BLEND_MULTIPLIED\b/g, '.MULTIPLY')
     .replaceAll(/\.BLEND_NONE\b/g, '.NONE');
+}
+
+function replaceTranslatedRaylibConstructors(value: string): string {
+  let output = '';
+  let index = 0;
+  const constructorPattern = /rl\.(Color|Vector2|Rectangle)\(/g;
+  while (index < value.length) {
+    constructorPattern.lastIndex = index;
+    const match = constructorPattern.exec(value);
+    if (match === null) {
+      output += value.slice(index);
+      break;
+    }
+
+    const argsStart = constructorPattern.lastIndex;
+    const closeIndex = matchingCloseParen(value, argsStart - 1);
+    if (closeIndex === null) {
+      output += value.slice(index);
+      break;
+    }
+
+    output += value.slice(index, match.index);
+    const args = splitTopLevelComma(value.slice(argsStart, closeIndex));
+    if (match[1] === 'Color' && args.length === 4) {
+      output += `rl.makeColor(${args.map((arg) => /\.[rgba]$/.test(arg.trim()) ? arg.trim() : `${arg.trim()} / 255`).join(', ')})`;
+    } else if (match[1] === 'Vector2' && args.length === 2) {
+      output += `rl.makeVector2(${args.map((arg) => arg.trim()).join(', ')})`;
+    } else if (match[1] === 'Rectangle' && args.length === 4) {
+      output += `rl.makeRectangle(${args.map((arg) => arg.trim()).join(', ')})`;
+    } else {
+      output += value.slice(match.index, closeIndex + 1);
+    }
+    index = closeIndex + 1;
+  }
+  return output;
+}
+
+function matchingCloseParen(value: string, openIndex: number): number | null {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let index = openIndex; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      if (char === quote && value[index - 1] !== '\\') {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '(') {
+      depth += 1;
+      continue;
+    }
+    if (char === ')') {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+  return null;
 }
 
 function translateMixedKeywordCall(
