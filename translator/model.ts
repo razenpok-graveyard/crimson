@@ -187,10 +187,31 @@ export interface InitReexports {
 export interface SimpleModuleFunction {
   name: string;
   exported: boolean;
+  async?: boolean;
   parameters: FunctionParameter[];
   optsParams: OptionalFunctionParameter[];
   returnType: string;
   statements: string[];
+}
+
+export interface PlainClassFieldDefinition {
+  name: string;
+  typeExpression: string;
+  readonly: boolean;
+  private: boolean;
+}
+
+export interface PlainClassConstructorDefinition {
+  parameters: FunctionParameter[];
+  optsParams: OptionalFunctionParameter[];
+  statements: string[];
+}
+
+export interface PlainClassDefinition {
+  name: string;
+  fields: PlainClassFieldDefinition[];
+  constructorDefinition: PlainClassConstructorDefinition;
+  methods: SimpleModuleFunction[];
 }
 
 export interface SimpleModuleAssignment {
@@ -213,6 +234,7 @@ export interface StraightLineModule {
   leadingAssignments: SimpleModuleAssignment[];
   leadingStatements: string[];
   classes: StructClassDefinition[];
+  plainClasses: PlainClassDefinition[];
   functions: SimpleModuleFunction[];
   trailingStatements: string[];
   assignments: SimpleModuleAssignment[];

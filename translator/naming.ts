@@ -62,6 +62,9 @@ export function tsTypeExpression(pythonType: string): string {
   if (trimmed === 'str') {
     return 'string';
   }
+  if (trimmed === 'Path') {
+    return 'string';
+  }
   if (trimmed === 'bool') {
     return 'boolean';
   }

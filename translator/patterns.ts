@@ -13,6 +13,7 @@ import type {
   OptionalFunctionParameter,
   PackageVersionModule,
   PlatformDirsModule,
+  PlainClassDefinition,
   ProtocolDefinition,
   ProtocolMethod,
   Reexport,
@@ -1147,8 +1148,271 @@ function parseStructMethod(
     method: {
       name: tsExportNameForPythonName(header.name),
       exported: false,
+      async: statements.some((statement) => statement.includes('await ')),
       parameters,
       optsParams,
+      returnType: tsTypeExpression(header.returnType),
+      statements,
+    },
+    nextIndex,
+  };
+}
+
+function tsAttributeNameForPythonName(pythonName: string): string {
+  return pythonName.startsWith('_')
+    ? `_${tsExportNameForPythonName(pythonName)}`
+    : tsExportNameForPythonName(pythonName);
+}
+
+function parseFunctionParametersText(
+  parametersText: string,
+  arrayNames: Set<string>,
+): { parameters: FunctionParameter[]; optsParams: OptionalFunctionParameter[] } | null {
+  const parameters: FunctionParameter[] = [];
+  const optsParams: OptionalFunctionParameter[] = [];
+  let keywordOnly = false;
+  if (parametersText !== '') {
+    for (const parameterText of splitTopLevelComma(parametersText)) {
+      if (parameterText === '*') {
+        keywordOnly = true;
+        continue;
+      }
+      const parameter = /^([A-Za-z_][A-Za-z0-9_]*): ([^=]+?)(?: = (.+))?$/.exec(parameterText);
+      if (parameter === null) {
+        return null;
+      }
+      const parsedParameter = {
+        name: tsExportNameForPythonName(parameter[1]),
+        typeExpression: tsTypeExpression(parameter[2]),
+      };
+      if (parsedParameter.typeExpression.endsWith('[]')) {
+        arrayNames.add(parameter[1]);
+      }
+      if (keywordOnly) {
+        optsParams.push({
+          ...parsedParameter,
+          defaultValue: parameter[3] === undefined ? null : translateExpression(parameter[3], undefined, arrayNames),
+        });
+      } else if (parameter[3] === undefined) {
+        parameters.push(parsedParameter);
+      } else {
+        parameters.push({
+          ...parsedParameter,
+          defaultValue: translateExpression(parameter[3], undefined, arrayNames),
+        });
+      }
+    }
+  }
+  return { parameters, optsParams };
+}
+
+function parsePlainClass(
+  lines: string[],
+  index: number,
+): { plainClass: PlainClassDefinition; nextIndex: number } | null {
+  const header = /^class ([A-Za-z_][A-Za-z0-9_]*):$/.exec(lines[index] ?? '');
+  if (header === null) {
+    return null;
+  }
+
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length && lines[nextIndex].trim() === '') {
+    nextIndex += 1;
+  }
+  const constructorHeader = parseIndentedFunctionHeader(lines, nextIndex, '    ');
+  if (constructorHeader === null || constructorHeader.name !== '__init__') {
+    return null;
+  }
+  const constructorParametersText = constructorHeader.parametersText;
+  if (constructorParametersText !== 'self' && !constructorParametersText.startsWith('self, ')) {
+    return null;
+  }
+
+  const constructorArrayNames = new Set<string>();
+  const constructorParams = parseFunctionParametersText(
+    constructorParametersText === 'self' ? '' : constructorParametersText.slice('self, '.length),
+    constructorArrayNames,
+  );
+  if (constructorParams === null) {
+    return null;
+  }
+
+  const fieldTypes = new Map<string, string>();
+  for (const parameter of [...constructorParams.parameters, ...constructorParams.optsParams]) {
+    fieldTypes.set(parameter.name, parameter.typeExpression);
+  }
+  const fieldMap = new Map<string, PlainClassDefinition['fields'][number]>();
+  const fieldNameMap = new Map<string, string>();
+  const constructorStatements: string[] = [];
+  const constructorNameMap = new Map<string, string>([['self', 'this']]);
+  for (const parameter of constructorParams.optsParams) {
+    constructorNameMap.set(parameter.name, parameter.name);
+  }
+  let bodyIndex = constructorHeader.nextIndex;
+  while (bodyIndex < lines.length && isIndentedBlockLine(lines, bodyIndex, '        ')) {
+    if (lines[bodyIndex].trim() === '') {
+      constructorStatements.push('');
+      bodyIndex += 1;
+      continue;
+    }
+    const statement = lines[bodyIndex].slice('        '.length);
+    const annotatedFieldAssignment = /^self\.([A-Za-z_][A-Za-z0-9_]*): (.+?) = (.+)$/.exec(statement);
+    const fieldAssignment = /^self\.([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(statement);
+    const assignment = annotatedFieldAssignment ?? fieldAssignment;
+    if (assignment !== null) {
+      const pythonFieldName = assignment[1];
+      const fieldName = tsAttributeNameForPythonName(pythonFieldName);
+      fieldNameMap.set(pythonFieldName, fieldName);
+      constructorNameMap.set(pythonFieldName, fieldName);
+      const valueText = annotatedFieldAssignment === null ? assignment[2] : assignment[3];
+      const value = translateExpression(valueText, constructorNameMap, constructorArrayNames);
+      const typeExpression = annotatedFieldAssignment === null
+        ? inferPlainClassFieldType(valueText, fieldTypes)
+        : tsTypeExpression(assignment[2]);
+      if (typeExpression === null) {
+        return null;
+      }
+      fieldMap.set(fieldName, {
+        name: fieldName,
+        typeExpression,
+        readonly: true,
+        private: pythonFieldName.startsWith('_'),
+      });
+      constructorStatements.push(`this.${fieldName} = ${value};`);
+      bodyIndex += 1;
+      continue;
+    }
+    const translated = translateStraightLineStatement(
+      lines,
+      bodyIndex,
+      '        ',
+      constructorNameMap,
+      new Set(),
+      new Set(),
+      constructorArrayNames,
+    );
+    if (translated === null) {
+      return null;
+    }
+    constructorStatements.push(...translated.statements);
+    bodyIndex = translated.nextIndex;
+  }
+
+  const methods: SimpleModuleFunction[] = [];
+  nextIndex = bodyIndex;
+  while (nextIndex < lines.length) {
+    const trimmed = lines[nextIndex].trim();
+    if (trimmed === '') {
+      nextIndex += 1;
+      continue;
+    }
+    if (!lines[nextIndex].startsWith('    ')) {
+      break;
+    }
+    const method = parsePlainClassMethod(lines, nextIndex, fieldNameMap);
+    if (method === null) {
+      return null;
+    }
+    methods.push(method.method);
+    nextIndex = method.nextIndex;
+  }
+
+  const mutableFields = new Set<string>();
+  for (const method of methods) {
+    for (const statement of method.statements) {
+      const assignment = /this\.([A-Za-z_][A-Za-z0-9_]*) = /.exec(statement);
+      if (assignment !== null) {
+        mutableFields.add(assignment[1]);
+      }
+    }
+  }
+  const fields = [...fieldMap.values()].map((field) => ({
+    ...field,
+    readonly: !mutableFields.has(field.name),
+  }));
+
+  return {
+    plainClass: {
+      name: header[1],
+      fields,
+      constructorDefinition: {
+        parameters: constructorParams.parameters,
+        optsParams: constructorParams.optsParams,
+        statements: constructorStatements,
+      },
+      methods,
+    },
+    nextIndex,
+  };
+}
+
+function inferPlainClassFieldType(valueText: string, fieldTypes: ReadonlyMap<string, string>): string | null {
+  if (/^Path\([A-Za-z_][A-Za-z0-9_]*\)$/.test(valueText)) {
+    return 'string';
+  }
+  const directParameterType = fieldTypes.get(tsExportNameForPythonName(valueText));
+  if (directParameterType !== undefined) {
+    return directParameterType;
+  }
+  const literalType = inferPythonExpressionType(valueText);
+  return literalType === 'any' ? null : literalType;
+}
+
+function parsePlainClassMethod(
+  lines: string[],
+  index: number,
+  fieldNameMap: Map<string, string>,
+): { method: SimpleModuleFunction; nextIndex: number } | null {
+  const header = parseIndentedFunctionHeader(lines, index, '    ');
+  if (header === null || header.name === '__init__') {
+    return null;
+  }
+  const parametersText = header.parametersText;
+  if (parametersText !== 'self' && !parametersText.startsWith('self, ')) {
+    return null;
+  }
+  const arrayNames = new Set<string>();
+  const parsedParams = parseFunctionParametersText(
+    parametersText === 'self' ? '' : parametersText.slice('self, '.length),
+    arrayNames,
+  );
+  if (parsedParams === null) {
+    return null;
+  }
+
+  const statements: string[] = [];
+  const nameMap = new Map<string, string>([['self', 'this'], ...fieldNameMap]);
+  const declaredNames = new Set<string>();
+  const reassignedNames = reassignedLocalNames(lines, header.nextIndex);
+  let nextIndex = header.nextIndex;
+  while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, '        ')) {
+    if (lines[nextIndex].trim() === '') {
+      statements.push('');
+      nextIndex += 1;
+      continue;
+    }
+    const statement = translateStraightLineStatement(
+      lines,
+      nextIndex,
+      '        ',
+      nameMap,
+      declaredNames,
+      reassignedNames,
+      arrayNames,
+    );
+    if (statement === null) {
+      return null;
+    }
+    statements.push(...statement.statements);
+    nextIndex = statement.nextIndex;
+  }
+  return {
+    method: {
+      name: tsExportNameForPythonName(header.name),
+      exported: false,
+      async: statements.some((statement) => statement.includes('await ')),
+      parameters: parsedParams.parameters,
+      optsParams: parsedParams.optsParams,
       returnType: tsTypeExpression(header.returnType),
       statements,
     },
@@ -1504,6 +1768,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   const enums: EnumDefinition[] = [];
   const validatedTypeAliases = new Set<string>();
   const classes: StructModule['classes'] = [];
+  const plainClasses: PlainClassDefinition[] = [];
   const functions: SimpleModuleFunction[] = [];
   const assignments: SimpleModuleAssignment[] = [];
   const allNames: string[] = [];
@@ -1583,6 +1848,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     if (structClass !== null) {
       classes.push(structClass.structClass);
       index = structClass.nextIndex;
+      continue;
+    }
+
+    const plainClass = parsePlainClass(lines, index);
+    if (plainClass !== null) {
+      plainClasses.push(plainClass.plainClass);
+      index = plainClass.nextIndex;
       continue;
     }
 
@@ -1737,6 +2009,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     functions.push({
       name: tsExportNameForPythonName(header.name),
       exported: !header.name.startsWith('_'),
+      async: statements.some((statement) => statement.includes('await ')),
       parameters,
       optsParams,
       returnType: tsTypeExpression(header.returnType),
@@ -1795,7 +2068,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   }
 
   const reexports = reexportsForAllNames(imports, allNames);
-  markTypeOnlyImports(imports, typeAliases, classes, [...leadingStatements, ...trailingStatements], functions, [...leadingAssignments, ...assignments]);
+  markTypeOnlyImports(imports, typeAliases, classes, plainClasses, [...leadingStatements, ...trailingStatements], functions, [...leadingAssignments, ...assignments]);
   if (allNames.length > 0) {
     const exportedNames = new Set(allNames.map(tsPublicNameForPythonName));
     for (const alias of typeAliases) {
@@ -1813,8 +2086,8 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
   }
 
-  return typeAliases.length + enums.length + leadingAssignments.length + leadingStatements.length + classes.length + functions.length + trailingStatements.length + assignments.length + reexports.length > 0
-    ? { docstring: moduleDocstring?.value ?? null, imports, namespaceImports, reexports, typeAliases, enums, leadingAssignments, leadingStatements, classes, functions, trailingStatements, assignments }
+  return typeAliases.length + enums.length + leadingAssignments.length + leadingStatements.length + classes.length + plainClasses.length + functions.length + trailingStatements.length + assignments.length + reexports.length > 0
+    ? { docstring: moduleDocstring?.value ?? null, imports, namespaceImports, reexports, typeAliases, enums, leadingAssignments, leadingStatements, classes, plainClasses, functions, trailingStatements, assignments }
     : null;
 }
 
@@ -2396,23 +2669,43 @@ function translateStraightLineStatement(
     };
 
     const tryBlock = translateBlock(index + 1);
-    if (tryBlock === null || (lines[tryBlock.nextIndex] ?? '').trim() !== 'finally:') {
+    if (tryBlock === null) {
       return null;
     }
-    const finallyBlock = translateBlock(tryBlock.nextIndex + 1);
-    if (finallyBlock === null) {
-      return null;
+    const afterTry = (lines[tryBlock.nextIndex] ?? '').trim();
+    if (afterTry === 'finally:') {
+      const finallyBlock = translateBlock(tryBlock.nextIndex + 1);
+      if (finallyBlock === null) {
+        return null;
+      }
+      return {
+        statements: [
+          'try {',
+          ...tryBlock.statements,
+          '} finally {',
+          ...finallyBlock.statements,
+          '}',
+        ],
+        nextIndex: finallyBlock.nextIndex,
+      };
     }
-    return {
-      statements: [
-        'try {',
-        ...tryBlock.statements,
-        '} finally {',
-        ...finallyBlock.statements,
-        '}',
-      ],
-      nextIndex: finallyBlock.nextIndex,
-    };
+    if (afterTry === 'except Exception:') {
+      const exceptBlock = translateBlock(tryBlock.nextIndex + 1);
+      if (exceptBlock === null) {
+        return null;
+      }
+      return {
+        statements: [
+          'try {',
+          ...tryBlock.statements,
+          '} catch (exc) {',
+          ...exceptBlock.statements,
+          '}',
+        ],
+        nextIndex: exceptBlock.nextIndex,
+      };
+    }
+    return null;
   }
 
   const forOfStatement = /^for ([A-Za-z_][A-Za-z0-9_]*) in (.+):$/.exec(statement);
@@ -2532,6 +2825,9 @@ function translateStraightLineStatement(
       statements: [`throw new Error(${translateExpression(raiseStatement[2], nameMap, arrayNames, validatedTypeAliases)});`],
       nextIndex: index + 1,
     };
+  }
+  if (statement === 'raise') {
+    return { statements: ['throw exc;'], nextIndex: index + 1 };
   }
 
   const assignment = /^(.+?) (\+=|-=|\*=|\/=|=) (.+)$/.exec(statement);
@@ -2844,29 +3140,30 @@ function translateStraightLineAssignment(
     };
   }
 
+  const assignedRight = operator === '=' ? maybeAwaitAsyncCall(tsRight) : tsRight;
   const localAssignment = /^([A-Za-z_][A-Za-z0-9_]*)$/.exec(pythonLeft);
   if (operator === '=' && localAssignment !== null) {
     const globalName = nameMap.get(localAssignment[1]);
     if (globalName !== undefined) {
       return {
-        statements: [`${globalName} = ${tsRight};`],
+        statements: [`${globalName} = ${assignedRight};`],
         nextIndex,
       };
     }
     const tsName = tsExportNameForPythonName(localAssignment[1]);
-    if (tsRight === tsName) {
+    if (assignedRight === tsName) {
       return { statements: [], nextIndex };
     }
     if (declaredNames.has(localAssignment[1])) {
       return {
-        statements: [`${tsName} = ${tsRight};`],
+        statements: [`${tsName} = ${assignedRight};`],
         nextIndex,
       };
     }
     declaredNames.add(localAssignment[1]);
     return {
       statements: [
-        `${reassignedNames.has(localAssignment[1]) ? 'let' : 'const'} ${tsName} = ${tsRight};`,
+        `${reassignedNames.has(localAssignment[1]) ? 'let' : 'const'} ${tsName} = ${assignedRight};`,
       ],
       nextIndex,
     };
@@ -2880,14 +3177,18 @@ function translateStraightLineAssignment(
       declaredNames.add(name);
     }
     return {
-      statements: [`${alreadyDeclared ? '' : 'const '}[${tsNames.join(', ')}] = ${tsRight};`],
+      statements: [`${alreadyDeclared ? '' : 'const '}[${tsNames.join(', ')}] = ${assignedRight};`],
       nextIndex,
     };
   }
   return {
-    statements: [`${translateExpression(pythonLeft, nameMap, arrayNames)} ${operator} ${tsRight};`],
+    statements: [`${translateExpression(pythonLeft, nameMap, arrayNames)} ${operator} ${assignedRight};`],
     nextIndex,
   };
+}
+
+function maybeAwaitAsyncCall(tsExpression: string): string {
+  return /^load[A-Z][A-Za-z0-9_]*\(.*\)$/.test(tsExpression) ? `await ${tsExpression}` : tsExpression;
 }
 
 function reassignedLocalNames(lines: string[], startIndex: number): Set<string> {
@@ -3029,6 +3330,7 @@ function markTypeOnlyImports(
   imports: ImportDefinition[],
   typeAliases: TypeAlias[],
   classes: StructModule['classes'],
+  plainClasses: PlainClassDefinition[],
   leadingStatements: string[],
   functions: SimpleModuleFunction[],
   assignments: SimpleModuleAssignment[],
@@ -3043,6 +3345,8 @@ function markTypeOnlyImports(
     ]),
     ...classes.flatMap((structClass) => structClass.fields.map((field) => field.defaultValue ?? '')),
     ...classes.flatMap((structClass) => structClass.methods.flatMap((method) => method.statements)),
+    ...plainClasses.flatMap((plainClass) => plainClass.constructorDefinition.statements),
+    ...plainClasses.flatMap((plainClass) => plainClass.methods.flatMap((method) => method.statements)),
     ...leadingStatements,
     ...functions.flatMap((fn) => fn.statements),
     ...assignments.flatMap((assignment) => assignment.valueLines),
@@ -3051,6 +3355,16 @@ function markTypeOnlyImports(
     ...typeAliases.map((alias) => alias.typeExpression),
     ...classes.flatMap((structClass) => structClass.fields.map((field) => field.typeExpression)),
     ...classes.flatMap((structClass) => structClass.methods.flatMap((method) => [
+      method.returnType,
+      ...method.parameters.map((parameter) => parameter.typeExpression),
+      ...method.optsParams.map((parameter) => parameter.typeExpression),
+    ])),
+    ...plainClasses.flatMap((plainClass) => plainClass.fields.map((field) => field.typeExpression)),
+    ...plainClasses.flatMap((plainClass) => [
+      ...plainClass.constructorDefinition.parameters.map((parameter) => parameter.typeExpression),
+      ...plainClass.constructorDefinition.optsParams.map((parameter) => parameter.typeExpression),
+    ]),
+    ...plainClasses.flatMap((plainClass) => plainClass.methods.flatMap((method) => [
       method.returnType,
       ...method.parameters.map((parameter) => parameter.typeExpression),
       ...method.optsParams.map((parameter) => parameter.typeExpression),
@@ -3126,6 +3440,11 @@ function translateExpression(
     if (primitiveCall !== null && primitiveCall.rest === '') {
       return translateExpression(primitiveCall.argsText, nameMap, arrayNames, validatedTypeAliases);
     }
+  }
+
+  const pathCall = parseCallPrefix(trimmed, 'Path');
+  if (pathCall !== null && pathCall.rest === '') {
+    return translateExpression(pathCall.argsText, nameMap, arrayNames, validatedTypeAliases);
   }
 
   const raylibConstructor = /^rl\.(Color|Vector2|Rectangle)\((.*)\)$/.exec(trimmed);

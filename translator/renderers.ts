@@ -300,7 +300,7 @@ function renderStructClasses(lines: string[], classes: StructModule['classes']):
         const allOptsHaveDefaults = method.optsParams.every((param) => param.defaultValue !== null);
         params.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
       }
-      lines.push(`  ${method.name}(${params.join(', ')}): ${method.returnType} {`);
+      lines.push(`  ${method.async === true ? 'async ' : ''}${method.name}(${params.join(', ')}): ${renderFunctionReturnType(method)} {`);
       for (const param of method.optsParams) {
         if (param.defaultValue === null) {
           lines.push(`    const ${param.name} = opts.${param.name};`);
@@ -318,6 +318,68 @@ function renderStructClasses(lines: string[], classes: StructModule['classes']):
       lines.push('');
     }
   }
+}
+
+function renderPlainClasses(lines: string[], classes: StraightLineModule['plainClasses']): void {
+  for (let index = 0; index < classes.length; index += 1) {
+    const plainClass = classes[index];
+    lines.push(`export class ${plainClass.name} {`);
+    for (const field of plainClass.fields) {
+      lines.push(`  ${field.private ? 'private ' : ''}${field.readonly ? 'readonly ' : ''}${field.name}: ${field.typeExpression};`);
+    }
+    lines.push('');
+    const constructorParams = plainClass.constructorDefinition.parameters.map(renderParameter);
+    if (plainClass.constructorDefinition.optsParams.length > 0) {
+      const optsType = plainClass.constructorDefinition.optsParams
+        .map((param) => `${param.name}${param.defaultValue === null ? '' : '?'}: ${param.typeExpression}`)
+        .join('; ');
+      const allOptsHaveDefaults = plainClass.constructorDefinition.optsParams.every((param) => param.defaultValue !== null);
+      constructorParams.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
+    }
+    lines.push(`  constructor(${constructorParams.join(', ')}) {`);
+    for (const param of plainClass.constructorDefinition.optsParams) {
+      if (param.defaultValue === null) {
+        lines.push(`    const ${param.name} = opts.${param.name};`);
+      } else {
+        lines.push(`    const ${param.name} = opts.${param.name} ?? ${param.defaultValue};`);
+      }
+    }
+    for (const statement of plainClass.constructorDefinition.statements) {
+      lines.push(statement === '' ? '' : `    ${statement}`);
+    }
+    lines.push('  }');
+    for (const method of plainClass.methods) {
+      lines.push('');
+      const params = method.parameters.map(renderParameter);
+      if (method.optsParams.length > 0) {
+        const optsType = method.optsParams
+          .map((param) => `${param.name}${param.defaultValue === null ? '' : '?'}: ${param.typeExpression}`)
+          .join('; ');
+        const allOptsHaveDefaults = method.optsParams.every((param) => param.defaultValue !== null);
+        params.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
+      }
+      lines.push(`  ${method.async === true ? 'async ' : ''}${method.name}(${params.join(', ')}): ${renderFunctionReturnType(method)} {`);
+      for (const param of method.optsParams) {
+        if (param.defaultValue === null) {
+          lines.push(`    const ${param.name} = opts.${param.name};`);
+        } else {
+          lines.push(`    const ${param.name} = opts.${param.name} ?? ${param.defaultValue};`);
+        }
+      }
+      for (const statement of method.statements) {
+        lines.push(statement === '' ? '' : `    ${statement}`);
+      }
+      lines.push('  }');
+    }
+    lines.push('}');
+    if (index < classes.length - 1) {
+      lines.push('');
+    }
+  }
+}
+
+function renderFunctionReturnType(fn: { async?: boolean; returnType: string }): string {
+  return fn.async === true ? `Promise<${fn.returnType}>` : fn.returnType;
 }
 
 export function renderStraightLineModule(relativePath: string, module: StraightLineModule): string {
@@ -357,19 +419,19 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
       }
     }
   }
-  if (module.typeAliases.length > 0 && module.enums.length + module.leadingAssignments.length + module.leadingStatements.length + module.classes.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
+  if (module.typeAliases.length > 0 && module.enums.length + module.leadingAssignments.length + module.leadingStatements.length + module.classes.length + module.plainClasses.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
     lines.push('');
   }
 
   renderStraightLineAssignments(lines, module.leadingAssignments);
-  if (module.leadingAssignments.length > 0 && module.leadingStatements.length + module.enums.length + module.classes.length + module.functions.length + module.assignments.length > 0) {
+  if (module.leadingAssignments.length > 0 && module.leadingStatements.length + module.enums.length + module.classes.length + module.plainClasses.length + module.functions.length + module.assignments.length > 0) {
     lines.push('');
   }
 
   for (const statement of module.leadingStatements) {
     lines.push(statement);
   }
-  if (module.leadingStatements.length > 0 && module.enums.length + module.classes.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
+  if (module.leadingStatements.length > 0 && module.enums.length + module.classes.length + module.plainClasses.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
     lines.push('');
   }
 
@@ -379,12 +441,17 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
       lines.push('');
     }
   }
-  if (module.enums.length > 0 && module.classes.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
+  if (module.enums.length > 0 && module.classes.length + module.plainClasses.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
     lines.push('');
   }
 
   renderStructClasses(lines, module.classes);
-  if (module.classes.length > 0 && module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
+  if (module.classes.length > 0 && module.plainClasses.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
+    lines.push('');
+  }
+
+  renderPlainClasses(lines, module.plainClasses);
+  if (module.plainClasses.length > 0 && module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
     lines.push('');
   }
 
@@ -398,7 +465,7 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
       const allOptsHaveDefaults = fn.optsParams.every((param) => param.defaultValue !== null);
       params.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
     }
-    lines.push(`${fn.exported ? 'export ' : ''}function ${fn.name}(${params.join(', ')}): ${fn.returnType} {`);
+    lines.push(`${fn.exported ? 'export ' : ''}${fn.async === true ? 'async ' : ''}function ${fn.name}(${params.join(', ')}): ${renderFunctionReturnType(fn)} {`);
     let statementIndex = 0;
     while (
       statementIndex < fn.statements.length

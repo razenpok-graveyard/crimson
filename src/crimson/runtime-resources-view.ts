@@ -1,6 +1,7 @@
 // Port of crimson/runtime_resources_view.py
 
-import { type RuntimeResources, loadRuntimeResources, unloadRuntimeResources } from '@grim/assets.ts';
+import type { RuntimeResources } from '@grim/assets.ts';
+import { loadRuntimeResources, unloadRuntimeResources } from '@grim/assets.ts';
 import type { View } from '@grim/view.ts';
 
 export class RuntimeResourcesView {
@@ -9,8 +10,9 @@ export class RuntimeResourcesView {
   private _resources: RuntimeResources | null;
 
   constructor(view: View, opts: { assetsDir: string }) {
+    const assetsDir = opts.assetsDir;
     this._view = view;
-    this._assetsDir = opts.assetsDir;
+    this._assetsDir = assetsDir;
     this._resources = null;
   }
 
