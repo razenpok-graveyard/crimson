@@ -21,7 +21,7 @@ import type {
   StraightLineModule,
   TypeAlias,
 } from './model.js';
-import { tsCallableType, tsExportNameForPythonName, tsLiteralExpression, tsTypeExpression } from './naming.js';
+import { tsCallableType, tsExportNameForPythonName, tsLiteralExpression, tsPublicNameForPythonName, tsTypeExpression } from './naming.js';
 import { tsImportPathForPythonImport, tsImportPathForPythonModule, tsImportPathForPythonNamespace } from './paths.js';
 import { flattenFromImportBlocks, isOneLineAllAssignment, splitLeadingModuleDocstring, stripAllAssignments } from './python-utils.js';
 
@@ -690,6 +690,7 @@ export function parsePackageVersionModule(trimmedPython: string): PackageVersion
 export function parseStraightLineModule(trimmedPython: string, relativePath: string): StraightLineModule | null {
   const lines = flattenFromImportBlocks(trimmedPython.split(/\r?\n/));
   const imports: ImportDefinition[] = [];
+  const leadingAssignments: SimpleModuleAssignment[] = [];
   const functions: SimpleModuleFunction[] = [];
   const assignments: SimpleModuleAssignment[] = [];
   let index = 0;
@@ -703,18 +704,33 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     if (trimmed.startsWith('def ')) {
       break;
     }
-
-    const fromImport = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
-    if (fromImport === null) {
-      return null;
+    if (trimmed.startsWith('__all__ = ')) {
+      if (!isOneLineAllAssignment(trimmed)) {
+        while (index < lines.length && lines[index].trim() !== ']') {
+          index += 1;
+        }
+      }
+      index += 1;
+      continue;
     }
 
-    const names = fromImport[2].split(', ').map(tsExportNameForPythonName);
-    imports.push({
-      modulePath: tsImportPathForPythonImport(fromImport[1], relativePath),
-      names,
-    });
-    index += 1;
+    const fromImport = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
+    if (fromImport !== null) {
+      const names = fromImport[2].split(', ').map(tsExportNameForPythonName);
+      imports.push({
+        modulePath: tsImportPathForPythonImport(fromImport[1], relativePath),
+        names,
+      });
+      index += 1;
+      continue;
+    }
+
+    const assignment = parseTopLevelAssignment(lines, index);
+    if (assignment === null) {
+      return null;
+    }
+    leadingAssignments.push(assignment.assignment);
+    index = assignment.nextIndex;
   }
 
   while (index < lines.length) {
@@ -776,6 +792,16 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
 
+    if (trimmed.startsWith('__all__ = ')) {
+      if (!isOneLineAllAssignment(trimmed)) {
+        while (index < lines.length && lines[index].trim() !== ']') {
+          index += 1;
+        }
+      }
+      index += 1;
+      continue;
+    }
+
     const assignment = parseTopLevelAssignment(lines, index);
     if (assignment === null) {
       return null;
@@ -784,10 +810,10 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     index = assignment.nextIndex;
   }
 
-  markTypeOnlyImports(imports, functions, assignments);
+  markTypeOnlyImports(imports, functions, [...leadingAssignments, ...assignments]);
 
-  return functions.length + assignments.length > 0
-    ? { imports, functions, assignments }
+  return leadingAssignments.length + functions.length + assignments.length > 0
+    ? { imports, leadingAssignments, functions, assignments }
     : null;
 }
 
@@ -906,7 +932,7 @@ function parseTopLevelAssignment(
     return null;
   }
 
-  const name = tsExportNameForPythonName(assignment[1]);
+  const name = tsPublicNameForPythonName(assignment[1]);
   const value = assignment[2];
   const keywordCall = /^([A-Za-z_][A-Za-z0-9_]*)\($/.exec(value);
   if (keywordCall === null) {

@@ -10,6 +10,10 @@ export function tsExportNameForPythonName(pythonName: string): string {
   );
 }
 
+export function tsPublicNameForPythonName(pythonName: string): string {
+  return tsExportNameForPythonName(pythonName.replace(/^_+/, ''));
+}
+
 export function tsTypeExpression(pythonType: string): string {
   const trimmed = pythonType.trim();
   if (trimmed === 'None') {

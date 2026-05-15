@@ -192,6 +192,11 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
   }
   lines.push('');
 
+  renderStraightLineAssignments(lines, module.leadingAssignments);
+  if (module.leadingAssignments.length > 0 && module.functions.length + module.assignments.length > 0) {
+    lines.push('');
+  }
+
   for (let index = 0; index < module.functions.length; index += 1) {
     const fn = module.functions[index];
     const params = fn.parameters.map((param) => `${param.name}: ${param.typeExpression}`).join(', ');
@@ -205,7 +210,15 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
     }
   }
 
-  for (const assignment of module.assignments) {
+  renderStraightLineAssignments(lines, module.assignments);
+  if (lines.at(-1) !== '') {
+    lines.push('');
+  }
+  return lines.join('\n');
+}
+
+function renderStraightLineAssignments(lines: string[], assignments: StraightLineModule['assignments']): void {
+  for (const assignment of assignments) {
     if (assignment.valueLines.length === 1) {
       lines.push(`export const ${assignment.name} = ${assignment.valueLines[0]};`);
       continue;
@@ -217,10 +230,6 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
     }
     lines.push(`${assignment.valueLines.at(-1)};`);
   }
-  if (lines.at(-1) !== '') {
-    lines.push('');
-  }
-  return lines.join('\n');
 }
 
 export function renderPackageVersionModule(relativePath: string, version: string): string {
