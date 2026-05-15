@@ -2044,6 +2044,28 @@ function predeclareIfBranchAssignments(
   return declarations;
 }
 
+function translateRaylibColorArg(pythonExpression: string, nameMap: Map<string, string>, arrayNames: Set<string>, validatedTypeAliases: ReadonlySet<string>): string {
+  const translated = translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases);
+  return /\.[rgba]$/.test(translated) ? translated : `${translated} / 255`;
+}
+
+function translatePositionalCallExpression(
+  pythonCallee: string,
+  positionalParts: string[],
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  constructUppercase = false,
+): string {
+  const callee = translateExpression(pythonCallee, nameMap, arrayNames, validatedTypeAliases);
+  const args = positionalParts.map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases));
+  const reorderedArgs = callee === 'rl.rlSetBlendFactorsSeparate' && args.length === 6
+    ? [args[0], args[1], args[4], args[2], args[3], args[5]]
+    : args;
+  const callPrefix = constructUppercase && /^[A-Z]/.test(callee) ? `new ${callee}` : callee;
+  return `${callPrefix}(${reorderedArgs.join(', ')})`;
+}
+
 function translateStraightLineStatement(
   lines: string[],
   index: number,
@@ -2371,7 +2393,7 @@ function translateStraightLineStatement(
         const callee = translateExpression(multilineKeywordCall[1], nameMap, arrayNames, validatedTypeAliases);
         if (keywordParts.length === 0) {
           return {
-            statements: [`${callee}(${positionalParts.map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases)).join(', ')});`],
+            statements: [`${translatePositionalCallExpression(multilineKeywordCall[1], positionalParts, nameMap, arrayNames, validatedTypeAliases)};`],
             nextIndex: nextIndex + 1,
           };
         }
@@ -2488,7 +2510,7 @@ function parseMultilineCallExpression(
       const callPrefix = /^[A-Z]/.test(callee) ? `new ${callee}` : callee;
       if (keywordParts.length === 0) {
         return {
-          expression: `${callPrefix}(${positionalParts.map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`,
+          expression: translatePositionalCallExpression(pythonCallee, positionalParts, nameMap, arrayNames, validatedTypeAliases, true),
           nextIndex: nextIndex + 1,
         };
       }
@@ -2814,6 +2836,28 @@ function translateExpression(
     }
   }
 
+  const raylibConstructor = /^rl\.(Color|Vector2|Rectangle)\((.*)\)$/.exec(trimmed);
+  if (raylibConstructor !== null) {
+    const args = splitTopLevelComma(raylibConstructor[2]);
+    if (raylibConstructor[1] === 'Color' && args.length === 4) {
+      return `rl.makeColor(${args.map((arg) => translateRaylibColorArg(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;
+    }
+    if (raylibConstructor[1] === 'Vector2' && args.length === 2) {
+      return `rl.makeVector2(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;
+    }
+    if (raylibConstructor[1] === 'Rectangle' && args.length === 4) {
+      return `rl.makeRectangle(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;
+    }
+  }
+
+  const blendFactorsSeparateCall = /^rl\.rl_set_blend_factors_separate\((.*)\)$/.exec(trimmed);
+  if (blendFactorsSeparateCall !== null) {
+    const args = splitTopLevelComma(blendFactorsSeparateCall[1]);
+    if (args.length === 6) {
+      return translatePositionalCallExpression('rl.rl_set_blend_factors_separate', args, nameMap, arrayNames, validatedTypeAliases);
+    }
+  }
+
   const tempDirPathJoin = /^Path\(tempfile\.gettempdir\(\)\) \/ "([^"\\]*)"$/.exec(trimmed);
   if (tempDirPathJoin !== null) {
     return tsStringLiteral(`"/tmp/${tempDirPathJoin[1]}"`);
@@ -3003,7 +3047,14 @@ function translateExpression(
       }
       return nameMap.get(name) ?? tsExportNameForPythonName(name);
     });
-  return translated.replaceAll(/__CRIMSON_STRING_(\d+)__/g, (_match, index: string) => stringLiterals[Number(index)] ?? _match);
+  return translated
+    .replaceAll(/__CRIMSON_STRING_(\d+)__/g, (_match, index: string) => stringLiterals[Number(index)] ?? _match)
+    .replaceAll(/\.BLEND_CUSTOM_SEPARATE\b/g, '.CUSTOM')
+    .replaceAll(/\.BLEND_CUSTOM\b/g, '.CUSTOM')
+    .replaceAll(/\.BLEND_ADDITIVE\b/g, '.ADDITIVE')
+    .replaceAll(/\.BLEND_ALPHA\b/g, '.ALPHA')
+    .replaceAll(/\.BLEND_MULTIPLIED\b/g, '.MULTIPLY')
+    .replaceAll(/\.BLEND_NONE\b/g, '.NONE');
 }
 
 function translateMixedKeywordCall(
