@@ -3769,6 +3769,12 @@ function translateStraightLineAssignment(
       nextIndex,
     };
   }
+  if (operator === '=') {
+    const tsLeft = translateExpression(pythonLeft, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (assignedRight === tsLeft) {
+      return { statements: [], nextIndex };
+    }
+  }
   return {
     statements: [`${translateExpression(pythonLeft, nameMap, arrayNames, validatedTypeAliases, mapNames)} ${operator} ${assignedRight};`],
     nextIndex,
