@@ -81,6 +81,11 @@ async function translateFile(job: TranslationJob): Promise<string> {
     return renderTypeAliases(job.relativePath, typeAliases);
   }
 
+  const constantsModule = parseConstantsModule(futureStripped);
+  if (constantsModule !== null) {
+    return renderConstantsModule(job.relativePath, constantsModule);
+  }
+
   const trimmed = stripIgnorablePythonLines(job.python).trim();
   if (trimmed === '') {
     return renderEmptyModule(job.relativePath);
@@ -174,6 +179,16 @@ interface TypeAlias {
   typeExpression: string;
 }
 
+interface ConstantDefinition {
+  name: string;
+  value: string;
+}
+
+interface ConstantsModule {
+  docstring: string | null;
+  constants: ConstantDefinition[];
+}
+
 interface InitReexports {
   docstring: string | null;
   reexports: Reexport[];
@@ -184,7 +199,7 @@ function parseInitReexports(trimmedPython: string): InitReexports | null {
   const body = docstring === null ? trimmedPython : docstring.remainder.trim();
   const reexports: Reexport[] = [];
   let sawAll = false;
-  const lines = body.split(/\r?\n/);
+  const lines = flattenFromImportBlocks(body.split(/\r?\n/));
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
@@ -215,6 +230,33 @@ function parseInitReexports(trimmedPython: string): InitReexports | null {
   }
 
   return sawAll && reexports.length > 0 ? { docstring: docstring?.value ?? null, reexports } : null;
+}
+
+function flattenFromImportBlocks(lines: string[]): string[] {
+  const flattened: string[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const trimmed = lines[index].trim();
+    const fromImportBlock = /^from ((?:\.)?[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import \($/.exec(trimmed);
+    if (fromImportBlock === null) {
+      flattened.push(lines[index]);
+      continue;
+    }
+
+    const names: string[] = [];
+    index += 1;
+    while (index < lines.length && lines[index].trim() !== ')') {
+      const name = lines[index].trim().replace(/,$/, '');
+      if (name !== '') {
+        names.push(name);
+      }
+      index += 1;
+    }
+
+    flattened.push(`from ${fromImportBlock[1]} import ${names.join(', ')}`);
+  }
+
+  return flattened;
 }
 
 function splitLeadingModuleDocstring(trimmedPython: string): { value: string; remainder: string } | null {
@@ -384,6 +426,73 @@ function renderTypeAliases(relativePath: string, aliases: TypeAlias[]): string {
   const lines = [`// Port of ${relativePath}`, ''];
   for (const alias of aliases) {
     lines.push(`export type ${alias.name} = ${alias.typeExpression};`);
+  }
+  lines.push('');
+  return lines.join('\n');
+}
+
+function parseConstantsModule(trimmedPython: string): ConstantsModule | null {
+  const docstring = splitLeadingModuleDocstring(trimmedPython);
+  const body = docstring === null ? trimmedPython : docstring.remainder.trim();
+  const constants: ConstantDefinition[] = [];
+  let sawAll = false;
+  const lines = body.split(/\r?\n/);
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const trimmed = lines[index].trim();
+    if (trimmed === '') {
+      continue;
+    }
+
+    if (trimmed.startsWith('__all__ = ')) {
+      sawAll = true;
+      if (!isOneLineAllAssignment(trimmed)) {
+        while (index < lines.length && lines[index].trim() !== ']') {
+          index += 1;
+        }
+      }
+      continue;
+    }
+
+    const assignment = /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(trimmed);
+    if (assignment === null) {
+      return null;
+    }
+
+    constants.push({
+      name: assignment[1],
+      value: tsLiteralExpression(assignment[2]),
+    });
+  }
+
+  return sawAll && constants.length > 0 ? { docstring: docstring?.value ?? null, constants } : null;
+}
+
+function tsLiteralExpression(pythonValue: string): string {
+  const trimmed = pythonValue.trim();
+  if (trimmed === 'True') {
+    return 'true';
+  }
+  if (trimmed === 'False') {
+    return 'false';
+  }
+  if (trimmed === 'None') {
+    return 'null';
+  }
+  return trimmed;
+}
+
+function renderConstantsModule(relativePath: string, constantsModule: ConstantsModule): string {
+  const lines = [`// Port of ${relativePath}`, ''];
+  if (constantsModule.docstring !== null) {
+    for (const line of constantsModule.docstring.split(/\r?\n/)) {
+      lines.push(line === '' ? '//' : `// ${line}`);
+    }
+    lines.push('');
+  }
+
+  for (const constant of constantsModule.constants) {
+    lines.push(`export const ${constant.name} = ${constant.value};`);
   }
   lines.push('');
   return lines.join('\n');
