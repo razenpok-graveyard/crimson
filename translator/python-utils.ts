@@ -73,7 +73,7 @@ export function flattenFromImportBlocks(lines: string[]): string[] {
 
   for (let index = 0; index < lines.length; index += 1) {
     const trimmed = lines[index].trim();
-    const fromImportBlock = /^from ((?:\.)?[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import \($/.exec(trimmed);
+    const fromImportBlock = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import \($/.exec(trimmed);
     if (fromImportBlock === null) {
       flattened.push(lines[index]);
       continue;

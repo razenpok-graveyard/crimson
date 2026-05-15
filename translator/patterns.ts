@@ -776,6 +776,7 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       || trimmed === 'from pathlib import Path'
       || trimmed === 'from typing import Protocol'
       || trimmed === 'from typing import TYPE_CHECKING'
+      || trimmed === 'from typing import cast'
     ) {
       index += 1;
       continue;
@@ -953,15 +954,59 @@ function parseStructClass(
   };
 }
 
+function parseIndentedFunctionHeader(
+  lines: string[],
+  index: number,
+  indent: string,
+): { name: string; parametersText: string; returnType: string; nextIndex: number } | null {
+  const oneLine = new RegExp(`^${indent}def ([A-Za-z_][A-Za-z0-9_]*)\\((.*)\\) -> ([^:]+):$`).exec(lines[index] ?? '');
+  if (oneLine !== null) {
+    return {
+      name: oneLine[1],
+      parametersText: oneLine[2],
+      returnType: oneLine[3],
+      nextIndex: index + 1,
+    };
+  }
+
+  const start = new RegExp(`^${indent}def ([A-Za-z_][A-Za-z0-9_]*)\\($`).exec(lines[index] ?? '');
+  if (start === null) {
+    return null;
+  }
+
+  const parameterIndent = `${indent}    `;
+  const parameterLines: string[] = [];
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length) {
+    const close = new RegExp(`^${indent}\\) -> ([^:]+):$`).exec(lines[nextIndex] ?? '');
+    if (close !== null) {
+      return {
+        name: start[1],
+        parametersText: parameterLines.join(', '),
+        returnType: close[1],
+        nextIndex: nextIndex + 1,
+      };
+    }
+
+    const line = lines[nextIndex] ?? '';
+    if (!line.startsWith(parameterIndent)) {
+      return null;
+    }
+    parameterLines.push(line.slice(parameterIndent.length).replace(/,$/, ''));
+    nextIndex += 1;
+  }
+  return null;
+}
+
 function parseStructMethod(
   lines: string[],
   index: number,
 ): { method: SimpleModuleFunction; nextIndex: number } | null {
-  const header = /^    def ([A-Za-z_][A-Za-z0-9_]*)\((.*)\) -> ([^:]+):$/.exec(lines[index] ?? '');
+  const header = parseIndentedFunctionHeader(lines, index, '    ');
   if (header === null) {
     return null;
   }
-  const parametersText = header[2];
+  const parametersText = header.parametersText;
   if (parametersText !== 'self' && !parametersText.startsWith('self, ')) {
     return null;
   }
@@ -970,10 +1015,15 @@ function parseStructMethod(
   const optsParams: OptionalFunctionParameter[] = [];
   const arrayNames = new Set<string>();
   const extraParameters = parametersText === 'self' ? '' : parametersText.slice('self, '.length);
+  let keywordOnly = false;
   if (extraParameters !== '') {
     for (const parameterText of splitTopLevelComma(extraParameters)) {
+      if (parameterText === '*') {
+        keywordOnly = true;
+        continue;
+      }
       const parameter = /^([A-Za-z_][A-Za-z0-9_]*): ([^=]+?)(?: = (.+))?$/.exec(parameterText);
-      if (parameter === null || parameter[3] !== undefined) {
+      if (parameter === null) {
         return null;
       }
       const parsedParameter = {
@@ -983,7 +1033,19 @@ function parseStructMethod(
       if (parsedParameter.typeExpression.endsWith('[]')) {
         arrayNames.add(parameter[1]);
       }
-      parameters.push(parsedParameter);
+      if (keywordOnly) {
+        optsParams.push({
+          ...parsedParameter,
+          defaultValue: parameter[3] === undefined ? null : translateExpression(parameter[3], undefined, arrayNames),
+        });
+      } else if (parameter[3] === undefined) {
+        parameters.push(parsedParameter);
+      } else {
+        parameters.push({
+          ...parsedParameter,
+          defaultValue: translateExpression(parameter[3], undefined, arrayNames),
+        });
+      }
     }
   }
 
@@ -991,7 +1053,7 @@ function parseStructMethod(
   const nameMap = new Map<string, string>([['self', 'this']]);
   const declaredNames = new Set<string>();
   const reassignedNames = reassignedLocalNames(lines, index + 1);
-  let nextIndex = index + 1;
+  let nextIndex = header.nextIndex;
   while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, '        ')) {
     if (lines[nextIndex].trim() === '') {
       statements.push('');
@@ -1016,11 +1078,11 @@ function parseStructMethod(
 
   return {
     method: {
-      name: tsExportNameForPythonName(header[1]),
+      name: tsExportNameForPythonName(header.name),
       exported: false,
       parameters,
       optsParams,
-      returnType: tsTypeExpression(header[3]),
+      returnType: tsTypeExpression(header.returnType),
       statements,
     },
     nextIndex,
@@ -1171,6 +1233,10 @@ function tsStructFieldDefaultValue(pythonValue: string): string | null {
   const zeroArgConstructor = /^([A-Z][A-Za-z0-9_]*)\(\)$/.exec(trimmed);
   if (zeroArgConstructor !== null) {
     return `new ${tsExportNameForPythonName(zeroArgConstructor[1])}()`;
+  }
+
+  if (/^cast\([A-Za-z_][A-Za-z0-9_]*(?:\[[^\]]+\])?, None\)$/.test(trimmed)) {
+    return 'undefined!';
   }
 
   return translateExpression(trimmed);
@@ -2058,12 +2124,42 @@ function translatePositionalCallExpression(
   constructUppercase = false,
 ): string {
   const callee = translateExpression(pythonCallee, nameMap, arrayNames, validatedTypeAliases);
-  const args = positionalParts.map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases));
+  const args = positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases));
   const reorderedArgs = callee === 'rl.rlSetBlendFactorsSeparate' && args.length === 6
     ? [args[0], args[1], args[4], args[2], args[3], args[5]]
     : args;
   const callPrefix = constructUppercase && /^[A-Z]/.test(callee) ? `new ${callee}` : callee;
   return `${callPrefix}(${reorderedArgs.join(', ')})`;
+}
+
+function translateCallArgumentExpression(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+): string {
+  return translateBoundMethodReference(pythonExpression, nameMap, arrayNames, validatedTypeAliases)
+    ?? translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases);
+}
+
+function translateBoundMethodReference(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+): string | null {
+  const reference = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){2,})$/.exec(pythonExpression.trim());
+  if (reference === null) {
+    return null;
+  }
+  const parts = reference[1].split('.');
+  const translatedRoot = nameMap.get(parts[0]) ?? tsExportNameForPythonName(parts[0]);
+  if (translatedRoot !== 'this') {
+    return null;
+  }
+  const receiver = translateExpression(parts.slice(0, -1).join('.'), nameMap, arrayNames, validatedTypeAliases);
+  const method = tsExportNameForPythonName(parts[parts.length - 1]);
+  return `${receiver}.${method}.bind(${receiver})`;
 }
 
 function translateStraightLineStatement(
@@ -2410,7 +2506,7 @@ function translateStraightLineStatement(
         return {
           statements: [
             `${callee}(`,
-            ...positionalParts.map((part) => `  ${translateExpression(part, nameMap, arrayNames, validatedTypeAliases)},`),
+            ...positionalParts.map((part) => `  ${translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases)},`),
             `  { ${keywordParts.join(', ')} },`,
             ');',
           ],
@@ -2522,7 +2618,7 @@ function parseMultilineCallExpression(
       }
       return {
         expression: `${callPrefix}(${[
-          ...positionalParts.map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases)),
+          ...positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases)),
           `{ ${keywordParts.join(', ')} }`,
         ].join(', ')})`,
         nextIndex: nextIndex + 1,
@@ -2589,6 +2685,19 @@ function translateStraightLineAssignment(
       statements: [
         `${reassignedNames.has(localAssignment[1]) ? 'let' : 'const'} ${tsName} = ${tsRight};`,
       ],
+      nextIndex,
+    };
+  }
+  const tupleAssignment = /^([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+)$/.exec(pythonLeft);
+  if (operator === '=' && tupleAssignment !== null) {
+    const names = tupleAssignment[1].split(', ');
+    const tsNames = names.map(tsExportNameForPythonName);
+    const alreadyDeclared = names.every((name) => declaredNames.has(name));
+    for (const name of names) {
+      declaredNames.add(name);
+    }
+    return {
+      statements: [`${alreadyDeclared ? '' : 'const '}[${tsNames.join(', ')}] = ${tsRight};`],
       nextIndex,
     };
   }
@@ -3092,7 +3201,7 @@ function translateMixedKeywordCall(
   }
 
   return `${translateExpression(call[1], nameMap, arrayNames, validatedTypeAliases)}(${[
-    ...positionalParts.map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases)),
+    ...positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases)),
     `{ ${keywordParts.join(', ')} }`,
   ].join(', ')})`;
 }
