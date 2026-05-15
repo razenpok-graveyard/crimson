@@ -416,14 +416,14 @@ export function translateExpression(
   if (trimmed.includes(' and ')) {
     return trimmed
       .split(' and ')
-      .map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases))
+      .map((part) => parenthesizeForLogicalAnd(translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)))
       .join(' && ');
   }
 
   if (trimmed.includes(' or ')) {
     return trimmed
       .split(' or ')
-      .map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases))
+      .map((part) => parenthesizeForLogicalOr(translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)))
       .join(' || ');
   }
 
@@ -779,6 +779,14 @@ function stripPrimitiveCallWrappers(value: string): string {
     output = nextOutput;
   }
   return output;
+}
+
+function parenthesizeForLogicalAnd(value: string): string {
+  return value.includes(' || ') ? `(${value})` : value;
+}
+
+function parenthesizeForLogicalOr(value: string): string {
+  return value.includes(' && ') ? `(${value})` : value;
 }
 
 function stripBalancedOuterParens(value: string): string {

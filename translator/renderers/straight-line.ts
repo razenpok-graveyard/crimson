@@ -1,5 +1,6 @@
 import type { StraightLineModule, TypeAlias } from '../model.js';
 import { renderEnumDefinition } from './enums.js';
+import { renderProtocolDefinition } from './protocols.js';
 import {
   renderPlainClasses,
   renderSimpleModuleFunctions,
@@ -43,7 +44,17 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
       }
     }
   }
-  if (module.typeAliases.length > 0 && module.enums.length + module.leadingAssignments.length + module.leadingStatements.length + module.classes.length + module.plainClasses.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
+  if (module.typeAliases.length > 0 && module.protocols.length + module.enums.length + module.leadingAssignments.length + module.leadingStatements.length + module.classes.length + module.plainClasses.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
+    lines.push('');
+  }
+
+  for (let index = 0; index < module.protocols.length; index += 1) {
+    renderProtocolDefinition(lines, module.protocols[index]);
+    if (index < module.protocols.length - 1) {
+      lines.push('');
+    }
+  }
+  if (module.protocols.length > 0 && module.enums.length + module.leadingAssignments.length + module.leadingStatements.length + module.classes.length + module.plainClasses.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
     lines.push('');
   }
 

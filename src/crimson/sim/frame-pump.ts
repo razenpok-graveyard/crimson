@@ -1,16 +1,12 @@
 // Port of crimson/sim/frame_pump.py
 
-import type { FixedStepClock } from './clock.ts';
-import { FrameContext, InputStatus } from './input-providers.ts';
-import type { TickBatchResult } from './tick-runner.ts';
+import type { FixedStepClock } from '@crimson/sim/clock.ts';
+import { FrameContext, InputStatus } from '@crimson/sim/input-providers.ts';
+import type { TickBatchResult } from '@crimson/sim/tick-runner.ts';
 
 export interface TickFrameRunner {
   beginFrame(frameCtx: FrameContext): void;
-  advanceTicks(opts: {
-    startTick: number;
-    ticksRequested: number;
-    tickDt: number;
-  }): TickBatchResult;
+  advanceTicks(opts: { startTick: number; ticksRequested: number; tickDt: number }): TickBatchResult;
 }
 
 export class TickFrameAdvance {
@@ -32,58 +28,29 @@ export class TickFrameAdvance {
   }
 }
 
-export function advanceTickRunnerFrame(opts: {
-  runner: TickFrameRunner;
-  startTick: number;
-  frameIndex: number;
-  ticksRequested: number;
-  dtSeconds: number;
-  tickDtSeconds: number;
-  isNetworked: boolean;
-  isReplay: boolean;
-  refundClock?: FixedStepClock | null;
-}): TickFrameAdvance {
-  const nextFrameIndex = int(opts.frameIndex) + 1;
-  const ticksRequested = Math.max(0, int(opts.ticksRequested));
+export function advanceTickRunnerFrame(opts: { runner: TickFrameRunner; startTick: number; frameIndex: number; ticksRequested: number; dtSeconds: number; tickDtSeconds: number; isNetworked: boolean; isReplay: boolean; refundClock?: FixedStepClock | null }): TickFrameAdvance {
+  const runner = opts.runner;
+  const startTick = opts.startTick;
+  const frameIndex = opts.frameIndex;
+  let ticksRequested = opts.ticksRequested;
+  const dtSeconds = opts.dtSeconds;
+  const tickDtSeconds = opts.tickDtSeconds;
+  const isNetworked = opts.isNetworked;
+  const isReplay = opts.isReplay;
+  const refundClock = opts.refundClock ?? null;
+  const nextFrameIndex = int(frameIndex) + 1;
+  ticksRequested = Math.max(0, int(ticksRequested));
 
-  opts.runner.beginFrame(
-    new FrameContext({
-      dtSeconds: Number(opts.dtSeconds),
-      tickDtSeconds: Number(opts.tickDtSeconds),
-      frameIndex: nextFrameIndex,
-      candidateTicks: ticksRequested,
-      isNetworked: Boolean(opts.isNetworked),
-      isReplay: Boolean(opts.isReplay),
-    }),
-  );
-
-  const batch = opts.runner.advanceTicks({
-    startTick: int(opts.startTick),
-    ticksRequested,
-    tickDt: Number(opts.tickDtSeconds),
-  });
-
+  runner.beginFrame(new FrameContext({ dtSeconds: dtSeconds, tickDtSeconds: tickDtSeconds, frameIndex: int(nextFrameIndex), candidateTicks: int(ticksRequested), isNetworked: isNetworked, isReplay: isReplay }));
+  const batch = runner.advanceTicks({ startTick: int(startTick), ticksRequested: int(ticksRequested), tickDt: tickDtSeconds });
   const nextTickIndex = int(batch.nextTickIndex);
 
-  const refundClock = opts.refundClock ?? null;
-  if (
-    refundClock !== null &&
-    (batch.batchStatus === InputStatus.STALLED ||
-      batch.batchStatus === InputStatus.EOS)
-  ) {
-    const unconsumedTicks = Math.max(
-      0,
-      int(ticksRequested) - int(batch.ticksCompleted),
-    );
+  if (refundClock !== null && (batch.batchStatus === InputStatus.STALLED || batch.batchStatus === InputStatus.EOS)) {
+    const unconsumedTicks = Math.max(0, int(ticksRequested) - int(batch.ticksCompleted));
     if (unconsumedTicks > 0) {
-      refundClock.accum += unconsumedTicks * Number(opts.tickDtSeconds);
+      refundClock.accum += unconsumedTicks * tickDtSeconds;
     }
   }
 
-  return new TickFrameAdvance({
-    batch,
-    frameIndex: nextFrameIndex,
-    nextTickIndex,
-    ticksRequested,
-  });
+  return new TickFrameAdvance({ batch: batch, frameIndex: int(nextFrameIndex), nextTickIndex: int(nextTickIndex), ticksRequested: int(ticksRequested) });
 }

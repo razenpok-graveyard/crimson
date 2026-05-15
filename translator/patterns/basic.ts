@@ -33,7 +33,7 @@ import {
   splitTopLevelComma,
 } from './common.js';
 import { translateExpression, tsRegExpExpression } from './expression.js';
-import { tsSimpleExpression } from './parameters.js';
+import { parseFunctionParameterText, tsSimpleExpression } from './parameters.js';
 
 export function parseProtocolModule(trimmedPython: string): ProtocolDefinition | null {
   const lines = trimmedPython.split(/\r?\n/);
@@ -84,6 +84,124 @@ export function parseProtocolModule(trimmedPython: string): ProtocolDefinition |
   }
 
   return methods.length > 0 ? { name: header[1], methods } : null;
+}
+
+export function parseProtocolClass(
+  lines: string[],
+  index: number,
+): { protocol: ProtocolDefinition; nextIndex: number } | null {
+  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\(Protocol\):$/.exec(lines[index] ?? '');
+  if (header === null) {
+    return null;
+  }
+
+  const methods: ProtocolMethod[] = [];
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length) {
+    const line = lines[nextIndex] ?? '';
+    if (line.trim() === '') {
+      nextIndex += 1;
+      continue;
+    }
+    if (!line.startsWith('    ')) {
+      break;
+    }
+
+    const method = parseProtocolMethod(lines, nextIndex);
+    if (method === null) {
+      return null;
+    }
+    methods.push(method.method);
+    nextIndex = method.nextIndex;
+  }
+
+  return methods.length > 0
+    ? { protocol: { name: header[1], methods }, nextIndex }
+    : null;
+}
+
+function parseProtocolMethod(
+  lines: string[],
+  index: number,
+): { method: ProtocolMethod; nextIndex: number } | null {
+  const oneLine = /^    def ([A-Za-z_][A-Za-z0-9_]*)\((.*)\) -> ([^:]+): \.\.\.$/.exec(lines[index] ?? '');
+  if (oneLine !== null) {
+    const parameters = parseProtocolParameters(oneLine[2]);
+    if (parameters === null) {
+      return null;
+    }
+    return {
+      method: {
+        name: tsExportNameForPythonName(oneLine[1]),
+        ...parameters,
+        returnType: tsTypeExpression(oneLine[3]),
+      },
+      nextIndex: index + 1,
+    };
+  }
+
+  const start = /^    def ([A-Za-z_][A-Za-z0-9_]*)\($/.exec(lines[index] ?? '');
+  if (start === null) {
+    return null;
+  }
+
+  const parameterLines: string[] = [];
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length) {
+    const close = /^    \) -> ([^:]+): \.\.\.$/.exec(lines[nextIndex] ?? '');
+    if (close !== null) {
+      const parameters = parseProtocolParameters(parameterLines.join(', '));
+      if (parameters === null) {
+        return null;
+      }
+      return {
+        method: {
+          name: tsExportNameForPythonName(start[1]),
+          ...parameters,
+          returnType: tsTypeExpression(close[1]),
+        },
+        nextIndex: nextIndex + 1,
+      };
+    }
+
+    const parameterLine = /^        (.+),$/.exec(lines[nextIndex] ?? '');
+    if (parameterLine === null) {
+      return null;
+    }
+    parameterLines.push(parameterLine[1]);
+    nextIndex += 1;
+  }
+
+  return null;
+}
+
+function parseProtocolParameters(parametersText: string): Pick<ProtocolMethod, 'parameters' | 'optsParams' | 'optsOptional'> | null {
+  const parameters: ProtocolMethod['parameters'] = [];
+  const optsParams: ProtocolMethod['optsParams'] = [];
+  let keywordOnly = false;
+  for (const parameterText of splitTopLevelComma(parametersText)) {
+    if (parameterText === 'self') {
+      continue;
+    }
+    if (parameterText === '*') {
+      keywordOnly = true;
+      continue;
+    }
+    const parameter = parseFunctionParameterText(parameterText, new Set());
+    if (parameter === null) {
+      return null;
+    }
+    if (keywordOnly) {
+      optsParams.push(parameter);
+    } else {
+      parameters.push(parameter);
+    }
+  }
+  return {
+    parameters,
+    optsParams,
+    optsOptional: optsParams.length > 0 && optsParams.every((param) => param.defaultValue !== undefined),
+  };
 }
 export function parseTypeAliases(trimmedPython: string): TypeAlias[] | null {
   const aliases: TypeAlias[] = [];

@@ -25,7 +25,7 @@ import {
   isOneLineAllAssignment,
   splitLeadingModuleDocstring,
 } from '../python-utils.js';
-import { parseTypeAliasValidation } from './basic.js';
+import { parseProtocolClass, parseTypeAliasValidation } from './basic.js';
 import {
   identifierPattern,
   isBareTypeAliasExpression,
@@ -58,6 +58,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   const leadingStatements: string[] = [];
   const trailingStatements: string[] = [];
   const typeAliases: TypeAlias[] = [];
+  const protocols: StraightLineModule['protocols'] = [];
   const enums: EnumDefinition[] = [];
   const validatedTypeAliases = new Set<string>();
   const classes: StructModule['classes'] = [];
@@ -141,6 +142,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       enums.push(stringEnumClass.enumDefinition);
       moduleNameMap.set(stringEnumClass.enumDefinition.name, stringEnumClass.enumDefinition.name);
       index = stringEnumClass.nextIndex;
+      continue;
+    }
+
+    const protocolClass = parseProtocolClass(lines, index);
+    if (protocolClass !== null) {
+      protocols.push(protocolClass.protocol);
+      index = protocolClass.nextIndex;
       continue;
     }
 
@@ -261,6 +269,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
 
     if (!(lines[index] ?? '').startsWith('def ')) {
+      const protocolClass = parseProtocolClass(lines, index);
+      if (protocolClass !== null) {
+        protocols.push(protocolClass.protocol);
+        index = protocolClass.nextIndex;
+        continue;
+      }
+
       const structClass = parseStructClass(lines, index);
       if (structClass !== null) {
         classes.push(structClass.structClass);
@@ -428,7 +443,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   }
 
   const reexports = reexportsForAllNames(imports, allNames);
-  markTypeOnlyImports(imports, typeAliases, classes, plainClasses, [...leadingStatements, ...trailingStatements], functions, [...leadingAssignments, ...assignments]);
+  markTypeOnlyImports(imports, typeAliases, protocols, classes, plainClasses, [...leadingStatements, ...trailingStatements], functions, [...leadingAssignments, ...assignments]);
   if (allNames.length > 0) {
     const exportedNames = new Set(allNames.map(tsPublicNameForPythonName));
     for (const alias of typeAliases) {
@@ -446,8 +461,8 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
   }
 
-  return typeAliases.length + enums.length + leadingAssignments.length + leadingStatements.length + classes.length + plainClasses.length + functions.length + trailingStatements.length + assignments.length + reexports.length > 0
-    ? { docstring: moduleDocstring?.value ?? null, imports, namespaceImports, reexports, typeAliases, enums, leadingAssignments, leadingStatements, classes, plainClasses, functions, trailingStatements, assignments }
+  return typeAliases.length + protocols.length + enums.length + leadingAssignments.length + leadingStatements.length + classes.length + plainClasses.length + functions.length + trailingStatements.length + assignments.length + reexports.length > 0
+    ? { docstring: moduleDocstring?.value ?? null, imports, namespaceImports, reexports, typeAliases, protocols, enums, leadingAssignments, leadingStatements, classes, plainClasses, functions, trailingStatements, assignments }
     : null;
 }
 
@@ -757,6 +772,7 @@ function avoidImportedPrivateNameCollision(assignment: SimpleModuleAssignment, i
 function markTypeOnlyImports(
   imports: ImportDefinition[],
   typeAliases: TypeAlias[],
+  protocols: StraightLineModule['protocols'],
   classes: StructModule['classes'],
   plainClasses: PlainClassDefinition[],
   leadingStatements: string[],
@@ -773,6 +789,10 @@ function markTypeOnlyImports(
     ]),
     ...classes.flatMap((structClass) => structClass.fields.map((field) => field.defaultValue ?? '')),
     ...classes.flatMap((structClass) => structClass.methods.flatMap((method) => method.statements)),
+    ...protocols.flatMap((protocol) => protocol.methods.flatMap((method) => [
+      ...method.parameters.map((parameter) => parameter.defaultValue ?? ''),
+      ...method.optsParams.map((parameter) => parameter.defaultValue ?? ''),
+    ])),
     ...plainClasses.flatMap((plainClass) => plainClass.constructorDefinition.statements),
     ...plainClasses.flatMap((plainClass) => plainClass.methods.flatMap((method) => method.statements)),
     ...leadingStatements,
@@ -785,6 +805,11 @@ function markTypeOnlyImports(
   ].join('\n'));
   const typeText = [
     ...typeAliases.map((alias) => alias.typeExpression),
+    ...protocols.flatMap((protocol) => protocol.methods.flatMap((method) => [
+      method.returnType,
+      ...method.parameters.map((parameter) => parameter.typeExpression),
+      ...method.optsParams.map((parameter) => parameter.typeExpression),
+    ])),
     ...classes.flatMap((structClass) => structClass.fields.map((field) => field.typeExpression)),
     ...classes.flatMap((structClass) => structClass.methods.flatMap((method) => [
       method.returnType,

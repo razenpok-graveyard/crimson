@@ -233,6 +233,7 @@ export interface StraightLineModule {
   namespaceImports: NamespaceImportDefinition[];
   reexports: Reexport[];
   typeAliases: TypeAlias[];
+  protocols: ProtocolDefinition[];
   enums: EnumDefinition[];
   leadingAssignments: SimpleModuleAssignment[];
   leadingStatements: string[];
