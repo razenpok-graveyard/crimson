@@ -1856,7 +1856,12 @@ function tsRegExpExpression(pythonLiteral: string): string {
   return `new RegExp(${JSON.stringify(content)})`;
 }
 
-function tsFStringTemplateContent(content: string): string {
+function tsFStringTemplateContent(
+  content: string,
+  nameMap: Map<string, string> = new Map(),
+  arrayNames: Set<string> = new Set(),
+  validatedTypeAliases: ReadonlySet<string> = new Set(),
+): string {
   let translated = '';
   for (let index = 0; index < content.length; index += 1) {
     const char = content[index];
@@ -1875,7 +1880,16 @@ function tsFStringTemplateContent(content: string): string {
       const closeIndex = content.indexOf('}', index + 1);
       if (closeIndex !== -1) {
         const expression = content.slice(index + 1, closeIndex).trim();
-        translated += `\${${tsExportNameForPythonName(expression)}}`;
+        const formatSeparator = expression.indexOf(':');
+        const expressionText = formatSeparator === -1 ? expression : expression.slice(0, formatSeparator).trim();
+        const format = formatSeparator === -1 ? null : expression.slice(formatSeparator + 1).trim();
+        const translatedExpression = translateExpression(expressionText, nameMap, arrayNames, validatedTypeAliases);
+        const zeroPaddedInteger = format === null ? null : /^0(\d+)d$/.exec(format);
+        if (zeroPaddedInteger !== null) {
+          translated += `\${String(${translatedExpression}).padStart(${zeroPaddedInteger[1]}, '0')}`;
+        } else {
+          translated += `\${${translatedExpression}}`;
+        }
         index = closeIndex;
         continue;
       }
@@ -1972,6 +1986,64 @@ function operatorIsAssignment(operator: string): boolean {
   return operator === '=';
 }
 
+function inferPythonExpressionType(pythonExpression: string): string {
+  const trimmed = pythonExpression.trim();
+  if (/^(?:"[^"]*"|'[^']*')$/.test(trimmed)) {
+    return 'string';
+  }
+  if (/^(?:True|False)$/.test(trimmed)) {
+    return 'boolean';
+  }
+  if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) {
+    return 'number';
+  }
+  return 'any';
+}
+
+function predeclareIfBranchAssignments(
+  lines: string[],
+  index: number,
+  indent: string,
+  declaredNames: Set<string>,
+  reassignedNames: Set<string>,
+): string[] {
+  const innerIndent = `${indent}    `;
+  const assignedTypes = new Map<string, Set<string>>();
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length) {
+    const line = lines[nextIndex] ?? '';
+    const trimmed = line.trim();
+    if (trimmed === '') {
+      nextIndex += 1;
+      continue;
+    }
+    if (line.startsWith(innerIndent)) {
+      const rest = line.slice(innerIndent.length);
+      const assignment = rest.startsWith(' ') ? null : /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(rest);
+      if (assignment !== null && reassignedNames.has(assignment[1]) && !declaredNames.has(assignment[1])) {
+        const types = assignedTypes.get(assignment[1]) ?? new Set<string>();
+        types.add(inferPythonExpressionType(assignment[2]));
+        assignedTypes.set(assignment[1], types);
+      }
+      nextIndex += 1;
+      continue;
+    }
+    if (line.startsWith(indent) && (/^elif .+:$/.test(trimmed) || trimmed === 'else:')) {
+      nextIndex += 1;
+      continue;
+    }
+    break;
+  }
+
+  const declarations: string[] = [];
+  for (const [name, types] of assignedTypes) {
+    const type = types.size === 1 ? [...types][0] : 'any';
+    declarations.push(`let ${tsExportNameForPythonName(name)}: ${type};`);
+    declaredNames.add(name);
+  }
+  return declarations;
+}
+
 function translateStraightLineStatement(
   lines: string[],
   index: number,
@@ -2015,53 +2087,19 @@ function translateStraightLineStatement(
   const ifStatement = /^if (.+):$/.exec(statement);
   if (ifStatement !== null) {
     const innerIndent = `${indent}    `;
-    const innerStatements: string[] = [];
-    let nextIndex = index + 1;
-    while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, innerIndent)) {
-      if (lines[nextIndex].trim() === '') {
-        innerStatements.push('');
-        nextIndex += 1;
-        continue;
-      }
-      const innerStatement = translateStraightLineStatement(
-        lines,
-        nextIndex,
-        innerIndent,
-        nameMap,
-        declaredNames,
-        reassignedNames,
-        arrayNames,
-        validatedTypeAliases,
-        relativePath,
-      );
-      if (innerStatement === null) {
-        return null;
-      }
-      innerStatements.push(...innerStatement.statements.map(indentStatementLine));
-      nextIndex = innerStatement.nextIndex;
-    }
-    if (innerStatements.length === 0) {
-      return null;
-    }
-    const statements = [
-      `if (${translateExpression(ifStatement[1], nameMap, arrayNames, validatedTypeAliases)}) {`,
-      ...innerStatements,
-      '}',
-    ];
-    if ((lines[nextIndex] ?? '').trim() === 'else:') {
-      const elseIndent = `${indent}    `;
-      const elseStatements: string[] = [];
-      nextIndex += 1;
-      while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, elseIndent)) {
+    const translateBranch = (startIndex: number): { statements: string[]; nextIndex: number } | null => {
+      const branchStatements: string[] = [];
+      let nextIndex = startIndex;
+      while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, innerIndent)) {
         if (lines[nextIndex].trim() === '') {
-          elseStatements.push('');
+          branchStatements.push('');
           nextIndex += 1;
           continue;
         }
-        const elseStatement = translateStraightLineStatement(
+        const innerStatement = translateStraightLineStatement(
           lines,
           nextIndex,
-          elseIndent,
+          innerIndent,
           nameMap,
           declaredNames,
           reassignedNames,
@@ -2069,17 +2107,48 @@ function translateStraightLineStatement(
           validatedTypeAliases,
           relativePath,
         );
-        if (elseStatement === null) {
+        if (innerStatement === null) {
           return null;
         }
-        elseStatements.push(...elseStatement.statements.map(indentStatementLine));
-        nextIndex = elseStatement.nextIndex;
+        branchStatements.push(...innerStatement.statements.map(indentStatementLine));
+        nextIndex = innerStatement.nextIndex;
       }
-      if (elseStatements.length === 0) {
+      return branchStatements.length === 0 ? null : { statements: branchStatements, nextIndex };
+    };
+
+    const branchDeclarations = predeclareIfBranchAssignments(lines, index, indent, declaredNames, reassignedNames);
+    const initialBranch = translateBranch(index + 1);
+    if (initialBranch === null) {
+      return null;
+    }
+    let nextIndex = initialBranch.nextIndex;
+    const statements = [
+      ...branchDeclarations,
+      `if (${translateExpression(ifStatement[1], nameMap, arrayNames, validatedTypeAliases)}) {`,
+      ...initialBranch.statements,
+      '}',
+    ];
+    while (nextIndex < lines.length) {
+      const elifStatement = /^elif (.+):$/.exec((lines[nextIndex] ?? '').trim());
+      if (elifStatement === null) {
+        break;
+      }
+      const elifBranch = translateBranch(nextIndex + 1);
+      if (elifBranch === null) {
+        return null;
+      }
+      statements[statements.length - 1] = `} else if (${translateExpression(elifStatement[1], nameMap, arrayNames, validatedTypeAliases)}) {`;
+      statements.push(...elifBranch.statements, '}');
+      nextIndex = elifBranch.nextIndex;
+    }
+    if ((lines[nextIndex] ?? '').trim() === 'else:') {
+      const elseBranch = translateBranch(nextIndex + 1);
+      if (elseBranch === null) {
         return null;
       }
       statements[statements.length - 1] = '} else {';
-      statements.push(...elseStatements, '}');
+      statements.push(...elseBranch.statements, '}');
+      nextIndex = elseBranch.nextIndex;
     }
     return {
       statements,
@@ -2670,6 +2739,10 @@ function translateExpression(
   if (trimmed === '()') {
     return '[]';
   }
+  const fStringLiteral = /^f(["'])([\s\S]*)\1$/.exec(trimmed);
+  if (fStringLiteral !== null) {
+    return `\`${tsFStringTemplateContent(fStringLiteral[2], nameMap, arrayNames, validatedTypeAliases)}\``;
+  }
 
   const strCall = parseCallPrefix(trimmed, 'str');
   if (strCall !== null && strCall.rest === '.strip().lower()') {
@@ -2767,6 +2840,19 @@ function translateExpression(
     return splitTopLevelComma(notInTuple[2])
       .map((item) => `${value} !== ${translateExpression(item, nameMap, arrayNames, validatedTypeAliases)}`)
       .join(' && ');
+  }
+
+  const inTuple = /^(.+?) in \((.*)\)$/.exec(trimmed);
+  if (inTuple !== null) {
+    const value = translateExpression(inTuple[1], nameMap, arrayNames, validatedTypeAliases);
+    return splitTopLevelComma(inTuple[2])
+      .map((item) => `${value} === ${translateExpression(item, nameMap, arrayNames, validatedTypeAliases)}`)
+      .join(' || ');
+  }
+
+  const floorDivision = /^(.+) \/\/ (.+)$/.exec(trimmed);
+  if (floorDivision !== null) {
+    return `Math.floor(${translateExpression(floorDivision[1], nameMap, arrayNames, validatedTypeAliases)} / ${translateExpression(floorDivision[2], nameMap, arrayNames, validatedTypeAliases)})`;
   }
 
   const binaryComparison = /^(.+?) (<=|>=|<|>|==|!=) (.+)$/.exec(trimmed);
