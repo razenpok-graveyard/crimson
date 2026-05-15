@@ -41,6 +41,10 @@ export function assertRelativePath(relativePath: string): void {
   }
 }
 
+function tsPathPartForPythonName(pythonName: string): string {
+  return pythonName.replace(/^_+/, '').replaceAll('_', '-');
+}
+
 export function tsPathForPython(relativePath: string): string {
   const parts = relativePath.split('/');
   const file = parts.pop();
@@ -48,18 +52,18 @@ export function tsPathForPython(relativePath: string): string {
     throw new Error(`invalid Python path: ${relativePath}`);
   }
 
-  const tsParts = parts.map((part) => part.replaceAll('_', '-'));
+  const tsParts = parts.map(tsPathPartForPythonName);
   if (file === '__init__.py') {
     tsParts.push('index.ts');
   } else {
-    tsParts.push(file.slice(0, -'.py'.length).replaceAll('_', '-') + '.ts');
+    tsParts.push(tsPathPartForPythonName(file.slice(0, -'.py'.length)) + '.ts');
   }
   return tsParts.join('/');
 }
 
 export function tsImportPathForPythonModule(moduleName: string): string {
   const parts = moduleName.split('.').filter((part) => part !== '');
-  const tsParts = parts.map((part) => part.replaceAll('_', '-'));
+  const tsParts = parts.map(tsPathPartForPythonName);
   if (moduleName.startsWith('.')) {
     return `./${tsParts.join('/')}.ts`;
   }

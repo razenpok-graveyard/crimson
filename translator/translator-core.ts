@@ -18,7 +18,7 @@ import {
   parseTypeAliases,
 } from './patterns.js';
 import { pythonProjectRoot, repoRoot } from './paths.js';
-import { isIntentionallyExcludedPath, parseModuleDocstring, stripFutureImports, stripIgnorablePythonLines } from './python-utils.js';
+import { parseModuleDocstring, stripFutureImports, stripIgnorablePythonLines } from './python-utils.js';
 import {
   renderConstantsModule,
   renderEmptyModule,
@@ -39,10 +39,6 @@ import {
 } from './renderers.js';
 
 export async function translateFile(job: TranslationJob): Promise<string> {
-  if (isIntentionallyExcludedPath(job.relativePath)) {
-    return renderEmptyModule(job.relativePath);
-  }
-
   const futureStripped = stripFutureImports(job.python).trim();
   const initReexports = parseInitReexports(futureStripped);
   if (initReexports !== null) {

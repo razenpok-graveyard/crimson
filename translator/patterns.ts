@@ -1365,6 +1365,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   const namespaceImports: NamespaceImportDefinition[] = [];
   const leadingAssignments: SimpleModuleAssignment[] = [];
   const leadingStatements: string[] = [];
+  const trailingStatements: string[] = [];
   const typeAliases: TypeAlias[] = [];
   const validatedTypeAliases = new Set<string>();
   const classes: StructModule['classes'] = [];
@@ -1473,6 +1474,8 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         new Set(),
         new Set(),
         new Set(),
+        validatedTypeAliases,
+        relativePath,
       );
       if (topLevelStatement === null) {
         return null;
@@ -1496,6 +1499,9 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       index += 1;
     }
     if (/^[A-Za-z_][A-Za-z0-9_]* = /.test(lines[index] ?? '')) {
+      break;
+    }
+    if (!(lines[index] ?? '').startsWith('def ')) {
       break;
     }
 
@@ -1574,6 +1580,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         reassignedNames,
         arrayNames,
         validatedTypeAliases,
+        relativePath,
       );
       if (statement === null) {
         return null;
@@ -1590,6 +1597,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       returnType: tsTypeExpression(header.returnType),
       statements,
     });
+    moduleNameMap.set(header.name, tsExportNameForPythonName(header.name));
   }
 
   while (index < lines.length) {
@@ -1611,7 +1619,23 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
 
     const assignment = parseTopLevelAssignment(lines, index);
     if (assignment === null) {
-      return null;
+      const trailingStatement = translateStraightLineStatement(
+        lines,
+        index,
+        '',
+        moduleNameMap,
+        new Set(),
+        new Set(),
+        new Set(),
+        validatedTypeAliases,
+        relativePath,
+      );
+      if (trailingStatement === null) {
+        return null;
+      }
+      trailingStatements.push(...trailingStatement.statements);
+      index = trailingStatement.nextIndex;
+      continue;
     }
     attachPendingAssignmentComments(assignment.assignment, pendingAssignmentComments);
     avoidImportedPrivateNameCollision(assignment.assignment, imports);
@@ -1620,7 +1644,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   }
 
   const reexports = reexportsForAllNames(imports, allNames);
-  markTypeOnlyImports(imports, typeAliases, classes, leadingStatements, functions, [...leadingAssignments, ...assignments]);
+  markTypeOnlyImports(imports, typeAliases, classes, [...leadingStatements, ...trailingStatements], functions, [...leadingAssignments, ...assignments]);
   if (allNames.length > 0) {
     const exportedNames = new Set(allNames.map(tsPublicNameForPythonName));
     for (const alias of typeAliases) {
@@ -1638,8 +1662,8 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
   }
 
-  return typeAliases.length + leadingAssignments.length + leadingStatements.length + classes.length + functions.length + assignments.length + reexports.length > 0
-    ? { imports, namespaceImports, reexports, typeAliases, leadingAssignments, leadingStatements, classes, functions, assignments }
+  return typeAliases.length + leadingAssignments.length + leadingStatements.length + classes.length + functions.length + trailingStatements.length + assignments.length + reexports.length > 0
+    ? { imports, namespaceImports, reexports, typeAliases, leadingAssignments, leadingStatements, classes, functions, trailingStatements, assignments }
     : null;
 }
 
@@ -1957,6 +1981,7 @@ function translateStraightLineStatement(
   reassignedNames: Set<string>,
   arrayNames: Set<string>,
   validatedTypeAliases: ReadonlySet<string> = new Set(),
+  relativePath: string | null = null,
 ): { statements: string[]; nextIndex: number } | null {
   const line = lines[index];
   if (line === undefined || !line.startsWith(indent)) {
@@ -1979,6 +2004,14 @@ function translateStraightLineStatement(
     return { statements: [], nextIndex: index + 1 };
   }
 
+  const sideEffectImport = /^from (\.+) import ([A-Za-z_][A-Za-z0-9_]*) as (_[A-Za-z_][A-Za-z0-9_]*)(?:\s+#.*)?$/.exec(statement);
+  if (sideEffectImport !== null && relativePath !== null) {
+    return {
+      statements: [`void import('${tsImportPathForPythonImport(`${sideEffectImport[1]}${sideEffectImport[2]}`, relativePath)}');`],
+      nextIndex: index + 1,
+    };
+  }
+
   const ifStatement = /^if (.+):$/.exec(statement);
   if (ifStatement !== null) {
     const innerIndent = `${indent}    `;
@@ -1999,6 +2032,7 @@ function translateStraightLineStatement(
         reassignedNames,
         arrayNames,
         validatedTypeAliases,
+        relativePath,
       );
       if (innerStatement === null) {
         return null;
@@ -2033,6 +2067,7 @@ function translateStraightLineStatement(
           reassignedNames,
           arrayNames,
           validatedTypeAliases,
+          relativePath,
         );
         if (elseStatement === null) {
           return null;
@@ -2073,6 +2108,7 @@ function translateStraightLineStatement(
         reassignedNames,
         arrayNames,
         validatedTypeAliases,
+        relativePath,
       );
       if (innerStatement === null) {
         return null;

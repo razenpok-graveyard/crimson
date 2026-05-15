@@ -35,10 +35,6 @@ export function stripAllAssignments(lines: string[]): string[] {
   return stripped;
 }
 
-export function isIntentionallyExcludedPath(relativePath: string): boolean {
-  return relativePath.startsWith('crimson/debug_views/');
-}
-
 export function parseModuleDocstring(trimmedPython: string): { raw: string; value: string } | null {
   for (const quote of ['"""', "'''"]) {
     if (!trimmedPython.startsWith(quote) || !trimmedPython.endsWith(quote)) {

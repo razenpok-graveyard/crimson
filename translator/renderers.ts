@@ -346,7 +346,7 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
       }
     }
   }
-  if (module.typeAliases.length > 0 && module.leadingAssignments.length + module.functions.length + module.assignments.length > 0) {
+  if (module.typeAliases.length > 0 && module.leadingAssignments.length + module.leadingStatements.length + module.classes.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
     lines.push('');
   }
 
@@ -358,12 +358,12 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
   for (const statement of module.leadingStatements) {
     lines.push(statement);
   }
-  if (module.leadingStatements.length > 0 && module.classes.length + module.functions.length + module.assignments.length > 0) {
+  if (module.leadingStatements.length > 0 && module.classes.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
     lines.push('');
   }
 
   renderStructClasses(lines, module.classes);
-  if (module.classes.length > 0 && module.functions.length + module.assignments.length > 0) {
+  if (module.classes.length > 0 && module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
     lines.push('');
   }
 
@@ -398,9 +398,16 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
       lines.push(statement === '' ? '' : `  ${statement}`);
     }
     lines.push('}');
-    if (index < module.functions.length - 1 || module.assignments.length > 0) {
+    if (index < module.functions.length - 1 || module.trailingStatements.length + module.assignments.length > 0) {
       lines.push('');
     }
+  }
+
+  for (const statement of module.trailingStatements) {
+    lines.push(statement);
+  }
+  if (module.trailingStatements.length > 0 && module.assignments.length > 0) {
+    lines.push('');
   }
 
   renderStraightLineAssignments(lines, module.assignments);

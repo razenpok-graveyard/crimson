@@ -212,5 +212,6 @@ export interface StraightLineModule {
   leadingStatements: string[];
   classes: StructClassDefinition[];
   functions: SimpleModuleFunction[];
+  trailingStatements: string[];
   assignments: SimpleModuleAssignment[];
 }
