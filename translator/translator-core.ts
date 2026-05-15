@@ -16,6 +16,7 @@ import {
   parseSimpleExportModule,
   parseStraightLineModule,
   parseTypeAliases,
+  parseTyperCliModule,
 } from './patterns.js';
 import { pythonProjectRoot, repoRoot } from './paths.js';
 import { parseModuleDocstring, stripFutureImports, stripIgnorablePythonLines } from './python-utils.js';
@@ -36,6 +37,7 @@ import {
   renderSimpleExportModule,
   renderStraightLineModule,
   renderTypeAliases,
+  renderTyperCliModule,
 } from './renderers.js';
 
 export async function translateFile(job: TranslationJob): Promise<string> {
@@ -104,6 +106,11 @@ export async function translateFile(job: TranslationJob): Promise<string> {
   const straightLineModule = parseStraightLineModule(futureStripped, job.relativePath);
   if (straightLineModule !== null) {
     return renderStraightLineModule(job.relativePath, straightLineModule);
+  }
+
+  const typerCliModule = parseTyperCliModule(futureStripped);
+  if (typerCliModule !== null) {
+    return renderTyperCliModule(job.relativePath, typerCliModule);
   }
 
   const functionsModule = parseFunctionsModule(futureStripped);

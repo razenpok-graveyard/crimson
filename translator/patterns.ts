@@ -24,6 +24,7 @@ import type {
   SimpleModuleFunction,
   StraightLineModule,
   StructModule,
+  TyperCliModule,
   TypeAlias,
   TypeAliasValidation,
 } from './model.js';
@@ -2249,6 +2250,133 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   return typeAliases.length + enums.length + leadingAssignments.length + leadingStatements.length + classes.length + plainClasses.length + functions.length + trailingStatements.length + assignments.length + reexports.length > 0
     ? { docstring: moduleDocstring?.value ?? null, imports, namespaceImports, reexports, typeAliases, enums, leadingAssignments, leadingStatements, classes, plainClasses, functions, trailingStatements, assignments }
     : null;
+}
+
+export function parseTyperCliModule(trimmedPython: string): TyperCliModule | null {
+  const lines = flattenFromImportBlocks(trimmedPython.split(/\r?\n/));
+  let sawTyperImport = false;
+  let appName: string | null = null;
+  const commands: TyperCliModule['commands'] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const trimmed = lines[index].trim();
+    if (trimmed === '') {
+      index += 1;
+      continue;
+    }
+    if (trimmed === 'import typer') {
+      sawTyperImport = true;
+      index += 1;
+      continue;
+    }
+    if (trimmed === 'from pathlib import Path') {
+      index += 1;
+      continue;
+    }
+    const fromImport = /^from \.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)* import .+$/.exec(trimmed);
+    if (fromImport !== null) {
+      index += 1;
+      continue;
+    }
+    const appAssignment = /^([A-Za-z_][A-Za-z0-9_]*) = typer\.Typer\(.+\)$/.exec(trimmed);
+    if (appAssignment === null) {
+      return null;
+    }
+    appName = tsPublicNameForPythonName(appAssignment[1]);
+    index += 1;
+    break;
+  }
+
+  if (!sawTyperImport || appName === null) {
+    return null;
+  }
+
+  while (index < lines.length) {
+    const trimmed = lines[index].trim();
+    if (trimmed === '') {
+      index += 1;
+      continue;
+    }
+
+    const commandDecorator = new RegExp(`^@${appName.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)}\\.command\\("([^"]+)"\\)$`).exec(trimmed)
+      ?? new RegExp(`^@${appName}\\.command\\("([^"]+)"\\)$`).exec(trimmed);
+    if (commandDecorator === null) {
+      return null;
+    }
+
+    const header = parseTyperCliFunctionHeader(lines, index + 1);
+    if (header === null) {
+      return null;
+    }
+
+    const optsParams = parseTyperCliParameters(header.parametersText);
+    if (optsParams === null) {
+      return null;
+    }
+    commands.push({
+      name: tsExportNameForPythonName(header.name),
+      commandName: commandDecorator[1],
+      optsParams,
+    });
+
+    index = header.nextIndex;
+    while (index < lines.length && isIndentedBlockLine(lines, index, '    ')) {
+      index += 1;
+    }
+  }
+
+  return commands.length > 0 ? { appName, commands } : null;
+}
+
+function parseTyperCliFunctionHeader(
+  lines: string[],
+  index: number,
+): { name: string; parametersText: string; nextIndex: number } | null {
+  const start = /^def ([A-Za-z_][A-Za-z0-9_]*)\($/.exec(lines[index] ?? '');
+  if (start === null) {
+    return null;
+  }
+
+  const parameterLines: string[] = [];
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length) {
+    if (/^\) -> [^:]+:$/.test(lines[nextIndex] ?? '')) {
+      return {
+        name: start[1],
+        parametersText: parameterLines.join(' '),
+        nextIndex: nextIndex + 1,
+      };
+    }
+    const line = lines[nextIndex];
+    if (line === undefined || (!line.startsWith('    ') && line.trim() !== '')) {
+      return null;
+    }
+    if (line.trim() !== '') {
+      parameterLines.push(line.trim());
+    }
+    nextIndex += 1;
+  }
+  return null;
+}
+
+function parseTyperCliParameters(parametersText: string): TyperCliModule['commands'][number]['optsParams'] | null {
+  if (parametersText === '') {
+    return [];
+  }
+  const params: TyperCliModule['commands'][number]['optsParams'] = [];
+  for (const parameterText of splitTopLevelComma(parametersText)) {
+    const parameter = /^([A-Za-z_][A-Za-z0-9_]*): ([^=]+?)(?: = (.+))?$/.exec(parameterText);
+    if (parameter === null) {
+      return null;
+    }
+    params.push({
+      name: tsExportNameForPythonName(parameter[1]),
+      typeExpression: tsTypeExpression(parameter[2]),
+      optional: parameter[3] !== undefined,
+    });
+  }
+  return params;
 }
 
 function parseStraightLineFunctionHeader(

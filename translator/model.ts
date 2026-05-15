@@ -241,3 +241,20 @@ export interface StraightLineModule {
   trailingStatements: string[];
   assignments: SimpleModuleAssignment[];
 }
+
+export interface TyperCliModule {
+  appName: string;
+  commands: TyperCliCommand[];
+}
+
+export interface TyperCliCommand {
+  name: string;
+  commandName: string;
+  optsParams: TyperCliParameter[];
+}
+
+export interface TyperCliParameter {
+  name: string;
+  typeExpression: string;
+  optional: boolean;
+}
