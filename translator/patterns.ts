@@ -2010,6 +2010,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       || trimmed === 'import msgspec'
       || trimmed === 'import tempfile'
       || trimmed === 'import typer'
+      || trimmed === 'import warnings'
     ) {
       index += 1;
       continue;
@@ -2053,6 +2054,14 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     if (plainClass !== null) {
       plainClasses.push(plainClass.plainClass);
       index = plainClass.nextIndex;
+      continue;
+    }
+
+    const exceptionClass = parseSimpleExceptionClass(lines, index);
+    if (exceptionClass !== null) {
+      leadingStatements.push(...exceptionClass.statements);
+      moduleNameMap.set(exceptionClass.name, exceptionClass.name);
+      index = exceptionClass.nextIndex;
       continue;
     }
 
@@ -2497,6 +2506,44 @@ function parseAllAssignment(
   }
 
   return null;
+}
+
+function parseSimpleExceptionClass(
+  lines: string[],
+  index: number,
+): { name: string; statements: string[]; nextIndex: number } | null {
+  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\((ValueError|UserWarning|Exception|RuntimeError)\):$/.exec(lines[index] ?? '');
+  if (header === null) {
+    return null;
+  }
+
+  const statements: string[] = [];
+  let nextIndex = index + 1;
+  const docstring = parseIndentedDocstring(lines, nextIndex);
+  if (docstring !== null) {
+    for (const line of docstring.value.split('\n')) {
+      statements.push(line === '' ? '//' : `// ${line}`);
+    }
+    nextIndex = docstring.nextIndex;
+  }
+  while (nextIndex < lines.length && lines[nextIndex].trim() === '') {
+    nextIndex += 1;
+  }
+  if ((lines[nextIndex] ?? '').trim() === 'pass') {
+    nextIndex += 1;
+  }
+  if ((lines[nextIndex] ?? '').startsWith('    ')) {
+    return null;
+  }
+
+  statements.push(`export class ${header[1]} extends Error {`);
+  statements.push('  constructor(message?: string) {');
+  statements.push('    super(message);');
+  statements.push(`    this.name = '${header[1]}';`);
+  statements.push('  }');
+  statements.push('}');
+  statements.push('');
+  return { name: header[1], statements, nextIndex };
 }
 
 function parseTypeAliasStatement(
@@ -3330,18 +3377,14 @@ function translateStraightLineStatement(
   const raiseStatement = /^raise ([A-Za-z_][A-Za-z0-9_]*)\((.*)\)$/.exec(statement);
   if (raiseStatement !== null) {
     return {
-      statements: [`throw new Error(${translateExpression(raiseStatement[2], nameMap, arrayNames, validatedTypeAliases, mapNames)});`],
+      statements: [`throw ${translateRaiseExpression(raiseStatement[1], raiseStatement[2], nameMap, arrayNames, validatedTypeAliases, mapNames)};`],
       nextIndex: index + 1,
     };
   }
   const qualifiedRaiseStatement = /^raise ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\((.*)\)$/.exec(statement);
   if (qualifiedRaiseStatement !== null) {
-    const args = splitTopLevelComma(qualifiedRaiseStatement[2]);
-    const message = args[0] === undefined || args[0] === ''
-      ? `'${qualifiedRaiseStatement[1]}'`
-      : translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
     return {
-      statements: [`throw new Error(${message});`],
+      statements: [`throw ${translateRaiseExpression(qualifiedRaiseStatement[1], qualifiedRaiseStatement[2], nameMap, arrayNames, validatedTypeAliases, mapNames)};`],
       nextIndex: index + 1,
     };
   }
@@ -3362,7 +3405,7 @@ function translateStraightLineStatement(
       ? `'${multilineRaiseCall[1]}'`
       : translateCallArgumentExpression(callParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases);
     return {
-      statements: [`throw new Error(${message});`],
+      statements: [`throw ${translateRaiseExpression(multilineRaiseCall[1], message, nameMap, arrayNames, validatedTypeAliases, mapNames, true)};`],
       nextIndex: callParts.nextIndex,
     };
   }
@@ -3483,6 +3526,24 @@ function translateStraightLineStatement(
 
   const multilineKeywordCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(statement);
   if (multilineKeywordCall !== null) {
+    if (multilineKeywordCall[1] === 'warnings.warn') {
+      const callParts = parseMultilineCallParts(
+        lines,
+        index + 1,
+        nameMap,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+      );
+      if (callParts === null || callParts.positionalParts.length === 0) {
+        return null;
+      }
+      return {
+        statements: [`console.warn(${translateCallArgumentExpression(callParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases)});`],
+        nextIndex: callParts.nextIndex,
+      };
+    }
+
     const positionalParts: string[] = [];
     const keywordParts: string[] = [];
     let sawKeyword = false;
@@ -3664,6 +3725,26 @@ function parseMultilineCallParts(
     }
 
     const arg = trimmed.replace(/,$/, '');
+    const stringLiteral = parsePythonStringExpression(arg);
+    if (stringLiteral !== null && !trimmed.endsWith(',')) {
+      const adjacentStrings = [arg];
+      nextIndex += 1;
+      while (nextIndex < lines.length) {
+        const adjacentTrimmed = lines[nextIndex].trim();
+        const adjacentArg = adjacentTrimmed.replace(/,$/, '');
+        if (parsePythonStringExpression(adjacentArg) === null) {
+          break;
+        }
+        adjacentStrings.push(adjacentArg);
+        nextIndex += 1;
+        if (adjacentTrimmed.endsWith(',')) {
+          break;
+        }
+      }
+      positionalParts.push(combinePythonStringExpressions(adjacentStrings));
+      continue;
+    }
+
     const keywordArg = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(arg);
     if (keywordArg === null) {
       if (sawKeyword) {
@@ -3759,10 +3840,12 @@ function translateStraightLineAssignment(
   const tupleAssignment = /^([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+)$/.exec(pythonLeft);
   if (operator === '=' && tupleAssignment !== null) {
     const names = tupleAssignment[1].split(', ');
-    const tsNames = names.map(tsExportNameForPythonName);
-    const alreadyDeclared = names.every((name) => declaredNames.has(name));
+    const tsNames = names.map((name) => name === '_' ? '' : tsExportNameForPythonName(name));
+    const alreadyDeclared = names.filter((name) => name !== '_').every((name) => declaredNames.has(name));
     for (const name of names) {
-      declaredNames.add(name);
+      if (name !== '_') {
+        declaredNames.add(name);
+      }
     }
     return {
       statements: [`${alreadyDeclared ? '' : 'const '}[${tsNames.join(', ')}] = ${assignedRight};`],
@@ -3779,6 +3862,32 @@ function translateStraightLineAssignment(
     statements: [`${translateExpression(pythonLeft, nameMap, arrayNames, validatedTypeAliases, mapNames)} ${operator} ${assignedRight};`],
     nextIndex,
   };
+}
+
+function translateRaiseExpression(
+  pythonCallee: string,
+  argsText: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+  argsAlreadyTranslated = false,
+): string {
+  const args = argsAlreadyTranslated ? [argsText] : splitTopLevelComma(argsText);
+  const message = args[0] === undefined || args[0] === ''
+    ? `'${pythonCallee}'`
+    : argsAlreadyTranslated ? args[0] : translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const translatedCallee = translateExpression(pythonCallee, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (translatedCallee === 'TypeError') {
+    return `new TypeError(${message})`;
+  }
+  if (
+    translatedCallee.includes('.')
+    || ['Exception', 'RuntimeError', 'UserWarning', 'ValueError'].includes(translatedCallee)
+  ) {
+    return `new Error(${message})`;
+  }
+  return `new ${translatedCallee}(${message})`;
 }
 
 function maybeAwaitAsyncCall(tsExpression: string): string {
@@ -4128,6 +4237,14 @@ function translateExpression(
   }
 
   const strCall = parseCallPrefix(trimmed, 'str');
+  if (strCall !== null) {
+    const partitionCall = /^\.partition\((.+)\)$/.exec(strCall.rest);
+    if (partitionCall !== null) {
+      const text = translateExpression(strCall.argsText, nameMap, arrayNames, validatedTypeAliases);
+      const sep = translateExpression(partitionCall[1], nameMap, arrayNames, validatedTypeAliases);
+      return `(() => { const text = String(${text}); const sep = ${sep}; const index = text.indexOf(sep); return index === -1 ? [text, '', ''] : [text.slice(0, index), sep, text.slice(index + sep.length)]; })()`;
+    }
+  }
   if (strCall !== null && strCall.rest === '.strip().lower()') {
     return `${tsPropertyAccessBase(translateExpression(strCall.argsText, nameMap, arrayNames, validatedTypeAliases))}.trim().toLowerCase()`;
   }
@@ -4380,6 +4497,8 @@ function translateExpression(
     .replaceAll(/\b(?:float|str|bool)\(([^()]*)\)/g, '$1')
     .replaceAll(/\blen\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, '$1.length')
     .replaceAll(/\.append\(/g, '.push(')
+    .replaceAll(/\.strip\(\)/g, '.trim()')
+    .replaceAll(/\.lower\(\)/g, '.toLowerCase()')
     .replaceAll(/\bmath\.pi\b/g, 'Math.PI')
     .replaceAll(/ is not None\b/g, ' !== null')
     .replaceAll(/ is None\b/g, ' === null')
@@ -4607,6 +4726,29 @@ function tsStringLiteral(pythonLiteral: string): string {
     .slice(1, -1)
     .replaceAll("'", "\\'");
   return `'${value}'`;
+}
+
+function parsePythonStringExpression(expression: string): { fString: boolean; content: string } | null {
+  const stringExpression = /^([fF]?)(["'])([\s\S]*)\2$/.exec(expression.trim());
+  if (stringExpression === null) {
+    return null;
+  }
+  return { fString: stringExpression[1] !== '', content: stringExpression[3] };
+}
+
+function combinePythonStringExpressions(expressions: string[]): string {
+  const parts = expressions.map(parsePythonStringExpression);
+  if (parts.some((part) => part === null)) {
+    return expressions.join(' + ');
+  }
+  const typedParts = parts as { fString: boolean; content: string }[];
+  const prefix = typedParts.some((part) => part.fString) ? 'f' : '';
+  const content = typedParts
+    .map((part) => part.content)
+    .join('')
+    .replaceAll('\\', '\\\\')
+    .replaceAll('"', '\\"');
+  return `${prefix}"${content}"`;
 }
 
 function identifierPattern(identifier: string): RegExp {
