@@ -36,7 +36,7 @@ export class FixedStepClock {
 
     this.accum += dt;
     const dtTick = this.dtTick;
-    if (!((dtTick) > 0.0)) {
+    if (!(dtTick > 0.0)) {
       return 0;
     }
 

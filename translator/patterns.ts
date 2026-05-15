@@ -3117,8 +3117,38 @@ function translateStraightLineStatement(
     return nestedFunction;
   }
 
-  const ifStatement = /^if (.+):$/.exec(statement);
-  if (ifStatement !== null) {
+  const oneLineIfStatement = /^if (.+):$/.exec(statement);
+  let ifCondition: string | null = oneLineIfStatement?.[1] ?? null;
+  let ifBodyStartIndex = index + 1;
+  if (ifCondition === null && statement === 'if (') {
+    const conditionLines: string[] = [];
+    let conditionIndex = index + 1;
+    while (conditionIndex < lines.length) {
+      const conditionLine = lines[conditionIndex] ?? '';
+      const conditionTrimmed = conditionLine.trim();
+      const close = /^\)(.*):$/.exec(conditionTrimmed);
+      if (conditionLine.startsWith(indent) && close !== null) {
+        const conditionBody = conditionLines
+          .join(' ')
+          .replaceAll(/,\s*\)/g, ')')
+          .replaceAll(/\(\s+/g, '(')
+          .replaceAll(/\s+\)/g, ')');
+        const suffix = close[1].trimEnd();
+        ifCondition = suffix === '' ? conditionBody : `(${conditionBody})${suffix}`;
+        ifBodyStartIndex = conditionIndex + 1;
+        break;
+      }
+      if (!conditionLine.startsWith(`${indent}    `) || conditionTrimmed === '') {
+        return null;
+      }
+      conditionLines.push(conditionTrimmed);
+      conditionIndex += 1;
+    }
+    if (ifCondition === null) {
+      return null;
+    }
+  }
+  if (ifCondition !== null) {
     const innerIndent = `${indent}    `;
     const translateBranch = (startIndex: number): { statements: string[]; nextIndex: number } | null => {
       const branchStatements: string[] = [];
@@ -3151,14 +3181,14 @@ function translateStraightLineStatement(
     };
 
     const branchDeclarations = predeclareIfBranchAssignments(lines, index, indent, declaredNames, reassignedNames);
-    const initialBranch = translateBranch(index + 1);
+    const initialBranch = translateBranch(ifBodyStartIndex);
     if (initialBranch === null) {
       return null;
     }
     let nextIndex = initialBranch.nextIndex;
     const statements = [
       ...branchDeclarations,
-      `if (${translateExpression(ifStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`,
+      `if (${translateExpression(ifCondition, nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`,
       ...initialBranch.statements,
       '}',
     ];
@@ -4523,6 +4553,26 @@ function translateExpression(
       .join(' || ');
   }
 
+  const notIdentifier = /^not ([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);
+  if (notIdentifier !== null) {
+    const value = translateExpression(notIdentifier[1], nameMap, arrayNames, validatedTypeAliases);
+    return arrayNames.has(notIdentifier[1]) ? `!${value}.length` : `!${value}`;
+  }
+
+  const notPlayersCollection = /^not ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\.players)$/.exec(trimmed);
+  if (notPlayersCollection !== null) {
+    return `${translateExpression(notPlayersCollection[1], nameMap, arrayNames, validatedTypeAliases)}.length === 0`;
+  }
+
+  const notExpression = /^not (.+)$/.exec(trimmed);
+  if (notExpression !== null) {
+    const value = translateExpression(stripBalancedOuterParens(notExpression[1]), nameMap, arrayNames, validatedTypeAliases);
+    if (/^[A-Za-z_$][A-Za-z0-9_.$]*\(.*\)$/.test(value)) {
+      return `!${value}`;
+    }
+    return /^[A-Za-z_$][A-Za-z0-9_.$()[\]]*$/.test(value) ? `!${value}` : `!(${value})`;
+  }
+
   const lowerBoundLengthComparison = /^(.+?) <= (.+?) < len\((.+)\)$/.exec(trimmed);
   if (lowerBoundLengthComparison !== null) {
     const value = translateExpression(lowerBoundLengthComparison[2], nameMap, arrayNames, validatedTypeAliases);
@@ -4533,6 +4583,12 @@ function translateExpression(
   if (chainedLessEqualComparison !== null) {
     const middle = translateExpression(chainedLessEqualComparison[2], nameMap, arrayNames, validatedTypeAliases);
     return `${translateExpression(chainedLessEqualComparison[1], nameMap, arrayNames, validatedTypeAliases)} <= ${middle} && ${middle} <= ${translateExpression(chainedLessEqualComparison[3], nameMap, arrayNames, validatedTypeAliases)}`;
+  }
+
+  const chainedLessComparison = /^(.+?) < (.+?) < (.+)$/.exec(trimmed);
+  if (chainedLessComparison !== null) {
+    const middle = translateExpression(chainedLessComparison[2], nameMap, arrayNames, validatedTypeAliases);
+    return `${translateExpression(chainedLessComparison[1], nameMap, arrayNames, validatedTypeAliases)} < ${middle} && ${middle} < ${translateExpression(chainedLessComparison[3], nameMap, arrayNames, validatedTypeAliases)}`;
   }
 
   const notInTuple = /^(.+?) not in \((.*)\)$/.exec(trimmed);
@@ -4590,26 +4646,6 @@ function translateExpression(
         ? '!=='
         : binaryComparison[2];
     return `${translateExpression(binaryComparison[1], nameMap, arrayNames, validatedTypeAliases)} ${operator} ${translateExpression(binaryComparison[3], nameMap, arrayNames, validatedTypeAliases)}`;
-  }
-
-  const notIdentifier = /^not ([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);
-  if (notIdentifier !== null) {
-    const value = translateExpression(notIdentifier[1], nameMap, arrayNames, validatedTypeAliases);
-    return arrayNames.has(notIdentifier[1]) ? `!${value}.length` : `!${value}`;
-  }
-
-  const notPlayersCollection = /^not ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\.players)$/.exec(trimmed);
-  if (notPlayersCollection !== null) {
-    return `${translateExpression(notPlayersCollection[1], nameMap, arrayNames, validatedTypeAliases)}.length === 0`;
-  }
-
-  const notExpression = /^not (.+)$/.exec(trimmed);
-  if (notExpression !== null) {
-    const value = translateExpression(notExpression[1], nameMap, arrayNames, validatedTypeAliases);
-    if (/^[A-Za-z_$][A-Za-z0-9_.$]*\(.*\)$/.test(value)) {
-      return `!${value}`;
-    }
-    return /^[A-Za-z_$][A-Za-z0-9_.$()[\]]*$/.test(value) ? `!${value}` : `!(${value})`;
   }
 
   const prefixSlice = /^(.+)\[:(.+)\]$/.exec(trimmed);
@@ -4782,6 +4818,19 @@ function stripPrimitiveCallWrappers(value: string): string {
     output = nextOutput;
   }
   return output;
+}
+
+function stripBalancedOuterParens(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('(')) {
+    return trimmed;
+  }
+  const closeIndex = matchingCloseParen(trimmed, 0);
+  if (closeIndex !== trimmed.length - 1) {
+    return trimmed;
+  }
+  const inner = trimmed.slice(1, -1).trim();
+  return splitTopLevelComma(inner).length > 1 ? trimmed : inner;
 }
 
 function matchingCloseParen(value: string, openIndex: number): number | null {

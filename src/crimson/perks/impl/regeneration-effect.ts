@@ -7,17 +7,13 @@ import type { PerksUpdateEffectsCtx } from '@crimson/perks/runtime/effects-conte
 import { PerkHooks } from '@crimson/perks/runtime/hook-types.ts';
 
 export function updateRegeneration(ctx: PerksUpdateEffectsCtx): void {
-  if (!ctx.players.length) {
+  if (ctx.players.length === 0) {
     return;
   }
   if (!perkActive(ctx.players[0], PerkId.REGENERATION)) {
     return;
   }
-  if (
-    (ctx.state.rng.rand(
-      { caller: RngCallerStatic.PERKS_UPDATE_EFFECTS_REGENERATION_GATE },
-    ) & 1) === 0
-  ) {
+  if ((ctx.state.rng.rand({ caller: RngCallerStatic.PERKS_UPDATE_EFFECTS_REGENERATION_GATE }) & 1) === 0) {
     return;
   }
 
@@ -40,10 +36,7 @@ export function updateRegeneration(ctx: PerksUpdateEffectsCtx): void {
   let healAmount = ctx.dt;
   // Native no-ops Greater Regeneration. In default rewrite mode we apply the
   // intended upgrade and keep the no-op behind `--preserve-bugs`.
-  if (
-    !ctx.state.preserveBugs &&
-    perkActive(ctx.players[0], PerkId.GREATER_REGENERATION)
-  ) {
+  if (!ctx.state.preserveBugs && perkActive(ctx.players[0], PerkId.GREATER_REGENERATION)) {
     healAmount = ctx.dt * 2.0;
   }
 
