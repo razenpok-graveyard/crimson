@@ -5,7 +5,7 @@ import { PerkId } from '@crimson/perks/ids.ts';
 import { PerkHooks } from '@crimson/perks/runtime/hook-types.ts';
 import type { PlayerPerkTickCtx } from '@crimson/perks/runtime/player-tick-context.ts';
 
-function tickLivingFortress(ctx: PlayerPerkTickCtx): void {
+export function tickLivingFortress(ctx: PlayerPerkTickCtx): void {
   if (perkActive(ctx.player, PerkId.LIVING_FORTRESS)) {
     ctx.player.livingFortressTimer = Math.min(30.0, ctx.player.livingFortressTimer + ctx.dt);
   } else {

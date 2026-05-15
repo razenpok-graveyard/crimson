@@ -1338,6 +1338,16 @@ function translateExpression(pythonExpression: string, nameMap: Map<string, stri
     return `${value} >= ${translateExpression(lowerBoundLengthComparison[1], nameMap)} && ${value} < ${translateExpression(lowerBoundLengthComparison[3], nameMap)}.length`;
   }
 
+  const tupleLiteral = /^\((.*)\)$/.exec(trimmed);
+  if (tupleLiteral !== null && tupleLiteral[1].includes(',')) {
+    const values = tupleLiteral[1]
+      .split(',')
+      .map((part) => part.trim())
+      .filter((part) => part !== '')
+      .map((part) => translateExpression(part, nameMap));
+    return `[${values.join(', ')}]`;
+  }
+
   const stringLiterals: string[] = [];
   const masked = trimmed.replaceAll(
     /"[^"\\]*(?:\\.[^"\\]*)*"|'[^'\\]*(?:\\.[^'\\]*)*'/g,
