@@ -35,7 +35,7 @@ export class LanFrameSample {
   }) {
     this.frameTickIndex = opts.frameTickIndex;
     this.frameInputs = opts.frameInputs;
-    this.commands = opts.commands ?? [];
+    this.commands = Array.from(opts.commands ?? []);
   }
 }
 

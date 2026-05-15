@@ -208,6 +208,9 @@ function renderFunctionReturnType(fn: { async?: boolean; returnType: string }): 
 }
 
 function defaultedOptionExpression(optionExpression: string, typeExpression: string, defaultValue: string): string {
+  if (typeExpression.startsWith('readonly ') && typeExpression.endsWith('[]')) {
+    return `Array.from(${optionExpression} ?? ${defaultValue})`;
+  }
   return typeExpression.includes('null') && defaultValue !== 'null'
     ? `${optionExpression} !== undefined ? ${optionExpression} : ${defaultValue}`
     : `${optionExpression} ?? ${defaultValue}`;

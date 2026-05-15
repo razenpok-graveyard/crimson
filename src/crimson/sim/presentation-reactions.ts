@@ -25,7 +25,7 @@ export class PostApplyReaction {
     sfx?: readonly SfxId[];
     quest?: QuestPresentationReaction | null;
   } = {}) {
-    this.sfx = opts.sfx ?? [];
+    this.sfx = Array.from(opts.sfx ?? []);
     this.quest = opts.quest ?? null;
   }
 }

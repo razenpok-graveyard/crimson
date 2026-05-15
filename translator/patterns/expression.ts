@@ -220,7 +220,7 @@ export function translateExpression(
       if (argsText === '') {
         return '[]';
       }
-      const generator = /^(.+) for ([A-Za-z_][A-Za-z0-9_]*) in (.+)$/.exec(argsText);
+      const generator = /^(.+?)(?:,)? for ([A-Za-z_][A-Za-z0-9_]*) in (.+)$/.exec(argsText);
       if (generator !== null) {
         const itemName = tsExportNameForPythonName(generator[2]);
         const itemNameMap = new Map(nameMap);
@@ -486,7 +486,11 @@ export function translateExpression(
 
   const notExpression = /^not (.+)$/.exec(trimmed);
   if (notExpression !== null) {
-    const value = translateExpression(stripBalancedOuterParens(notExpression[1]), nameMap, arrayNames, validatedTypeAliases);
+    const operand = stripBalancedOuterParens(notExpression[1]);
+    const value = translateExpression(operand, nameMap, arrayNames, validatedTypeAliases);
+    if (arrayNames.has(operand) || arrayNames.has(value)) {
+      return `${value}.length === 0`;
+    }
     if (/^[A-Za-z_$][A-Za-z0-9_.$]*\(.*\)$/.test(value)) {
       return `!${value}`;
     }

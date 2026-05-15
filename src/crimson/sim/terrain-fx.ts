@@ -5,6 +5,13 @@ import { Vec2 } from '@grim/geom.ts';
 import { FxQueue, FxQueueRotated } from '@crimson/effects.ts';
 
 export class TerrainDecalFx {
+  readonly effectId: number;
+  readonly rotation: number;
+  readonly pos: Vec2;
+  readonly width: number;
+  readonly height: number;
+  readonly color: RGBA;
+
   constructor(opts: {
     effectId?: number;
     rotation?: number;
@@ -20,16 +27,15 @@ export class TerrainDecalFx {
     this.height = opts.height ?? 0.0;
     this.color = opts.color ?? new RGBA();
   }
-
-  readonly effectId: number;
-  readonly rotation: number;
-  readonly pos: Vec2;
-  readonly width: number;
-  readonly height: number;
-  readonly color: RGBA;
 }
 
 export class TerrainCorpseFx {
+  readonly topLeft: Vec2;
+  readonly color: RGBA;
+  readonly rotation: number;
+  readonly scale: number;
+  readonly creatureTypeId: number;
+
   constructor(opts: {
     topLeft?: Vec2;
     color?: RGBA;
@@ -43,19 +49,16 @@ export class TerrainCorpseFx {
     this.scale = opts.scale ?? 1.0;
     this.creatureTypeId = opts.creatureTypeId ?? 0;
   }
-
-  readonly topLeft: Vec2;
-  readonly color: RGBA;
-  readonly rotation: number;
-  readonly scale: number;
-  readonly creatureTypeId: number;
 }
 
 export class TerrainFxBatch {
   readonly decals: readonly TerrainDecalFx[];
   readonly corpses: readonly TerrainCorpseFx[];
 
-  constructor(opts: { decals?: readonly TerrainDecalFx[]; corpses?: readonly TerrainCorpseFx[] } = {}) {
+  constructor(opts: {
+    decals?: readonly TerrainDecalFx[];
+    corpses?: readonly TerrainCorpseFx[];
+  } = {}) {
     this.decals = Array.from(opts.decals ?? []);
     this.corpses = Array.from(opts.corpses ?? []);
   }
@@ -66,8 +69,16 @@ export class TerrainFxBatch {
 }
 
 export class TerrainFxScratch {
-  decals = new FxQueue();
-  corpses = new FxQueueRotated();
+  decals: FxQueue;
+  corpses: FxQueueRotated;
+
+  constructor(opts: {
+    decals?: FxQueue;
+    corpses?: FxQueueRotated;
+  } = {}) {
+    this.decals = opts.decals ?? new FxQueue();
+    this.corpses = opts.corpses ?? new FxQueueRotated();
+  }
 
   clear(): void {
     this.decals.clear();
@@ -75,25 +86,8 @@ export class TerrainFxScratch {
   }
 
   takeBatch(): TerrainFxBatch {
-    const decals: TerrainDecalFx[] = this.decals.iterActive().map((entry) => new TerrainDecalFx({
-      effectId: int(entry.effectId),
-      rotation: entry.rotation,
-      pos: entry.pos,
-      width: entry.width,
-      height: entry.height,
-      color: entry.color,
-    }));
-
-    const corpses: TerrainCorpseFx[] = this.corpses.iterActive().map((entry) => new TerrainCorpseFx({
-      topLeft: entry.topLeft,
-      color: entry.color,
-      rotation: entry.rotation,
-      scale: entry.scale,
-      creatureTypeId: int(entry.creatureTypeId),
-    }));
-
+    const batch = new TerrainFxBatch({ decals: this.decals.iterActive().map((entry) => new TerrainDecalFx({ effectId: int(entry.effectId), rotation: entry.rotation, pos: entry.pos, width: entry.width, height: entry.height, color: entry.color })), corpses: this.corpses.iterActive().map((entry) => new TerrainCorpseFx({ topLeft: entry.topLeft, color: entry.color, rotation: entry.rotation, scale: entry.scale, creatureTypeId: int(entry.creatureTypeId) })) });
     this.clear();
-
-    return new TerrainFxBatch({ decals, corpses });
+    return batch;
   }
 }

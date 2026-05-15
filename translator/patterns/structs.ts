@@ -56,7 +56,12 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       index += 1;
       continue;
     }
-    if (isCollectionsAbcTypeImport(trimmed) || isTypingOnlyImport(trimmed) || trimmed === 'from pathlib import Path') {
+    if (
+      isCollectionsAbcTypeImport(trimmed)
+      || isTypingOnlyImport(trimmed)
+      || trimmed === 'from pathlib import Path'
+      || isDataclassImport(trimmed)
+    ) {
       index += 1;
       continue;
     }
@@ -277,6 +282,7 @@ export function parseStructClass(
 
   const fields: StructModule['classes'][number]['fields'] = [];
   const methods: SimpleModuleFunction[] = [];
+  const arrayFieldNames = new Set<string>();
   let postInitStatements: string[] = [];
   while (nextIndex < lines.length) {
     const line = lines[nextIndex];
@@ -295,7 +301,7 @@ export function parseStructClass(
     }
 
     if (trimmedField === '@property') {
-      const propertyMethod = parseStructMethod(lines, nextIndex + 1);
+      const propertyMethod = parseStructMethod(lines, nextIndex + 1, false, arrayFieldNames);
       if (propertyMethod === null || propertyMethod.method.parameters.length > 0 || propertyMethod.method.optsParams.length > 0) {
         return null;
       }
@@ -308,7 +314,7 @@ export function parseStructClass(
     }
 
     if (trimmedField === '@staticmethod') {
-      const staticMethod = parseStructMethod(lines, nextIndex + 1, true);
+      const staticMethod = parseStructMethod(lines, nextIndex + 1, true, arrayFieldNames);
       if (staticMethod === null) {
         return null;
       }
@@ -317,7 +323,7 @@ export function parseStructClass(
       continue;
     }
 
-    const method = parseStructMethod(lines, nextIndex);
+    const method = parseStructMethod(lines, nextIndex, false, arrayFieldNames);
     if (method !== null) {
       if (method.method.name === '__post_init__') {
         postInitStatements = method.method.statements;
@@ -333,9 +339,15 @@ export function parseStructClass(
       return null;
     }
     const defaultValue = field[3] === undefined ? null : tsStructFieldDefaultValue(field[3]);
+    const fieldName = tsExportNameForPythonName(field[1]);
+    const typeExpression = tsStructFieldType(field[2]);
+    if (typeExpression.endsWith('[]')) {
+      arrayFieldNames.add(`self.${field[1]}`);
+      arrayFieldNames.add(`this.${fieldName}`);
+    }
     fields.push({
-      name: tsExportNameForPythonName(field[1]),
-      typeExpression: tsStructFieldType(field[2]),
+      name: fieldName,
+      typeExpression,
       defaultValue,
     });
     nextIndex += 1;
@@ -359,6 +371,7 @@ function parseStructMethod(
   lines: string[],
   index: number,
   staticMethod = false,
+  initialArrayNames: ReadonlySet<string> = new Set(),
 ): { method: SimpleModuleFunction; nextIndex: number } | null {
   const header = parseIndentedFunctionHeader(lines, index, '    ');
   if (header === null) {
@@ -371,7 +384,7 @@ function parseStructMethod(
 
   const parameters: FunctionParameter[] = [];
   const optsParams: OptionalFunctionParameter[] = [];
-  const arrayNames = new Set<string>();
+  const arrayNames = new Set<string>(initialArrayNames);
   const extraParameters = staticMethod
     ? parametersText
     : parametersText === 'self' ? '' : parametersText.slice('self, '.length);
@@ -866,6 +879,11 @@ function tsStructFieldDefaultValue(pythonValue: string): string | null {
     return '[]';
   }
 
+  const dataclassFactory = /^field\(default_factory=([A-Za-z_][A-Za-z0-9_]*)\)$/.exec(trimmed);
+  if (dataclassFactory !== null) {
+    return `new ${tsExportNameForPythonName(dataclassFactory[1])}()`;
+  }
+
   const lambdaFactory = /^msgspec\.field\(default_factory=lambda: (.+)\)$/.exec(trimmed);
   if (lambdaFactory !== null) {
     return translateExpression(lambdaFactory[1]);
@@ -956,4 +974,12 @@ function markStructTypeOnlyImports(
 
 function importedBindingName(importName: string): string {
   return /^.+ as ([A-Za-z_$][A-Za-z0-9_$]*)$/.exec(importName)?.[1] ?? importName;
+}
+
+function isDataclassImport(trimmedLine: string): boolean {
+  const dataclassImport = /^from dataclasses import (.+)$/.exec(trimmedLine);
+  if (dataclassImport === null) {
+    return false;
+  }
+  return dataclassImport[1].split(', ').every((name) => name === 'dataclass' || name === 'field');
 }

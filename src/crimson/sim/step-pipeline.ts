@@ -79,6 +79,6 @@ export class DeterministicStepResult {
     this.presentationPlanMs = opts.presentationPlanMs;
     this.presentationRngTrace = opts.presentationRngTrace;
     this.terrainFx = opts.terrainFx ?? new TerrainFxBatch();
-    this.postApplySfx = opts.postApplySfx ?? [];
+    this.postApplySfx = Array.from(opts.postApplySfx ?? []);
   }
 }

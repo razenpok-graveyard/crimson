@@ -1166,6 +1166,20 @@ function parseMultilineCallExpression(
 
   const callee = translateExpression(pythonCallee, nameMap, arrayNames, validatedTypeAliases);
   const callPrefix = /^[A-Z][A-Za-z0-9_]*$/.test(callee) ? `new ${callee}` : callee;
+  const sequenceGenerator = translateMultilineSequenceGenerator(
+    pythonCallee,
+    callParts.positionalParts,
+    nameMap,
+    arrayNames,
+    validatedTypeAliases,
+    mapNames,
+  );
+  if (sequenceGenerator !== null && callParts.keywordParts.length === 0) {
+    return {
+      expression: sequenceGenerator,
+      nextIndex: callParts.nextIndex,
+    };
+  }
   if (callParts.keywordParts.length === 0) {
     return {
       expression: translatePositionalCallExpression(pythonCallee, callParts.positionalParts, nameMap, arrayNames, validatedTypeAliases, true),
@@ -1185,6 +1199,34 @@ function parseMultilineCallExpression(
     ].join(', ')})`,
     nextIndex: callParts.nextIndex,
   };
+}
+
+function translateMultilineSequenceGenerator(
+  pythonCallee: string,
+  positionalParts: string[],
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  if (pythonCallee !== 'list' && pythonCallee !== 'tuple') {
+    return null;
+  }
+  if (positionalParts.length !== 2) {
+    return null;
+  }
+  const generatorClause = /^for ([A-Za-z_][A-Za-z0-9_]*) in (.+)$/.exec(positionalParts[1]);
+  if (generatorClause === null) {
+    return null;
+  }
+  const itemName = tsExportNameForPythonName(generatorClause[1]);
+  const itemNameMap = new Map(nameMap);
+  itemNameMap.set(generatorClause[1], itemName);
+  const itemExpression = positionalParts[0].startsWith('new ')
+    ? positionalParts[0]
+    : translateExpression(positionalParts[0], itemNameMap, arrayNames, validatedTypeAliases, mapNames);
+  const iterable = translateExpression(generatorClause[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  return `${iterable}.map((${itemName}) => ${itemExpression})`;
 }
 
 function parseMultilineCallParts(

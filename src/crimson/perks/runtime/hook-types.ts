@@ -44,8 +44,8 @@ export class PerkHooks {
     this.perkId = opts.perkId;
     this.applyHandler = opts.applyHandler ?? null;
     this.worldDtStep = opts.worldDtStep ?? null;
-    this.playerTickSteps = opts.playerTickSteps ?? [];
-    this.effectsSteps = opts.effectsSteps ?? [];
+    this.playerTickSteps = Array.from(opts.playerTickSteps ?? []);
+    this.effectsSteps = Array.from(opts.effectsSteps ?? []);
     this.playerDeathHook = opts.playerDeathHook ?? null;
   }
 }
