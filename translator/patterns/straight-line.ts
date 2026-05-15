@@ -105,6 +105,10 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       index += 1;
       continue;
     }
+    if (trimmed === 'import struct') {
+      index += 1;
+      continue;
+    }
     if (
       isCollectionsAbcTypeImport(trimmed)
       || isTypingOnlyImport(trimmed)
@@ -134,6 +138,10 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       }
       imports.push(...typeCheckingImports.imports);
       index = typeCheckingImports.nextIndex;
+      continue;
+    }
+    if (isStructFloatHelperAssignment(trimmed)) {
+      index += 1;
       continue;
     }
 
@@ -261,6 +269,11 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     if ((lines[index] ?? '').trim().startsWith('__all__ = ')) {
       break;
     }
+    if ((lines[index] ?? '').trim().startsWith('#')) {
+      pendingAssignmentComments.push((lines[index] ?? '').trim().replace(/^# ?/, ''));
+      index += 1;
+      continue;
+    }
 
     const typeCheckingAlias = parseTypeCheckingTypeAliasFallback(lines, index, relativePath);
     if (typeCheckingAlias !== null) {
@@ -276,6 +289,11 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       }
       imports.push(...typeCheckingImports.imports);
       index = typeCheckingImports.nextIndex;
+      continue;
+    }
+    if (isStructFloatHelperAssignment((lines[index] ?? '').trim())) {
+      pendingAssignmentComments.length = 0;
+      index += 1;
       continue;
     }
 
@@ -435,6 +453,11 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       index = allAssignment.nextIndex;
       continue;
     }
+    if (trimmed.startsWith('#')) {
+      pendingAssignmentComments.push(trimmed.replace(/^# ?/, ''));
+      index += 1;
+      continue;
+    }
 
     const typeCheckingAlias = parseTypeCheckingTypeAliasFallback(lines, index, relativePath);
     if (typeCheckingAlias !== null) {
@@ -450,6 +473,11 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       }
       imports.push(...typeCheckingImports.imports);
       index = typeCheckingImports.nextIndex;
+      continue;
+    }
+    if (isStructFloatHelperAssignment(trimmed)) {
+      pendingAssignmentComments.length = 0;
+      index += 1;
       continue;
     }
 
@@ -496,6 +524,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     leadingStatements.unshift(...helperStatements);
   }
+  if (straightLineModuleUsesStructFloatBuffers([...leadingStatements, ...trailingStatements], classes, plainClasses, functions, [...leadingAssignments, ...assignments])) {
+    const helperStatements = structFloatBufferStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
 
   const reexports = reexportsForAllNames(imports, allNames, relativePath);
   markTypeOnlyImports(imports, typeAliases, protocols, classes, plainClasses, [...leadingStatements, ...trailingStatements], functions, [...leadingAssignments, ...assignments]);
@@ -521,6 +556,11 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     : null;
 }
 
+function isStructFloatHelperAssignment(trimmedLine: string): boolean {
+  return /^_[A-Z0-9_]+ = struct\.Struct\("[^"]+"\)$/.test(trimmedLine)
+    || /^_[A-Z0-9_]+ = _[A-Z0-9_]+\.(?:pack|unpack)$/.test(trimmedLine);
+}
+
 function straightLineModuleUsesPythonRepr(
   statements: string[],
   classes: StructModule['classes'],
@@ -542,6 +582,36 @@ function straightLineModuleUsesPythonRepr(
     ...functions.flatMap((fn) => fn.statements),
     ...assignments.flatMap((assignment) => assignment.valueLines),
   ].some((line) => line.includes('pythonRepr('));
+}
+
+function straightLineModuleUsesStructFloatBuffers(
+  statements: string[],
+  classes: StructModule['classes'],
+  plainClasses: PlainClassDefinition[],
+  functions: SimpleModuleFunction[],
+  assignments: SimpleModuleAssignment[],
+): boolean {
+  return [
+    ...statements,
+    ...classes.flatMap((structClass) => [
+      ...structClass.fields.map((field) => field.defaultValue ?? ''),
+      ...structClass.postInitStatements,
+      ...structClass.methods.flatMap((method) => method.statements),
+    ]),
+    ...plainClasses.flatMap((plainClass) => [
+      ...plainClass.constructorDefinition.statements,
+      ...plainClass.methods.flatMap((method) => method.statements),
+    ]),
+    ...functions.flatMap((fn) => fn.statements),
+    ...assignments.flatMap((assignment) => assignment.valueLines),
+  ].some((line) => line.includes('_f32buf') || line.includes('_u32buf'));
+}
+
+function structFloatBufferStatements(): string[] {
+  return [
+    'const _f32buf = new Float32Array(1);',
+    'const _u32buf = new Uint32Array(_f32buf.buffer);',
+  ];
 }
 
 function pythonReprHelperStatements(): string[] {

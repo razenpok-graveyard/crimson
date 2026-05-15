@@ -209,6 +209,17 @@ export function translateExpression(
   if (envComparison !== null) {
     return `typeof process !== 'undefined' && process.env?.${envComparison[1]} === '${envComparison[2]}'`;
   }
+
+  const structUnpackPackedFloat = /^struct\.unpack\("<f", struct\.pack\("<I", (.+)\)\)\[0\]$/.exec(trimmed);
+  if (structUnpackPackedFloat !== null) {
+    return `(() => { _u32buf[0] = ${translateExpression(structUnpackPackedFloat[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}; return _f32buf[0]; })()`;
+  }
+
+  const boundStructFloatRoundTrip = /^_F32_UNPACK\(_F32_PACK\((.+)\)\)\[0\]$/.exec(trimmed);
+  if (boundStructFloatRoundTrip !== null) {
+    return `(() => { _f32buf[0] = ${translateExpression(boundStructFloatRoundTrip[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}; return _f32buf[0]; })()`;
+  }
+
   if (trimmed === '()') {
     return '[]';
   }
@@ -681,6 +692,7 @@ export function translateExpression(
     .replaceAll(/\bmath\.trunc\(/g, 'Math.trunc(')
     .replaceAll(/\bmath\.cos\(/g, 'Math.cos(')
     .replaceAll(/\bmath\.sin\(/g, 'Math.sin(')
+    .replaceAll(/\bmath\.atan2\(/g, 'Math.atan2(')
     .replaceAll(/ is not None\b/g, ' !== null')
     .replaceAll(/ is None\b/g, ' === null')
     .replaceAll(/ == /g, ' === ')
