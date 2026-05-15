@@ -2353,6 +2353,57 @@ function translateStraightLineStatement(
     };
   }
 
+  if (statement === 'try:') {
+    const innerIndent = `${indent}    `;
+    const translateBlock = (startIndex: number): { statements: string[]; nextIndex: number } | null => {
+      const blockStatements: string[] = [];
+      let nextIndex = startIndex;
+      while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, innerIndent)) {
+        if (lines[nextIndex].trim() === '') {
+          blockStatements.push('');
+          nextIndex += 1;
+          continue;
+        }
+        const innerStatement = translateStraightLineStatement(
+          lines,
+          nextIndex,
+          innerIndent,
+          nameMap,
+          declaredNames,
+          reassignedNames,
+          arrayNames,
+          validatedTypeAliases,
+          relativePath,
+        );
+        if (innerStatement === null) {
+          return null;
+        }
+        blockStatements.push(...innerStatement.statements.map(indentStatementLine));
+        nextIndex = innerStatement.nextIndex;
+      }
+      return { statements: blockStatements, nextIndex };
+    };
+
+    const tryBlock = translateBlock(index + 1);
+    if (tryBlock === null || (lines[tryBlock.nextIndex] ?? '').trim() !== 'finally:') {
+      return null;
+    }
+    const finallyBlock = translateBlock(tryBlock.nextIndex + 1);
+    if (finallyBlock === null) {
+      return null;
+    }
+    return {
+      statements: [
+        'try {',
+        ...tryBlock.statements,
+        '} finally {',
+        ...finallyBlock.statements,
+        '}',
+      ],
+      nextIndex: finallyBlock.nextIndex,
+    };
+  }
+
   const forOfStatement = /^for ([A-Za-z_][A-Za-z0-9_]*) in (.+):$/.exec(statement);
   if (forOfStatement !== null) {
     const rangeLoop = /^range\((.+)\)$/.exec(forOfStatement[2]);
@@ -2607,6 +2658,23 @@ function translateStraightLineStatement(
         if (sawKeyword) {
           return null;
         }
+        const nestedCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(arg);
+        if (nestedCall !== null) {
+          const callExpression = parseMultilineCallExpression(
+            lines,
+            nextIndex + 1,
+            nestedCall[1],
+            nameMap,
+            arrayNames,
+            validatedTypeAliases,
+          );
+          if (callExpression === null) {
+            return null;
+          }
+          positionalParts.push(callExpression.expression);
+          nextIndex = callExpression.nextIndex;
+          continue;
+        }
         positionalParts.push(arg);
       } else {
         sawKeyword = true;
@@ -2688,7 +2756,7 @@ function parseMultilineCallExpression(
   let nextIndex = startIndex;
   while (nextIndex < lines.length) {
     const trimmed = lines[nextIndex].trim();
-    if (trimmed === ')') {
+    if (trimmed === ')' || trimmed === '),') {
       const callee = translateExpression(pythonCallee, nameMap, arrayNames, validatedTypeAliases);
       const callPrefix = /^[A-Z]/.test(callee) ? `new ${callee}` : callee;
       if (keywordParts.length === 0) {
@@ -2717,6 +2785,23 @@ function parseMultilineCallExpression(
     if (keywordArg === null) {
       if (sawKeyword) {
         return null;
+      }
+      const nestedCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(arg);
+      if (nestedCall !== null) {
+        const callExpression = parseMultilineCallExpression(
+          lines,
+          nextIndex + 1,
+          nestedCall[1],
+          nameMap,
+          arrayNames,
+          validatedTypeAliases,
+        );
+        if (callExpression === null) {
+          return null;
+        }
+        positionalParts.push(callExpression.expression);
+        nextIndex = callExpression.nextIndex;
+        continue;
       }
       positionalParts.push(arg);
     } else {
@@ -3069,7 +3154,7 @@ function translateExpression(
     const parts = splitTopLevelComma(dictGet[2]);
     if (parts.length === 1 || parts.length === 2) {
       const value = `${translateExpression(dictGet[1], nameMap, arrayNames, validatedTypeAliases)}.get(${translateExpression(parts[0], nameMap, arrayNames, validatedTypeAliases)})`;
-      return parts.length === 1 ? value : `${value} ?? ${translateExpression(parts[1], nameMap, arrayNames, validatedTypeAliases)}`;
+      return parts.length === 1 ? `${value} ?? null` : `${value} ?? ${translateExpression(parts[1], nameMap, arrayNames, validatedTypeAliases)}`;
     }
   }
 
