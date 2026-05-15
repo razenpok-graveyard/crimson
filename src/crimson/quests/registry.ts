@@ -1,59 +1,46 @@
 // Port of crimson/quests/registry.py
 
-import { terrainSlotsForQuest, TerrainSlotTriplet } from "@crimson/terrain-slots.ts";
-import { WeaponId } from "@crimson/weapons.ts";
-import { QuestLevel } from "./level.ts";
-import { QuestDefinition, type QuestBuilder } from "./types.ts";
+import type { TerrainSlotTriplet } from '@crimson/terrain-slots.ts';
+import { terrainSlotsForQuest } from '@crimson/terrain-slots.ts';
+import type { WeaponId } from '@crimson/weapons.ts';
+import { QuestLevel } from '@crimson/quests/level.ts';
+import type { QuestBuilder } from '@crimson/quests/types.ts';
+import { QuestDefinition } from '@crimson/quests/types.ts';
 
-const _QUESTS: Map<string, QuestDefinition> = new Map();
+const quests: Map<string, QuestDefinition> = new Map();
 
-export function registerQuest(opts: {
-  level: string;
-  title: string;
-  timeLimitMs: number;
-  startWeaponId: WeaponId;
-  unlockPerkId?: number | null;
-  unlockWeaponId?: WeaponId | null;
-  terrainSlots?: TerrainSlotTriplet | null;
-}): (builder: QuestBuilder) => QuestBuilder {
-  function _builderName(builderFn: QuestBuilder): string {
+export function registerQuest(opts: { level: string; title: string; timeLimitMs: number; startWeaponId: WeaponId; unlockPerkId?: number | null; unlockWeaponId?: WeaponId | null; terrainSlots?: TerrainSlotTriplet | null }): (arg0: QuestBuilder) => QuestBuilder {
+  const level = opts.level;
+  const title = opts.title;
+  const timeLimitMs = opts.timeLimitMs;
+  const startWeaponId = opts.startWeaponId;
+  const unlockPerkId = opts.unlockPerkId ?? null;
+  const unlockWeaponId = opts.unlockWeaponId ?? null;
+  const terrainSlots = opts.terrainSlots ?? null;
+  function builderName(builderFn: QuestBuilder): string {
     return builderFn.name || String(builderFn);
   }
 
-  return (builder: QuestBuilder): QuestBuilder => {
-    const questLevel = QuestLevel.parse(opts.level);
-    const resolvedTerrainSlots = opts.terrainSlots !== undefined && opts.terrainSlots !== null
-      ? opts.terrainSlots
-      : terrainSlotsForQuest(questLevel);
-    const normalizedUnlockWeaponId = opts.unlockWeaponId !== undefined && opts.unlockWeaponId !== null
-      ? opts.unlockWeaponId
-      : null;
-    const quest = new QuestDefinition({
-      level: questLevel,
-      title: opts.title,
-      builder,
-      timeLimitMs: opts.timeLimitMs,
-      startWeaponId: opts.startWeaponId,
-      unlockPerkId: opts.unlockPerkId ?? null,
-      unlockWeaponId: normalizedUnlockWeaponId,
-      terrainSlots: resolvedTerrainSlots,
-    });
-    const key = quest.level.text;
-    const existing = _QUESTS.get(key);
-    if (existing !== undefined) {
-      throw new Error(
-        `duplicate quest level ${quest.level.text}: ${_builderName(existing.builder)} vs ${_builderName(builder)}`,
-      );
+  function decorator(builder: QuestBuilder): QuestBuilder {
+    const questLevel = QuestLevel.parse(level);
+    const resolvedTerrainSlots = terrainSlots !== null ? terrainSlots : terrainSlotsForQuest(questLevel);
+    const normalizedUnlockWeaponId = unlockWeaponId !== null ? unlockWeaponId : null;
+    const quest = new QuestDefinition({ level: questLevel, title: title, builder: builder, timeLimitMs: timeLimitMs, startWeaponId: startWeaponId, unlockPerkId: unlockPerkId, unlockWeaponId: normalizedUnlockWeaponId, terrainSlots: resolvedTerrainSlots });
+    const existing = quests.get(quest.level.text) ?? null;
+    if (existing !== null) {
+      throw new Error(`duplicate quest level ${quest.level.text}: ${builderName(existing.builder)} vs ${builderName(builder)}`);
     }
-    _QUESTS.set(key, quest);
+    quests.set(quest.level.text, quest);
     return builder;
-  };
+  }
+
+  return decorator;
 }
 
 export function allQuests(): QuestDefinition[] {
-  return Array.from(_QUESTS.values()).sort((a, b) => a.level.globalIndex - b.level.globalIndex);
+  return Array.from(quests.values()).sort((left, right) => left.level.globalIndex < right.level.globalIndex ? -1 : left.level.globalIndex > right.level.globalIndex ? 1 : 0);
 }
 
 export function questByLevel(level: QuestLevel): QuestDefinition | null {
-  return _QUESTS.get(level.text) ?? null;
+  return quests.get(level.text) ?? null;
 }

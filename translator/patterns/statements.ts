@@ -23,6 +23,7 @@ import {
 import {
   translateCallArgumentExpression,
   translateExpression,
+  translateMapKeyExpression,
   translatePositionalCallExpression,
 } from './expression.js';
 import {
@@ -1163,8 +1164,9 @@ function translateStraightLineAssignment(
   if (operator === '=' && mapItemAssignment !== null) {
     const mapName = translateExpression(mapItemAssignment[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (mapNames.has(mapName)) {
+      const key = translateMapKeyExpression(mapName, translateExpression(mapItemAssignment[2], nameMap, arrayNames, validatedTypeAliases, mapNames));
       return {
-        statements: [`${mapName}.set(${translateExpression(mapItemAssignment[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}, ${assignedRight});`],
+        statements: [`${mapName}.set(${key}, ${assignedRight});`],
         nextIndex,
       };
     }
@@ -1394,12 +1396,13 @@ export function parseTopLevelAssignment(
   const name = annotatedType === null
     ? pythonName.startsWith('_') ? tsExportNameForPythonName(pythonName) : tsPublicNameForPythonName(pythonName)
     : publicUppercaseName ? tsPublicNameForPythonName(pythonName) : tsMutableNameForPythonName(pythonName);
+  const typeExpression = annotatedType === null ? undefined : tsTopLevelAssignmentTypeExpression(annotatedType);
   const baseAssignment = {
     pythonName,
     name,
     declaration: annotatedType === null || publicUppercaseName ? 'const' as const : 'let' as const,
     exported: !pythonName.startsWith('_'),
-    typeExpression: annotatedType === null ? undefined : tsTypeExpression(annotatedType),
+    typeExpression,
   };
   if (value === '(') {
     const valueLines = ['['];
@@ -1592,6 +1595,14 @@ export function parseTopLevelAssignment(
   }
 
   return null;
+}
+
+function tsTopLevelAssignmentTypeExpression(pythonType: string): string {
+  const dictType = /^dict\[(.+), (.+)\]$/.exec(pythonType.trim());
+  if (dictType !== null && dictType[1] === 'QuestLevel') {
+    return `Map<string, ${tsTypeExpression(dictType[2])}>`;
+  }
+  return tsTypeExpression(pythonType);
 }
 
 function parseMultilineFrozenSet(

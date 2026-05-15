@@ -174,11 +174,20 @@ export function translateExpression(
     return `${iterable}.sort((left, right) => left.toLowerCase().localeCompare(right.toLowerCase()))`;
   }
 
+  const sortedCall = parseCallPrefix(trimmed, 'sorted');
+  if (sortedCall !== null && sortedCall.rest === '') {
+    const sortedExpression = translateSortedCall(sortedCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (sortedExpression !== null) {
+      return sortedExpression;
+    }
+  }
+
   const mapMembership = /^(.+) in ([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);
   if (mapMembership !== null) {
     const mapName = translateExpression(mapMembership[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (mapNames.has(mapName)) {
-      return `${mapName}.has(${translateExpression(mapMembership[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+      const key = translateMapKeyExpression(mapName, translateExpression(mapMembership[1], nameMap, arrayNames, validatedTypeAliases, mapNames));
+      return `${mapName}.has(${key})`;
     }
   }
 
@@ -186,7 +195,8 @@ export function translateExpression(
   if (mapSubscript !== null) {
     const mapName = translateExpression(mapSubscript[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (mapNames.has(mapName)) {
-      return `${mapName}.get(${translateExpression(mapSubscript[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})!`;
+      const key = translateMapKeyExpression(mapName, translateExpression(mapSubscript[2], nameMap, arrayNames, validatedTypeAliases, mapNames));
+      return `${mapName}.get(${key})!`;
     }
   }
 
@@ -275,6 +285,34 @@ export function translateExpression(
     return `${tsPropertyAccessBase(translateExpression(strCall.argsText, nameMap, arrayNames, validatedTypeAliases))}.trim()`;
   }
 
+  const getattrCall = parseCallPrefix(trimmed, 'getattr');
+  if (getattrCall !== null && getattrCall.rest === '') {
+    const args = splitTopLevelComma(getattrCall.argsText);
+    if (args.length === 2 || args.length === 3) {
+      const objectExpression = translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const attribute = parsePythonStringExpression(args[1]);
+      if (attribute !== null) {
+        const fallback = args[2] === undefined
+          ? null
+          : translateExpression(args[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+        if (attribute.content === '__name__') {
+          return fallback === null
+            ? `${objectExpression}.name`
+            : `${objectExpression}.name || ${fallback}`;
+        }
+        const property = tsStringLiteral(JSON.stringify(attribute.content));
+        return fallback === null
+          ? `Reflect.get(${objectExpression}, ${property})`
+          : `Reflect.get(${objectExpression}, ${property}) ?? ${fallback}`;
+      }
+    }
+  }
+
+  const reprCall = parseCallPrefix(trimmed, 'repr');
+  if (reprCall !== null && reprCall.rest === '') {
+    return `String(${translateExpression(reprCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
   for (const primitiveName of ['float', 'str', 'bool']) {
     const primitiveCall = parseCallPrefix(trimmed, primitiveName);
     if (primitiveCall !== null && primitiveCall.rest === '') {
@@ -326,7 +364,9 @@ export function translateExpression(
   if (dictGet !== null) {
     const parts = splitTopLevelComma(dictGet[2]);
     if (parts.length === 1 || parts.length === 2) {
-      const value = `${translateExpression(dictGet[1], nameMap, arrayNames, validatedTypeAliases)}.get(${translateExpression(parts[0], nameMap, arrayNames, validatedTypeAliases)})`;
+      const mapName = translateExpression(dictGet[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const key = translateMapKeyExpression(mapName, translateExpression(parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames));
+      const value = `${mapName}.get(${key})`;
       return parts.length === 1 ? `${value} ?? null` : `${value} ?? ${translateExpression(parts[1], nameMap, arrayNames, validatedTypeAliases)}`;
     }
   }
@@ -591,6 +631,63 @@ export function translateExpression(
     .replaceAll(/\.BLEND_ALPHA\b/g, '.ALPHA')
     .replaceAll(/\.BLEND_MULTIPLIED\b/g, '.MULTIPLY')
     .replaceAll(/\.BLEND_NONE\b/g, '.NONE');
+}
+
+export function translateMapKeyExpression(mapName: string, keyExpression: string): string {
+  if (mapName === 'quests' && !keyExpression.endsWith('.text')) {
+    return `${keyExpression}.text`;
+  }
+  return keyExpression;
+}
+
+function translateSortedCall(
+  argsText: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  const parts = splitTopLevelComma(argsText);
+  if (parts.length === 0) {
+    return null;
+  }
+  const iterablePart = parts.find((part) => !part.startsWith('key=') && !part.startsWith('reverse='));
+  if (iterablePart === undefined) {
+    return null;
+  }
+
+  const keyPart = parts.find((part) => part.startsWith('key='));
+  const reverse = parts.some((part) => part === 'reverse=True');
+  const iterable = sortedIterableExpression(iterablePart, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (keyPart === undefined) {
+    return `${iterable}.sort(${reverse ? '(left, right) => left < right ? 1 : left > right ? -1 : 0' : ''})`;
+  }
+
+  const lambda = /^key=lambda ([A-Za-z_][A-Za-z0-9_]*): (.+)$/.exec(keyPart);
+  if (lambda === null) {
+    return null;
+  }
+
+  const leftNameMap = new Map(nameMap);
+  leftNameMap.set(lambda[1], 'left');
+  const rightNameMap = new Map(nameMap);
+  rightNameMap.set(lambda[1], 'right');
+  const leftKey = translateExpression(lambda[2], leftNameMap, arrayNames, validatedTypeAliases, mapNames);
+  const rightKey = translateExpression(lambda[2], rightNameMap, arrayNames, validatedTypeAliases, mapNames);
+  const less = reverse ? 1 : -1;
+  const greater = reverse ? -1 : 1;
+  return `${iterable}.sort((left, right) => ${leftKey} < ${rightKey} ? ${less} : ${leftKey} > ${rightKey} ? ${greater} : 0)`;
+}
+
+function sortedIterableExpression(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string {
+  const iterable = translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  return `Array.from(${iterable})`;
 }
 
 function replaceTranslatedRaylibConstructors(value: string): string {
