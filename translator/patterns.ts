@@ -11,6 +11,7 @@ import type {
   NamespaceReexport,
   OptionalFunctionParameter,
   PackageVersionModule,
+  PlatformDirsModule,
   ProtocolDefinition,
   ProtocolMethod,
   Reexport,
@@ -692,6 +693,94 @@ export function parsePackageVersionModule(trimmedPython: string): PackageVersion
   }
 
   return sawImport && packageName !== null ? { packageName } : null;
+}
+
+export function parsePlatformDirsModule(trimmedPython: string): PlatformDirsModule | null {
+  const lines = trimmedPython.split(/\r?\n/);
+  let index = 0;
+
+  const expectedPreamble = [
+    'import os',
+    'from pathlib import Path',
+    '',
+    'from platformdirs import PlatformDirs',
+    '',
+  ];
+  for (const expected of expectedPreamble) {
+    if ((lines[index] ?? '') !== expected) {
+      return null;
+    }
+    index += 1;
+  }
+
+  const appNameAssignment = /^APP_NAME = "([^"]+)"$/.exec(lines[index] ?? '');
+  if (appNameAssignment === null) {
+    return null;
+  }
+  index += 1;
+
+  while (index < lines.length && lines[index].trim() === '') {
+    index += 1;
+  }
+
+  const header = /^def ([A-Za-z_][A-Za-z0-9_]*)\(\) -> Path:$/.exec(lines[index] ?? '');
+  if (header === null) {
+    return null;
+  }
+  index += 1;
+
+  if ((lines[index] ?? '').trim() !== '"""Return the default per-user runtime directory.') {
+    return null;
+  }
+  index += 1;
+  const docLines = ['Return the default per-user runtime directory.'];
+  while (index < lines.length && (lines[index] ?? '').trim() !== '"""') {
+    docLines.push((lines[index] ?? '').replace(/^    /, ''));
+    index += 1;
+  }
+  if ((lines[index] ?? '').trim() !== '"""') {
+    return null;
+  }
+  index += 1;
+
+  while (index < lines.length && lines[index].trim() === '') {
+    index += 1;
+  }
+
+  const override = /^    override = os\.environ\.get\("([A-Za-z_][A-Za-z0-9_]*)"\) or os\.environ\.get\("([A-Za-z_][A-Za-z0-9_]*)"\)$/.exec(lines[index] ?? '');
+  if (override === null) {
+    return null;
+  }
+  index += 1;
+
+  const expectedBody = [
+    '    if override:',
+    '        return Path(override).expanduser()',
+    '',
+    '    dirs = PlatformDirs(appname=APP_NAME, appauthor=False)',
+    '    return Path(dirs.user_data_path)',
+  ];
+  for (const expected of expectedBody) {
+    if ((lines[index] ?? '') !== expected) {
+      return null;
+    }
+    index += 1;
+  }
+
+  while (index < lines.length && lines[index].trim() === '') {
+    index += 1;
+  }
+  if (index !== lines.length) {
+    return null;
+  }
+
+  return {
+    appName: appNameAssignment[1],
+    functionName: tsExportNameForPythonName(header[1]),
+    docstring: docLines.join('\n'),
+    primaryEnvName: override[1],
+    fallbackEnvName: override[2],
+  };
 }
 
 export function parseStraightLineModule(trimmedPython: string, relativePath: string): StraightLineModule | null {

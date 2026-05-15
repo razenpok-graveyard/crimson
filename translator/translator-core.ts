@@ -10,6 +10,7 @@ import {
   parseLazyWrapperModule,
   parseNamespaceReexports,
   parsePackageVersionModule,
+  parsePlatformDirsModule,
   parseProtocolModule,
   parseSimpleExportModule,
   parseStraightLineModule,
@@ -28,6 +29,7 @@ import {
   renderModuleDocOnly,
   renderNamespaceReexports,
   renderPackageVersionModule,
+  renderPlatformDirsModule,
   renderProtocolModule,
   renderSimpleExportModule,
   renderStraightLineModule,
@@ -79,6 +81,11 @@ export async function translateFile(job: TranslationJob): Promise<string> {
   if (packageVersionModule !== null) {
     const version = await readPythonProjectVersion(packageVersionModule.packageName);
     return renderPackageVersionModule(job.relativePath, version);
+  }
+
+  const platformDirsModule = parsePlatformDirsModule(futureStripped);
+  if (platformDirsModule !== null) {
+    return renderPlatformDirsModule(job.relativePath, platformDirsModule);
   }
 
   const guardedAttributeModule = parseGuardedAttributeModule(futureStripped, job.relativePath);

@@ -102,6 +102,14 @@ export interface PackageVersionModule {
   packageName: string;
 }
 
+export interface PlatformDirsModule {
+  appName: string;
+  functionName: string;
+  docstring: string;
+  primaryEnvName: string;
+  fallbackEnvName: string;
+}
+
 export interface LazyWrapperModule {
   typeName: string;
   typeModulePath: string;
