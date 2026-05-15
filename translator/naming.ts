@@ -3,7 +3,11 @@ export function tsExportNameForPythonName(pythonName: string): string {
     return pythonName;
   }
 
-  return pythonName.replaceAll(/_([a-zA-Z0-9])/g, (_match, letter: string) => letter.toUpperCase());
+  const withoutLeadingPrivateMarker = pythonName.replace(/^_+/, '');
+  return withoutLeadingPrivateMarker.replaceAll(
+    /_([a-zA-Z0-9])/g,
+    (_match, letter: string) => letter.toUpperCase(),
+  );
 }
 
 export function tsTypeExpression(pythonType: string): string {
