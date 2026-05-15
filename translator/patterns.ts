@@ -851,6 +851,32 @@ function translateStraightLineStatement(
     };
   }
 
+  const forOfStatement = /^for ([A-Za-z_][A-Za-z0-9_]*) in (.+):$/.exec(statement);
+  if (forOfStatement !== null) {
+    const innerIndent = `${indent}    `;
+    const innerStatements: string[] = [];
+    let nextIndex = index + 1;
+    while (nextIndex < lines.length && lines[nextIndex].startsWith(innerIndent)) {
+      const innerStatement = translateStraightLineStatement(lines, nextIndex, innerIndent);
+      if (innerStatement === null) {
+        return null;
+      }
+      innerStatements.push(...innerStatement.statements.map((innerLine) => `  ${innerLine}`));
+      nextIndex = innerStatement.nextIndex;
+    }
+    if (innerStatements.length === 0) {
+      return null;
+    }
+    return {
+      statements: [
+        `for (const ${tsExportNameForPythonName(forOfStatement[1])} of ${translateExpression(forOfStatement[2])}) {`,
+        ...innerStatements,
+        '}',
+      ],
+      nextIndex,
+    };
+  }
+
   if (statement === 'return') {
     return { statements: ['return;'], nextIndex: index + 1 };
   }
