@@ -1,7 +1,7 @@
 // Port of crimson/bonuses/weapon_power_up.py
 
 import { f32 } from '@crimson/math-parity.ts';
-import type { BonusApplyCtx } from './apply-context.ts';
+import type { BonusApplyCtx } from '@crimson/bonuses/apply-context.ts';
 
 export function applyWeaponPowerUp(ctx: BonusApplyCtx): void {
   const old = ctx.state.bonuses.weaponPowerUp;
