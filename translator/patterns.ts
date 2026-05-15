@@ -796,13 +796,22 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
 
     const statements: string[] = [];
     const nameMap = new Map(moduleNameMap);
+    const declaredNames = new Set<string>();
+    const reassignedNames = reassignedLocalNames(lines, index);
     while (index < lines.length) {
       const line = lines[index];
       if (line.trim() === '') {
         index += 1;
         break;
       }
-      const statement = translateStraightLineStatement(lines, index, '    ', nameMap);
+      const statement = translateStraightLineStatement(
+        lines,
+        index,
+        '    ',
+        nameMap,
+        declaredNames,
+        reassignedNames,
+      );
       if (statement === null) {
         return null;
       }
@@ -877,6 +886,8 @@ function translateStraightLineStatement(
   index: number,
   indent: string,
   nameMap: Map<string, string>,
+  declaredNames: Set<string>,
+  reassignedNames: Set<string>,
 ): { statements: string[]; nextIndex: number } | null {
   const line = lines[index];
   if (line === undefined || !line.startsWith(indent)) {
@@ -885,6 +896,10 @@ function translateStraightLineStatement(
   const statement = line.slice(indent.length);
   if (statement.trim() === '' || statement.startsWith(' ')) {
     return null;
+  }
+
+  if (statement.startsWith('#')) {
+    return { statements: [`// ${statement.replace(/^# ?/, '')}`], nextIndex: index + 1 };
   }
 
   const globalStatement = /^global ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(statement);
@@ -901,7 +916,14 @@ function translateStraightLineStatement(
     const innerStatements: string[] = [];
     let nextIndex = index + 1;
     while (nextIndex < lines.length && lines[nextIndex].startsWith(innerIndent)) {
-      const innerStatement = translateStraightLineStatement(lines, nextIndex, innerIndent, nameMap);
+      const innerStatement = translateStraightLineStatement(
+        lines,
+        nextIndex,
+        innerIndent,
+        nameMap,
+        declaredNames,
+        reassignedNames,
+      );
       if (innerStatement === null) {
         return null;
       }
@@ -927,7 +949,14 @@ function translateStraightLineStatement(
     const innerStatements: string[] = [];
     let nextIndex = index + 1;
     while (nextIndex < lines.length && lines[nextIndex].startsWith(innerIndent)) {
-      const innerStatement = translateStraightLineStatement(lines, nextIndex, innerIndent, nameMap);
+      const innerStatement = translateStraightLineStatement(
+        lines,
+        nextIndex,
+        innerIndent,
+        nameMap,
+        declaredNames,
+        reassignedNames,
+      );
       if (innerStatement === null) {
         return null;
       }
@@ -967,8 +996,18 @@ function translateStraightLineStatement(
           nextIndex: index + 1,
         };
       }
+      const tsName = tsExportNameForPythonName(localAssignment[1]);
+      if (declaredNames.has(localAssignment[1])) {
+        return {
+          statements: [`${tsName} = ${translateExpression(assignment[3], nameMap)};`],
+          nextIndex: index + 1,
+        };
+      }
+      declaredNames.add(localAssignment[1]);
       return {
-        statements: [`const ${tsExportNameForPythonName(localAssignment[1])} = ${translateExpression(assignment[3], nameMap)};`],
+        statements: [
+          `${reassignedNames.has(localAssignment[1]) ? 'let' : 'const'} ${tsName} = ${translateExpression(assignment[3], nameMap)};`,
+        ],
         nextIndex: index + 1,
       };
     }
@@ -979,6 +1018,23 @@ function translateStraightLineStatement(
   }
 
   return null;
+}
+
+function reassignedLocalNames(lines: string[], startIndex: number): Set<string> {
+  const counts = new Map<string, number>();
+  let index = startIndex;
+  while (index < lines.length && lines[index].trim() !== '') {
+    const assignment = /^\s+([A-Za-z_][A-Za-z0-9_]*) = /.exec(lines[index]);
+    if (assignment !== null) {
+      counts.set(assignment[1], (counts.get(assignment[1]) ?? 0) + 1);
+    }
+    index += 1;
+  }
+  return new Set(
+    [...counts.entries()]
+      .filter((entry) => entry[1] > 1)
+      .map((entry) => entry[0]),
+  );
 }
 
 function parseTopLevelAssignment(
