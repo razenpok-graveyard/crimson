@@ -823,56 +823,71 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       continue;
     }
 
-    const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\(msgspec\.Struct(?<options>(?:, [^)]+)?)\):$/.exec(lines[index] ?? '');
-    if (header === null) {
+    const structClass = parseStructClass(lines, index);
+    if (structClass === null) {
       return null;
     }
-    const readonlyFields = header.groups?.options?.includes('frozen=True') ?? false;
-    index += 1;
-
-    const docstring = parseIndentedDocstring(lines, index);
-    if (docstring !== null) {
-      index = docstring.nextIndex;
-    }
-
-    const fields: StructModule['classes'][number]['fields'] = [];
-    while (index < lines.length) {
-      const line = lines[index];
-      const trimmedField = line.trim();
-      if (trimmedField === '') {
-        index += 1;
-        continue;
-      }
-      if (!line.startsWith('    ')) {
-        break;
-      }
-
-      const field = /^    ([A-Za-z_][A-Za-z0-9_]*): (.+?)(?: = (.+))?$/.exec(line);
-      if (field === null) {
-        return null;
-      }
-      const defaultValue = field[3] === undefined ? null : tsStructFieldDefaultValue(field[3]);
-      fields.push({
-        name: tsExportNameForPythonName(field[1]),
-        typeExpression: tsStructFieldType(field[2]),
-        defaultValue,
-      });
-      index += 1;
-    }
-
-    if (fields.length === 0) {
-      return null;
-    }
-    classes.push({
-      name: header[1],
-      docstring: docstring?.value ?? null,
-      readonlyFields,
-      fields,
-    });
+    classes.push(structClass.structClass);
+    index = structClass.nextIndex;
   }
 
   markStructTypeOnlyImports(imports, typeAliases, classes, protocols);
   return typeAliases.length + classes.length + protocols.length > 0 ? { imports, typeAliases, classes, protocols } : null;
+}
+
+function parseStructClass(
+  lines: string[],
+  index: number,
+): { structClass: StructModule['classes'][number]; nextIndex: number } | null {
+  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\(msgspec\.Struct(?<options>(?:, [^)]+)?)\):$/.exec(lines[index] ?? '');
+  if (header === null) {
+    return null;
+  }
+  const readonlyFields = header.groups?.options?.includes('frozen=True') ?? false;
+  let nextIndex = index + 1;
+
+  const docstring = parseIndentedDocstring(lines, nextIndex);
+  if (docstring !== null) {
+    nextIndex = docstring.nextIndex;
+  }
+
+  const fields: StructModule['classes'][number]['fields'] = [];
+  while (nextIndex < lines.length) {
+    const line = lines[nextIndex];
+    const trimmedField = line.trim();
+    if (trimmedField === '') {
+      nextIndex += 1;
+      continue;
+    }
+    if (!line.startsWith('    ')) {
+      break;
+    }
+
+    const field = /^    ([A-Za-z_][A-Za-z0-9_]*): (.+?)(?: = (.+))?$/.exec(line);
+    if (field === null) {
+      return null;
+    }
+    const defaultValue = field[3] === undefined ? null : tsStructFieldDefaultValue(field[3]);
+    fields.push({
+      name: tsExportNameForPythonName(field[1]),
+      typeExpression: tsStructFieldType(field[2]),
+      defaultValue,
+    });
+    nextIndex += 1;
+  }
+
+  if (fields.length === 0) {
+    return null;
+  }
+  return {
+    structClass: {
+      name: header[1],
+      docstring: docstring?.value ?? null,
+      readonlyFields,
+      fields,
+    },
+    nextIndex,
+  };
 }
 
 function parseSimpleProtocolClass(
@@ -1205,6 +1220,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   const leadingAssignments: SimpleModuleAssignment[] = [];
   const typeAliases: TypeAlias[] = [];
   const validatedTypeAliases = new Set<string>();
+  const classes: StructModule['classes'] = [];
   const functions: SimpleModuleFunction[] = [];
   const assignments: SimpleModuleAssignment[] = [];
   const allNames: string[] = [];
@@ -1251,6 +1267,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         validatedTypeAliases.add(annotatedTypeAlias.alias.name);
       }
       index = annotatedTypeAlias.nextIndex;
+      continue;
+    }
+
+    const structClass = parseStructClass(lines, index);
+    if (structClass !== null) {
+      classes.push(structClass.structClass);
+      index = structClass.nextIndex;
       continue;
     }
 
@@ -1401,7 +1424,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   }
 
   const reexports = reexportsForAllNames(imports, allNames);
-  markTypeOnlyImports(imports, typeAliases, functions, [...leadingAssignments, ...assignments]);
+  markTypeOnlyImports(imports, typeAliases, classes, functions, [...leadingAssignments, ...assignments]);
   if (allNames.length > 0) {
     const exportedNames = new Set(allNames.map(tsPublicNameForPythonName));
     for (const fn of functions) {
@@ -1416,8 +1439,8 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
   }
 
-  return typeAliases.length + leadingAssignments.length + functions.length + assignments.length + reexports.length > 0
-    ? { imports, reexports, typeAliases, leadingAssignments, functions, assignments }
+  return typeAliases.length + leadingAssignments.length + classes.length + functions.length + assignments.length + reexports.length > 0
+    ? { imports, reexports, typeAliases, leadingAssignments, classes, functions, assignments }
     : null;
 }
 
@@ -2241,6 +2264,7 @@ function parseTopLevelAssignment(
 function markTypeOnlyImports(
   imports: ImportDefinition[],
   typeAliases: TypeAlias[],
+  classes: StructModule['classes'],
   functions: SimpleModuleFunction[],
   assignments: SimpleModuleAssignment[],
 ): void {
@@ -2252,11 +2276,13 @@ function markTypeOnlyImports(
       alias.validation?.ge ?? '',
       alias.validation?.le ?? '',
     ]),
+    ...classes.flatMap((structClass) => structClass.fields.map((field) => field.defaultValue ?? '')),
     ...functions.flatMap((fn) => fn.statements),
     ...assignments.flatMap((assignment) => assignment.valueLines),
   ].join('\n');
   const typeText = [
     ...typeAliases.map((alias) => alias.typeExpression),
+    ...classes.flatMap((structClass) => structClass.fields.map((field) => field.typeExpression)),
     ...functions.flatMap((fn) => [
       fn.returnType,
       ...fn.parameters.map((parameter) => parameter.typeExpression),
@@ -2326,6 +2352,11 @@ function translateExpression(
   const tempDirPathJoin = /^Path\(tempfile\.gettempdir\(\)\) \/ "([^"\\]*)"$/.exec(trimmed);
   if (tempDirPathJoin !== null) {
     return tsStringLiteral(`"/tmp/${tempDirPathJoin[1]}"`);
+  }
+
+  const zeroArgConstructor = /^([A-Z][A-Za-z0-9_]*)\(\)$/.exec(trimmed);
+  if (zeroArgConstructor !== null) {
+    return `new ${tsExportNameForPythonName(zeroArgConstructor[1])}()`;
   }
 
   const msgspecConvert = parseCallPrefix(trimmed, 'msgspec.convert');

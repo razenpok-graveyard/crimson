@@ -233,8 +233,29 @@ export function renderMsgspecStructModule(relativePath: string, module: StructMo
     lines.push('');
   }
 
-  for (let index = 0; index < module.classes.length; index += 1) {
-    const structClass = module.classes[index];
+  renderStructClasses(lines, module.classes);
+  if (module.classes.length > 0 && module.protocols.length > 0) {
+    lines.push('');
+  }
+  for (let index = 0; index < module.protocols.length; index += 1) {
+    const protocol = module.protocols[index];
+    lines.push(`export interface ${protocol.name} {`);
+    for (const method of protocol.methods) {
+      const params = method.parameters.map((param) => `${param.name}: ${param.typeExpression}`);
+      lines.push(`  ${method.name}(${params.join(', ')}): ${method.returnType};`);
+    }
+    lines.push('}');
+    if (index < module.protocols.length - 1) {
+      lines.push('');
+    }
+  }
+  lines.push('');
+  return lines.join('\n');
+}
+
+function renderStructClasses(lines: string[], classes: StructModule['classes']): void {
+  for (let index = 0; index < classes.length; index += 1) {
+    const structClass = classes[index];
     if (structClass.docstring !== null) {
       for (const line of structClass.docstring.split(/\r?\n/)) {
         lines.push(line === '' ? '//' : `// ${line}`);
@@ -260,27 +281,10 @@ export function renderMsgspecStructModule(relativePath: string, module: StructMo
     }
     lines.push('  }');
     lines.push('}');
-    if (index < module.classes.length - 1) {
+    if (index < classes.length - 1) {
       lines.push('');
     }
   }
-  if (module.classes.length > 0 && module.protocols.length > 0) {
-    lines.push('');
-  }
-  for (let index = 0; index < module.protocols.length; index += 1) {
-    const protocol = module.protocols[index];
-    lines.push(`export interface ${protocol.name} {`);
-    for (const method of protocol.methods) {
-      const params = method.parameters.map((param) => `${param.name}: ${param.typeExpression}`);
-      lines.push(`  ${method.name}(${params.join(', ')}): ${method.returnType};`);
-    }
-    lines.push('}');
-    if (index < module.protocols.length - 1) {
-      lines.push('');
-    }
-  }
-  lines.push('');
-  return lines.join('\n');
 }
 
 export function renderStraightLineModule(relativePath: string, module: StraightLineModule): string {
@@ -315,7 +319,12 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
   }
 
   renderStraightLineAssignments(lines, module.leadingAssignments);
-  if (module.leadingAssignments.length > 0 && module.functions.length + module.assignments.length > 0) {
+  if (module.leadingAssignments.length > 0 && module.classes.length + module.functions.length + module.assignments.length > 0) {
+    lines.push('');
+  }
+
+  renderStructClasses(lines, module.classes);
+  if (module.classes.length > 0 && module.functions.length + module.assignments.length > 0) {
     lines.push('');
   }
 

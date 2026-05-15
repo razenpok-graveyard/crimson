@@ -199,6 +199,7 @@ export interface StraightLineModule {
   reexports: Reexport[];
   typeAliases: TypeAlias[];
   leadingAssignments: SimpleModuleAssignment[];
+  classes: StructClassDefinition[];
   functions: SimpleModuleFunction[];
   assignments: SimpleModuleAssignment[];
 }
