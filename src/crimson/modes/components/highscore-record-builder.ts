@@ -1,9 +1,9 @@
 // Port of crimson/modes/components/highscore_record_builder.py
 
-import { GameMode } from '@crimson/game-modes.ts';
+import type { GameMode } from '@crimson/game-modes.ts';
 import type { GameplayState } from '@crimson/gameplay.ts';
 import { HighScoreRecord } from '@crimson/persistence/highscores.ts';
-import { type PlayerState } from '@crimson/sim/state-types.ts';
+import type { PlayerState } from '@crimson/sim/state-types.ts';
 import { mostUsedWeaponIdForPlayer } from '@crimson/weapon-runtime/index.ts';
 
 export function clampShots(fired: number, hit: number): [number, number] {
@@ -13,7 +13,8 @@ export function clampShots(fired: number, hit: number): [number, number] {
 }
 
 export function shotsFromState(state: GameplayState, opts: { playerIndex: number }): [number, number] {
-  const index = int(opts.playerIndex);
+  const playerIndex = opts.playerIndex;
+  const index = int(playerIndex);
   if (index < 0 || index >= state.shotsFired.length || index >= state.shotsHit.length) {
     return [0, 0];
   }
@@ -22,44 +23,30 @@ export function shotsFromState(state: GameplayState, opts: { playerIndex: number
   return clampShots(fired, hit);
 }
 
-export function buildHighscoreRecordForGameOver(opts: {
-  state: GameplayState;
-  player: PlayerState;
-  survivalElapsedMs: number;
-  creatureKillCount: number;
-  gameModeId: GameMode;
-  shotsFired?: number | null;
-  shotsHit?: number | null;
-  clampShotsHit?: boolean;
-}): HighScoreRecord {
-  const {
-    state,
-    player,
-    survivalElapsedMs,
-    creatureKillCount,
-    gameModeId,
-    clampShotsHit = true,
-  } = opts;
-
+export function buildHighscoreRecordForGameOver(opts: { state: GameplayState; player: PlayerState; survivalElapsedMs: number; creatureKillCount: number; gameModeId: GameMode; shotsFired?: number | null; shotsHit?: number | null; clampShotsHit?: boolean }): HighScoreRecord {
+  const state = opts.state;
+  const player = opts.player;
+  const survivalElapsedMs = opts.survivalElapsedMs;
+  const creatureKillCount = opts.creatureKillCount;
+  const gameModeId = opts.gameModeId;
+  const shotsFired = opts.shotsFired ?? null;
+  const shotsHit = opts.shotsHit ?? null;
+  const clampShotsHit = opts.clampShotsHit ?? true;
   const record = HighScoreRecord.blank();
   record.scoreXp = int(player.experience);
   record.survivalElapsedMs = int(survivalElapsedMs);
   record.creatureKillCount = int(creatureKillCount);
 
-  const weaponId = mostUsedWeaponIdForPlayer(
-    state,
-    { playerIndex: int(player.index), fallbackWeaponId: player.weapon.weaponId },
-  );
+  const weaponId = mostUsedWeaponIdForPlayer(state, { playerIndex: int(player.index), fallbackWeaponId: player.weapon.weaponId });
   record.mostUsedWeaponId = weaponId;
 
   let fired: number;
   let hit: number;
-
-  if (opts.shotsFired == null || opts.shotsHit == null) {
+  if (shotsFired === null || shotsHit === null) {
     [fired, hit] = shotsFromState(state, { playerIndex: int(player.index) });
   } else {
-    fired = int(opts.shotsFired);
-    hit = int(opts.shotsHit);
+    fired = int(shotsFired);
+    hit = int(shotsHit);
     if (clampShotsHit) {
       [fired, hit] = clampShots(fired, hit);
     }

@@ -136,6 +136,17 @@ function predeclareIfBranchAssignments(
         types.add(inferPythonExpressionType(assignment[2]));
         assignedTypes.set(assignment[1], types);
       }
+      const tupleAssignment = rest.startsWith(' ') ? null : /^([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+) = (.+)$/.exec(rest);
+      if (tupleAssignment !== null) {
+        for (const name of tupleAssignment[1].split(', ')) {
+          if (name === '_' || !reassignedNames.has(name) || declaredNames.has(name)) {
+            continue;
+          }
+          const types = assignedTypes.get(name) ?? new Set<string>();
+          types.add(inferPythonExpressionType(tupleAssignment[2]));
+          assignedTypes.set(name, types);
+        }
+      }
       nextIndex += 1;
       continue;
     }
@@ -148,7 +159,9 @@ function predeclareIfBranchAssignments(
 
   const declarations: string[] = [];
   for (const [name, types] of assignedTypes) {
-    const type = types.size === 1 ? [...types][0] : 'any';
+    const concreteTypes = [...types].filter((type) => type !== 'any');
+    const candidateTypes = concreteTypes.length > 0 ? concreteTypes : [...types];
+    const type = new Set(candidateTypes).size === 1 ? candidateTypes[0] : 'any';
     declarations.push(`let ${tsExportNameForPythonName(name)}: ${type};`);
     declaredNames.add(name);
   }
@@ -1210,53 +1223,65 @@ function parseMultilineCallParts(
       continue;
     }
 
-    const keywordArg = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(arg);
-    if (keywordArg === null) {
-      if (sawKeyword) {
-        return null;
-      }
-      const nestedCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(arg);
-      if (nestedCall !== null) {
-        const callExpression = parseMultilineCallExpression(
-          lines,
-          nextIndex + 1,
-          nestedCall[1],
-          nameMap,
-          arrayNames,
-          validatedTypeAliases,
-          mapNames,
-        );
-        if (callExpression === null) {
+    const argParts = splitTopLevelComma(arg);
+    let consumedNestedCall = false;
+    for (const argPart of argParts) {
+      const keywordArg = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(argPart);
+      if (keywordArg === null) {
+        if (sawKeyword) {
           return null;
         }
-        positionalParts.push(callExpression.expression);
-        nextIndex = callExpression.nextIndex;
-        continue;
-      }
-      positionalParts.push(arg);
-    } else {
-      sawKeyword = true;
-      const nestedCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(keywordArg[2]);
-      if (nestedCall !== null) {
-        const callExpression = parseMultilineCallExpression(
-          lines,
-          nextIndex + 1,
-          nestedCall[1],
-          nameMap,
-          arrayNames,
-          validatedTypeAliases,
-          mapNames,
-        );
-        if (callExpression === null) {
-          return null;
+        const nestedCall = argParts.length === 1
+          ? /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(argPart)
+          : null;
+        if (nestedCall !== null) {
+          const callExpression = parseMultilineCallExpression(
+            lines,
+            nextIndex + 1,
+            nestedCall[1],
+            nameMap,
+            arrayNames,
+            validatedTypeAliases,
+            mapNames,
+          );
+          if (callExpression === null) {
+            return null;
+          }
+          positionalParts.push(callExpression.expression);
+          nextIndex = callExpression.nextIndex;
+          consumedNestedCall = true;
+          break;
         }
-        keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${callExpression.expression}`);
-        nextIndex = callExpression.nextIndex;
-        continue;
+        positionalParts.push(argPart);
+      } else {
+        sawKeyword = true;
+        const nestedCall = argParts.length === 1
+          ? /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(keywordArg[2])
+          : null;
+        if (nestedCall !== null) {
+          const callExpression = parseMultilineCallExpression(
+            lines,
+            nextIndex + 1,
+            nestedCall[1],
+            nameMap,
+            arrayNames,
+            validatedTypeAliases,
+            mapNames,
+          );
+          if (callExpression === null) {
+            return null;
+          }
+          keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${callExpression.expression}`);
+          nextIndex = callExpression.nextIndex;
+          consumedNestedCall = true;
+          break;
+        }
+        keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${translateExpression(keywordArg[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
       }
-      keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${translateExpression(keywordArg[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
     }
-    nextIndex += 1;
+    if (!consumedNestedCall) {
+      nextIndex += 1;
+    }
   }
   return null;
 }
@@ -1329,13 +1354,16 @@ function translateStraightLineAssignment(
     const names = tupleAssignment[1].split(', ');
     const tsNames = names.map((name) => name === '_' ? '' : tsExportNameForPythonName(name));
     const alreadyDeclared = names.filter((name) => name !== '_').every((name) => declaredNames.has(name));
+    const declaration = alreadyDeclared
+      ? ''
+      : names.some((name) => reassignedNames.has(name)) ? 'let ' : 'const ';
     for (const name of names) {
       if (name !== '_') {
         declaredNames.add(name);
       }
     }
     return {
-      statements: [`${alreadyDeclared ? '' : 'const '}[${tsNames.join(', ')}] = ${assignedRight};`],
+      statements: [`${declaration}[${tsNames.join(', ')}] = ${assignedRight};`],
       nextIndex,
     };
   }
@@ -1507,6 +1535,14 @@ export function reassignedLocalNames(lines: string[], startIndex: number): Set<s
     const assignment = /^\s+([A-Za-z_][A-Za-z0-9_]*) (?:\+=|-=|\*=|\/=|=) /.exec(lines[index]);
     if (assignment !== null) {
       counts.set(assignment[1], (counts.get(assignment[1]) ?? 0) + 1);
+    }
+    const tupleAssignment = /^\s+([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+) = /.exec(lines[index]);
+    if (tupleAssignment !== null) {
+      for (const name of tupleAssignment[1].split(', ')) {
+        if (name !== '_') {
+          counts.set(name, (counts.get(name) ?? 0) + 1);
+        }
+      }
     }
     index += 1;
   }

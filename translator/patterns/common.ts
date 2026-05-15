@@ -191,6 +191,9 @@ export function inferPythonExpressionType(pythonExpression: string): string {
   if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) {
     return 'number';
   }
+  if (/^(?:int|float)\(.+\)$/.test(trimmed)) {
+    return 'number';
+  }
   if (/^(?:proj_origin|Vec2|rl\.Vector2)\(/.test(trimmed)) {
     return '{ x: number; y: number }';
   }
