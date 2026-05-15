@@ -1,12 +1,12 @@
 // Port of crimson/render/world/renderer.py
 
-import { CrimsonConfig } from '@grim/config.ts';
+import type { CrimsonConfig } from '@grim/config.ts';
 import { Vec2 } from '@grim/geom.ts';
-import * as wgl from '@wgl';
 import type { RenderFrame } from '@crimson/render/frame.ts';
-import * as viewport from './viewport.ts';
-import { buildWorldRenderCtx } from './context.ts';
-import { drawWorld } from './draw.ts';
+import { buildWorldRenderCtx } from '@crimson/render/world/context.ts';
+import { drawWorld } from '@crimson/render/world/draw.ts';
+import * as wgl from '@wgl';
+import * as viewport from '@crimson/render/world/viewport.ts';
 
 export class WorldRenderer {
   worldSize: number;
@@ -24,47 +24,55 @@ export class WorldRenderer {
   }
 
   syncViewport(opts: { worldSize: number; config: CrimsonConfig | null; camera: Vec2 }): void {
-    this.worldSize = opts.worldSize;
-    this.config = opts.config;
-    this.camera = opts.camera;
+    const worldSize = opts.worldSize;
+    const config = opts.config;
+    const camera = opts.camera;
+    this.worldSize = worldSize;
+    this.config = config;
+    this.camera = camera;
   }
 
   draw(opts: { renderFrame: RenderFrame; drawAimIndicators?: boolean; entityAlpha?: number }): void {
+    const renderFrame = opts.renderFrame;
     const drawAimIndicators = opts.drawAimIndicators ?? true;
     const entityAlpha = opts.entityAlpha ?? 1.0;
-    this.syncViewport({ worldSize: opts.renderFrame.worldSize, config: opts.renderFrame.config, camera: opts.renderFrame.camera });
-    const renderCtx = buildWorldRenderCtx(this, { renderFrame: opts.renderFrame });
-    drawWorld(renderCtx, { drawAimIndicators, entityAlpha });
+    this.syncViewport({
+      worldSize: renderFrame.worldSize,
+      config: renderFrame.config,
+      camera: renderFrame.camera,
+    });
+    const renderCtx = buildWorldRenderCtx(this, { renderFrame: renderFrame });
+    drawWorld(
+      renderCtx,
+      { drawAimIndicators: drawAimIndicators, entityAlpha: entityAlpha },
+    );
   }
 
-  private cameraScreenSize(opts: { runtimeW?: number | null; runtimeH?: number | null } = {}): Vec2 {
-    const outW = opts.runtimeW ?? wgl.getScreenWidth();
-    const outH = opts.runtimeH ?? wgl.getScreenHeight();
+  cameraScreenSize(opts: { runtimeW?: number | null; runtimeH?: number | null } = {}): Vec2 {
+    const runtimeW = opts.runtimeW ?? null;
+    const runtimeH = opts.runtimeH ?? null;
+    const outW = runtimeW !== null ? runtimeW : wgl.getScreenWidth();
+    const outH = runtimeH !== null ? runtimeH : wgl.getScreenHeight();
     return viewport.cameraScreenSize({ worldSize: this.worldSize, config: this.config, runtimeW: outW, runtimeH: outH });
   }
 
-  private clampCamera(camera: Vec2, screenSize: Vec2): Vec2 {
-    return viewport.clampCamera({ worldSize: this.worldSize, camera, screenSize });
+  clampCamera(camera: Vec2, screenSize: Vec2): Vec2 {
+    return viewport.clampCamera({ worldSize: this.worldSize, camera: camera, screenSize: screenSize });
   }
 
-  private worldParams(): [Vec2, Vec2] {
+  worldParams(): [Vec2, Vec2] {
     const outSize = new Vec2(wgl.getScreenWidth(), wgl.getScreenHeight());
-    const [camera, viewScale] = viewport.viewTransform({
-      worldSize: this.worldSize,
-      config: this.config,
-      camera: this.camera,
-      outSize,
-    });
+    const [camera, viewScale, screenSize] = viewport.viewTransform({ worldSize: this.worldSize, config: this.config, camera: this.camera, outSize: outSize });
     return [camera, viewScale];
   }
 
   worldToScreen(pos: Vec2): Vec2 {
     const [camera, viewScale] = this.worldParams();
-    return viewport.worldToScreenWith(pos, { camera, viewScale });
+    return viewport.worldToScreenWith(pos, { camera: camera, viewScale: viewScale });
   }
 
   screenToWorld(pos: Vec2): Vec2 {
     const [camera, viewScale] = this.worldParams();
-    return viewport.screenToWorldWith(pos, { camera, viewScale });
+    return viewport.screenToWorldWith(pos, { camera: camera, viewScale: viewScale });
   }
 }

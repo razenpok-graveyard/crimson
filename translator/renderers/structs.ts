@@ -17,7 +17,10 @@ export function renderMsgspecStructModule(relativePath: string, module: StructMo
       `import ${importDefinition.typeOnly ? 'type ' : ''}{ ${importDefinition.names.join(', ')} } from '${importDefinition.modulePath}';`,
     );
   }
-  if (module.imports.length > 0) {
+  for (const namespaceImport of module.namespaceImports) {
+    lines.push(`import * as ${namespaceImport.alias} from '${namespaceImport.modulePath}';`);
+  }
+  if (module.imports.length + module.namespaceImports.length > 0) {
     lines.push('');
   }
 

@@ -124,6 +124,7 @@ export interface SimpleExportModule {
 
 export interface StructModule {
   imports: ImportDefinition[];
+  namespaceImports: NamespaceImportDefinition[];
   typeAliases: TypeAlias[];
   functions: SimpleModuleFunction[];
   classes: StructClassDefinition[];

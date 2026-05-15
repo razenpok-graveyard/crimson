@@ -1,6 +1,7 @@
 import type {
   FunctionParameter,
   ImportDefinition,
+  NamespaceImportDefinition,
   OptionalFunctionParameter,
   PlainClassDefinition,
   ProtocolDefinition,
@@ -37,11 +38,13 @@ import {
 export function parseMsgspecStructModule(trimmedPython: string, relativePath: string): StructModule | null {
   const lines = flattenFromImportBlocks(trimmedPython.split(/\r?\n/));
   const imports: ImportDefinition[] = [];
+  const namespaceImports: NamespaceImportDefinition[] = [];
   const typeAliases: TypeAlias[] = [];
   const functions: SimpleModuleFunction[] = [];
   const classes: StructModule['classes'] = [];
   const protocols: StructModule['protocols'] = [];
   const structConstructorFields = new Map<string, string[]>();
+  const moduleNameMap = new Map<string, string>();
   let sawMsgspecImport = false;
   let index = 0;
 
@@ -79,6 +82,36 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       }
       imports.push(...typeCheckingImports.imports);
       index = typeCheckingImports.nextIndex;
+      continue;
+    }
+
+    const raylibApiImport = /^from grim\.raylib_api import ((?:r[dl])(?:, r[dl])*)$/.exec(trimmed);
+    if (raylibApiImport !== null) {
+      const names = raylibApiImport[1].split(', ');
+      imports.push({
+        modulePath: tsImportPathForPythonImport('grim.raylib_api', relativePath),
+        names,
+      });
+      namespaceImports.push({
+        alias: 'wgl',
+        modulePath: '@wgl',
+      });
+      for (const name of names) {
+        moduleNameMap.set(name, 'wgl');
+      }
+      index += 1;
+      continue;
+    }
+
+    const namespaceImport = /^from (\.+) import ([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);
+    if (namespaceImport !== null) {
+      const alias = tsExportNameForPythonName(namespaceImport[2]);
+      namespaceImports.push({
+        alias,
+        modulePath: tsImportPathForPythonImport(`${namespaceImport[1]}${namespaceImport[2]}`, relativePath),
+      });
+      moduleNameMap.set(namespaceImport[2], alias);
+      index += 1;
       continue;
     }
 
@@ -149,7 +182,7 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       continue;
     }
 
-    const fn = parseStructModuleFunction(lines, index, structConstructorFields);
+    const fn = parseStructModuleFunction(lines, index, structConstructorFields, moduleNameMap);
     if (fn !== null) {
       functions.push(fn.fn);
       index = fn.nextIndex;
@@ -163,7 +196,7 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       continue;
     }
 
-    const structClass = parseStructClass(lines, index);
+    const structClass = parseStructClass(lines, index, moduleNameMap);
     if (structClass === null) {
       return null;
     }
@@ -176,7 +209,10 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
   }
 
   markStructTypeOnlyImports(imports, typeAliases, functions, classes, protocols);
-  return typeAliases.length + functions.length + classes.length + protocols.length > 0 ? { imports, typeAliases, functions, classes, protocols } : null;
+  markStructNamespaceImports(namespaceImports, typeAliases, functions, classes, protocols);
+  return typeAliases.length + functions.length + classes.length + protocols.length > 0
+    ? { imports, namespaceImports, typeAliases, functions, classes, protocols }
+    : null;
 }
 
 function rewriteStructClassConstructorCalls(
@@ -197,6 +233,7 @@ function parseStructModuleFunction(
   lines: string[],
   index: number,
   structConstructorFields: ReadonlyMap<string, string[]> = new Map(),
+  moduleNameMap: ReadonlyMap<string, string> = new Map(),
 ): { fn: SimpleModuleFunction; nextIndex: number } | null {
   const header = parseStraightLineFunctionHeader(lines, index);
   if (header === null) {
@@ -210,7 +247,7 @@ function parseStructModuleFunction(
   }
 
   const statements: string[] = [];
-  const nameMap = new Map<string, string>();
+  const nameMap = new Map(moduleNameMap);
   const declaredNames = new Set<string>(pythonParameterNames(header.parametersText));
   let nextIndex = header.nextIndex;
   const docstring = parseIndentedDocstring(lines, nextIndex);
@@ -261,6 +298,7 @@ function parseStructModuleFunction(
 export function parseStructClass(
   lines: string[],
   index: number,
+  moduleNameMap: ReadonlyMap<string, string> = new Map(),
 ): { structClass: StructModule['classes'][number]; nextIndex: number } | null {
   const dataclass = /^@dataclass\((?<options>[^)]*)\)$/.exec(lines[index] ?? '');
   const classIndex = dataclass === null ? index : index + 1;
@@ -301,7 +339,7 @@ export function parseStructClass(
     }
 
     if (trimmedField === '@property') {
-      const propertyMethod = parseStructMethod(lines, nextIndex + 1, false, arrayFieldNames);
+      const propertyMethod = parseStructMethod(lines, nextIndex + 1, false, arrayFieldNames, moduleNameMap);
       if (propertyMethod === null || propertyMethod.method.parameters.length > 0 || propertyMethod.method.optsParams.length > 0) {
         return null;
       }
@@ -314,7 +352,7 @@ export function parseStructClass(
     }
 
     if (trimmedField === '@staticmethod') {
-      const staticMethod = parseStructMethod(lines, nextIndex + 1, true, arrayFieldNames);
+      const staticMethod = parseStructMethod(lines, nextIndex + 1, true, arrayFieldNames, moduleNameMap);
       if (staticMethod === null) {
         return null;
       }
@@ -323,7 +361,7 @@ export function parseStructClass(
       continue;
     }
 
-    const method = parseStructMethod(lines, nextIndex, false, arrayFieldNames);
+    const method = parseStructMethod(lines, nextIndex, false, arrayFieldNames, moduleNameMap);
     if (method !== null) {
       if (method.method.name === '__post_init__') {
         postInitStatements = method.method.statements;
@@ -372,6 +410,7 @@ function parseStructMethod(
   index: number,
   staticMethod = false,
   initialArrayNames: ReadonlySet<string> = new Set(),
+  moduleNameMap: ReadonlyMap<string, string> = new Map(),
 ): { method: SimpleModuleFunction; nextIndex: number } | null {
   const header = parseIndentedFunctionHeader(lines, index, '    ');
   if (header === null) {
@@ -423,7 +462,7 @@ function parseStructMethod(
   }
 
   const statements: string[] = [];
-  const nameMap = staticMethod ? new Map<string, string>() : new Map<string, string>([['self', 'this']]);
+  const nameMap = staticMethod ? new Map(moduleNameMap) : new Map<string, string>([...moduleNameMap, ['self', 'this']]);
   const declaredNames = new Set<string>(pythonParameterNames(extraParameters));
   const reassignedNames = reassignedLocalNames(lines, header.nextIndex);
   let nextIndex = header.nextIndex;
@@ -969,6 +1008,47 @@ function markStructTypeOnlyImports(
       { ...importDefinition, names: valueNames, typeOnly: false },
     );
     index += 1;
+  }
+}
+
+function markStructNamespaceImports(
+  namespaceImports: NamespaceImportDefinition[],
+  typeAliases: TypeAlias[],
+  functions: SimpleModuleFunction[],
+  classes: StructModule['classes'],
+  protocols: StructModule['protocols'],
+): void {
+  const usageText = [
+    ...typeAliases.map((alias) => alias.typeExpression),
+    ...classes.flatMap((structClass) => [
+      ...structClass.fields.map((field) => field.typeExpression),
+      ...structClass.fields.map((field) => field.defaultValue ?? ''),
+      ...structClass.postInitStatements,
+      ...structClass.methods.flatMap((method) => [
+        method.returnType,
+        ...method.parameters.map((parameter) => parameter.typeExpression),
+        ...method.optsParams.map((parameter) => parameter.typeExpression),
+        ...method.statements,
+      ]),
+    ]),
+    ...functions.flatMap((fn) => [
+      fn.returnType,
+      ...fn.parameters.map((parameter) => parameter.typeExpression),
+      ...fn.optsParams.map((parameter) => parameter.typeExpression),
+      ...fn.statements,
+    ]),
+    ...protocols.flatMap((protocol) => protocol.methods.flatMap((method) => [
+      method.returnType,
+      ...method.parameters.map((parameter) => parameter.typeExpression),
+      ...method.optsParams.map((parameter) => parameter.typeExpression),
+    ])),
+  ].join('\n');
+
+  for (let index = 0; index < namespaceImports.length; index += 1) {
+    if (!identifierPattern(namespaceImports[index].alias).test(usageText)) {
+      namespaceImports.splice(index, 1);
+      index -= 1;
+    }
   }
 }
 
