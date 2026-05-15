@@ -195,7 +195,8 @@ export function stripTypeOnlyStatementSyntax(text: string): string {
     .split('\n')
     .map((line) => {
       const nestedFunction = /^(\s*)(?:async )?function ([A-Za-z_$][A-Za-z0-9_$]*)\(/.exec(line);
-      return nestedFunction === null ? line : `${nestedFunction[1]}function ${nestedFunction[2]}`;
+      const withoutNestedFunctionReturnType = nestedFunction === null ? line : `${nestedFunction[1]}function ${nestedFunction[2]}`;
+      return withoutNestedFunctionReturnType.replace(/\(([^()]+)\): [^=]+ =>/g, '($1) =>');
     })
     .join('\n');
 }

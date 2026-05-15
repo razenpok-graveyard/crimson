@@ -1,13 +1,11 @@
 // Port of crimson/replay/header_settings.py
 
 import { GameMode } from '@crimson/game-modes.ts';
-import { INPUT_DELAY_TICKS } from '@crimson/net/lockstep-protocol.ts';
+import { INPUT_DELAY_TICKS as LOCKSTEP_INPUT_DELAY_TICKS } from '@crimson/net/lockstep-protocol.ts';
 import type { LockstepSessionSettings } from '@crimson/net/session-settings.ts';
 import { sessionSettingsForLockstep } from '@crimson/net/session-settings.ts';
 import { GameStatusData } from '@crimson/persistence/save-status.ts';
 import { ReplayHeader } from '@crimson/replay/types.ts';
-
-const LOCKSTEP_INPUT_DELAY_TICKS = INPUT_DELAY_TICKS;
 
 export function sessionSettingsFromReplayHeader(header: ReplayHeader, opts: { inputDelayTicks?: number } = {}): LockstepSessionSettings {
   const inputDelayTicks = opts.inputDelayTicks ?? LOCKSTEP_INPUT_DELAY_TICKS;

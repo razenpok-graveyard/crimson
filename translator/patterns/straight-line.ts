@@ -172,14 +172,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       const aliasName = tsExportNameForPythonName(aliasedFromImport[3]);
       imports.push({
         modulePath: tsImportPathForPythonImport(aliasedFromImport[1], relativePath),
-        names: [importedName],
-      });
-      leadingAssignments.push({
-        pythonName: aliasedFromImport[3],
-        name: aliasName,
-        declaration: 'const',
-        exported: false,
-        valueLines: [importedName],
+        names: [`${importedName} as ${aliasName}`],
       });
       moduleNameMap.set(aliasedFromImport[3], aliasName);
       index += 1;
@@ -734,7 +727,7 @@ function avoidImportedPrivateNameCollision(assignment: SimpleModuleAssignment, i
   if (!(assignment.pythonName?.startsWith('_') ?? false)) {
     return;
   }
-  const importedNames = new Set(imports.flatMap((importDefinition) => importDefinition.names));
+  const importedNames = new Set(imports.flatMap((importDefinition) => importDefinition.names.map(importedBindingName)));
   if (importedNames.has(assignment.name)) {
     assignment.name = `_${assignment.name}`;
   }
@@ -762,6 +755,10 @@ function markTypeOnlyImports(
     ...plainClasses.flatMap((plainClass) => plainClass.methods.flatMap((method) => method.statements)),
     ...leadingStatements,
     ...functions.flatMap((fn) => fn.statements),
+    ...functions.flatMap((fn) => [
+      ...fn.parameters.map((parameter) => parameter.defaultValue ?? ''),
+      ...fn.optsParams.map((parameter) => parameter.defaultValue ?? ''),
+    ]),
     ...assignments.flatMap((assignment) => assignment.valueLines),
   ].join('\n'));
   const typeText = [
@@ -792,9 +789,9 @@ function markTypeOnlyImports(
 
   for (let index = 0; index < imports.length; index += 1) {
     const importDefinition = imports[index];
-    const valueNames = importDefinition.names.filter((name) => identifierPattern(name).test(valueText));
+    const valueNames = importDefinition.names.filter((name) => identifierPattern(importedBindingName(name)).test(valueText));
     const typeOnlyNames = importDefinition.names.filter((name) => (
-      !identifierPattern(name).test(valueText) && identifierPattern(name).test(typeText)
+      !identifierPattern(importedBindingName(name)).test(valueText) && identifierPattern(importedBindingName(name)).test(typeText)
     ));
     if (valueNames.length + typeOnlyNames.length === 0) {
       imports.splice(index, 1);
@@ -819,4 +816,8 @@ function markTypeOnlyImports(
     );
     index += 1;
   }
+}
+
+function importedBindingName(importName: string): string {
+  return /^.+ as ([A-Za-z_$][A-Za-z0-9_$]*)$/.exec(importName)?.[1] ?? importName;
 }

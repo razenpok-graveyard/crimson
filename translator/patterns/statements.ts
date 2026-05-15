@@ -1426,6 +1426,14 @@ export function parseTopLevelAssignment(
   }
 
   if (value === '{') {
+    const dictComprehension = parseMultilineDictComprehension(lines, index + 1, annotatedType);
+    if (dictComprehension !== null) {
+      return {
+        assignment: { ...baseAssignment, valueLines: dictComprehension.valueLines },
+        nextIndex: dictComprehension.nextIndex,
+      };
+    }
+
     const valueLines = ['new Map(['];
     let nextIndex = index + 1;
     while (nextIndex < lines.length) {
@@ -1453,6 +1461,49 @@ export function parseTopLevelAssignment(
     return {
       assignment: { ...baseAssignment, declaration: 'const', valueLines: ['new Map()'] },
       nextIndex: index + 1,
+    };
+  }
+
+  const tupleGeneratorCall = /^tuple\($/.exec(value);
+  if (tupleGeneratorCall !== null) {
+    const generator = collectMultilineExpression(lines, index + 1, ')');
+    if (generator === null) {
+      return null;
+    }
+    const valueLines = valueLinesForTupleGenerator(generator.expression, annotatedType);
+    if (valueLines === null) {
+      return null;
+    }
+    return {
+      assignment: { ...baseAssignment, valueLines },
+      nextIndex: generator.nextIndex,
+    };
+  }
+
+  const tuplePlusTupleGeneratorCall = /^\((.*),\) \+ tuple\($/.exec(value);
+  if (tuplePlusTupleGeneratorCall !== null) {
+    const generator = collectMultilineExpression(lines, index + 1, ')');
+    if (generator === null) {
+      return null;
+    }
+    const generatorValueLines = valueLinesForTupleGenerator(generator.expression, annotatedType);
+    if (generatorValueLines === null || generatorValueLines.length !== 1) {
+      return null;
+    }
+    const prefixValues = splitTopLevelComma(tuplePlusTupleGeneratorCall[1])
+      .filter((part) => part !== '')
+      .map((part) => translateExpression(part));
+    return {
+      assignment: {
+        ...baseAssignment,
+        valueLines: [
+          '[',
+          ...prefixValues.map((part) => `  ${part},`),
+          `  ...${generatorValueLines[0]},`,
+          ']',
+        ],
+      },
+      nextIndex: generator.nextIndex,
     };
   }
 
@@ -1487,4 +1538,118 @@ export function parseTopLevelAssignment(
   }
 
   return null;
+}
+
+function parseMultilineDictComprehension(
+  lines: string[],
+  startIndex: number,
+  annotatedType: string | null,
+): { valueLines: string[]; nextIndex: number } | null {
+  const keyValue = /^(.+): (.+)$/.exec((lines[startIndex] ?? '').trim());
+  const forClause = /^for ([A-Za-z_][A-Za-z0-9_]*) in (.+)$/.exec((lines[startIndex + 1] ?? '').trim());
+  const ifNotNone = /^if (.+) is not None$/.exec((lines[startIndex + 2] ?? '').trim());
+  if (
+    keyValue === null
+    || forClause === null
+    || ifNotNone === null
+    || (lines[startIndex + 3] ?? '').trim() !== '}'
+  ) {
+    return null;
+  }
+
+  const valueType = dictValueType(annotatedType);
+  const iterVar = tsExportNameForPythonName(forClause[1]);
+  const iterable = translateExpression(forClause[2]);
+  const guard = nonNullHookAttrTypeGuard(forClause[2], forClause[1], ifNotNone[1], valueType);
+  return {
+    valueLines: [
+      'new Map(',
+      `  ${iterable}`,
+      `    .filter((${iterVar})${guard} => ${translateExpression(`${ifNotNone[1]} is not None`)})`,
+      `    .map((${iterVar}) => [${translateExpression(keyValue[1])}, ${translateExpression(keyValue[2])}]),`,
+      ')',
+    ],
+    nextIndex: startIndex + 4,
+  };
+}
+
+function collectMultilineExpression(
+  lines: string[],
+  startIndex: number,
+  closeLine: string,
+): { expression: string; nextIndex: number } | null {
+  const parts: string[] = [];
+  let nextIndex = startIndex;
+  while (nextIndex < lines.length) {
+    const trimmed = lines[nextIndex].trim();
+    if (trimmed === closeLine) {
+      return parts.length === 0
+        ? null
+        : { expression: parts.join(' '), nextIndex: nextIndex + 1 };
+    }
+    if (trimmed !== '') {
+      parts.push(trimmed.replace(/,$/, ''));
+    }
+    nextIndex += 1;
+  }
+  return null;
+}
+
+function valueLinesForTupleGenerator(
+  generatorExpression: string,
+  annotatedType: string | null,
+): string[] | null {
+  const filteredGenerator = /^(.+) for ([A-Za-z_][A-Za-z0-9_]*) in (.+) if (.+) is not None$/.exec(generatorExpression);
+  if (filteredGenerator !== null) {
+    const iterVar = tsExportNameForPythonName(filteredGenerator[2]);
+    const iterable = translateExpression(filteredGenerator[3]);
+    const guard = nonNullHookAttrTypeGuard(
+      filteredGenerator[3],
+      filteredGenerator[2],
+      filteredGenerator[4],
+      tupleElementType(annotatedType),
+    );
+    return [
+      `${iterable}`,
+      `  .filter((${iterVar})${guard} => ${translateExpression(`${filteredGenerator[4]} is not None`)})`,
+      `  .map((${iterVar}) => ${translateExpression(filteredGenerator[1])})`,
+    ];
+  }
+
+  const nestedGenerator = /^(.+) for ([A-Za-z_][A-Za-z0-9_]*) in (.+) for ([A-Za-z_][A-Za-z0-9_]*) in (.+)$/.exec(generatorExpression);
+  if (nestedGenerator !== null) {
+    const outerVar = tsExportNameForPythonName(nestedGenerator[2]);
+    return [
+      `${translateExpression(nestedGenerator[3])}.flatMap((${outerVar}) => ${translateExpression(nestedGenerator[5])})`,
+    ];
+  }
+
+  return null;
+}
+
+function tupleElementType(annotatedType: string | null): string | null {
+  const tupleType = /^tuple\[(.+), \.\.\.\]$/.exec(annotatedType?.trim() ?? '');
+  return tupleType === null ? null : tsTypeExpression(tupleType[1]);
+}
+
+function dictValueType(annotatedType: string | null): string | null {
+  const dictType = /^dict\[(.+), (.+)\]$/.exec(annotatedType?.trim() ?? '');
+  return dictType === null ? null : tsTypeExpression(dictType[2]);
+}
+
+function nonNullHookAttrTypeGuard(
+  iterableExpression: string,
+  pythonVarName: string,
+  pythonAttrExpression: string,
+  valueType: string | null,
+): string {
+  if (translateExpression(iterableExpression) !== 'PERK_HOOKS_IN_ORDER' || valueType === null) {
+    return '';
+  }
+  const attr = new RegExp(`^${pythonVarName}\\.([A-Za-z_][A-Za-z0-9_]*)$`).exec(pythonAttrExpression);
+  if (attr === null) {
+    return '';
+  }
+  const varName = tsExportNameForPythonName(pythonVarName);
+  return `: ${varName} is PerkHooks & { ${tsExportNameForPythonName(attr[1])}: ${valueType} }`;
 }
