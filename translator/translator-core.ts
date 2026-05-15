@@ -5,6 +5,7 @@ import {
   parseConstantsModule,
   parseFunctionsModule,
   parseGuardedAttributeModule,
+  parseBrowserInputModule,
   parseIntEnumModule,
   parseInitReexports,
   parseLazyWrapperModule,
@@ -25,6 +26,7 @@ import {
   renderEmptyModule,
   renderFunctionsModule,
   renderGuardedAttributeModule,
+  renderBrowserInputModule,
   renderIntEnumModule,
   renderInitReexports,
   renderLazyWrapperModule,
@@ -91,6 +93,10 @@ export async function translateFile(job: TranslationJob): Promise<string> {
   const guardedAttributeModule = parseGuardedAttributeModule(futureStripped, job.relativePath);
   if (guardedAttributeModule !== null) {
     return renderGuardedAttributeModule(job.relativePath, guardedAttributeModule);
+  }
+
+  if (parseBrowserInputModule(futureStripped)) {
+    return renderBrowserInputModule(job.relativePath);
   }
 
   const simpleExportModule = parseSimpleExportModule(futureStripped, job.relativePath);

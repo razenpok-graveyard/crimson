@@ -1,5 +1,6 @@
 export * from './basic.js';
 export * from './enums.js';
+export * from './input.js';
 export * from './protocols.js';
 export * from './simple.js';
 export * from './straight-line.js';
