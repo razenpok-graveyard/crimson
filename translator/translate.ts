@@ -76,6 +76,11 @@ async function translateFile(job: TranslationJob): Promise<string> {
     return renderNamespaceReexports(job.relativePath, namespaceReexports);
   }
 
+  const typeAliases = parseTypeAliases(futureStripped);
+  if (typeAliases !== null) {
+    return renderTypeAliases(job.relativePath, typeAliases);
+  }
+
   const trimmed = stripIgnorablePythonLines(job.python).trim();
   if (trimmed === '') {
     return renderEmptyModule(job.relativePath);
@@ -162,6 +167,11 @@ interface Reexport {
 interface NamespaceReexport {
   alias: string;
   modulePath: string;
+}
+
+interface TypeAlias {
+  name: string;
+  typeExpression: string;
 }
 
 interface InitReexports {
@@ -307,6 +317,73 @@ function renderNamespaceReexports(relativePath: string, reexports: NamespaceReex
   const lines = [`// Port of ${relativePath}`, ''];
   for (const reexport of reexports) {
     lines.push(`export * as ${reexport.alias} from '${reexport.modulePath}';`);
+  }
+  lines.push('');
+  return lines.join('\n');
+}
+
+function parseTypeAliases(trimmedPython: string): TypeAlias[] | null {
+  const aliases: TypeAlias[] = [];
+  let sawCallableImport = false;
+
+  for (const line of trimmedPython.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed === '') {
+      continue;
+    }
+
+    if (trimmed === 'from collections.abc import Callable') {
+      sawCallableImport = true;
+      continue;
+    }
+
+    const callableAlias = /^([A-Za-z_][A-Za-z0-9_]*) = Callable\[\[(.*)\], ([^\]]+)\]$/.exec(trimmed);
+    if (callableAlias !== null) {
+      aliases.push({
+        name: callableAlias[1],
+        typeExpression: tsCallableType(callableAlias[2], callableAlias[3]),
+      });
+      continue;
+    }
+
+    return null;
+  }
+
+  return sawCallableImport && aliases.length > 0 ? aliases : null;
+}
+
+function tsCallableType(argsText: string, returnText: string): string {
+  const args = argsText.trim();
+  const params = args === ''
+    ? ''
+    : args
+      .split(', ')
+      .map((arg, index) => `arg${index}: ${tsTypeExpression(arg)}`)
+      .join(', ');
+  return `(${params}) => ${tsTypeExpression(returnText)}`;
+}
+
+function tsTypeExpression(pythonType: string): string {
+  const trimmed = pythonType.trim();
+  if (trimmed === 'None') {
+    return 'void';
+  }
+  if (trimmed === 'float' || trimmed === 'int') {
+    return 'number';
+  }
+  if (trimmed === 'str') {
+    return 'string';
+  }
+  if (trimmed === 'bool') {
+    return 'boolean';
+  }
+  return tsExportNameForPythonName(trimmed);
+}
+
+function renderTypeAliases(relativePath: string, aliases: TypeAlias[]): string {
+  const lines = [`// Port of ${relativePath}`, ''];
+  for (const alias of aliases) {
+    lines.push(`export type ${alias.name} = ${alias.typeExpression};`);
   }
   lines.push('');
   return lines.join('\n');
