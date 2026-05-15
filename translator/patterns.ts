@@ -890,6 +890,11 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     while (index < lines.length) {
       const line = lines[index];
       if (line.trim() === '') {
+        if ((lines[index + 1] ?? '').startsWith('    ')) {
+          statements.push('');
+          index += 1;
+          continue;
+        }
         index += 1;
         break;
       }

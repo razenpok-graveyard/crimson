@@ -219,7 +219,7 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
       }
     }
     for (const statement of fn.statements) {
-      lines.push(`  ${statement}`);
+      lines.push(statement === '' ? '' : `  ${statement}`);
     }
     lines.push('}');
     if (index < module.functions.length - 1 || module.assignments.length > 0) {
