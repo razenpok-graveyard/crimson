@@ -1,8 +1,8 @@
 // Port of crimson/game/__init__.py
 
-import type { GameConfig } from './types.ts';
+import { GameConfig } from './types.ts';
 
-export type { GameConfig };
+export { GameConfig };
 
 export function runGame(config: GameConfig): void {
   // Keep package import side effects minimal so UI modules can import

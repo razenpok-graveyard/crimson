@@ -28,6 +28,13 @@ export function tsTypeExpression(pythonType: string): string {
   if (callable !== null) {
     return tsCallableType(callable[1], callable[2]);
   }
+  const literalType = /^Literal\[(.+)\]$/.exec(trimmed);
+  if (literalType !== null) {
+    return literalType[1]
+      .split(topLevelCommaPattern())
+      .map(tsLiteralExpression)
+      .join(' | ');
+  }
   if (trimmed.includes(' | ')) {
     return trimmed
       .split(' | ')

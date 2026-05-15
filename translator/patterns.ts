@@ -926,7 +926,12 @@ function isTypeAliasExpression(pythonExpression: string): boolean {
   if (/^(?:True|False|None|-?\d+(?:\.\d+)?|["'])/.test(trimmed)) {
     return false;
   }
-  return /[\[\]|]/.test(trimmed) || /^(?:Callable|Sequence|dict|list|tuple)\b/.test(trimmed) || /^[A-Z][A-Za-z0-9_]*(?:\.[A-Z][A-Za-z0-9_]*)?$/.test(trimmed);
+  return /[\[\]|]/.test(trimmed) || /^(?:Callable|Literal|Sequence|dict|list|tuple)\b/.test(trimmed) || /^[A-Z][A-Za-z0-9_]*(?:\.[A-Z][A-Za-z0-9_]*)?$/.test(trimmed);
+}
+
+function isBareTypeAliasExpression(pythonExpression: string): boolean {
+  const trimmed = pythonExpression.trim();
+  return /[\[\]|]/.test(trimmed) || /^(?:Callable|Literal|Sequence|dict|list|tuple)\b/.test(trimmed);
 }
 
 function isCollectionsAbcTypeImport(trimmedLine: string): boolean {
@@ -937,6 +942,16 @@ function isCollectionsAbcTypeImport(trimmedLine: string): boolean {
   return typeImport[1]
     .split(', ')
     .every((name) => ['Callable', 'Sequence'].includes(name));
+}
+
+function isTypingOnlyImport(trimmedLine: string): boolean {
+  const typeImport = /^from typing import (.+)$/.exec(trimmedLine);
+  if (typeImport === null) {
+    return false;
+  }
+  return typeImport[1]
+    .split(', ')
+    .every((name) => ['Annotated', 'Callable', 'Literal', 'Protocol', 'TYPE_CHECKING', 'TypeAlias', 'cast'].includes(name));
 }
 
 function parseTypeCheckingImports(
@@ -1261,33 +1276,51 @@ function parseFunctionParametersText(
         keywordOnly = true;
         continue;
       }
-      const parameter = /^([A-Za-z_][A-Za-z0-9_]*): ([^=]+?)(?: = (.+))?$/.exec(parameterText);
+      const parameter = parseFunctionParameterText(parameterText, arrayNames);
       if (parameter === null) {
         return null;
       }
-      const parsedParameter = {
-        name: tsExportNameForPythonName(parameter[1]),
-        typeExpression: tsTypeExpression(parameter[2]),
-      };
-      if (parsedParameter.typeExpression.endsWith('[]')) {
-        arrayNames.add(parameter[1]);
-      }
       if (keywordOnly) {
         optsParams.push({
-          ...parsedParameter,
-          defaultValue: parameter[3] === undefined ? null : translateExpression(parameter[3], undefined, arrayNames),
+          name: parameter.name,
+          typeExpression: parameter.typeExpression,
+          defaultValue: parameter.defaultValue === undefined ? null : parameter.defaultValue,
         });
-      } else if (parameter[3] === undefined) {
-        parameters.push(parsedParameter);
       } else {
-        parameters.push({
-          ...parsedParameter,
-          defaultValue: translateExpression(parameter[3], undefined, arrayNames),
-        });
+        parameters.push(parameter);
       }
     }
   }
   return { parameters, optsParams };
+}
+
+function parseFunctionParameterText(
+  parameterText: string,
+  arrayNames: Set<string>,
+): FunctionParameter | null {
+  const typedParameter = /^([A-Za-z_][A-Za-z0-9_]*): ([^=]+?)(?: = (.+))?$/.exec(parameterText);
+  if (typedParameter !== null) {
+    const typeExpression = tsTypeExpression(typedParameter[2]);
+    if (typeExpression.endsWith('[]')) {
+      arrayNames.add(typedParameter[1]);
+    }
+    return {
+      name: tsExportNameForPythonName(typedParameter[1]),
+      typeExpression,
+      ...(typedParameter[3] === undefined ? {} : { defaultValue: translateExpression(typedParameter[3], undefined, arrayNames) }),
+    };
+  }
+
+  const untypedParameter = /^([A-Za-z_][A-Za-z0-9_]*)(?: = (.+))?$/.exec(parameterText);
+  if (untypedParameter !== null) {
+    return {
+      name: tsExportNameForPythonName(untypedParameter[1]),
+      typeExpression: 'any',
+      ...(untypedParameter[2] === undefined ? {} : { defaultValue: translateExpression(untypedParameter[2], undefined, arrayNames) }),
+    };
+  }
+
+  return null;
 }
 
 function pythonParameterNames(parametersText: string): string[] {
@@ -1299,7 +1332,7 @@ function pythonParameterNames(parametersText: string): string[] {
     if (parameterText === '*') {
       continue;
     }
-    const parameter = /^([A-Za-z_][A-Za-z0-9_]*): /.exec(parameterText);
+    const parameter = /^([A-Za-z_][A-Za-z0-9_]*)(?:: |(?: = .+)?$)/.exec(parameterText);
     if (parameter !== null) {
       names.push(parameter[1]);
     }
@@ -1956,14 +1989,14 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     if (
       isCollectionsAbcTypeImport(trimmed)
+      || isTypingOnlyImport(trimmed)
       || trimmed === 'from enum import Enum'
       || trimmed === 'from enum import IntEnum'
       || trimmed === 'from dataclasses import dataclass'
       || trimmed === 'from pathlib import Path'
-      || trimmed === 'from typing import Annotated, TypeAlias'
-      || trimmed === 'from typing import TYPE_CHECKING'
       || trimmed === 'import msgspec'
       || trimmed === 'import tempfile'
+      || trimmed === 'import typer'
     ) {
       index += 1;
       continue;
@@ -1978,13 +2011,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
 
-    const annotatedTypeAlias = parseAnnotatedTypeAlias(lines, index);
-    if (annotatedTypeAlias !== null) {
-      typeAliases.push(annotatedTypeAlias.alias);
-      if (annotatedTypeAlias.alias.validation !== undefined) {
-        validatedTypeAliases.add(annotatedTypeAlias.alias.name);
+    const typeAlias = parseTypeAliasStatement(lines, index);
+    if (typeAlias !== null) {
+      typeAliases.push(typeAlias.alias);
+      if (typeAlias.alias.validation !== undefined) {
+        validatedTypeAliases.add(typeAlias.alias.name);
       }
-      index = annotatedTypeAlias.nextIndex;
+      index = typeAlias.nextIndex;
       continue;
     }
 
@@ -2094,30 +2127,18 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
           keywordOnly = true;
           continue;
         }
-        const parameter = /^([A-Za-z_][A-Za-z0-9_]*): ([^=]+?)(?: = (.+))?$/.exec(parameterText);
+        const parameter = parseFunctionParameterText(parameterText, arrayNames);
         if (parameter === null) {
           return null;
         }
-        const baseTypeExpression = tsTypeExpression(parameter[2]);
-        const parsedParameter = {
-          name: tsExportNameForPythonName(parameter[1]),
-          typeExpression: baseTypeExpression,
-        };
-        if (baseTypeExpression.endsWith('[]')) {
-          arrayNames.add(parameter[1]);
-        }
         if (keywordOnly) {
           optsParams.push({
-            ...parsedParameter,
-            defaultValue: parameter[3] === undefined ? null : translateExpression(parameter[3], undefined, arrayNames),
+            name: parameter.name,
+            typeExpression: parameter.typeExpression,
+            defaultValue: parameter.defaultValue === undefined ? null : parameter.defaultValue,
           });
         } else {
-          parameters.push(parameter[3] === undefined
-            ? parsedParameter
-            : {
-              ...parsedParameter,
-              defaultValue: translateExpression(parameter[3], undefined, arrayNames),
-            });
+          parameters.push(parameter);
         }
       }
     }
@@ -2137,7 +2158,9 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       const line = lines[index];
       if (line.trim() === '') {
         if ((lines[index + 1] ?? '').startsWith('    ')) {
-          statements.push('');
+          if (statements.length > 0 && statements.at(-1) !== '') {
+            statements.push('');
+          }
           index += 1;
           continue;
         }
@@ -2155,6 +2178,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         validatedTypeAliases,
         relativePath,
         mapNames,
+        imports,
       );
       if (statement === null) {
         return null;
@@ -2462,7 +2486,7 @@ function parseAllAssignment(
   return null;
 }
 
-function parseAnnotatedTypeAlias(
+function parseTypeAliasStatement(
   lines: string[],
   index: number,
 ): { alias: TypeAlias; nextIndex: number } | null {
@@ -2470,7 +2494,7 @@ function parseAnnotatedTypeAlias(
   if (oneLineAnnotated !== null) {
     return {
       alias: {
-        name: oneLineAnnotated[1],
+        name: tsExportNameForPythonName(oneLineAnnotated[1]),
         typeExpression: tsTypeExpression(oneLineAnnotated[2]),
         validation: parseTypeAliasValidation(oneLineAnnotated[3]),
       },
@@ -2491,7 +2515,7 @@ function parseAnnotatedTypeAlias(
         const metadata = /^msgspec\.Meta\(([\s\S]*)\)\s*,?$/.exec(metadataBlock);
         return {
           alias: {
-            name: start[1],
+            name: tsExportNameForPythonName(start[1]),
             typeExpression: tsTypeExpression(baseType[1]),
             validation: metadata === null ? undefined : parseTypeAliasValidation(metadata[1]),
           },
@@ -2506,7 +2530,7 @@ function parseAnnotatedTypeAlias(
   const plainAlias = /^([A-Za-z_][A-Za-z0-9_]*): TypeAlias = (.+)$/.exec(lines[index]?.trim() ?? '');
   if (plainAlias !== null) {
     return {
-      alias: { name: plainAlias[1], typeExpression: tsTypeExpression(plainAlias[2]) },
+      alias: { name: tsExportNameForPythonName(plainAlias[1]), typeExpression: tsTypeExpression(plainAlias[2]) },
       nextIndex: index + 1,
     };
   }
@@ -2514,7 +2538,15 @@ function parseAnnotatedTypeAlias(
   const typeStatement = /^type ([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(lines[index]?.trim() ?? '');
   if (typeStatement !== null) {
     return {
-      alias: { name: typeStatement[1], typeExpression: tsTypeExpression(typeStatement[2]) },
+      alias: { name: tsExportNameForPythonName(typeStatement[1]), typeExpression: tsTypeExpression(typeStatement[2]) },
+      nextIndex: index + 1,
+    };
+  }
+
+  const plainTypeAlias = /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(lines[index]?.trim() ?? '');
+  if (plainTypeAlias !== null && isBareTypeAliasExpression(plainTypeAlias[2])) {
+    return {
+      alias: { name: tsExportNameForPythonName(plainTypeAlias[1]), typeExpression: tsTypeExpression(plainTypeAlias[2]) },
       nextIndex: index + 1,
     };
   }
@@ -2670,6 +2702,22 @@ function reexportsForAllNames(imports: ImportDefinition[], allNames: string[]): 
   }
 
   return [...byModule.entries()].map(([modulePath, names]) => ({ modulePath, names }));
+}
+
+function pushImportDefinition(imports: ImportDefinition[], importDefinition: ImportDefinition): void {
+  const existing = imports.find((candidate) => (
+    candidate.modulePath === importDefinition.modulePath
+    && candidate.typeOnly === importDefinition.typeOnly
+  ));
+  if (existing === undefined) {
+    imports.push(importDefinition);
+    return;
+  }
+  for (const name of importDefinition.names) {
+    if (!existing.names.includes(name)) {
+      existing.names.push(name);
+    }
+  }
 }
 
 function attachPendingAssignmentComments(assignment: SimpleModuleAssignment, pendingComments: string[]): void {
@@ -2907,6 +2955,7 @@ function translateStraightLineStatement(
   validatedTypeAliases: ReadonlySet<string> = new Set(),
   relativePath: string | null = null,
   mapNames: ReadonlySet<string> = new Set(),
+  imports: ImportDefinition[] | null = null,
 ): { statements: string[]; nextIndex: number } | null {
   const line = lines[index];
   if (line === undefined || !line.startsWith(indent)) {
@@ -2935,6 +2984,19 @@ function translateStraightLineStatement(
       statements: [`void import('${tsImportPathForPythonImport(`${sideEffectImport[1]}${sideEffectImport[2]}`, relativePath)}');`],
       nextIndex: index + 1,
     };
+  }
+
+  const localFromImport = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)(?:\s+#.*)?$/.exec(statement);
+  if (localFromImport !== null && relativePath !== null && imports !== null) {
+    const names = localFromImport[2].split(', ');
+    pushImportDefinition(imports, {
+      modulePath: tsImportPathForPythonImport(localFromImport[1], relativePath),
+      names: names.map(tsExportNameForPythonName),
+    });
+    for (const name of names) {
+      nameMap.set(name, tsExportNameForPythonName(name));
+    }
+    return { statements: [], nextIndex: index + 1 };
   }
 
   const nestedFunction = parseNestedFunctionStatement(
@@ -3259,6 +3321,38 @@ function translateStraightLineStatement(
       nextIndex: index + 1,
     };
   }
+  const qualifiedRaiseStatement = /^raise ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\((.*)\)$/.exec(statement);
+  if (qualifiedRaiseStatement !== null) {
+    const args = splitTopLevelComma(qualifiedRaiseStatement[2]);
+    const message = args[0] === undefined || args[0] === ''
+      ? `'${qualifiedRaiseStatement[1]}'`
+      : translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return {
+      statements: [`throw new Error(${message});`],
+      nextIndex: index + 1,
+    };
+  }
+  const multilineRaiseCall = /^raise ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(statement);
+  if (multilineRaiseCall !== null) {
+    const callParts = parseMultilineCallParts(
+      lines,
+      index + 1,
+      nameMap,
+      arrayNames,
+      validatedTypeAliases,
+      mapNames,
+    );
+    if (callParts === null) {
+      return null;
+    }
+    const message = callParts.positionalParts[0] === undefined
+      ? `'${multilineRaiseCall[1]}'`
+      : translateCallArgumentExpression(callParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases);
+    return {
+      statements: [`throw new Error(${message});`],
+      nextIndex: callParts.nextIndex,
+    };
+  }
   if (statement === 'raise') {
     return { statements: ['throw exc;'], nextIndex: index + 1 };
   }
@@ -3508,7 +3602,44 @@ function parseMultilineCallExpression(
   nameMap: Map<string, string>,
   arrayNames: Set<string>,
   validatedTypeAliases: ReadonlySet<string> = new Set(),
+  mapNames: ReadonlySet<string> = new Set(),
 ): { expression: string; nextIndex: number } | null {
+  const callParts = parseMultilineCallParts(lines, startIndex, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (callParts === null) {
+    return null;
+  }
+
+  const callee = translateExpression(pythonCallee, nameMap, arrayNames, validatedTypeAliases);
+  const callPrefix = /^[A-Z][A-Za-z0-9_]*$/.test(callee) ? `new ${callee}` : callee;
+  if (callParts.keywordParts.length === 0) {
+    return {
+      expression: translatePositionalCallExpression(pythonCallee, callParts.positionalParts, nameMap, arrayNames, validatedTypeAliases, true),
+      nextIndex: callParts.nextIndex,
+    };
+  }
+  if (callParts.positionalParts.length === 0) {
+    return {
+      expression: `${callPrefix}({ ${callParts.keywordParts.join(', ')} })`,
+      nextIndex: callParts.nextIndex,
+    };
+  }
+  return {
+    expression: `${callPrefix}(${[
+      ...callParts.positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases)),
+      `{ ${callParts.keywordParts.join(', ')} }`,
+    ].join(', ')})`,
+    nextIndex: callParts.nextIndex,
+  };
+}
+
+function parseMultilineCallParts(
+  lines: string[],
+  startIndex: number,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string> = new Set(),
+  mapNames: ReadonlySet<string> = new Set(),
+): { positionalParts: string[]; keywordParts: string[]; nextIndex: number } | null {
   const positionalParts: string[] = [];
   const keywordParts: string[] = [];
   let sawKeyword = false;
@@ -3516,27 +3647,7 @@ function parseMultilineCallExpression(
   while (nextIndex < lines.length) {
     const trimmed = lines[nextIndex].trim();
     if (trimmed === ')' || trimmed === '),') {
-      const callee = translateExpression(pythonCallee, nameMap, arrayNames, validatedTypeAliases);
-      const callPrefix = /^[A-Z][A-Za-z0-9_]*$/.test(callee) ? `new ${callee}` : callee;
-      if (keywordParts.length === 0) {
-        return {
-          expression: translatePositionalCallExpression(pythonCallee, positionalParts, nameMap, arrayNames, validatedTypeAliases, true),
-          nextIndex: nextIndex + 1,
-        };
-      }
-      if (positionalParts.length === 0) {
-        return {
-          expression: `${callPrefix}({ ${keywordParts.join(', ')} })`,
-          nextIndex: nextIndex + 1,
-        };
-      }
-      return {
-        expression: `${callPrefix}(${[
-          ...positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases)),
-          `{ ${keywordParts.join(', ')} }`,
-        ].join(', ')})`,
-        nextIndex: nextIndex + 1,
-      };
+      return { positionalParts, keywordParts, nextIndex: nextIndex + 1 };
     }
 
     const arg = trimmed.replace(/,$/, '');
@@ -3554,6 +3665,7 @@ function parseMultilineCallExpression(
           nameMap,
           arrayNames,
           validatedTypeAliases,
+          mapNames,
         );
         if (callExpression === null) {
           return null;
@@ -3565,7 +3677,7 @@ function parseMultilineCallExpression(
       positionalParts.push(arg);
     } else {
       sawKeyword = true;
-      keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${translateExpression(keywordArg[2], nameMap, arrayNames, validatedTypeAliases)}`);
+      keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${translateExpression(keywordArg[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
     }
     nextIndex += 1;
   }
@@ -4125,6 +4237,22 @@ function translateExpression(
   if (inTuple !== null) {
     const value = translateExpression(inTuple[1], nameMap, arrayNames, validatedTypeAliases);
     return splitTopLevelComma(inTuple[2])
+      .map((item) => `${value} === ${translateExpression(item, nameMap, arrayNames, validatedTypeAliases)}`)
+      .join(' || ');
+  }
+
+  const notInSet = /^(.+?) not in \{(.*)\}$/.exec(trimmed);
+  if (notInSet !== null) {
+    const value = translateExpression(notInSet[1], nameMap, arrayNames, validatedTypeAliases);
+    return splitTopLevelComma(notInSet[2])
+      .map((item) => `${value} !== ${translateExpression(item, nameMap, arrayNames, validatedTypeAliases)}`)
+      .join(' && ');
+  }
+
+  const inSet = /^(.+?) in \{(.*)\}$/.exec(trimmed);
+  if (inSet !== null) {
+    const value = translateExpression(inSet[1], nameMap, arrayNames, validatedTypeAliases);
+    return splitTopLevelComma(inSet[2])
       .map((item) => `${value} === ${translateExpression(item, nameMap, arrayNames, validatedTypeAliases)}`)
       .join(' || ');
   }

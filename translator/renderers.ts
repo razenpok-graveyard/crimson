@@ -49,9 +49,9 @@ export function renderLazyWrapperModule(relativePath: string, module: LazyWrappe
   const lines = [
     `// Port of ${relativePath}`,
     '',
-    `import type { ${module.typeName} } from '${module.typeModulePath}';`,
+    `import { ${module.typeName} } from '${module.typeModulePath}';`,
     '',
-    `export type { ${module.typeName} };`,
+    `export { ${module.typeName} };`,
     '',
     `export function ${module.functionName}(${module.parameter.name}: ${module.parameter.typeExpression}): void {`,
   ];
