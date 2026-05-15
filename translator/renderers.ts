@@ -138,17 +138,20 @@ export function renderSimpleExportModule(relativePath: string, module: SimpleExp
   }
 
   for (const constant of module.constants) {
-    lines.push(`export const ${constant.name} = ${constant.value};`);
+    lines.push(`${constant.exported ? 'export ' : ''}const ${constant.name} = ${constant.value};`);
   }
   if (module.constants.length > 0 && module.functions.length > 0) {
     lines.push('');
   }
 
   for (const fn of module.functions) {
+    for (const comment of fn.comments) {
+      lines.push(`// ${comment}`);
+    }
     const params = fn.parameters
       .map((param) => `${param.ignored ? '_' : ''}${param.name}: ${param.typeExpression}`)
       .join(', ');
-    lines.push(`export function ${fn.name}(${params}): ${fn.returnType} {`);
+    lines.push(`${fn.exported ? 'export ' : ''}function ${fn.name}(${params}): ${fn.returnType} {`);
     for (const param of fn.parameters) {
       if (param.ignored) {
         lines.push(`  void _${param.name};`);

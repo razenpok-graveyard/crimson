@@ -24,6 +24,7 @@ export interface TypeAlias {
 export interface ConstantDefinition {
   name: string;
   value: string;
+  exported?: boolean;
 }
 
 export interface ConstantsModule {
@@ -71,6 +72,8 @@ export interface SimpleFunctionDefinition {
   parameters: SimpleFunctionParameter[];
   returnType: string;
   returnExpression: string;
+  comments: string[];
+  exported: boolean;
 }
 
 export interface SimpleExportModule {

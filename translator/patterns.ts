@@ -444,7 +444,7 @@ export function parseSimpleExportModule(trimmedPython: string, relativePath: str
   const imports: ImportDefinition[] = [];
   const constants: ConstantDefinition[] = [];
   const functions: SimpleFunctionDefinition[] = [];
-  let sawAll = false;
+  const allNames: string[] = [];
   let index = 0;
 
   while (index < lines.length) {
@@ -474,7 +474,11 @@ export function parseSimpleExportModule(trimmedPython: string, relativePath: str
     }
 
     if (trimmed.startsWith('__all__ = ')) {
-      sawAll = true;
+      const parsedAllNames = parseOneLineAllNames(trimmed);
+      if (parsedAllNames === null) {
+        return null;
+      }
+      allNames.push(...parsedAllNames);
       if (!isOneLineAllAssignment(trimmed)) {
         while (index < lines.length && lines[index].trim() !== ']') {
           index += 1;
@@ -515,6 +519,17 @@ export function parseSimpleExportModule(trimmedPython: string, relativePath: str
       }
     }
 
+    const comments: string[] = [];
+    const docstring = /^    """(.*)"""$/.exec(lines[index] ?? '');
+    if (docstring !== null) {
+      comments.push(docstring[1]);
+      index += 1;
+    }
+
+    while (index < lines.length && lines[index].trim() === '') {
+      index += 1;
+    }
+
     const ignored = /^    _ = ([A-Za-z_][A-Za-z0-9_]*)$/.exec(lines[index] ?? '');
     if (ignored !== null) {
       const parameter = parameters.find((candidate) => candidate.name === tsExportNameForPythonName(ignored[1]));
@@ -525,14 +540,14 @@ export function parseSimpleExportModule(trimmedPython: string, relativePath: str
       index += 1;
     }
 
-    const returnLine = /^    return ([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(lines[index] ?? '');
+    const returnLine = /^    return (.+)$/.exec(lines[index] ?? '');
     if (returnLine === null) {
       return null;
     }
     index += 1;
 
-    const receiverName = tsExportNameForPythonName(returnLine[1]);
-    if (!parameters.some((parameter) => parameter.name === receiverName)) {
+    const returnExpression = tsSimpleExpression(returnLine[1], parameters);
+    if (returnExpression === null) {
       return null;
     }
 
@@ -540,11 +555,63 @@ export function parseSimpleExportModule(trimmedPython: string, relativePath: str
       name: tsExportNameForPythonName(header[1]),
       parameters,
       returnType: tsTypeExpression(header[3]),
-      returnExpression: `${receiverName}.${tsExportNameForPythonName(returnLine[2])}`,
+      returnExpression,
+      comments,
+      exported: false,
     });
   }
 
-  return sawAll && constants.length + functions.length > 0
-    ? { imports, constants, functions }
+  if (allNames.length === 0 || constants.length + functions.length === 0) {
+    return null;
+  }
+
+  const exportedNames = new Set(allNames.map(tsExportNameForPythonName));
+  return {
+    imports,
+    constants: constants.map((constant) => ({
+      ...constant,
+      exported: exportedNames.has(constant.name),
+    })),
+    functions: functions.map((fn) => ({
+      ...fn,
+      exported: exportedNames.has(fn.name),
+    })),
+  };
+}
+
+function parseOneLineAllNames(trimmedLine: string): string[] | null {
+  const allAssignment = /^__all__ = \[(.*)\]$/.exec(trimmedLine);
+  if (allAssignment === null) {
+    return null;
+  }
+  const namesText = allAssignment[1].trim();
+  if (namesText === '') {
+    return [];
+  }
+  const names: string[] = [];
+  for (const nameText of namesText.split(', ')) {
+    const name = /^"([A-Za-z_][A-Za-z0-9_]*)"$/.exec(nameText);
+    if (name === null) {
+      return null;
+    }
+    names.push(name[1]);
+  }
+  return names;
+}
+
+function tsSimpleExpression(pythonExpression: string, parameters: SimpleFunctionParameter[]): string | null {
+  let expression = pythonExpression.replaceAll(/\b(?:float|str|bool)\(([A-Za-z_][A-Za-z0-9_]*)\)/g, '$1');
+  expression = expression.replaceAll(/\b[A-Za-z_][A-Za-z0-9_]*\b/g, (name) => tsExportNameForPythonName(name));
+  const emittedParameterNames = new Set(parameters.map((parameter) => parameter.ignored ? `_${parameter.name}` : parameter.name));
+  for (const parameter of parameters) {
+    if (!parameter.ignored) {
+      continue;
+    }
+    expression = expression.replaceAll(new RegExp(`\\b${parameter.name}\\b`, 'g'), `_${parameter.name}`);
+  }
+
+  const firstIdentifier = /\b[A-Za-z_][A-Za-z0-9_]*\b/.exec(expression)?.[0] ?? null;
+  return firstIdentifier === null || emittedParameterNames.has(firstIdentifier) || /^[A-Z0-9_]+$/.test(firstIdentifier)
+    ? expression
     : null;
 }
