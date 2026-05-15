@@ -2324,15 +2324,21 @@ function translateStraightLineStatement(
       return null;
     }
     if (/^(?:float|str|bool)\($/.test(assignment[3])) {
-      const valueLine = lines[index + 1]?.trim().replace(/,$/, '') ?? null;
-      if (valueLine === null || lines[index + 2]?.trim() !== ')') {
+      const wrappedExpression = parseWrappedMultilineExpression(
+        lines,
+        index + 1,
+        nameMap,
+        arrayNames,
+        validatedTypeAliases,
+      );
+      if (wrappedExpression === null) {
         return null;
       }
       return translateStraightLineAssignment(
         assignment[1],
         assignment[2],
-        translateExpression(valueLine, nameMap, arrayNames, validatedTypeAliases),
-        index + 3,
+        wrappedExpression.expression,
+        wrappedExpression.nextIndex,
         nameMap,
         declaredNames,
         reassignedNames,
@@ -2411,6 +2417,55 @@ function translateStraightLineStatement(
     return { statements: [`${translateExpression(callStatement[1], nameMap, arrayNames, validatedTypeAliases)};`], nextIndex: index + 1 };
   }
 
+  return null;
+}
+
+function parseWrappedMultilineExpression(
+  lines: string[],
+  startIndex: number,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string> = new Set(),
+): { expression: string; nextIndex: number } | null {
+  const parts: string[] = [];
+  let nextIndex = startIndex;
+  while (nextIndex < lines.length) {
+    const trimmed = lines[nextIndex].trim();
+    if (trimmed === ')') {
+      return parts.length === 0
+        ? null
+        : {
+          expression: translateExpression(parts.join(' '), nameMap, arrayNames, validatedTypeAliases),
+          nextIndex: nextIndex + 1,
+        };
+    }
+    if (trimmed === '') {
+      nextIndex += 1;
+      continue;
+    }
+
+    const expressionLine = trimmed.replace(/,$/, '');
+    const multilineCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(expressionLine);
+    if (multilineCall !== null) {
+      const callExpression = parseMultilineCallExpression(
+        lines,
+        nextIndex + 1,
+        multilineCall[1],
+        nameMap,
+        arrayNames,
+        validatedTypeAliases,
+      );
+      if (callExpression === null) {
+        return null;
+      }
+      parts.push(callExpression.expression);
+      nextIndex = callExpression.nextIndex;
+      continue;
+    }
+
+    parts.push(expressionLine);
+    nextIndex += 1;
+  }
   return null;
 }
 
