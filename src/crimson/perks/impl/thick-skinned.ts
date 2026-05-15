@@ -4,7 +4,7 @@ import { PerkId } from '@crimson/perks/ids.ts';
 import type { PerkApplyCtx } from '@crimson/perks/runtime/apply-context.ts';
 import { PerkHooks } from '@crimson/perks/runtime/hook-types.ts';
 
-function applyThickSkinned(ctx: PerkApplyCtx): void {
+export function applyThickSkinned(ctx: PerkApplyCtx): void {
   for (const player of ctx.players) {
     if (player.health > 0.0) {
       player.health = Math.max(1.0, player.health * (2.0 / 3.0));
