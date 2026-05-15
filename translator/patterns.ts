@@ -984,7 +984,7 @@ function parseStructModuleFunction(
 
   const statements: string[] = [];
   const nameMap = new Map<string, string>();
-  const declaredNames = new Set<string>();
+  const declaredNames = new Set<string>(pythonParameterNames(header.parametersText));
   let nextIndex = header.nextIndex;
   const docstring = parseIndentedDocstring(lines, nextIndex);
   if (docstring !== null) {
@@ -1202,7 +1202,7 @@ function parseStructMethod(
 
   const statements: string[] = [];
   const nameMap = new Map<string, string>([['self', 'this']]);
-  const declaredNames = new Set<string>();
+  const declaredNames = new Set<string>(pythonParameterNames(extraParameters));
   const reassignedNames = reassignedLocalNames(lines, index + 1);
   let nextIndex = header.nextIndex;
   while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, '        ')) {
@@ -1287,6 +1287,23 @@ function parseFunctionParametersText(
     }
   }
   return { parameters, optsParams };
+}
+
+function pythonParameterNames(parametersText: string): string[] {
+  if (parametersText === '') {
+    return [];
+  }
+  const names: string[] = [];
+  for (const parameterText of splitTopLevelComma(parametersText)) {
+    if (parameterText === '*') {
+      continue;
+    }
+    const parameter = /^([A-Za-z_][A-Za-z0-9_]*): /.exec(parameterText);
+    if (parameter !== null) {
+      names.push(parameter[1]);
+    }
+  }
+  return names;
 }
 
 function parsePlainClass(
@@ -1465,7 +1482,9 @@ function parsePlainClassMethod(
 
   const statements: string[] = [];
   const nameMap = new Map<string, string>([['self', 'this'], ...fieldNameMap]);
-  const declaredNames = new Set<string>();
+  const declaredNames = new Set<string>(pythonParameterNames(
+    parametersText === 'self' ? '' : parametersText.slice('self, '.length),
+  ));
   const reassignedNames = reassignedLocalNames(lines, header.nextIndex);
   let nextIndex = header.nextIndex;
   while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, '        ')) {
@@ -2099,7 +2118,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
 
     const statements: string[] = [];
     const nameMap = new Map(moduleNameMap);
-    const declaredNames = new Set<string>();
+    const declaredNames = new Set<string>(pythonParameterNames(header.parametersText));
     const docstring = parseIndentedDocstring(lines, index);
     if (docstring !== null) {
       for (const line of docstring.value.split('\n')) {
@@ -2698,7 +2717,7 @@ function parseNestedFunctionStatement(
 
   const nestedNameMap = new Map(outerNameMap);
   const statements: string[] = [];
-  const declaredNames = new Set<string>();
+  const declaredNames = new Set<string>(pythonParameterNames(header.parametersText));
   const reassignedNames = reassignedLocalNames(lines, header.nextIndex);
   const innerIndent = `${indent}    `;
   let nextIndex = header.nextIndex;
@@ -2924,7 +2943,10 @@ function translateStraightLineStatement(
         nextIndex: finallyBlock.nextIndex,
       };
     }
-    if (afterTry === 'except Exception:') {
+    if (
+      afterTry === 'except Exception:'
+      || /^except \([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+\):$/.test(afterTry)
+    ) {
       const exceptBlock = translateBlock(tryBlock.nextIndex + 1);
       if (exceptBlock === null) {
         return null;
@@ -2941,6 +2963,48 @@ function translateStraightLineStatement(
       };
     }
     return null;
+  }
+
+  const enumerateStatement = /^for ([A-Za-z_][A-Za-z0-9_]*), ([A-Za-z_][A-Za-z0-9_]*) in enumerate\((.+)\):$/.exec(statement);
+  if (enumerateStatement !== null) {
+    const innerIndent = `${indent}    `;
+    const innerStatements: string[] = [];
+    let nextIndex = index + 1;
+    while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, innerIndent)) {
+      if (lines[nextIndex].trim() === '') {
+        innerStatements.push('');
+        nextIndex += 1;
+        continue;
+      }
+      const innerStatement = translateStraightLineStatement(
+        lines,
+        nextIndex,
+        innerIndent,
+        nameMap,
+        declaredNames,
+        reassignedNames,
+        arrayNames,
+        validatedTypeAliases,
+        relativePath,
+        mapNames,
+      );
+      if (innerStatement === null) {
+        return null;
+      }
+      innerStatements.push(...innerStatement.statements.map(indentStatementLine));
+      nextIndex = innerStatement.nextIndex;
+    }
+    if (innerStatements.length === 0) {
+      return null;
+    }
+    return {
+      statements: [
+        `for (const [${tsExportNameForPythonName(enumerateStatement[1])}, ${tsExportNameForPythonName(enumerateStatement[2])}] of ${translateExpression(enumerateStatement[3], nameMap, arrayNames, validatedTypeAliases, mapNames)}.entries()) {`,
+        ...innerStatements,
+        '}',
+      ],
+      nextIndex,
+    };
   }
 
   const forOfStatement = /^for ([A-Za-z_][A-Za-z0-9_]*) in (.+):$/.exec(statement);
@@ -3064,6 +3128,21 @@ function translateStraightLineStatement(
   }
   if (statement === 'raise') {
     return { statements: ['throw exc;'], nextIndex: index + 1 };
+  }
+
+  const annotatedAssignment = /^([A-Za-z_][A-Za-z0-9_]*): (.+?) = (.+)$/.exec(statement);
+  if (annotatedAssignment !== null) {
+    const tsName = tsExportNameForPythonName(annotatedAssignment[1]);
+    const assignedRight = maybeAwaitAsyncCall(
+      translateExpression(annotatedAssignment[3], nameMap, arrayNames, validatedTypeAliases, mapNames),
+    );
+    declaredNames.add(annotatedAssignment[1]);
+    return {
+      statements: [
+        `${reassignedNames.has(annotatedAssignment[1]) ? 'let' : 'const'} ${tsName}: ${tsTypeExpression(annotatedAssignment[2])} = ${assignedRight};`,
+      ],
+      nextIndex: index + 1,
+    };
   }
 
   const assignment = /^(.+?) (\+=|-=|\*=|\/=|=) (.+)$/.exec(statement);
@@ -3734,9 +3813,17 @@ function translateExpression(
     const sequenceCall = parseCallPrefix(trimmed, sequenceConstructor);
     if (sequenceCall !== null && sequenceCall.rest === '') {
       const argsText = sequenceCall.argsText.trim();
-      return argsText === ''
-        ? '[]'
-        : `Array.from(${translateExpression(argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+      if (argsText === '') {
+        return '[]';
+      }
+      const generator = /^(.+) for ([A-Za-z_][A-Za-z0-9_]*) in (.+)$/.exec(argsText);
+      if (generator !== null) {
+        const itemName = tsExportNameForPythonName(generator[2]);
+        const itemNameMap = new Map(nameMap);
+        itemNameMap.set(generator[2], itemName);
+        return `${translateExpression(generator[3], nameMap, arrayNames, validatedTypeAliases, mapNames)}.map((${itemName}) => ${translateExpression(generator[1], itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+      }
+      return `Array.from(${translateExpression(argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
     }
   }
 
@@ -3752,6 +3839,23 @@ function translateExpression(
       const stop = translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
       return `Array.from({ length: Math.max(0, ${stop} - ${start}) }, (_, i) => ${start} + i)`;
     }
+  }
+
+  const isinstanceSequence = /^isinstance\((.+), \((.+)\)\)$/.exec(trimmed);
+  if (isinstanceSequence !== null) {
+    const types = splitTopLevelComma(isinstanceSequence[2]);
+    if (types.length > 0 && types.every((type) => type === 'list' || type === 'tuple')) {
+      return `Array.isArray(${translateExpression(isinstanceSequence[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
+  }
+  const isinstanceSingleSequence = /^isinstance\((.+), (list|tuple)\)$/.exec(trimmed);
+  if (isinstanceSingleSequence !== null) {
+    return `Array.isArray(${translateExpression(isinstanceSingleSequence[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
+  const listRepeat = /^\[(.+)\] \* (.+)$/.exec(trimmed);
+  if (listRepeat !== null) {
+    return `Array.from({ length: ${translateExpression(listRepeat[2], nameMap, arrayNames, validatedTypeAliases, mapNames)} }, () => ${translateExpression(listRepeat[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
   const fStringLiteral = /^f(["'])([\s\S]*)\1$/.exec(trimmed);
@@ -3897,6 +4001,11 @@ function translateExpression(
     return `Math.floor(${translateExpression(floorDivision[1], nameMap, arrayNames, validatedTypeAliases)} / ${translateExpression(floorDivision[2], nameMap, arrayNames, validatedTypeAliases)})`;
   }
 
+  const uint32Mask = /^(.+) & 0xFFFFFFFF$/i.exec(trimmed);
+  if (uint32Mask !== null) {
+    return `(${translateExpression(uint32Mask[1], nameMap, arrayNames, validatedTypeAliases, mapNames)} >>> 0)`;
+  }
+
   const identityComparison = /^(.+?) is( not)? (.+)$/.exec(trimmed);
   if (identityComparison !== null) {
     return `${translateExpression(identityComparison[1], nameMap, arrayNames, validatedTypeAliases)} ${identityComparison[2] === undefined ? '===' : '!=='} ${translateExpression(identityComparison[3], nameMap, arrayNames, validatedTypeAliases)}`;
@@ -3932,9 +4041,9 @@ function translateExpression(
     return /^[A-Za-z_$][A-Za-z0-9_.$()[\]]*$/.test(value) ? `!${value}` : `!(${value})`;
   }
 
-  const prefixSlice = /^(.+)\[:(-?\d+)\]$/.exec(trimmed);
+  const prefixSlice = /^(.+)\[:(.+)\]$/.exec(trimmed);
   if (prefixSlice !== null) {
-    return `${translateExpression(prefixSlice[1], nameMap, arrayNames, validatedTypeAliases)}.slice(0, ${prefixSlice[2]})`;
+    return `${translateExpression(prefixSlice[1], nameMap, arrayNames, validatedTypeAliases)}.slice(0, ${translateExpression(prefixSlice[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
   const openEndedSlice = /^(.+)\[(\d+):\]$/.exec(trimmed);
