@@ -261,6 +261,28 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
 
     if (!(lines[index] ?? '').startsWith('def ')) {
+      const structClass = parseStructClass(lines, index);
+      if (structClass !== null) {
+        classes.push(structClass.structClass);
+        index = structClass.nextIndex;
+        continue;
+      }
+
+      const plainClass = parsePlainClass(lines, index);
+      if (plainClass !== null) {
+        plainClasses.push(plainClass.plainClass);
+        index = plainClass.nextIndex;
+        continue;
+      }
+
+      const exceptionClass = parseSimpleExceptionClass(lines, index);
+      if (exceptionClass !== null) {
+        trailingStatements.push(...exceptionClass.statements);
+        moduleNameMap.set(exceptionClass.name, exceptionClass.name);
+        index = exceptionClass.nextIndex;
+        continue;
+      }
+
       break;
     }
 

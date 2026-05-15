@@ -224,6 +224,7 @@ export interface SimpleModuleAssignment {
   typeExpression?: string;
   valueLines: string[];
   comments?: string[];
+  trailingComment?: string;
 }
 
 export interface StraightLineModule {

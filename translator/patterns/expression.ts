@@ -502,6 +502,24 @@ export function translateExpression(
       .join(' || ');
   }
 
+  const additiveWithHighPrecedenceOperator = splitTopLevelAdditive(trimmed);
+  if (
+    additiveWithHighPrecedenceOperator !== null
+    && additiveWithHighPrecedenceOperator.parts.some((part) => part.includes(' // ') || part.includes(' >> '))
+  ) {
+    return joinTranslatedAdditive(additiveWithHighPrecedenceOperator, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  }
+
+  const withoutOuterParens = stripBalancedOuterParens(trimmed);
+  if (withoutOuterParens !== trimmed && withoutOuterParens.includes(' >> ')) {
+    return translateExpression(withoutOuterParens, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  }
+
+  const rightShift = /^(.+) >> (.+)$/.exec(trimmed);
+  if (rightShift !== null) {
+    return `Math.floor(${translateExpression(rightShift[1], nameMap, arrayNames, validatedTypeAliases, mapNames)} / (2 ** ${translateExpression(rightShift[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}))`;
+  }
+
   const additiveWithFloorDivision = /^(.+?) ([+-]) (.+ \/\/ .+)$/.exec(trimmed);
   if (additiveWithFloorDivision !== null) {
     return `${translateExpression(additiveWithFloorDivision[1], nameMap, arrayNames, validatedTypeAliases, mapNames)} ${additiveWithFloorDivision[2]} ${translateExpression(additiveWithFloorDivision[3], nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
@@ -595,7 +613,7 @@ export function translateExpression(
   const translated = masked
     .trim()
     .replaceAll(
-      /\b([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\(([A-Za-z_][A-Za-z0-9_]*)=([^)]+)\)/g,
+      /\b([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\(([A-Za-z_][A-Za-z0-9_]*)=([^(),]+)\)/g,
       (_match, callee: string, argName: string, argValue: string) => (
         `${translateExpression(callee, nameMap, arrayNames, validatedTypeAliases)}({ ${tsExportNameForPythonName(argName)}: ${translateExpression(argValue, nameMap, arrayNames, validatedTypeAliases)} })`
       ),
@@ -776,6 +794,64 @@ function stripBalancedOuterParens(value: string): string {
   return splitTopLevelComma(inner).length > 1 ? trimmed : inner;
 }
 
+function splitTopLevelAdditive(value: string): { parts: string[]; operators: string[] } | null {
+  const parts: string[] = [];
+  const operators: string[] = [];
+  let start = 0;
+  let depth = 0;
+  let quote: string | null = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      if (char === quote && value[index - 1] !== '\\') {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char === ')' || char === ']' || char === '}') {
+      depth -= 1;
+      continue;
+    }
+    if (
+      depth === 0
+      && (char === '+' || char === '-')
+      && value[index - 1] === ' '
+      && value[index + 1] === ' '
+    ) {
+      parts.push(value.slice(start, index - 1).trim());
+      operators.push(char);
+      start = index + 2;
+    }
+  }
+  if (operators.length === 0) {
+    return null;
+  }
+  parts.push(value.slice(start).trim());
+  return { parts, operators };
+}
+
+function joinTranslatedAdditive(
+  additive: { parts: string[]; operators: string[] },
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string {
+  let output = translateExpression(additive.parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  for (let index = 0; index < additive.operators.length; index += 1) {
+    output += ` ${additive.operators[index]} ${translateExpression(additive.parts[index + 1], nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
+  }
+  return output;
+}
+
 function matchingCloseParen(value: string, openIndex: number): number | null {
   let depth = 0;
   let quote: string | null = null;
@@ -833,7 +909,9 @@ function translateMixedKeywordCall(
     keywordParts.push(`${tsExportNameForPythonName(keyword[1])}: ${translateExpression(keyword[2], nameMap, arrayNames, validatedTypeAliases)}`);
   }
   if (keywordParts.length === 0) {
-    return null;
+    return positionalParts.some((part) => part.includes('='))
+      ? translatePositionalCallExpression(call[1], positionalParts, nameMap, arrayNames, validatedTypeAliases)
+      : null;
   }
   const callee = translateExpression(call[1], nameMap, arrayNames, validatedTypeAliases);
   const callPrefix = /^[A-Z][A-Za-z0-9_]*$/.test(callee) ? `new ${callee}` : callee;

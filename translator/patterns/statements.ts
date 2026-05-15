@@ -1424,7 +1424,8 @@ export function parseTopLevelAssignment(
   lines: string[],
   index: number,
 ): { assignment: SimpleModuleAssignment; nextIndex: number } | null {
-  const line = lines[index] ?? '';
+  const parsedLine = splitInlineComment(lines[index] ?? '');
+  const line = parsedLine.code;
   const annotatedAssignment = /^([A-Za-z_][A-Za-z0-9_]*): (.+?) = (.+)$/.exec(line);
   const plainAssignment = /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(line);
   if (annotatedAssignment === null && plainAssignment === null) {
@@ -1445,6 +1446,7 @@ export function parseTopLevelAssignment(
     declaration: annotatedType === null || publicUppercaseName ? 'const' as const : 'let' as const,
     exported: !pythonName.startsWith('_'),
     typeExpression,
+    trailingComment: parsedLine.comment ?? undefined,
   };
   if (value === '(') {
     const valueLines = ['['];
@@ -1637,6 +1639,30 @@ export function parseTopLevelAssignment(
   }
 
   return null;
+}
+
+function splitInlineComment(line: string): { code: string; comment: string | null } {
+  let quote: string | null = null;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (quote !== null) {
+      if (char === quote && line[index - 1] !== '\\') {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '#' && /\s/.test(line[index - 1] ?? '')) {
+      return {
+        code: line.slice(0, index).trimEnd(),
+        comment: line.slice(index + 1).trim(),
+      };
+    }
+  }
+  return { code: line, comment: null };
 }
 
 function tsTopLevelAssignmentTypeExpression(pythonType: string): string {

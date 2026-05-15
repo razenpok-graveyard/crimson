@@ -153,7 +153,8 @@ function renderStraightLineAssignments(lines: string[], assignments: StraightLin
     const exportPrefix = assignment.exported ? 'export ' : '';
     const typeSuffix = assignment.typeExpression === undefined ? '' : `: ${assignment.typeExpression}`;
     if (assignment.valueLines.length === 1) {
-      lines.push(`${exportPrefix}${assignment.declaration} ${assignment.name}${typeSuffix} = ${assignment.valueLines[0]};`);
+      const trailingComment = assignment.trailingComment === undefined ? '' : ` // ${assignment.trailingComment}`;
+      lines.push(`${exportPrefix}${assignment.declaration} ${assignment.name}${typeSuffix} = ${assignment.valueLines[0]};${trailingComment}`);
       continue;
     }
 
