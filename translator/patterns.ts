@@ -22,7 +22,14 @@ import type {
   StraightLineModule,
   TypeAlias,
 } from './model.js';
-import { tsCallableType, tsExportNameForPythonName, tsLiteralExpression, tsPublicNameForPythonName, tsTypeExpression } from './naming.js';
+import {
+  tsCallableType,
+  tsExportNameForPythonName,
+  tsLiteralExpression,
+  tsMutableNameForPythonName,
+  tsPublicNameForPythonName,
+  tsTypeExpression,
+} from './naming.js';
 import { tsImportPathForPythonImport, tsImportPathForPythonModule, tsImportPathForPythonNamespace } from './paths.js';
 import { flattenFromImportBlocks, isOneLineAllAssignment, splitLeadingModuleDocstring, stripAllAssignments } from './python-utils.js';
 
@@ -525,7 +532,6 @@ export function parseSimpleExportModule(trimmedPython: string, relativePath: str
       index += 1;
       continue;
     }
-
     const fromImport = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
     if (fromImport === null) {
       break;
@@ -694,6 +700,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   const leadingAssignments: SimpleModuleAssignment[] = [];
   const functions: SimpleModuleFunction[] = [];
   const assignments: SimpleModuleAssignment[] = [];
+  const moduleNameMap = new Map<string, string>();
   let index = 0;
 
   while (index < lines.length) {
@@ -714,6 +721,10 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       index += 1;
       continue;
     }
+    if (trimmed === 'import os') {
+      index += 1;
+      continue;
+    }
 
     const fromImport = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
     if (fromImport !== null) {
@@ -731,6 +742,10 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       return null;
     }
     leadingAssignments.push(assignment.assignment);
+    const annotatedAssignment = /^([A-Za-z_][A-Za-z0-9_]*): /.exec(lines[index] ?? '');
+    if (annotatedAssignment !== null) {
+      moduleNameMap.set(annotatedAssignment[1], assignment.assignment.name);
+    }
     index = assignment.nextIndex;
   }
 
@@ -780,13 +795,14 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
 
     const statements: string[] = [];
+    const nameMap = new Map(moduleNameMap);
     while (index < lines.length) {
       const line = lines[index];
       if (line.trim() === '') {
         index += 1;
         break;
       }
-      const statement = translateStraightLineStatement(lines, index, '    ');
+      const statement = translateStraightLineStatement(lines, index, '    ', nameMap);
       if (statement === null) {
         return null;
       }
@@ -860,6 +876,7 @@ function translateStraightLineStatement(
   lines: string[],
   index: number,
   indent: string,
+  nameMap: Map<string, string>,
 ): { statements: string[]; nextIndex: number } | null {
   const line = lines[index];
   if (line === undefined || !line.startsWith(indent)) {
@@ -870,13 +887,21 @@ function translateStraightLineStatement(
     return null;
   }
 
+  const globalStatement = /^global ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(statement);
+  if (globalStatement !== null) {
+    for (const name of globalStatement[1].split(', ')) {
+      nameMap.set(name, tsMutableNameForPythonName(name));
+    }
+    return { statements: [], nextIndex: index + 1 };
+  }
+
   const ifStatement = /^if (.+):$/.exec(statement);
   if (ifStatement !== null) {
     const innerIndent = `${indent}    `;
     const innerStatements: string[] = [];
     let nextIndex = index + 1;
     while (nextIndex < lines.length && lines[nextIndex].startsWith(innerIndent)) {
-      const innerStatement = translateStraightLineStatement(lines, nextIndex, innerIndent);
+      const innerStatement = translateStraightLineStatement(lines, nextIndex, innerIndent, nameMap);
       if (innerStatement === null) {
         return null;
       }
@@ -888,7 +913,7 @@ function translateStraightLineStatement(
     }
     return {
       statements: [
-        `if (${translateExpression(ifStatement[1])}) {`,
+        `if (${translateExpression(ifStatement[1], nameMap)}) {`,
         ...innerStatements,
         '}',
       ],
@@ -902,7 +927,7 @@ function translateStraightLineStatement(
     const innerStatements: string[] = [];
     let nextIndex = index + 1;
     while (nextIndex < lines.length && lines[nextIndex].startsWith(innerIndent)) {
-      const innerStatement = translateStraightLineStatement(lines, nextIndex, innerIndent);
+      const innerStatement = translateStraightLineStatement(lines, nextIndex, innerIndent, nameMap);
       if (innerStatement === null) {
         return null;
       }
@@ -914,7 +939,7 @@ function translateStraightLineStatement(
     }
     return {
       statements: [
-        `for (const ${tsExportNameForPythonName(forOfStatement[1])} of ${translateExpression(forOfStatement[2])}) {`,
+        `for (const ${tsExportNameForPythonName(forOfStatement[1])} of ${translateExpression(forOfStatement[2], nameMap)}) {`,
         ...innerStatements,
         '}',
       ],
@@ -928,20 +953,27 @@ function translateStraightLineStatement(
 
   const returnStatement = /^return (.+)$/.exec(statement);
   if (returnStatement !== null) {
-    return { statements: [`return ${translateExpression(returnStatement[1])};`], nextIndex: index + 1 };
+    return { statements: [`return ${translateExpression(returnStatement[1], nameMap)};`], nextIndex: index + 1 };
   }
 
   const assignment = /^(.+?) (\+=|-=|\*=|\/=|=) (.+)$/.exec(statement);
   if (assignment !== null) {
     const localAssignment = /^([A-Za-z_][A-Za-z0-9_]*)$/.exec(assignment[1]);
     if (assignment[2] === '=' && localAssignment !== null) {
+      const globalName = nameMap.get(localAssignment[1]);
+      if (globalName !== undefined) {
+        return {
+          statements: [`${globalName} = ${translateExpression(assignment[3], nameMap)};`],
+          nextIndex: index + 1,
+        };
+      }
       return {
-        statements: [`const ${tsExportNameForPythonName(localAssignment[1])} = ${translateExpression(assignment[3])};`],
+        statements: [`const ${tsExportNameForPythonName(localAssignment[1])} = ${translateExpression(assignment[3], nameMap)};`],
         nextIndex: index + 1,
       };
     }
     return {
-      statements: [`${translateExpression(assignment[1])} ${assignment[2]} ${translateExpression(assignment[3])};`],
+      statements: [`${translateExpression(assignment[1], nameMap)} ${assignment[2]} ${translateExpression(assignment[3], nameMap)};`],
       nextIndex: index + 1,
     };
   }
@@ -953,17 +985,29 @@ function parseTopLevelAssignment(
   lines: string[],
   index: number,
 ): { assignment: SimpleModuleAssignment; nextIndex: number } | null {
-  const assignment = /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(lines[index] ?? '');
-  if (assignment === null) {
+  const line = lines[index] ?? '';
+  const annotatedAssignment = /^([A-Za-z_][A-Za-z0-9_]*): (.+?) = (.+)$/.exec(line);
+  const plainAssignment = /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(line);
+  if (annotatedAssignment === null && plainAssignment === null) {
     return null;
   }
 
-  const name = tsPublicNameForPythonName(assignment[1]);
-  const value = assignment[2];
+  const pythonName = annotatedAssignment?.[1] ?? plainAssignment?.[1] ?? '';
+  const value = annotatedAssignment?.[3] ?? plainAssignment?.[2] ?? '';
+  const annotatedType = annotatedAssignment?.[2] ?? null;
+  const name = annotatedType === null
+    ? tsPublicNameForPythonName(pythonName)
+    : tsMutableNameForPythonName(pythonName);
+  const baseAssignment = {
+    name,
+    declaration: annotatedType === null ? 'const' as const : 'let' as const,
+    exported: annotatedType === null || !pythonName.startsWith('_'),
+    typeExpression: annotatedType === null ? undefined : tsTypeExpression(annotatedType),
+  };
   const keywordCall = /^([A-Za-z_][A-Za-z0-9_]*)\($/.exec(value);
   if (keywordCall === null) {
     return {
-      assignment: { name, valueLines: [translateExpression(value)] },
+      assignment: { ...baseAssignment, valueLines: [translateExpression(value)] },
       nextIndex: index + 1,
     };
   }
@@ -977,7 +1021,7 @@ function parseTopLevelAssignment(
     if (trimmed === ')') {
       valueLines.push('})');
       return {
-        assignment: { name, valueLines },
+        assignment: { ...baseAssignment, valueLines },
         nextIndex: nextIndex + 1,
       };
     }
@@ -1008,18 +1052,27 @@ function markTypeOnlyImports(
   }
 }
 
-function translateExpression(pythonExpression: string): string {
+function translateExpression(pythonExpression: string, nameMap: Map<string, string> = new Map()): string {
   const trimmed = pythonExpression.trim();
+  const envComparison = /^os\.environ\.get\("([A-Za-z_][A-Za-z0-9_]*)"\) == "([^"]*)"$/.exec(trimmed);
+  if (envComparison !== null) {
+    return `typeof process !== 'undefined' && process.env?.${envComparison[1]} === '${envComparison[2]}'`;
+  }
+
   const lowerBoundLengthComparison = /^(.+?) <= (.+?) < len\((.+)\)$/.exec(trimmed);
   if (lowerBoundLengthComparison !== null) {
-    const value = translateExpression(lowerBoundLengthComparison[2]);
-    return `${value} >= ${translateExpression(lowerBoundLengthComparison[1])} && ${value} < ${translateExpression(lowerBoundLengthComparison[3])}.length`;
+    const value = translateExpression(lowerBoundLengthComparison[2], nameMap);
+    return `${value} >= ${translateExpression(lowerBoundLengthComparison[1], nameMap)} && ${value} < ${translateExpression(lowerBoundLengthComparison[3], nameMap)}.length`;
   }
 
   return trimmed
     .trim()
     .replaceAll(/\b(?:float|str|bool)\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, '$1')
     .replaceAll(/\blen\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, '$1.length')
+    .replaceAll(/ is not None\b/g, ' !== null')
+    .replaceAll(/ is None\b/g, ' === null')
+    .replaceAll(/ == /g, ' === ')
+    .replaceAll(/ != /g, ' !== ')
     .replaceAll(/\bmin\(/g, 'Math.min(')
     .replaceAll(/\bmax\(/g, 'Math.max(')
     .replaceAll(/\babs\(/g, 'Math.abs(')
@@ -1033,7 +1086,7 @@ function translateExpression(pythonExpression: string): string {
       if (name === 'None') {
         return 'null';
       }
-      return tsExportNameForPythonName(name);
+      return nameMap.get(name) ?? tsExportNameForPythonName(name);
     });
 }
 

@@ -14,8 +14,18 @@ export function tsPublicNameForPythonName(pythonName: string): string {
   return tsExportNameForPythonName(pythonName.replace(/^_+/, ''));
 }
 
+export function tsMutableNameForPythonName(pythonName: string): string {
+  return tsExportNameForPythonName(pythonName.replace(/^_+/, '').toLowerCase());
+}
+
 export function tsTypeExpression(pythonType: string): string {
   const trimmed = pythonType.trim();
+  if (trimmed.includes(' | ')) {
+    return trimmed
+      .split(' | ')
+      .map((part) => part === 'None' ? 'null' : tsTypeExpression(part))
+      .join(' | ');
+  }
   if (trimmed === 'None') {
     return 'void';
   }

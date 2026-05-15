@@ -190,7 +190,9 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
       `import ${importDefinition.typeOnly ? 'type ' : ''}{ ${importDefinition.names.join(', ')} } from '${importDefinition.modulePath}';`,
     );
   }
-  lines.push('');
+  if (module.imports.length > 0) {
+    lines.push('');
+  }
 
   renderStraightLineAssignments(lines, module.leadingAssignments);
   if (module.leadingAssignments.length > 0 && module.functions.length + module.assignments.length > 0) {
@@ -233,12 +235,14 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
 
 function renderStraightLineAssignments(lines: string[], assignments: StraightLineModule['assignments']): void {
   for (const assignment of assignments) {
+    const exportPrefix = assignment.exported ? 'export ' : '';
+    const typeSuffix = assignment.typeExpression === undefined ? '' : `: ${assignment.typeExpression}`;
     if (assignment.valueLines.length === 1) {
-      lines.push(`export const ${assignment.name} = ${assignment.valueLines[0]};`);
+      lines.push(`${exportPrefix}${assignment.declaration} ${assignment.name}${typeSuffix} = ${assignment.valueLines[0]};`);
       continue;
     }
 
-    lines.push(`export const ${assignment.name} = ${assignment.valueLines[0]}`);
+    lines.push(`${exportPrefix}${assignment.declaration} ${assignment.name}${typeSuffix} = ${assignment.valueLines[0]}`);
     for (const valueLine of assignment.valueLines.slice(1, -1)) {
       lines.push(valueLine);
     }

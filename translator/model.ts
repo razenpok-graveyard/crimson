@@ -141,6 +141,9 @@ export interface SimpleModuleFunction {
 
 export interface SimpleModuleAssignment {
   name: string;
+  declaration: 'const' | 'let';
+  exported: boolean;
+  typeExpression?: string;
   valueLines: string[];
 }
 
