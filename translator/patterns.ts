@@ -1684,6 +1684,30 @@ function translateStraightLineStatement(
 
   const assignment = /^(.+?) (\+=|-=|\*=|\/=|=) (.+)$/.exec(statement);
   if (assignment !== null) {
+    if (assignment[3] === '(') {
+      const expressionLines: string[] = [];
+      let nextIndex = index + 1;
+      while (nextIndex < lines.length) {
+        const trimmed = lines[nextIndex].trim();
+        if (trimmed === ')') {
+          return translateStraightLineAssignment(
+            assignment[1],
+            assignment[2],
+            translateExpression(expressionLines.join(' '), nameMap, arrayNames),
+            nextIndex + 1,
+            nameMap,
+            declaredNames,
+            reassignedNames,
+            arrayNames,
+          );
+        }
+        if (trimmed !== '') {
+          expressionLines.push(trimmed);
+        }
+        nextIndex += 1;
+      }
+      return null;
+    }
     if (/^(?:float|str|bool)\($/.test(assignment[3])) {
       const valueLine = lines[index + 1]?.trim().replace(/,$/, '') ?? null;
       if (valueLine === null || lines[index + 2]?.trim() !== ')') {
