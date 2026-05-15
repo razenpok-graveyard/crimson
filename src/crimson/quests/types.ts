@@ -1,18 +1,24 @@
 // Port of crimson/quests/types.py
 
-import type { QuestLevel } from './level.ts';
-import { Vec2 } from '@grim/geom.ts';
+import type { QuestLevel } from '@crimson/quests/level.ts';
+import type { Vec2 } from '@grim/geom.ts';
 import type { CrandLike } from '@grim/rand.ts';
 import type { SpawnId } from '@crimson/creatures/spawn.ts';
 import type { TerrainSlotTriplet } from '@crimson/terrain-slots.ts';
 import type { WeaponId } from '@crimson/weapons.ts';
+
+export type QuestBuilder = (ctx: QuestContext, opts: { rng: CrandLike; fullVersion?: boolean }) => SpawnEntry[];
 
 export class QuestContext {
   readonly width: number;
   readonly height: number;
   readonly playerCount: number;
 
-  constructor(opts: { width: number; height: number; playerCount: number }) {
+  constructor(opts: {
+    width: number;
+    height: number;
+    playerCount: number;
+  }) {
     this.width = opts.width;
     this.height = opts.height;
     this.playerCount = opts.playerCount;
@@ -26,7 +32,13 @@ export class SpawnEntry {
   readonly triggerMs: number;
   readonly count: number;
 
-  constructor(opts: { pos: Vec2; heading: number; spawnId: SpawnId; triggerMs: number; count: number }) {
+  constructor(opts: {
+    pos: Vec2;
+    heading: number;
+    spawnId: SpawnId;
+    triggerMs: number;
+    count: number;
+  }) {
     this.pos = opts.pos;
     this.heading = opts.heading;
     this.spawnId = opts.spawnId;
@@ -34,11 +46,6 @@ export class SpawnEntry {
     this.count = opts.count;
   }
 }
-
-export type QuestBuilder = (
-  ctx: QuestContext,
-  opts: { rng: CrandLike; fullVersion?: boolean },
-) => SpawnEntry[];
 
 export class QuestDefinition {
   readonly level: QuestLevel;

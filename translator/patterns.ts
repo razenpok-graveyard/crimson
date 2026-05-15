@@ -1081,6 +1081,19 @@ function parseStructClass(
       break;
     }
 
+    if (trimmedField === '@property') {
+      const propertyMethod = parseStructMethod(lines, nextIndex + 1);
+      if (propertyMethod === null || propertyMethod.method.parameters.length > 0 || propertyMethod.method.optsParams.length > 0) {
+        return null;
+      }
+      methods.push({
+        ...propertyMethod.method,
+        name: `get ${propertyMethod.method.name}`,
+      });
+      nextIndex = propertyMethod.nextIndex;
+      continue;
+    }
+
     const method = parseStructMethod(lines, nextIndex);
     if (method !== null) {
       if (method.method.name === '__post_init__') {

@@ -274,13 +274,13 @@ function renderProtocolDefinition(lines: string[], protocol: ProtocolDefinition)
       if (method.parameters.length === 0 && method.optsParams.length > 2) {
         lines.push(`export type ${protocol.name} = (opts: {`);
         for (const param of method.optsParams) {
-          lines.push(`  ${param.name}: ${param.typeExpression};`);
+          lines.push(`  ${renderProtocolOptsParam(param)};`);
         }
         lines.push(`}) => ${method.returnType};`);
         return;
       }
       const optsType = method.optsParams
-        .map((param) => `${param.name}: ${param.typeExpression}`)
+        .map((param) => renderProtocolOptsParam(param))
         .join('; ');
       params.push(`opts: { ${optsType} }`);
     }
@@ -293,7 +293,7 @@ function renderProtocolDefinition(lines: string[], protocol: ProtocolDefinition)
     const params = method.parameters.map(renderParameter);
     if (method.optsParams.length > 0) {
       const optsType = method.optsParams
-        .map((param) => `${param.name}${method.optsOptional ? '?' : ''}: ${param.typeExpression}`)
+        .map((param) => renderProtocolOptsParam(param, method.optsOptional))
         .join('; ');
       params.push(`opts${method.optsOptional ? '?' : ''}: { ${optsType} }`);
     }
@@ -304,6 +304,11 @@ function renderProtocolDefinition(lines: string[], protocol: ProtocolDefinition)
 
 function isCallableProtocol(protocol: ProtocolDefinition): boolean {
   return protocol.methods.length === 1 && protocol.methods[0].name === '__call__';
+}
+
+function renderProtocolOptsParam(param: { name: string; typeExpression: string; defaultValue?: string | null }, optional = false): string {
+  const hasDefault = 'defaultValue' in param && param.defaultValue !== null;
+  return `${param.name}${optional || hasDefault ? '?' : ''}: ${param.typeExpression}`;
 }
 
 function renderStructClasses(lines: string[], classes: StructModule['classes']): void {
