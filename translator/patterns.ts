@@ -1098,18 +1098,18 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       break;
     }
 
-    const header = /^def ([A-Za-z_][A-Za-z0-9_]*)\((.*)\) -> ([^:]+):$/.exec(lines[index] ?? '');
+    const header = parseStraightLineFunctionHeader(lines, index);
     if (header === null) {
       return null;
     }
-    index += 1;
+    index = header.nextIndex;
 
     const parameters: FunctionParameter[] = [];
     const optsParams: OptionalFunctionParameter[] = [];
     const arrayNames = new Set<string>();
     let keywordOnly = false;
-    if (header[2] !== '') {
-      for (const parameterText of header[2].split(', ')) {
+    if (header.parametersText !== '') {
+      for (const parameterText of header.parametersText.split(', ')) {
         if (parameterText === '*') {
           keywordOnly = true;
           continue;
@@ -1176,11 +1176,11 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
 
     functions.push({
-      name: tsExportNameForPythonName(header[1]),
-      exported: !header[1].startsWith('_'),
+      name: tsExportNameForPythonName(header.name),
+      exported: !header.name.startsWith('_'),
       parameters,
       optsParams,
-      returnType: tsTypeExpression(header[3]),
+      returnType: tsTypeExpression(header.returnType),
       statements,
     });
   }
@@ -1227,6 +1227,49 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   return leadingAssignments.length + functions.length + assignments.length > 0
     ? { imports, leadingAssignments, functions, assignments }
     : null;
+}
+
+function parseStraightLineFunctionHeader(
+  lines: string[],
+  index: number,
+): { name: string; parametersText: string; returnType: string; nextIndex: number } | null {
+  const oneLine = /^def ([A-Za-z_][A-Za-z0-9_]*)\((.*)\) -> ([^:]+):$/.exec(lines[index] ?? '');
+  if (oneLine !== null) {
+    return {
+      name: oneLine[1],
+      parametersText: oneLine[2],
+      returnType: oneLine[3],
+      nextIndex: index + 1,
+    };
+  }
+
+  const start = /^def ([A-Za-z_][A-Za-z0-9_]*)\($/.exec(lines[index] ?? '');
+  if (start === null) {
+    return null;
+  }
+
+  const parameterLines: string[] = [];
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length) {
+    const close = /^\) -> ([^:]+):$/.exec(lines[nextIndex] ?? '');
+    if (close !== null) {
+      return {
+        name: start[1],
+        parametersText: parameterLines.join(', '),
+        returnType: close[1],
+        nextIndex: nextIndex + 1,
+      };
+    }
+
+    const parameterLine = /^    (.+),$/.exec(lines[nextIndex] ?? '');
+    if (parameterLine === null) {
+      return null;
+    }
+    parameterLines.push(parameterLine[1]);
+    nextIndex += 1;
+  }
+
+  return null;
 }
 
 function parseOneLineAllNames(trimmedLine: string): string[] | null {
@@ -1376,6 +1419,27 @@ function translateStraightLineStatement(
 
   if (statement === 'return') {
     return { statements: ['return;'], nextIndex: index + 1 };
+  }
+
+  if (statement === 'return (') {
+    const expressionLines: string[] = [];
+    let nextIndex = index + 1;
+    while (nextIndex < lines.length) {
+      const trimmed = lines[nextIndex].trim();
+      if (trimmed === ')') {
+        return {
+          statements: [`return ${translateExpression(expressionLines.join(' '), nameMap, arrayNames)};`],
+          nextIndex: nextIndex + 1,
+        };
+      }
+      if (trimmed === '') {
+        nextIndex += 1;
+        continue;
+      }
+      expressionLines.push(trimmed);
+      nextIndex += 1;
+    }
+    return null;
   }
 
   const returnStatement = /^return (.+)$/.exec(statement);
@@ -1601,10 +1665,23 @@ function translateExpression(
     return `typeof process !== 'undefined' && process.env?.${envComparison[1]} === '${envComparison[2]}'`;
   }
 
+  if (trimmed.includes(' and ')) {
+    return trimmed
+      .split(' and ')
+      .map((part) => translateExpression(part, nameMap, arrayNames))
+      .join(' && ');
+  }
+
   const lowerBoundLengthComparison = /^(.+?) <= (.+?) < len\((.+)\)$/.exec(trimmed);
   if (lowerBoundLengthComparison !== null) {
     const value = translateExpression(lowerBoundLengthComparison[2], nameMap, arrayNames);
     return `${value} >= ${translateExpression(lowerBoundLengthComparison[1], nameMap, arrayNames)} && ${value} < ${translateExpression(lowerBoundLengthComparison[3], nameMap, arrayNames)}.length`;
+  }
+
+  const chainedLessEqualComparison = /^(.+?) <= (.+?) <= (.+)$/.exec(trimmed);
+  if (chainedLessEqualComparison !== null) {
+    const middle = translateExpression(chainedLessEqualComparison[2], nameMap, arrayNames);
+    return `${translateExpression(chainedLessEqualComparison[1], nameMap, arrayNames)} <= ${middle} && ${middle} <= ${translateExpression(chainedLessEqualComparison[3], nameMap, arrayNames)}`;
   }
 
   const notIdentifier = /^not ([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);
