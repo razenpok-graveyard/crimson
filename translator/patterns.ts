@@ -2320,8 +2320,20 @@ function translateStraightLineAssignment(
 
 function reassignedLocalNames(lines: string[], startIndex: number): Set<string> {
   const counts = new Map<string, number>();
-  let index = startIndex;
-  while (index < lines.length && lines[index].trim() !== '') {
+  let firstStatementIndex = startIndex;
+  while (firstStatementIndex < lines.length && lines[firstStatementIndex].trim() === '') {
+    firstStatementIndex += 1;
+  }
+  const baseIndent = /^(\s+)/.exec(lines[firstStatementIndex] ?? '')?.[1] ?? null;
+  if (baseIndent === null) {
+    return new Set();
+  }
+
+  let index = firstStatementIndex;
+  while (index < lines.length) {
+    if (lines[index].trim() !== '' && !lines[index].startsWith(baseIndent)) {
+      break;
+    }
     const assignment = /^\s+([A-Za-z_][A-Za-z0-9_]*) = /.exec(lines[index]);
     if (assignment !== null) {
       counts.set(assignment[1], (counts.get(assignment[1]) ?? 0) + 1);

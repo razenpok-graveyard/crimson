@@ -4,7 +4,7 @@ import { PerkId } from '@crimson/perks/ids.ts';
 import type { PerkApplyCtx } from '@crimson/perks/runtime/apply-context.ts';
 import { PerkHooks } from '@crimson/perks/runtime/hook-types.ts';
 
-function applyLifeline5050(ctx: PerkApplyCtx): void {
+export function applyLifeline5050(ctx: PerkApplyCtx): void {
   const creatures = ctx.creatures;
   if (creatures === null) {
     return;
