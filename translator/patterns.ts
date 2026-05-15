@@ -933,12 +933,38 @@ function translateStraightLineStatement(
     if (innerStatements.length === 0) {
       return null;
     }
+    const statements = [
+      `if (${translateExpression(ifStatement[1], nameMap)}) {`,
+      ...innerStatements,
+      '}',
+    ];
+    if ((lines[nextIndex] ?? '').trim() === 'else:') {
+      const elseIndent = `${indent}    `;
+      const elseStatements: string[] = [];
+      nextIndex += 1;
+      while (nextIndex < lines.length && lines[nextIndex].startsWith(elseIndent)) {
+        const elseStatement = translateStraightLineStatement(
+          lines,
+          nextIndex,
+          elseIndent,
+          nameMap,
+          declaredNames,
+          reassignedNames,
+        );
+        if (elseStatement === null) {
+          return null;
+        }
+        elseStatements.push(...elseStatement.statements.map((elseLine) => `  ${elseLine}`));
+        nextIndex = elseStatement.nextIndex;
+      }
+      if (elseStatements.length === 0) {
+        return null;
+      }
+      statements[statements.length - 1] = '} else {';
+      statements.push(...elseStatements, '}');
+    }
     return {
-      statements: [
-        `if (${translateExpression(ifStatement[1], nameMap)}) {`,
-        ...innerStatements,
-        '}',
-      ],
+      statements,
       nextIndex,
     };
   }
@@ -1123,6 +1149,12 @@ function translateExpression(pythonExpression: string, nameMap: Map<string, stri
 
   return trimmed
     .trim()
+    .replaceAll(
+      /\b([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\(([A-Za-z_][A-Za-z0-9_]*)=([^)]+)\)/g,
+      (_match, callee: string, argName: string, argValue: string) => (
+        `${translateExpression(callee, nameMap)}({ ${tsExportNameForPythonName(argName)}: ${translateExpression(argValue, nameMap)} })`
+      ),
+    )
     .replaceAll(/\b(?:float|str|bool)\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, '$1')
     .replaceAll(/\blen\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, '$1.length')
     .replaceAll(/ is not None\b/g, ' !== null')
