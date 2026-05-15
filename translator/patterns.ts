@@ -1688,6 +1688,11 @@ function tsStructFieldDefaultValue(pythonValue: string): string | null {
     return '[]';
   }
 
+  const lambdaFactory = /^msgspec\.field\(default_factory=lambda: (.+)\)$/.exec(trimmed);
+  if (lambdaFactory !== null) {
+    return translateExpression(lambdaFactory[1]);
+  }
+
   const factory = /^msgspec\.field\(default_factory=([A-Za-z_][A-Za-z0-9_]*)\)$/.exec(trimmed);
   if (factory !== null) {
     return `new ${tsExportNameForPythonName(factory[1])}()`;
@@ -4072,6 +4077,11 @@ function translateExpression(
       .filter((part) => part !== '')
       .map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases));
     return `[${values.join(', ')}]`;
+  }
+
+  const topLevelTupleParts = splitTopLevelComma(trimmed);
+  if (topLevelTupleParts.length > 1) {
+    return `[${topLevelTupleParts.map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')}]`;
   }
 
   const stringLiterals: string[] = [];

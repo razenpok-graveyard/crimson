@@ -1,8 +1,25 @@
 // Port of crimson/typo/state.py
 
 import type { Vec2 } from '@grim/geom.ts';
-import { CreatureNameTable } from './names.ts';
-import { TypingBuffer } from './typing.ts';
+import { CreatureNameTable } from '@crimson/typo/names.ts';
+import { TypingBuffer } from '@crimson/typo/typing.ts';
+
+export function resetTypoState(typo: TypoState, opts: { creatureCapacity: number; dictionaryWords?: readonly string[]; highscoreNames?: readonly string[] }): void {
+  const creatureCapacity = opts.creatureCapacity;
+  const dictionaryWords = opts.dictionaryWords ?? [];
+  const highscoreNames = opts.highscoreNames ?? [];
+  typo.typing = new TypingBuffer();
+  typo.names = CreatureNameTable.sized(int(creatureCapacity));
+  typo.spawnCooldownMs = 0;
+  typo.dictionaryWords = dictionaryWords.map((word) => word);
+  typo.highscoreNames = highscoreNames.map((name) => name);
+  typo.pendingFireTarget = null;
+  typo.pendingReload = false;
+}
+
+export function typoShotCounts(typo: TypoState): [number, number] {
+  return [int(typo.typing.submitCount), int(typo.typing.matchCount)];
+}
 
 export class TypoState {
   typing: TypingBuffer;
@@ -25,28 +42,9 @@ export class TypoState {
     this.typing = opts.typing ?? new TypingBuffer();
     this.names = opts.names ?? CreatureNameTable.sized(0);
     this.spawnCooldownMs = opts.spawnCooldownMs ?? 0;
-    this.dictionaryWords = Array.from(opts.dictionaryWords ?? [], (word) => String(word));
-    this.highscoreNames = Array.from(opts.highscoreNames ?? [], (name) => String(name));
+    this.dictionaryWords = opts.dictionaryWords ?? [];
+    this.highscoreNames = opts.highscoreNames ?? [];
     this.pendingFireTarget = opts.pendingFireTarget ?? null;
     this.pendingReload = opts.pendingReload ?? false;
   }
-}
-
-export function resetTypoState(
-  typo: TypoState,
-  opts: { creatureCapacity: number; dictionaryWords?: readonly string[]; highscoreNames?: readonly string[] },
-): void {
-  const dictionaryWords = opts.dictionaryWords ?? [];
-  const highscoreNames = opts.highscoreNames ?? [];
-  typo.typing = new TypingBuffer();
-  typo.names = CreatureNameTable.sized(int(opts.creatureCapacity));
-  typo.spawnCooldownMs = 0;
-  typo.dictionaryWords = Array.from(dictionaryWords, (word) => String(word));
-  typo.highscoreNames = Array.from(highscoreNames, (name) => String(name));
-  typo.pendingFireTarget = null;
-  typo.pendingReload = false;
-}
-
-export function typoShotCounts(typo: TypoState): [number, number] {
-  return [int(typo.typing.submitCount), int(typo.typing.matchCount)];
 }

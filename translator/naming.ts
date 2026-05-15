@@ -41,6 +41,10 @@ export function tsTypeExpression(pythonType: string): string {
   if (dictType !== null) {
     return `Map<${tsTypeExpression(dictType[1])}, ${tsTypeExpression(dictType[2])}>`;
   }
+  const fixedTupleType = /^tuple\[(.+)\]$/.exec(trimmed);
+  if (fixedTupleType !== null && !fixedTupleType[1].endsWith(', ...')) {
+    return `[${fixedTupleType[1].split(topLevelCommaPattern()).map(tsTypeExpression).join(', ')}]`;
+  }
   const variadicTupleType = /^tuple\[(.+), \.\.\.\]$/.exec(trimmed);
   if (variadicTupleType !== null) {
     return `readonly ${tsTypeExpression(variadicTupleType[1])}[]`;
