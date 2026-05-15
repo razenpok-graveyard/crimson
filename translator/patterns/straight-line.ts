@@ -357,6 +357,9 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         index += 1;
         break;
       }
+      if (!isIndentedBlockLine(lines, index, '    ')) {
+        break;
+      }
       const statement = translateStraightLineStatement(
         lines,
         index,

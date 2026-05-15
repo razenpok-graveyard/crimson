@@ -101,6 +101,16 @@ function pushImportDefinition(imports: ImportDefinition[], importDefinition: Imp
 function operatorIsAssignment(operator: string): boolean {
   return operator === '=';
 }
+function caseBodyStops(statements: string[]): boolean {
+  for (let index = statements.length - 1; index >= 0; index -= 1) {
+    const trimmed = statements[index].trim();
+    if (trimmed === '') {
+      continue;
+    }
+    return /^(?:return|throw|break|continue)\b/.test(trimmed);
+  }
+  return false;
+}
 function predeclareIfBranchAssignments(
   lines: string[],
   index: number,
@@ -472,6 +482,77 @@ export function translateStraightLineStatement(
       };
     }
     return null;
+  }
+
+  const matchStatement = /^match (.+):$/.exec(statement);
+  if (matchStatement !== null) {
+    const caseIndent = `${indent}    `;
+    const bodyIndent = `${caseIndent}    `;
+    const statements = [`switch (${translateExpression(matchStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`];
+    let nextIndex = index + 1;
+    let sawCase = false;
+
+    while (nextIndex < lines.length) {
+      const line = lines[nextIndex] ?? '';
+      if (line.trim() === '') {
+        nextIndex += 1;
+        continue;
+      }
+      if (!line.startsWith(caseIndent)) {
+        break;
+      }
+
+      const caseStatement = /^case (.+):$/.exec(line.slice(caseIndent.length));
+      if (caseStatement === null) {
+        return null;
+      }
+      sawCase = true;
+      const translatedCase = caseStatement[1] === '_'
+        ? 'default'
+        : `case ${translateExpression(caseStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
+      statements.push(`  ${translatedCase}:`);
+
+      const caseStatements: string[] = [];
+      nextIndex += 1;
+      while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, bodyIndent)) {
+        if (lines[nextIndex].trim() === '') {
+          caseStatements.push('');
+          nextIndex += 1;
+          continue;
+        }
+        const innerStatement = translateStraightLineStatement(
+          lines,
+          nextIndex,
+          bodyIndent,
+          nameMap,
+          declaredNames,
+          reassignedNames,
+          arrayNames,
+          validatedTypeAliases,
+          relativePath,
+          mapNames,
+          imports,
+        );
+        if (innerStatement === null) {
+          return null;
+        }
+        caseStatements.push(...innerStatement.statements);
+        nextIndex = innerStatement.nextIndex;
+      }
+      if (caseStatements.length === 0) {
+        return null;
+      }
+      statements.push(...caseStatements.map((caseLine) => indentStatementLine(indentStatementLine(caseLine))));
+      if (!caseBodyStops(caseStatements)) {
+        statements.push('    break;');
+      }
+    }
+
+    if (!sawCase) {
+      return null;
+    }
+    statements.push('}');
+    return { statements, nextIndex };
   }
 
   const whileStatement = /^while (.+):$/.exec(statement);

@@ -20,6 +20,10 @@ export function tsMutableNameForPythonName(pythonName: string): string {
 
 export function tsTypeExpression(pythonType: string): string {
   const trimmed = pythonType.trim();
+  const forwardReference = /^(["'])(.+)\1$/.exec(trimmed);
+  if (forwardReference !== null) {
+    return tsTypeExpression(forwardReference[2]);
+  }
   const variadicCallable = /^Callable\[\.\.\., (.+)\]$/.exec(trimmed);
   if (variadicCallable !== null) {
     return `(...args: any[]) => ${tsTypeExpression(variadicCallable[1])}`;

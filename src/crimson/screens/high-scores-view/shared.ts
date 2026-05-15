@@ -5,19 +5,17 @@ import type { HighScoreRecord } from '@crimson/persistence/highscores.ts';
 
 export function ordinal(value: number): string {
   const n = int(value);
-  const suffix = (n % 100 >= 10 && n % 100 <= 20) ? 'th'
-    : (n % 10 === 1) ? 'st'
-    : (n % 10 === 2) ? 'nd'
-    : (n % 10 === 3) ? 'rd'
-    : 'th';
+  if (10 <= (n % 100) && (n % 100) <= 20) {
+    return `${n}th`;
+  }
+  const suffix = new Map([[1, 'st'], [2, 'nd'], [3, 'rd']]).get(n % 10) ?? 'th';
   return `${n}${suffix}`;
 }
 
 export function formatElapsedMmSs(valueMs: number): string {
-  const totalSec = Math.floor(Math.max(0, int(valueMs)) / 1000);
-  const m = Math.floor(totalSec / 60);
-  const s = totalSec % 60;
-  return `${m}:${s < 10 ? '0' : ''}${s}`;
+  const total = Math.floor(Math.max(0, int(valueMs)) / 1000);
+  const [minutes, seconds] = [Math.floor(total / 60), total % 60];
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
 export function formatScoreDate(entry: HighScoreRecord): string {
@@ -27,11 +25,8 @@ export function formatScoreDate(entry: HighScoreRecord): string {
   if (day <= 0 || month <= 0) {
     return '';
   }
-  const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-  ];
-  const monthName = (month >= 1 && month <= 12) ? months[month - 1] : `${month}`;
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthName = 1 <= month && month <= 12 ? months[month - 1] : `${month}`;
   const year = yearOff >= 0 ? 2000 + yearOff : 2000;
   return `${day}. ${monthName} ${year}`;
 }

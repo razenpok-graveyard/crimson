@@ -240,6 +240,16 @@ export function translateExpression(
     }
   }
 
+  const divmodCall = parseCallPrefix(trimmed, 'divmod');
+  if (divmodCall !== null && divmodCall.rest === '') {
+    const args = splitTopLevelComma(divmodCall.argsText);
+    if (args.length === 2) {
+      const value = translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const divisor = translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      return `[Math.floor(${value} / ${divisor}), ${value} % ${divisor}]`;
+    }
+  }
+
   const isinstanceSequence = /^isinstance\((.+), \((.+)\)\)$/.exec(trimmed);
   if (isinstanceSequence !== null) {
     const types = splitTopLevelComma(isinstanceSequence[2]);
@@ -364,7 +374,8 @@ export function translateExpression(
   if (dictGet !== null) {
     const parts = splitTopLevelComma(dictGet[2]);
     if (parts.length === 1 || parts.length === 2) {
-      const mapName = translateExpression(dictGet[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const inlineMap = translateInlineDictMapExpression(dictGet[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const mapName = inlineMap ?? translateExpression(dictGet[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
       const key = translateMapKeyExpression(mapName, translateExpression(parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames));
       const value = `${mapName}.get(${key})`;
       return parts.length === 1 ? `${value} ?? null` : `${value} ?? ${translateExpression(parts[1], nameMap, arrayNames, validatedTypeAliases)}`;
@@ -748,6 +759,64 @@ function replaceTranslatedRaylibConstructors(value: string): string {
     index = closeIndex + 1;
   }
   return output;
+}
+
+function translateInlineDictMapExpression(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  const trimmed = pythonExpression.trim();
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
+    return null;
+  }
+  const body = trimmed.slice(1, -1).trim();
+  if (body === '') {
+    return 'new Map()';
+  }
+  const entries: string[] = [];
+  for (const item of splitTopLevelComma(body)) {
+    const separator = topLevelColonIndex(item);
+    if (separator === null) {
+      return null;
+    }
+    const key = item.slice(0, separator).trim();
+    const value = item.slice(separator + 1).trim();
+    entries.push(`[${translateExpression(key, nameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(value, nameMap, arrayNames, validatedTypeAliases, mapNames)}]`);
+  }
+  return `new Map([${entries.join(', ')}])`;
+}
+
+function topLevelColonIndex(value: string): number | null {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      if (char === quote && value[index - 1] !== '\\') {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char === ')' || char === ']' || char === '}') {
+      depth -= 1;
+      continue;
+    }
+    if (char === ':' && depth === 0) {
+      return index;
+    }
+  }
+  return null;
 }
 
 function stripPrimitiveCallWrappers(value: string): string {
