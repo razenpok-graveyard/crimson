@@ -144,6 +144,19 @@ function translateBoundMethodReference(
   const method = tsExportNameForPythonName(parts[parts.length - 1]);
   return `${receiver}.${method}.bind(${receiver})`;
 }
+
+export function vectorNameMarker(name: string): string {
+  return `__vector__:${name}`;
+}
+
+export function translatedExpressionLooksVector(tsExpression: string): boolean {
+  const trimmed = tsExpression.trim();
+  if (/^(?:Vec2\.|new Vec2\b)/.test(trimmed) && !/\.(?:length|toHeading)\(\)$/.test(trimmed)) {
+    return true;
+  }
+  return finalVectorMethodCall(trimmed);
+}
+
 export function translateExpression(
   pythonExpression: string,
   nameMap: Map<string, string> = new Map(),
@@ -426,14 +439,19 @@ export function translateExpression(
     }
   }
 
-  const vectorAddWithScaledRight = /^(.+) \+ (Vec2\..+ \* .+)$/.exec(trimmed);
-  if (vectorAddWithScaledRight !== null) {
-    return `${translateExpression(vectorAddWithScaledRight[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.add(${translateExpression(vectorAddWithScaledRight[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  const vectorAdditive = splitTopLevelAdditive(trimmed);
+  if (
+    vectorAdditive !== null
+    && vectorAdditive.parts.length === 2
+    && vectorAdditive.operators[0] === '+'
+    && expressionIsVectorScale(vectorAdditive.parts[1], nameMap, arrayNames)
+  ) {
+    return `${translateExpression(vectorAdditive.parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames)}.add(${translateExpression(vectorAdditive.parts[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
-  const vectorScale = /^(.+) \* (.+)$/.exec(trimmed);
-  if (vectorScale !== null && vectorScale[1].includes('Vec2.')) {
-    return `${translateExpression(vectorScale[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.mul(${translateExpression(vectorScale[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  const vectorScale = splitTopLevelMultiplicative(trimmed);
+  if (vectorScale !== null && expressionIsKnownVector(vectorScale.left, nameMap, arrayNames)) {
+    return `${translateExpression(vectorScale.left, nameMap, arrayNames, validatedTypeAliases, mapNames)}.mul(${translateExpression(stripBalancedOuterParens(vectorScale.right), nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
   const vectorSubMethod = /^\((.+) - (.+)\)\.to_heading\(\)$/.exec(trimmed);
@@ -953,13 +971,96 @@ function stripPrimitiveCallWrappers(value: string): string {
         continue;
       }
       const inner = output.slice(openIndex + 1, closeIndex);
-      nextOutput += / [|&^] | << | >> /.test(inner) ? `(${inner})` : inner;
+      nextOutput += primitiveWrapperNeedsParens(inner) ? `(${inner})` : inner;
       index = closeIndex + 1;
       changed = true;
     }
     output = nextOutput;
   }
   return output;
+}
+
+function primitiveWrapperNeedsParens(inner: string): boolean {
+  return splitTopLevelAdditive(inner) !== null || / [|&^] | << | >> /.test(inner);
+}
+
+function expressionIsVectorScale(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+): boolean {
+  const scale = splitTopLevelMultiplicative(pythonExpression);
+  return scale !== null && expressionIsKnownVector(scale.left, nameMap, arrayNames);
+}
+
+function expressionIsKnownVector(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+): boolean {
+  const trimmed = stripBalancedOuterParens(pythonExpression);
+  if (trimmed.startsWith('Vec2.')) {
+    return true;
+  }
+  const identifier = /^[A-Za-z_][A-Za-z0-9_]*$/.exec(trimmed);
+  if (identifier !== null) {
+    const translated = translateIdentifierName(identifier[0], nameMap);
+    return arrayNames.has(vectorNameMarker(identifier[0])) || arrayNames.has(vectorNameMarker(translated));
+  }
+  return translatedExpressionLooksVector(trimmed);
+}
+
+function finalVectorMethodCall(tsExpression: string): boolean {
+  const vectorMethods = new Set(['add', 'sub', 'mul', 'rotated']);
+  const methodPattern = /\.([A-Za-z_$][A-Za-z0-9_$]*)\(/g;
+  let lastMatch: RegExpExecArray | null = null;
+  let match: RegExpExecArray | null;
+  while ((match = methodPattern.exec(tsExpression)) !== null) {
+    lastMatch = match;
+  }
+  if (lastMatch === null || !vectorMethods.has(lastMatch[1])) {
+    return false;
+  }
+  const openIndex = lastMatch.index + lastMatch[0].length - 1;
+  return matchingCloseParen(tsExpression, openIndex) === tsExpression.length - 1;
+}
+
+function splitTopLevelMultiplicative(value: string): { left: string; right: string } | null {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      if (char === quote && value[index - 1] !== '\\') {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char === ')' || char === ']' || char === '}') {
+      depth -= 1;
+      continue;
+    }
+    if (
+      depth === 0
+      && char === '*'
+      && value[index - 1] === ' '
+      && value[index + 1] === ' '
+    ) {
+      return {
+        left: value.slice(0, index - 1).trim(),
+        right: value.slice(index + 2).trim(),
+      };
+    }
+  }
+  return null;
 }
 
 function parenthesizeForLogicalAnd(value: string): string {

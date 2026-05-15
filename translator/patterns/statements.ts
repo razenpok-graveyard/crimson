@@ -25,6 +25,8 @@ import {
   translateExpression,
   translateMapKeyExpression,
   translatePositionalCallExpression,
+  translatedExpressionLooksVector,
+  vectorNameMarker,
 } from './expression.js';
 import {
   parseFunctionParameterText,
@@ -1386,6 +1388,10 @@ function translateStraightLineAssignment(
     declaredNames.add(localAssignment[1]);
     if (/\.(?:creatures|pickups|players)\b/.test(assignedRight)) {
       arrayNames.add(localAssignment[1]);
+    }
+    if (translatedExpressionLooksVector(assignedRight)) {
+      arrayNames.add(vectorNameMarker(localAssignment[1]));
+      arrayNames.add(vectorNameMarker(tsName));
     }
     return {
       statements: [
