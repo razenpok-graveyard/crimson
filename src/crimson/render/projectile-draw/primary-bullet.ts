@@ -1,10 +1,10 @@
 // Port of crimson/render/projectile_draw/primary_bullet.py
 
-import { TextureId, getTexture } from '@grim/assets.ts';
+import { TextureId } from '@grim/assets.ts';
 import { clamp } from '@grim/math.ts';
-import * as wgl from '@wgl';
-import { RAD_TO_DEG, projOrigin } from './common.ts';
-import type { ProjectileDrawCtx } from './types.ts';
+import { rl } from '@grim/raylib-api.ts';
+import { RAD_TO_DEG, projOrigin } from '@crimson/render/projectile-draw/common.ts';
+import type { ProjectileDrawCtx } from '@crimson/render/projectile-draw/types.ts';
 
 export function drawBulletTrail(ctx: ProjectileDrawCtx): boolean {
   const renderer = ctx.renderer;
@@ -18,35 +18,22 @@ export function drawBulletTrail(ctx: ProjectileDrawCtx): boolean {
   const alphaByte = int(clamp(lifeAlpha * ctx.alpha, 0.0, 255.0) + 0.5);
   let drawn = false;
 
-  let bulletTrail: wgl.Texture | null;
-  try {
-    bulletTrail = getTexture(resources, TextureId.BULLET_TRAIL);
-  } catch {
-    bulletTrail = null;
-  }
+  const bulletTrail = resources.texture(TextureId.BULLET_TRAIL);
+  let origin: { x: number; y: number };
   if (bulletTrail !== null) {
-    const origin = projOrigin(ctx.proj, ctx.pos);
+    origin = projOrigin(ctx.proj, ctx.pos);
     const originScreen = renderer.worldToScreen(origin);
-    drawn = renderer.drawBulletTrail(
-      originScreen,
-      ctx.screenPos,
-      { typeId, alpha: alphaByte, scale: ctx.scale, angle: ctx.angle },
-    );
+    drawn = renderer.drawBulletTrail(originScreen, ctx.screenPos, { typeId: typeId, alpha: alphaByte, scale: ctx.scale, angle: ctx.angle });
   }
 
-  let bullet: wgl.Texture | null;
-  try {
-    bullet = getTexture(resources, TextureId.BULLET_I);
-  } catch {
-    bullet = null;
-  }
+  const bullet = resources.texture(TextureId.BULLET_I);
   if (bullet !== null && ctx.life >= 0.39) {
     const size = renderer.bulletSpriteSize(typeId, { scale: ctx.scale });
-    const src = wgl.makeRectangle(0.0, 0.0, bullet.width, bullet.height);
-    const dst = wgl.makeRectangle(ctx.screenPos.x, ctx.screenPos.y, size, size);
-    const origin = wgl.makeVector2(size * 0.5, size * 0.5);
-    const tint = wgl.makeColor(220 / 255, 220 / 255, 220 / 255, alphaByte / 255);
-    wgl.drawTexturePro(bullet, src, dst, origin, ctx.angle * RAD_TO_DEG, tint);
+    const src = rl.makeRectangle(0.0, 0.0, bullet.width, bullet.height);
+    const dst = rl.makeRectangle(ctx.screenPos.x, ctx.screenPos.y, size, size);
+    origin = rl.makeVector2(size * 0.5, size * 0.5);
+    const tint = rl.makeColor(220 / 255, 220 / 255, 220 / 255, int(alphaByte) / 255);
+    rl.drawTexturePro(bullet, src, dst, origin, ctx.angle * RAD_TO_DEG, tint);
     drawn = true;
   }
 
