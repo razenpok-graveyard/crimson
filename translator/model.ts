@@ -211,6 +211,7 @@ export interface PlainClassConstructorDefinition {
 
 export interface PlainClassDefinition {
   name: string;
+  docstring: string | null;
   fields: PlainClassFieldDefinition[];
   constructorDefinition: PlainClassConstructorDefinition;
   methods: SimpleModuleFunction[];

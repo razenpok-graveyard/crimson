@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import type {
   EnumDefinition,
   FunctionParameter,
@@ -19,7 +21,7 @@ import {
   tsPublicNameForPythonName,
   tsTypeExpression,
 } from '../naming.js';
-import { tsImportPathForPythonImport } from '../paths.js';
+import { tsImportPathForPythonImport, tsTargetRoot } from '../paths.js';
 import {
   flattenFromImportBlocks,
   isOneLineAllAssignment,
@@ -445,7 +447,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
   }
 
-  const reexports = reexportsForAllNames(imports, allNames);
+  const reexports = reexportsForAllNames(imports, allNames, relativePath);
   markTypeOnlyImports(imports, typeAliases, protocols, classes, plainClasses, [...leadingStatements, ...trailingStatements], functions, [...leadingAssignments, ...assignments]);
   if (allNames.length > 0) {
     const exportedNames = new Set(allNames.map(tsPublicNameForPythonName));
@@ -732,7 +734,7 @@ function parseTypeAliasStatement(
   return null;
 }
 
-function reexportsForAllNames(imports: ImportDefinition[], allNames: string[]): Reexport[] {
+function reexportsForAllNames(imports: ImportDefinition[], allNames: string[], relativePath: string): Reexport[] {
   if (allNames.length === 0) {
     return [];
   }
@@ -740,7 +742,9 @@ function reexportsForAllNames(imports: ImportDefinition[], allNames: string[]): 
   const exportedNames = new Set(allNames.map(tsPublicNameForPythonName));
   const byModule = new Map<string, string[]>();
   for (const importDefinition of imports) {
-    const names = importDefinition.names.filter((name) => exportedNames.has(name));
+    const names = importDefinition.names
+      .filter((name) => exportedNames.has(name))
+      .map((name) => tsReexportName(importDefinition.modulePath, name, relativePath));
     if (names.length === 0) {
       continue;
     }
@@ -754,6 +758,33 @@ function reexportsForAllNames(imports: ImportDefinition[], allNames: string[]): 
   }
 
   return [...byModule.entries()].map(([modulePath, names]) => ({ modulePath, names }));
+}
+
+function tsReexportName(modulePath: string, name: string, relativePath: string): string {
+  return tsModuleExportsTypeOnly(modulePath, name, relativePath) ? `type ${name}` : name;
+}
+
+function tsModuleExportsTypeOnly(modulePath: string, name: string, relativePath: string): boolean {
+  const sourcePath = tsSourcePathForImportPath(modulePath, relativePath);
+  if (sourcePath === null || !fs.existsSync(sourcePath)) {
+    return false;
+  }
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^export\\s+(?:type\\s+${escapedName}\\b|interface\\s+${escapedName}\\b)`, 'm').test(source);
+}
+
+function tsSourcePathForImportPath(modulePath: string, relativePath: string): string | null {
+  if (modulePath.startsWith('@crimson/')) {
+    return path.join(tsTargetRoot, 'crimson', modulePath.slice('@crimson/'.length));
+  }
+  if (modulePath.startsWith('@grim/')) {
+    return path.join(tsTargetRoot, 'grim', modulePath.slice('@grim/'.length));
+  }
+  if (modulePath.startsWith('./') || modulePath.startsWith('../')) {
+    return path.resolve(tsTargetRoot, path.dirname(relativePath), modulePath);
+  }
+  return null;
 }
 function attachPendingAssignmentComments(assignment: SimpleModuleAssignment, pendingComments: string[]): void {
   if (pendingComments.length === 0) {

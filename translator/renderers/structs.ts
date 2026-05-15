@@ -121,11 +121,24 @@ export function renderStructClasses(lines: string[], classes: StructModule['clas
 export function renderPlainClasses(lines: string[], classes: StraightLineModule['plainClasses']): void {
   for (let index = 0; index < classes.length; index += 1) {
     const plainClass = classes[index];
+    if (plainClass.docstring !== null) {
+      for (const line of plainClass.docstring.split(/\r?\n/)) {
+        lines.push(line === '' ? '//' : `// ${line}`);
+      }
+    }
     lines.push(`export class ${plainClass.name} {`);
     for (const field of plainClass.fields) {
       lines.push(`  ${field.private ? 'private ' : ''}${field.readonly ? 'readonly ' : ''}${field.name}: ${field.typeExpression};`);
     }
-    lines.push('');
+    const shouldRenderConstructor = (
+      plainClass.fields.length > 0
+      || plainClass.constructorDefinition.parameters.length > 0
+      || plainClass.constructorDefinition.optsParams.length > 0
+      || plainClass.constructorDefinition.statements.length > 0
+    );
+    if (shouldRenderConstructor) {
+      lines.push('');
+    }
     const constructorParams = plainClass.constructorDefinition.parameters.map(renderParameter);
     if (plainClass.constructorDefinition.optsParams.length > 0) {
       const optsType = plainClass.constructorDefinition.optsParams
@@ -134,18 +147,20 @@ export function renderPlainClasses(lines: string[], classes: StraightLineModule[
       const allOptsHaveDefaults = plainClass.constructorDefinition.optsParams.every((param) => param.defaultValue !== null);
       constructorParams.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
     }
-    lines.push(`  constructor(${constructorParams.join(', ')}) {`);
-    for (const param of plainClass.constructorDefinition.optsParams) {
-      if (param.defaultValue === null) {
-        lines.push(`    const ${param.name} = opts.${param.name};`);
-      } else {
-        lines.push(`    const ${param.name} = opts.${param.name} ?? ${param.defaultValue};`);
+    if (shouldRenderConstructor) {
+      lines.push(`  constructor(${constructorParams.join(', ')}) {`);
+      for (const param of plainClass.constructorDefinition.optsParams) {
+        if (param.defaultValue === null) {
+          lines.push(`    const ${param.name} = opts.${param.name};`);
+        } else {
+          lines.push(`    const ${param.name} = opts.${param.name} ?? ${param.defaultValue};`);
+        }
       }
+      for (const statement of plainClass.constructorDefinition.statements) {
+        lines.push(statement === '' ? '' : `    ${statement}`);
+      }
+      lines.push('  }');
     }
-    for (const statement of plainClass.constructorDefinition.statements) {
-      lines.push(statement === '' ? '' : `    ${statement}`);
-    }
-    lines.push('  }');
     for (const method of plainClass.methods) {
       lines.push('');
       const params = method.parameters.map(renderParameter);

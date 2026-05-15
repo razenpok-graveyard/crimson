@@ -429,14 +429,17 @@ export function parsePlainClass(
   }
 
   let nextIndex = index + 1;
+  const docstring = parseIndentedDocstring(lines, nextIndex);
+  if (docstring !== null) {
+    nextIndex = docstring.nextIndex;
+  }
   while (nextIndex < lines.length && lines[nextIndex].trim() === '') {
     nextIndex += 1;
   }
-  const constructorHeader = parseIndentedFunctionHeader(lines, nextIndex, '    ');
-  if (constructorHeader === null || constructorHeader.name !== '__init__') {
-    return null;
-  }
-  const constructorParametersText = constructorHeader.parametersText;
+
+  const parsedConstructorHeader = parseIndentedFunctionHeader(lines, nextIndex, '    ');
+  const constructorHeader = parsedConstructorHeader?.name === '__init__' ? parsedConstructorHeader : null;
+  const constructorParametersText = constructorHeader?.parametersText ?? 'self';
   if (constructorParametersText !== 'self' && !constructorParametersText.startsWith('self, ')) {
     return null;
   }
@@ -461,54 +464,56 @@ export function parsePlainClass(
   for (const parameter of constructorParams.optsParams) {
     constructorNameMap.set(parameter.name, parameter.name);
   }
-  let bodyIndex = constructorHeader.nextIndex;
-  while (bodyIndex < lines.length && isIndentedBlockLine(lines, bodyIndex, '        ')) {
-    if (lines[bodyIndex].trim() === '') {
-      constructorStatements.push('');
-      bodyIndex += 1;
-      continue;
-    }
-    const statement = lines[bodyIndex].slice('        '.length);
-    const annotatedFieldAssignment = /^self\.([A-Za-z_][A-Za-z0-9_]*): (.+?) = (.+)$/.exec(statement);
-    const fieldAssignment = /^self\.([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(statement);
-    const assignment = annotatedFieldAssignment ?? fieldAssignment;
-    if (assignment !== null) {
-      const pythonFieldName = assignment[1];
-      const fieldName = tsAttributeNameForPythonName(pythonFieldName);
-      fieldNameMap.set(pythonFieldName, fieldName);
-      constructorNameMap.set(pythonFieldName, fieldName);
-      const valueText = annotatedFieldAssignment === null ? assignment[2] : assignment[3];
-      const value = translateExpression(valueText, constructorNameMap, constructorArrayNames);
-      const typeExpression = annotatedFieldAssignment === null
-        ? inferPlainClassFieldType(valueText, fieldTypes)
-        : tsTypeExpression(assignment[2]);
-      if (typeExpression === null) {
+  let bodyIndex = constructorHeader?.nextIndex ?? nextIndex;
+  if (constructorHeader !== null) {
+    while (bodyIndex < lines.length && isIndentedBlockLine(lines, bodyIndex, '        ')) {
+      if (lines[bodyIndex].trim() === '') {
+        constructorStatements.push('');
+        bodyIndex += 1;
+        continue;
+      }
+      const statement = lines[bodyIndex].slice('        '.length);
+      const annotatedFieldAssignment = /^self\.([A-Za-z_][A-Za-z0-9_]*): (.+?) = (.+)$/.exec(statement);
+      const fieldAssignment = /^self\.([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(statement);
+      const assignment = annotatedFieldAssignment ?? fieldAssignment;
+      if (assignment !== null) {
+        const pythonFieldName = assignment[1];
+        const fieldName = tsAttributeNameForPythonName(pythonFieldName);
+        fieldNameMap.set(pythonFieldName, fieldName);
+        constructorNameMap.set(pythonFieldName, fieldName);
+        const valueText = annotatedFieldAssignment === null ? assignment[2] : assignment[3];
+        const value = translateExpression(valueText, constructorNameMap, constructorArrayNames);
+        const typeExpression = annotatedFieldAssignment === null
+          ? inferPlainClassFieldType(valueText, fieldTypes)
+          : tsTypeExpression(assignment[2]);
+        if (typeExpression === null) {
+          return null;
+        }
+        fieldMap.set(fieldName, {
+          name: fieldName,
+          typeExpression,
+          readonly: true,
+          private: pythonFieldName.startsWith('_'),
+        });
+        constructorStatements.push(`this.${fieldName} = ${value};`);
+        bodyIndex += 1;
+        continue;
+      }
+      const translated = translateStraightLineStatement(
+        lines,
+        bodyIndex,
+        '        ',
+        constructorNameMap,
+        new Set(),
+        new Set(),
+        constructorArrayNames,
+      );
+      if (translated === null) {
         return null;
       }
-      fieldMap.set(fieldName, {
-        name: fieldName,
-        typeExpression,
-        readonly: true,
-        private: pythonFieldName.startsWith('_'),
-      });
-      constructorStatements.push(`this.${fieldName} = ${value};`);
-      bodyIndex += 1;
-      continue;
+      constructorStatements.push(...translated.statements);
+      bodyIndex = translated.nextIndex;
     }
-    const translated = translateStraightLineStatement(
-      lines,
-      bodyIndex,
-      '        ',
-      constructorNameMap,
-      new Set(),
-      new Set(),
-      constructorArrayNames,
-    );
-    if (translated === null) {
-      return null;
-    }
-    constructorStatements.push(...translated.statements);
-    bodyIndex = translated.nextIndex;
   }
 
   const methods: SimpleModuleFunction[] = [];
@@ -559,6 +564,7 @@ export function parsePlainClass(
   return {
     plainClass: {
       name: header[1],
+      docstring: docstring?.value ?? null,
       fields,
       constructorDefinition: {
         parameters: constructorParams.parameters,

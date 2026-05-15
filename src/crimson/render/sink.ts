@@ -1,39 +1,47 @@
 // Port of crimson/render/sink.py
 
-import { type RenderPresent, type RenderSink, WindowSink } from '@grim/render-pipeline.ts';
+import type { RenderPresent } from '@grim/render-pipeline.ts';
+export { type RenderPresent, type RenderSink, WindowSink } from '@grim/render-pipeline.ts';
 
-export { type RenderPresent, type RenderSink, WindowSink };
+// Headless sink used for determinism-only verification paths.
+export class NullSink {
 
-/** Headless sink used for determinism-only verification paths. */
-export class NullSink implements RenderSink {
-  open(): void {}
-  present(): void {}
-  flush(): void {}
-  close(): void {}
+  open(): void {
+  }
+
+  present(): void {
+  }
+
+  flush(): void {
+  }
+
+  close(): void {
+  }
 }
 
-/** Video-export sink. Fail-fast by policy: presentation errors abort rendering. */
-export class VideoSink implements RenderSink {
-  outputPath: string;
-  private _openTransport: (() => void) | null;
-  private _presentFrame: RenderPresent | null;
-  private _flushTransport: (() => void) | null;
-  private _closeTransport: (() => void) | null;
-  private _opened = false;
-  private _flushed = false;
+// Video-export sink. Fail-fast by policy: presentation errors abort rendering.
+export class VideoSink {
+  readonly outputPath: string;
+  private readonly _openTransport: (() => void) | null;
+  private readonly _presentFrame: RenderPresent | null;
+  private readonly _flushTransport: (() => void) | null;
+  private readonly _closeTransport: (() => void) | null;
+  private _opened: boolean;
+  private _flushed: boolean;
 
-  constructor(opts: {
-    outputPath: string;
-    openTransport?: (() => void) | null;
-    presentFrame?: RenderPresent | null;
-    flushTransport?: (() => void) | null;
-    closeTransport?: (() => void) | null;
-  }) {
-    this.outputPath = String(opts.outputPath);
-    this._openTransport = opts.openTransport ?? null;
-    this._presentFrame = opts.presentFrame ?? null;
-    this._flushTransport = opts.flushTransport ?? null;
-    this._closeTransport = opts.closeTransport ?? null;
+  constructor(opts: { outputPath: string; openTransport?: (() => void) | null; presentFrame?: RenderPresent | null; flushTransport?: (() => void) | null; closeTransport?: (() => void) | null }) {
+    const outputPath = opts.outputPath;
+    const openTransport = opts.openTransport ?? null;
+    const presentFrame = opts.presentFrame ?? null;
+    const flushTransport = opts.flushTransport ?? null;
+    const closeTransport = opts.closeTransport ?? null;
+    this.outputPath = outputPath;
+    this._openTransport = openTransport;
+    this._presentFrame = presentFrame;
+    this._flushTransport = flushTransport;
+    this._closeTransport = closeTransport;
+    this._opened = false;
+    this._flushed = false;
   }
 
   open(): void {

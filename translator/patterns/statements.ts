@@ -795,10 +795,13 @@ export function translateStraightLineStatement(
   if (statement === 'continue') {
     return { statements: ['continue;'], nextIndex: index + 1 };
   }
+  if (statement === 'pass') {
+    return { statements: [], nextIndex: index + 1 };
+  }
 
   if (/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\.mkdir\(parents=True, exist_ok=True\)$/.test(statement)) {
     return {
-      statements: ['// Browser/WebGL builds cannot create filesystem directories.'],
+      statements: [],
       nextIndex: index + 1,
     };
   }
