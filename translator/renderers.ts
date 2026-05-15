@@ -96,6 +96,11 @@ export function renderIntEnumModule(relativePath: string, enumDefinition: EnumDe
     lines.push(`export function ${fn.name}(`);
     lines.push(`  ${fn.parameterName}: number,`);
     lines.push(`): ${enumDefinition.name} {`);
+    if (fn.rejectsOverflow) {
+      lines.push(`  if (!Number.isFinite(${fn.parameterName})) {`);
+      lines.push(`    return ${enumDefinition.name}.${fallback};`);
+      lines.push('  }');
+    }
     lines.push(`  switch (int(${fn.parameterName})) {`);
     for (const member of caseMembers) {
       lines.push(`    case ${enumDefinition.name}.${member.name}:`);

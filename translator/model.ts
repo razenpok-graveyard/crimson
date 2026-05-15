@@ -37,6 +37,7 @@ export interface EnumValueFunction {
   name: string;
   parameterName: string;
   fallbackMember: string;
+  rejectsOverflow: boolean;
 }
 
 export interface ConstantDefinition {

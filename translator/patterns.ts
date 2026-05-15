@@ -348,7 +348,8 @@ function parseIntEnumValueFunction(
   if (returnConverted === null) {
     return null;
   }
-  if ((lines[index + 5] ?? '').trim() !== 'except (TypeError, ValueError):') {
+  const exceptLine = (lines[index + 5] ?? '').trim();
+  if (exceptLine !== 'except (TypeError, ValueError):' && exceptLine !== 'except (TypeError, ValueError, OverflowError):') {
     return null;
   }
   const fallbackReturn = new RegExp(`^        return ${enumName}\\.([A-Z][A-Z0-9_]*)$`).exec(lines[index + 6] ?? '');
@@ -361,6 +362,7 @@ function parseIntEnumValueFunction(
       name: tsExportNameForPythonName(header[1]),
       parameterName: tsExportNameForPythonName(parameter[1]),
       fallbackMember: fallbackReturn[1],
+      rejectsOverflow: exceptLine.includes('OverflowError'),
     },
     nextIndex: index + 7,
   };
