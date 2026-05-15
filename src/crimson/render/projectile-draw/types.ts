@@ -1,7 +1,7 @@
 // Port of crimson/render/projectile_draw/types.py
 
-import { Vec2 } from '@grim/geom.ts';
-import * as wgl from '@wgl';
+import type { Vec2 } from '@grim/geom.ts';
+import type { rl } from '@grim/raylib-api.ts';
 import type { Projectile, SecondaryProjectile } from '@crimson/projectiles/types.ts';
 import type { WorldRenderCtx } from '@crimson/render/world/context.ts';
 
@@ -9,7 +9,7 @@ export class ProjectileDrawCtx {
   readonly renderer: WorldRenderCtx;
   readonly proj: Projectile;
   readonly projIndex: number;
-  readonly texture: wgl.Texture | null;
+  readonly texture: rl.Texture | null;
   readonly typeId: number;
   readonly pos: Vec2;
   readonly screenPos: Vec2;
@@ -22,7 +22,7 @@ export class ProjectileDrawCtx {
     renderer: WorldRenderCtx;
     proj: Projectile;
     projIndex: number;
-    texture: wgl.Texture | null;
+    texture: rl.Texture | null;
     typeId: number;
     pos: Vec2;
     screenPos: Vec2;
