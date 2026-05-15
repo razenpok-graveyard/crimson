@@ -96,7 +96,7 @@ export function translatePositionalCallExpression(
   validatedTypeAliases: ReadonlySet<string>,
   constructUppercase = false,
 ): string {
-  const callee = translateExpression(pythonCallee, nameMap, arrayNames, validatedTypeAliases);
+  const callee = translateCallCalleeExpression(pythonCallee, nameMap, arrayNames, validatedTypeAliases);
   const args = positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases));
   const reorderedArgs = callee === 'rl.rlSetBlendFactorsSeparate' && args.length === 6
     ? [args[0], args[1], args[4], args[2], args[3], args[5]]
@@ -113,6 +113,16 @@ export function translateCallArgumentExpression(
 ): string {
   return translateBoundMethodReference(pythonExpression, nameMap, arrayNames, validatedTypeAliases)
     ?? translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases);
+}
+
+function translateCallCalleeExpression(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+): string {
+  return translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases)
+    .replace(/\.append$/, '.push');
 }
 
 function translateBoundMethodReference(
@@ -285,6 +295,9 @@ export function translateExpression(
     }
     if (raylibConstructor[1] === 'Vector2' && args.length === 2) {
       return `rl.makeVector2(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;
+    }
+    if (raylibConstructor[1] === 'Rectangle' && args.length === 1 && args[0].trim().startsWith('*')) {
+      return translateExpression(args[0].trim().slice(1), nameMap, arrayNames, validatedTypeAliases);
     }
     if (raylibConstructor[1] === 'Rectangle' && args.length === 4) {
       return `rl.makeRectangle(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;
