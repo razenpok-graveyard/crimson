@@ -150,18 +150,33 @@ function parseInitReexports(trimmedPython: string): Reexport[] | null {
       continue;
     }
 
-    const fromImport = /^from \.([A-Za-z_][A-Za-z0-9_]*) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
+    const fromImport = /^from ((?:\.)?[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
     if (fromImport === null) {
       return null;
     }
 
     reexports.push({
-      modulePath: `./${fromImport[1].replaceAll('_', '-')}.ts`,
+      modulePath: tsImportPathForPythonModule(fromImport[1]),
       names: fromImport[2].split(', '),
     });
   }
 
   return sawAll && reexports.length > 0 ? reexports : null;
+}
+
+function tsImportPathForPythonModule(moduleName: string): string {
+  const parts = moduleName.split('.').filter((part) => part !== '');
+  const tsParts = parts.map((part) => part.replaceAll('_', '-'));
+  if (moduleName.startsWith('.')) {
+    return `./${tsParts.join('/')}.ts`;
+  }
+
+  const [root, ...rest] = tsParts;
+  if (root === 'crimson' || root === 'grim') {
+    return `@${root}/${rest.join('/')}.ts`;
+  }
+
+  return `${tsParts.join('/')}.ts`;
 }
 
 function renderInitReexports(relativePath: string, reexports: Reexport[]): string {
