@@ -8,7 +8,7 @@ import { PerkId } from '@crimson/perks/ids.ts';
 import { PerkHooks } from '@crimson/perks/runtime/hook-types.ts';
 import type { PlayerPerkTickCtx } from '@crimson/perks/runtime/player-tick-context.ts';
 
-function tickManBomb(ctx: PlayerPerkTickCtx): void {
+export function tickManBomb(ctx: PlayerPerkTickCtx): void {
   if (!perkActive(ctx.player, PerkId.MAN_BOMB)) {
     ctx.player.manBombTimer = 0.0;
     return;
@@ -18,19 +18,12 @@ function tickManBomb(ctx: PlayerPerkTickCtx): void {
   if (ctx.player.manBombTimer > ctx.state.perkIntervals.manBomb) {
     const owner = ctx.ownerRefForPlayerProjectiles(ctx.state, ctx.player.index);
     for (let idx = 0; idx < 8; idx++) {
-      const typeId = ((idx & 1) === 0)
-        ? ProjectileTemplateId.ION_MINIGUN
-        : ProjectileTemplateId.ION_RIFLE;
-      const caller = typeId === ProjectileTemplateId.ION_MINIGUN
-        ? RngCallerStatic.PLAYER_UPDATE_MAN_BOMB_ION_MINIGUN_ANGLE
-        : RngCallerStatic.PLAYER_UPDATE_MAN_BOMB_ION_RIFLE_ANGLE;
-      const angle =
-        (ctx.state.rng.rand({ caller }) % 50) * 0.01
-        + idx * (Math.PI / 4.0)
-        - 0.25;
+      const typeId = ((idx & 1) === 0) ? ProjectileTemplateId.ION_MINIGUN : ProjectileTemplateId.ION_RIFLE;
+      const caller = typeId === ProjectileTemplateId.ION_MINIGUN ? RngCallerStatic.PLAYER_UPDATE_MAN_BOMB_ION_MINIGUN_ANGLE : RngCallerStatic.PLAYER_UPDATE_MAN_BOMB_ION_RIFLE_ANGLE;
+      const angle = (ctx.state.rng.rand({ caller: caller }) % 50 * 0.01) + idx * (Math.PI / 4.0) - 0.25;
       ctx.projectileSpawn(
         ctx.state,
-        { players: ctx.players, pos: ctx.player.pos, angle, typeId, owner, ownerPlayerIndex: ctx.player.index },
+        { players: ctx.players, pos: ctx.player.pos, angle: angle, typeId: typeId, owner: owner, ownerPlayerIndex: ctx.player.index },
       );
     }
     ctx.state.sfxQueue.push(SfxId.EXPLOSION_SMALL);
