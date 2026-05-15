@@ -2126,9 +2126,26 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     while (index < lines.length && lines[index].trim() === '') {
       index += 1;
     }
-    if (/^[A-Za-z_][A-Za-z0-9_]* = /.test(lines[index] ?? '')) {
+    if ((lines[index] ?? '').trim().startsWith('__all__ = ')) {
       break;
     }
+
+    const interleavedAssignment = parseTopLevelAssignment(lines, index);
+    if (interleavedAssignment !== null) {
+      attachPendingAssignmentComments(interleavedAssignment.assignment, pendingAssignmentComments);
+      avoidImportedPrivateNameCollision(interleavedAssignment.assignment, imports);
+      assignments.push(interleavedAssignment.assignment);
+      const namedAssignment = /^([A-Za-z_][A-Za-z0-9_]*)(?:: .+?)? = /.exec(lines[index] ?? '');
+      if (namedAssignment !== null) {
+        moduleNameMap.set(namedAssignment[1], interleavedAssignment.assignment.name);
+        if (interleavedAssignment.assignment.typeExpression?.startsWith('Map<') === true) {
+          mapNames.add(interleavedAssignment.assignment.name);
+        }
+      }
+      index = interleavedAssignment.nextIndex;
+      continue;
+    }
+
     if (!(lines[index] ?? '').startsWith('def ')) {
       break;
     }

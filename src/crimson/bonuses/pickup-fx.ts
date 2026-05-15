@@ -4,47 +4,53 @@
 
 import { RGBA } from '@grim/color.ts';
 import type { BonusPickupEvent, GameplayState } from '@crimson/sim/state-types.ts';
-import { applyFreezePickupFx } from './freeze.ts';
-import { BonusId } from './ids.ts';
-import { applyReflexBoostPickupFx } from './reflex-boost.ts';
+import { applyFreezePickupFx } from '@crimson/bonuses/freeze.ts';
+import { BonusId } from '@crimson/bonuses/ids.ts';
+import { applyReflexBoostPickupFx } from '@crimson/bonuses/reflex-boost.ts';
 
-export type BonusPickupFxHook = (state: GameplayState, pickup: BonusPickupEvent, detailPreset: number) => void;
+export type BonusPickupFxHook = (arg0: GameplayState, arg1: BonusPickupEvent, arg2: number) => void;
 
-function _applyDefaultPickupBurst(opts: { state: GameplayState; pickup: BonusPickupEvent; detailPreset: number }): void {
-  if (opts.pickup.bonusId === BonusId.NUKE) {
+function applyDefaultPickupBurst(opts: { state: GameplayState; pickup: BonusPickupEvent; detailPreset: number }): void {
+  const state = opts.state;
+  const pickup = opts.pickup;
+  const detailPreset = opts.detailPreset;
+  if (pickup.bonusId === BonusId.NUKE) {
     return;
   }
-  opts.state.effects.spawnBurst({
-    pos: opts.pickup.pos,
+  state.effects.spawnBurst({
+    pos: pickup.pos,
     count: 12,
-    rng: opts.state.rng,
-    detailPreset: int(opts.detailPreset),
+    rng: state.rng,
+    detailPreset: int(detailPreset),
     lifetime: 0.4,
     scaleStep: 0.1,
     color: new RGBA(0.4, 0.5, 1.0, 0.5),
   });
 }
 
-function _applyReflexBoostHook(state: GameplayState, pickup: BonusPickupEvent, detailPreset: number): void {
-  applyReflexBoostPickupFx({ state, pickup, detailPreset });
+function applyReflexBoostHook(state: GameplayState, pickup: BonusPickupEvent, detailPreset: number): void {
+  applyReflexBoostPickupFx({ state: state, pickup: pickup, detailPreset: detailPreset });
 }
 
-function _applyFreezeHook(state: GameplayState, pickup: BonusPickupEvent, detailPreset: number): void {
-  applyFreezePickupFx({ state, pickup, detailPreset });
+function applyFreezeHook(state: GameplayState, pickup: BonusPickupEvent, detailPreset: number): void {
+  applyFreezePickupFx({ state: state, pickup: pickup, detailPreset: detailPreset });
 }
-
-const _BONUS_PICKUP_HOOKS: Map<BonusId, BonusPickupFxHook> = new Map([
-  [BonusId.REFLEX_BOOST, _applyReflexBoostHook],
-  [BonusId.FREEZE, _applyFreezeHook],
-]);
 
 export function emitBonusPickupEffects(opts: { state: GameplayState; pickups: BonusPickupEvent[]; detailPreset: number }): void {
   // Emit deterministic pickup FX for the provided pickup list.
-  for (const pickup of opts.pickups) {
-    _applyDefaultPickupBurst({ state: opts.state, pickup, detailPreset: int(opts.detailPreset) });
-    const hook = _BONUS_PICKUP_HOOKS.get(pickup.bonusId);
-    if (hook !== undefined) {
-      hook(opts.state, pickup, int(opts.detailPreset));
+  const state = opts.state;
+  const pickups = opts.pickups;
+  const detailPreset = opts.detailPreset;
+  for (const pickup of pickups) {
+    applyDefaultPickupBurst({ state: state, pickup: pickup, detailPreset: int(detailPreset) });
+    const hook = bonusPickupHooks.get(pickup.bonusId) ?? null;
+    if (hook !== null) {
+      hook(state, pickup, int(detailPreset));
     }
   }
 }
+
+let bonusPickupHooks: Map<BonusId, BonusPickupFxHook> = new Map([
+  [BonusId.REFLEX_BOOST, applyReflexBoostHook],
+  [BonusId.FREEZE, applyFreezeHook],
+]);
