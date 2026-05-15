@@ -750,8 +750,17 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       index += 1;
       continue;
     }
+    if (trimmed.startsWith('__all__ = ')) {
+      if (!isOneLineAllAssignment(trimmed)) {
+        while (index < lines.length && lines[index].trim() !== ']') {
+          index += 1;
+        }
+      }
+      index += 1;
+      continue;
+    }
 
-    const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\(msgspec\.Struct\):$/.exec(lines[index] ?? '');
+    const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\(msgspec\.Struct(?:, [^)]+)?\):$/.exec(lines[index] ?? '');
     if (header === null) {
       return null;
     }
