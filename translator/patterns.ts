@@ -1102,37 +1102,77 @@ function translateStraightLineStatement(
 
   const assignment = /^(.+?) (\+=|-=|\*=|\/=|=) (.+)$/.exec(statement);
   if (assignment !== null) {
-    const localAssignment = /^([A-Za-z_][A-Za-z0-9_]*)$/.exec(assignment[1]);
-    if (assignment[2] === '=' && localAssignment !== null) {
-      const globalName = nameMap.get(localAssignment[1]);
-      if (globalName !== undefined) {
-        return {
-          statements: [`${globalName} = ${translateExpression(assignment[3], nameMap)};`],
-          nextIndex: index + 1,
-        };
+    if (/^(?:float|str|bool)\($/.test(assignment[3])) {
+      const valueLine = lines[index + 1]?.trim().replace(/,$/, '') ?? null;
+      if (valueLine === null || lines[index + 2]?.trim() !== ')') {
+        return null;
       }
-      const tsName = tsExportNameForPythonName(localAssignment[1]);
-      if (declaredNames.has(localAssignment[1])) {
-        return {
-          statements: [`${tsName} = ${translateExpression(assignment[3], nameMap)};`],
-          nextIndex: index + 1,
-        };
-      }
-      declaredNames.add(localAssignment[1]);
-      return {
-        statements: [
-          `${reassignedNames.has(localAssignment[1]) ? 'let' : 'const'} ${tsName} = ${translateExpression(assignment[3], nameMap)};`,
-        ],
-        nextIndex: index + 1,
-      };
+      return translateStraightLineAssignment(
+        assignment[1],
+        assignment[2],
+        translateExpression(valueLine, nameMap),
+        index + 3,
+        nameMap,
+        declaredNames,
+        reassignedNames,
+      );
     }
-    return {
-      statements: [`${translateExpression(assignment[1], nameMap)} ${assignment[2]} ${translateExpression(assignment[3], nameMap)};`],
-      nextIndex: index + 1,
-    };
+    return translateStraightLineAssignment(
+      assignment[1],
+      assignment[2],
+      translateExpression(assignment[3], nameMap),
+      index + 1,
+      nameMap,
+      declaredNames,
+      reassignedNames,
+    );
+  }
+
+  const callStatement = /^(.+\))$/.exec(statement);
+  if (callStatement !== null) {
+    return { statements: [`${translateExpression(callStatement[1], nameMap)};`], nextIndex: index + 1 };
   }
 
   return null;
+}
+
+function translateStraightLineAssignment(
+  pythonLeft: string,
+  operator: string,
+  tsRight: string,
+  nextIndex: number,
+  nameMap: Map<string, string>,
+  declaredNames: Set<string>,
+  reassignedNames: Set<string>,
+): { statements: string[]; nextIndex: number } {
+  const localAssignment = /^([A-Za-z_][A-Za-z0-9_]*)$/.exec(pythonLeft);
+  if (operator === '=' && localAssignment !== null) {
+    const globalName = nameMap.get(localAssignment[1]);
+    if (globalName !== undefined) {
+      return {
+        statements: [`${globalName} = ${tsRight};`],
+        nextIndex,
+      };
+    }
+    const tsName = tsExportNameForPythonName(localAssignment[1]);
+    if (declaredNames.has(localAssignment[1])) {
+      return {
+        statements: [`${tsName} = ${tsRight};`],
+        nextIndex,
+      };
+    }
+    declaredNames.add(localAssignment[1]);
+    return {
+      statements: [
+        `${reassignedNames.has(localAssignment[1]) ? 'let' : 'const'} ${tsName} = ${tsRight};`,
+      ],
+      nextIndex,
+    };
+  }
+  return {
+    statements: [`${translateExpression(pythonLeft, nameMap)} ${operator} ${tsRight};`],
+    nextIndex,
+  };
 }
 
 function reassignedLocalNames(lines: string[], startIndex: number): Set<string> {
@@ -1218,8 +1258,25 @@ function markTypeOnlyImports(
     ...assignments.flatMap((assignment) => assignment.valueLines),
   ].join('\n');
 
-  for (const importDefinition of imports) {
-    importDefinition.typeOnly = importDefinition.names.every((name) => !identifierPattern(name).test(valueText));
+  for (let index = 0; index < imports.length; index += 1) {
+    const importDefinition = imports[index];
+    const valueNames = importDefinition.names.filter((name) => identifierPattern(name).test(valueText));
+    const typeOnlyNames = importDefinition.names.filter((name) => !identifierPattern(name).test(valueText));
+    if (valueNames.length === 0) {
+      importDefinition.typeOnly = true;
+      continue;
+    }
+    if (typeOnlyNames.length === 0) {
+      importDefinition.typeOnly = false;
+      continue;
+    }
+    imports.splice(
+      index,
+      1,
+      { ...importDefinition, names: typeOnlyNames, typeOnly: true },
+      { ...importDefinition, names: valueNames, typeOnly: false },
+    );
+    index += 1;
   }
 }
 
@@ -1236,7 +1293,17 @@ function translateExpression(pythonExpression: string, nameMap: Map<string, stri
     return `${value} >= ${translateExpression(lowerBoundLengthComparison[1], nameMap)} && ${value} < ${translateExpression(lowerBoundLengthComparison[3], nameMap)}.length`;
   }
 
-  return trimmed
+  const stringLiterals: string[] = [];
+  const masked = trimmed.replaceAll(
+    /"[^"\\]*(?:\\.[^"\\]*)*"|'[^'\\]*(?:\\.[^'\\]*)*'/g,
+    (literal) => {
+      const placeholder = `__CRIMSON_STRING_${stringLiterals.length}__`;
+      stringLiterals.push(tsStringLiteral(literal));
+      return placeholder;
+    },
+  );
+
+  const translated = masked
     .trim()
     .replaceAll(
       /\b([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\(([A-Za-z_][A-Za-z0-9_]*)=([^)]+)\)/g,
@@ -1263,8 +1330,22 @@ function translateExpression(pythonExpression: string, nameMap: Map<string, stri
       if (name === 'None') {
         return 'null';
       }
+      if (/^__CRIMSON_STRING_\d+__$/.test(name)) {
+        return name;
+      }
       return nameMap.get(name) ?? tsExportNameForPythonName(name);
     });
+  return translated.replaceAll(/__CRIMSON_STRING_(\d+)__/g, (_match, index: string) => stringLiterals[Number(index)] ?? _match);
+}
+
+function tsStringLiteral(pythonLiteral: string): string {
+  if (!pythonLiteral.startsWith('"')) {
+    return pythonLiteral;
+  }
+  const value = pythonLiteral
+    .slice(1, -1)
+    .replaceAll("'", "\\'");
+  return `'${value}'`;
 }
 
 function identifierPattern(identifier: string): RegExp {

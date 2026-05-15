@@ -1,8 +1,8 @@
 // Port of crimson/bonuses/double_experience.py
 
 import { f32 } from '@crimson/math-parity.ts';
-import type { BonusApplyCtx } from './apply-context.ts';
-import { bonusApplySeconds } from './apply-context.ts';
+import type { BonusApplyCtx } from '@crimson/bonuses/apply-context.ts';
+import { bonusApplySeconds } from '@crimson/bonuses/apply-context.ts';
 
 export function applyDoubleExperience(ctx: BonusApplyCtx): void {
   const old = ctx.state.bonuses.doubleExperience;
