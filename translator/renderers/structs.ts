@@ -223,6 +223,7 @@ export function renderSimpleModuleFunctions(
 ): void {
   for (let index = 0; index < functions.length; index += 1) {
     const fn = functions[index];
+    const generator = fn.statements.some((statement) => /^\s*yield\*? /.test(statement));
     const params = fn.parameters.map(renderParameter);
     if (fn.optsParams.length > 0) {
       const optsType = fn.optsParams
@@ -231,7 +232,7 @@ export function renderSimpleModuleFunctions(
       const allOptsHaveDefaults = fn.optsParams.every((param) => param.defaultValue !== null);
       params.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
     }
-    lines.push(`${fn.exported ? 'export ' : ''}${fn.async === true ? 'async ' : ''}function ${fn.name}(${params.join(', ')}): ${renderFunctionReturnType(fn)} {`);
+    lines.push(`${fn.exported ? 'export ' : ''}${fn.async === true ? 'async ' : ''}function${generator ? '*' : ''} ${fn.name}(${params.join(', ')}): ${renderFunctionReturnType(fn)} {`);
     let statementIndex = 0;
     while (
       statementIndex < fn.statements.length

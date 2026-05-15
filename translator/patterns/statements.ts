@@ -320,6 +320,23 @@ export function translateStraightLineStatement(
     return nestedFunction;
   }
 
+  const pathStringCastIf = /^if isinstance\(([A-Za-z_][A-Za-z0-9_]*), Path\):$/.exec(statement);
+  if (pathStringCastIf !== null) {
+    const name = pathStringCastIf[1];
+    const nextLine = lines[index + 1] ?? '';
+    if (nextLine === `${indent}    ${name} = str(${name})`) {
+      const tsName = tsExportNameForPythonName(name);
+      return {
+        statements: [
+          `if (typeof ${tsName} !== 'string') {`,
+          `  ${tsName} = String(${tsName});`,
+          '}',
+        ],
+        nextIndex: index + 2,
+      };
+    }
+  }
+
   const oneLineIfStatement = /^if (.+):$/.exec(statement);
   let ifCondition: string | null = oneLineIfStatement?.[1] ?? null;
   let ifBodyStartIndex = index + 1;
@@ -728,6 +745,53 @@ export function translateStraightLineStatement(
     };
   }
 
+  const tupleForOfStatement = /^for ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+) in (.+):$/.exec(statement);
+  if (tupleForOfStatement !== null) {
+    const innerIndent = `${indent}    `;
+    const innerStatements: string[] = [];
+    const targets = tupleForOfStatement[1].split(', ');
+    const branchDeclaredNames = new Set(declaredNames);
+    for (const target of targets) {
+      branchDeclaredNames.add(target);
+    }
+    let nextIndex = index + 1;
+    while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, innerIndent)) {
+      if (lines[nextIndex].trim() === '') {
+        innerStatements.push('');
+        nextIndex += 1;
+        continue;
+      }
+      const innerStatement = translateStraightLineStatement(
+        lines,
+        nextIndex,
+        innerIndent,
+        nameMap,
+        branchDeclaredNames,
+        reassignedNames,
+        arrayNames,
+        validatedTypeAliases,
+        relativePath,
+        mapNames,
+      );
+      if (innerStatement === null) {
+        return null;
+      }
+      innerStatements.push(...innerStatement.statements.map(indentStatementLine));
+      nextIndex = innerStatement.nextIndex;
+    }
+    if (innerStatements.length === 0) {
+      return null;
+    }
+    return {
+      statements: [
+        `for (let [${targets.map(tsExportNameForPythonName).join(', ')}] of ${translateExpression(tupleForOfStatement[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`,
+        ...innerStatements,
+        '}',
+      ],
+      nextIndex,
+    };
+  }
+
   const forOfStatement = /^for ([A-Za-z_][A-Za-z0-9_]*) in (.+):$/.exec(statement);
   if (forOfStatement !== null) {
     const rangeLoop = /^range\((.+)\)$/.exec(forOfStatement[2]);
@@ -799,6 +863,20 @@ export function translateStraightLineStatement(
   }
   if (statement === 'pass') {
     return { statements: [], nextIndex: index + 1 };
+  }
+
+  const yieldFromStatement = /^yield from (.+)$/.exec(statement);
+  if (yieldFromStatement !== null) {
+    return { statements: [`yield* ${translateExpression(yieldFromStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)};`], nextIndex: index + 1 };
+  }
+
+  const yieldStatement = /^yield (.+)$/.exec(statement);
+  if (yieldStatement !== null) {
+    const parts = splitTopLevelComma(yieldStatement[1]);
+    const expression = parts.length > 1
+      ? `[${parts.map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')}]`
+      : translateExpression(yieldStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return { statements: [`yield ${expression};`], nextIndex: index + 1 };
   }
 
   if (/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\.mkdir\(parents=True, exist_ok=True\)$/.test(statement)) {
@@ -1064,6 +1142,15 @@ export function translateStraightLineStatement(
       }
 
       const arg = trimmed.replace(/,$/, '');
+      if (arg === '{') {
+        const dictLiteral = collectMultilineDictLiteral(lines, nextIndex + 1);
+        if (dictLiteral === null) {
+          return null;
+        }
+        positionalParts.push(dictLiteral.expression);
+        nextIndex = dictLiteral.nextIndex;
+        continue;
+      }
       const keywordArg = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(arg);
       if (keywordArg === null) {
         if (sawKeyword) {
@@ -1098,6 +1185,13 @@ export function translateStraightLineStatement(
 
   const callStatement = /^(.+\))$/.exec(statement);
   if (callStatement !== null) {
+    const pathlibWriteBytes = /^Path\((.+)\)\.write_bytes\((.+)\)$/.exec(callStatement[1]);
+    if (pathlibWriteBytes !== null) {
+      return {
+        statements: [`writeFileSync(String(${translateExpression(pathlibWriteBytes[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}), ${translateExpression(pathlibWriteBytes[2], nameMap, arrayNames, validatedTypeAliases, mapNames)});`],
+        nextIndex: index + 1,
+      };
+    }
     return { statements: [`${translateExpression(callStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)};`], nextIndex: index + 1 };
   }
 
@@ -1147,6 +1241,31 @@ function parseWrappedMultilineExpression(
     }
 
     parts.push(expressionLine);
+    nextIndex += 1;
+  }
+  return null;
+}
+
+function collectMultilineDictLiteral(
+  lines: string[],
+  startIndex: number,
+): { expression: string; nextIndex: number } | null {
+  const parts: string[] = [];
+  let nextIndex = startIndex;
+  while (nextIndex < lines.length) {
+    const trimmed = lines[nextIndex].trim();
+    if (trimmed === '}' || trimmed === '},') {
+      return { expression: `{ ${parts.join(', ')} }`, nextIndex: nextIndex + 1 };
+    }
+    if (trimmed === '') {
+      nextIndex += 1;
+      continue;
+    }
+    const item = /^(.+),$/.exec(trimmed);
+    if (item === null) {
+      return null;
+    }
+    parts.push(item[1]);
     nextIndex += 1;
   }
   return null;
@@ -1250,6 +1369,15 @@ function parseMultilineCallParts(
     }
 
     const arg = trimmed.replace(/,$/, '');
+    if (arg === '{') {
+      const dictLiteral = collectMultilineDictLiteral(lines, nextIndex + 1);
+      if (dictLiteral === null) {
+        return null;
+      }
+      positionalParts.push(dictLiteral.expression);
+      nextIndex = dictLiteral.nextIndex;
+      continue;
+    }
     const stringLiteral = parsePythonStringExpression(arg);
     if (stringLiteral !== null && !trimmed.endsWith(',')) {
       const adjacentStrings = [arg];
@@ -1816,6 +1944,32 @@ export function parseTopLevelAssignment(
       },
       nextIndex: generator.nextIndex,
     };
+  }
+
+  if (value === 'Struct(') {
+    const valueLines = ['constructStruct(['];
+    let nextIndex = index + 1;
+    while (nextIndex < lines.length) {
+      const trimmed = lines[nextIndex].trim();
+      if (trimmed === ')') {
+        valueLines.push('])');
+        return {
+          assignment: { ...baseAssignment, valueLines },
+          nextIndex: nextIndex + 1,
+        };
+      }
+      if (trimmed === '') {
+        nextIndex += 1;
+        continue;
+      }
+      const arg = /^(.+),$/.exec(trimmed);
+      if (arg === null) {
+        return null;
+      }
+      valueLines.push(`  ${translateExpression(arg[1])},`);
+      nextIndex += 1;
+    }
+    return null;
   }
 
   const keywordCall = /^([A-Za-z_][A-Za-z0-9_]*)\($/.exec(value);

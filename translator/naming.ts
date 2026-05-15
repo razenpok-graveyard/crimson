@@ -40,13 +40,13 @@ export function tsTypeExpression(pythonType: string): string {
       .join(' | ');
   }
   if (trimmed.includes(' | ')) {
-    return trimmed
+    const parts = trimmed
       .split(' | ')
       .map((part) => {
         const typeExpression = part === 'None' ? 'null' : tsTypeExpression(part);
         return typeExpression.includes('=>') ? `(${typeExpression})` : typeExpression;
-      })
-      .join(' | ');
+      });
+    return [...new Set(parts)].join(' | ');
   }
   const dictType = /^dict\[([^,\]]+), (.+)\]$/.exec(trimmed);
   if (dictType !== null) {
@@ -72,8 +72,22 @@ export function tsTypeExpression(pythonType: string): string {
   if (sequenceType !== null) {
     return `readonly ${tsTypeExpression(sequenceType[1])}[]`;
   }
+  const iterableType = /^Iterable\[(.+)\]$/.exec(trimmed);
+  if (iterableType !== null) {
+    return `Iterable<${tsTypeExpression(iterableType[1])}>`;
+  }
+  const iteratorType = /^Iterator\[(.+)\]$/.exec(trimmed);
+  if (iteratorType !== null) {
+    return `IterableIterator<${tsTypeExpression(iteratorType[1])}>`;
+  }
   if (trimmed === 'None') {
     return 'void';
+  }
+  if (trimmed === 'bytes') {
+    return 'Uint8Array';
+  }
+  if (trimmed === 'memoryview') {
+    return 'ArrayBufferView';
   }
   if (trimmed === 'float' || trimmed === 'int') {
     return 'number';

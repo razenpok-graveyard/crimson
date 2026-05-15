@@ -165,6 +165,41 @@ export function translateExpression(
   mapNames: ReadonlySet<string> = new Set(),
 ): string {
   const trimmed = pythonExpression.trim();
+  const bytesLiteral = parseBytesLiteral(trimmed);
+  if (bytesLiteral !== null) {
+    return `new Uint8Array([${bytesLiteral.join(', ')}])`;
+  }
+
+  const pathlibReadBytes = /^Path\((.+)\)\.read_bytes\(\)$/.exec(trimmed);
+  if (pathlibReadBytes !== null) {
+    return `readFileSync(String(${translateExpression(pathlibReadBytes[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}))`;
+  }
+
+  const toBytesCall = /^(.+)\.tobytes\(\)$/.exec(trimmed);
+  if (toBytesCall !== null) {
+    return `bytesFrom(${translateExpression(toBytesCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
+  const constructField = parseConstructFieldExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (constructField !== null) {
+    return constructField;
+  }
+
+  const constructExpression = translateConstructExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (constructExpression !== null) {
+    return constructExpression;
+  }
+
+  const inlineRecord = translateInlineRecordLiteral(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (inlineRecord !== null) {
+    return inlineRecord;
+  }
+
+  const callWithInlineRecord = translateCallWithInlineRecordArgs(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (callWithInlineRecord !== null) {
+    return callWithInlineRecord;
+  }
+
   const mathIsFinite = /^math\.isfinite\((.+)\)$/.exec(trimmed);
   if (mathIsFinite !== null) {
     return `Number.isFinite(${translateExpression(mathIsFinite[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
@@ -290,6 +325,15 @@ export function translateExpression(
   if (isinstanceSingleSequence !== null) {
     return `Array.isArray(${translateExpression(isinstanceSingleSequence[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
+  const isinstancePath = /^isinstance\((.+), Path\)$/.exec(trimmed);
+  if (isinstancePath !== null) {
+    return `typeof ${translateExpression(isinstancePath[1], nameMap, arrayNames, validatedTypeAliases, mapNames)} !== 'string'`;
+  }
+  const isinstanceMemoryview = /^isinstance\((.+), memoryview\)$/.exec(trimmed);
+  if (isinstanceMemoryview !== null) {
+    const value = translateExpression(isinstanceMemoryview[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return `ArrayBuffer.isView(${value}) && !(${value} instanceof Uint8Array)`;
+  }
   const isinstanceEnumMode = /^isinstance\((.+), ([A-Z][A-Za-z0-9_]*Mode)\)$/.exec(trimmed);
   if (isinstanceEnumMode !== null) {
     return `Object.values(${isinstanceEnumMode[2]}).includes(${translateExpression(isinstanceEnumMode[1], nameMap, arrayNames, validatedTypeAliases, mapNames)} as ${isinstanceEnumMode[2]})`;
@@ -322,6 +366,11 @@ export function translateExpression(
   }
   if (strCall !== null && strCall.rest === '.strip()') {
     return `${tsPropertyAccessBase(translateExpression(strCall.argsText, nameMap, arrayNames, validatedTypeAliases))}.trim()`;
+  }
+
+  const bytesCall = parseCallPrefix(trimmed, 'bytes');
+  if (bytesCall !== null && bytesCall.rest === '') {
+    return `bytesFrom(${translateExpression(bytesCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
   const getattrCall = parseCallPrefix(trimmed, 'getattr');
@@ -916,6 +965,180 @@ function translateMsgspecStructsReplace(
 
   const updateText = updates.length === 0 ? '' : `, ${updates.join(', ')}`;
   return `(() => { const value = ${value}; return new (value.constructor as new (opts: typeof value) => typeof value)({ ...value${updateText} }); })()`;
+}
+
+function parseBytesLiteral(value: string): number[] | null {
+  const literal = /^b(["'])([\s\S]*)\1$/.exec(value);
+  if (literal === null) {
+    return null;
+  }
+  const bytes: number[] = [];
+  const content = literal[2];
+  for (let index = 0; index < content.length; index += 1) {
+    const char = content[index];
+    if (char !== '\\') {
+      bytes.push(content.charCodeAt(index));
+      continue;
+    }
+    const next = content[index + 1];
+    if (next === 'x') {
+      const hex = content.slice(index + 2, index + 4);
+      if (!/^[0-9a-fA-F]{2}$/.test(hex)) {
+        return null;
+      }
+      bytes.push(Number.parseInt(hex, 16));
+      index += 3;
+      continue;
+    }
+    if (next === '0') {
+      bytes.push(0);
+      index += 1;
+      continue;
+    }
+    if (next === 'n') {
+      bytes.push(10);
+      index += 1;
+      continue;
+    }
+    if (next === 'r') {
+      bytes.push(13);
+      index += 1;
+      continue;
+    }
+    if (next === 't') {
+      bytes.push(9);
+      index += 1;
+      continue;
+    }
+    if (next === '\\' || next === '"' || next === "'") {
+      bytes.push(next.charCodeAt(0));
+      index += 1;
+      continue;
+    }
+    return null;
+  }
+  return bytes;
+}
+
+function parseConstructFieldExpression(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  const field = /^(.+) \/ (.+)$/.exec(pythonExpression);
+  if (field === null) {
+    return null;
+  }
+  const name = parsePythonStringExpression(field[1]);
+  if (name === null) {
+    return null;
+  }
+  return `constructField(${tsStringLiteral(JSON.stringify(name.content))}, ${translateExpression(field[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+}
+
+function translateConstructExpression(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  if (pythonExpression === 'Int32ul') {
+    return 'constructInt32ul()';
+  }
+  const cStringCall = parseCallPrefix(pythonExpression, 'CString');
+  if (cStringCall !== null && cStringCall.rest === '') {
+    return `constructCString(${translateExpression(cStringCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+  const bytesCall = parseCallPrefix(pythonExpression, 'Bytes');
+  if (bytesCall !== null && bytesCall.rest === '') {
+    const sizeLambda = /^lambda ([A-Za-z_][A-Za-z0-9_]*): (.+)$/.exec(bytesCall.argsText.trim());
+    if (sizeLambda !== null) {
+      const lambdaNameMap = new Map(nameMap);
+      const argName = tsExportNameForPythonName(sizeLambda[1]);
+      lambdaNameMap.set(sizeLambda[1], argName);
+      return `constructBytes((${argName}) => ${translateExpression(sizeLambda[2], lambdaNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
+    return `constructBytes(${translateExpression(bytesCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+  const constCall = parseCallPrefix(pythonExpression, 'Const');
+  if (constCall !== null && constCall.rest === '') {
+    return `constructConst(${translateExpression(constCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+  const greedyRangeCall = parseCallPrefix(pythonExpression, 'GreedyRange');
+  if (greedyRangeCall !== null && greedyRangeCall.rest === '') {
+    return `constructGreedyRange(${translateExpression(greedyRangeCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+  const structCall = parseCallPrefix(pythonExpression, 'Struct');
+  if (structCall !== null && structCall.rest === '') {
+    const fields = splitTopLevelComma(structCall.argsText)
+      .map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
+    return `constructStruct([${fields.join(', ')}])`;
+  }
+  return null;
+}
+
+function translateInlineRecordLiteral(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  if (!pythonExpression.startsWith('{') || !pythonExpression.endsWith('}') || !pythonExpression.includes(':')) {
+    return null;
+  }
+  const body = pythonExpression.slice(1, -1).trim();
+  if (body === '') {
+    return '{}';
+  }
+  const properties: string[] = [];
+  for (const item of splitTopLevelComma(body)) {
+    const separator = topLevelColonIndex(item);
+    if (separator === null) {
+      return null;
+    }
+    const keyExpression = item.slice(0, separator).trim();
+    const valueExpression = item.slice(separator + 1).trim();
+    const key = parsePythonStringExpression(keyExpression);
+    if (key === null) {
+      return null;
+    }
+    const renderedKey = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key.content)
+      ? key.content
+      : `[${tsStringLiteral(JSON.stringify(key.content))}]`;
+    properties.push(`${renderedKey}: ${translateExpression(valueExpression, nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
+  }
+  return `{ ${properties.join(', ')} }`;
+}
+
+function translateCallWithInlineRecordArgs(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  const call = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\((.*)\)$/.exec(pythonExpression);
+  if (call === null || !call[2].includes('{')) {
+    return null;
+  }
+  const args = splitTopLevelComma(call[2]);
+  let sawRecord = false;
+  const translatedArgs = args.map((arg) => {
+    const record = translateInlineRecordLiteral(arg, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (record !== null) {
+      sawRecord = true;
+      return record;
+    }
+    return translateExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  });
+  if (!sawRecord) {
+    return null;
+  }
+  return `${translateExpression(call[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}(${translatedArgs.join(', ')})`;
 }
 
 function topLevelColonIndex(value: string): number | null {

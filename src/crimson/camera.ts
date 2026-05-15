@@ -4,7 +4,6 @@
 //
 // This module currently models the `camera_update` screen shake logic, which is
 // global state in the original game.
-//
 
 import { Vec2 } from '@grim/geom.ts';
 import type { GameplayState } from '@crimson/gameplay.ts';

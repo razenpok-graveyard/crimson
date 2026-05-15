@@ -44,6 +44,7 @@ import {
 import { parseStringEnumClass } from './enums.js';
 import { translateExpression } from './expression.js';
 import { parseFunctionParameterText, pythonParameterNames } from './parameters.js';
+import { bytesFromHelperStatements, constructBinaryHelperStatements } from './runtime-helpers.js';
 import {
   parseStraightLineFunctionHeader,
   parseTopLevelAssignment,
@@ -116,6 +117,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       || trimmed === 'from enum import IntEnum'
       || trimmed === 'from dataclasses import dataclass'
       || trimmed === 'from pathlib import Path'
+      || trimmed.startsWith('from construct import ')
       || trimmed === 'import msgspec'
       || trimmed === 'import tempfile'
       || trimmed === 'import typer'
@@ -531,6 +533,29 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     leadingStatements.unshift(...helperStatements);
   }
+  const moduleValueText = moduleValueUsageText(typeAliases, protocols, classes, plainClasses, [...leadingStatements, ...trailingStatements], functions, [...leadingAssignments, ...assignments]);
+  if (moduleValueText.includes('constructStruct(')) {
+    const helperStatements = constructBinaryHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  } else if (moduleValueText.includes('bytesFrom(')) {
+    const helperStatements = bytesFromHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
+  if (moduleValueText.includes('readFileSync(') || moduleValueText.includes('writeFileSync(')) {
+    pushUniqueImportDefinition(imports, {
+      modulePath: 'node:fs',
+      names: [
+        ...(moduleValueText.includes('readFileSync(') ? ['readFileSync'] : []),
+        ...(moduleValueText.includes('writeFileSync(') ? ['writeFileSync'] : []),
+      ],
+    });
+  }
 
   const reexports = reexportsForAllNames(imports, allNames, relativePath);
   markTypeOnlyImports(imports, typeAliases, protocols, classes, plainClasses, [...leadingStatements, ...trailingStatements], functions, [...leadingAssignments, ...assignments]);
@@ -605,6 +630,41 @@ function straightLineModuleUsesStructFloatBuffers(
     ...functions.flatMap((fn) => fn.statements),
     ...assignments.flatMap((assignment) => assignment.valueLines),
   ].some((line) => line.includes('_f32buf') || line.includes('_u32buf'));
+}
+
+function moduleValueUsageText(
+  typeAliases: TypeAlias[],
+  protocols: StraightLineModule['protocols'],
+  classes: StructModule['classes'],
+  plainClasses: PlainClassDefinition[],
+  statements: string[],
+  functions: SimpleModuleFunction[],
+  assignments: SimpleModuleAssignment[],
+): string {
+  return stripTypeOnlyStatementSyntax([
+    ...typeAliases.flatMap((alias) => [
+      alias.validation?.minLength ?? '',
+      alias.validation?.maxLength ?? '',
+      alias.validation?.pattern ?? '',
+      alias.validation?.ge ?? '',
+      alias.validation?.le ?? '',
+    ]),
+    ...classes.flatMap((structClass) => structClass.fields.map((field) => field.defaultValue ?? '')),
+    ...classes.flatMap((structClass) => structClass.methods.flatMap((method) => method.statements)),
+    ...protocols.flatMap((protocol) => protocol.methods.flatMap((method) => [
+      ...method.parameters.map((parameter) => parameter.defaultValue ?? ''),
+      ...method.optsParams.map((parameter) => parameter.defaultValue ?? ''),
+    ])),
+    ...plainClasses.flatMap((plainClass) => plainClass.constructorDefinition.statements),
+    ...plainClasses.flatMap((plainClass) => plainClass.methods.flatMap((method) => method.statements)),
+    ...statements,
+    ...functions.flatMap((fn) => fn.statements),
+    ...functions.flatMap((fn) => [
+      ...fn.parameters.map((parameter) => parameter.defaultValue ?? ''),
+      ...fn.optsParams.map((parameter) => parameter.defaultValue ?? ''),
+    ]),
+    ...assignments.flatMap((assignment) => assignment.valueLines),
+  ].join('\n'));
 }
 
 function structFloatBufferStatements(): string[] {
@@ -967,6 +1027,22 @@ function attachPendingAssignmentComments(assignment: SimpleModuleAssignment, pen
   }
   assignment.comments = [...pendingComments];
   pendingComments.length = 0;
+}
+
+function pushUniqueImportDefinition(imports: ImportDefinition[], importDefinition: ImportDefinition): void {
+  const existing = imports.find((candidate) => (
+    candidate.modulePath === importDefinition.modulePath
+    && candidate.typeOnly === importDefinition.typeOnly
+  ));
+  if (existing === undefined) {
+    imports.push(importDefinition);
+    return;
+  }
+  for (const name of importDefinition.names) {
+    if (!existing.names.includes(name)) {
+      existing.names.push(name);
+    }
+  }
 }
 
 function avoidImportedPrivateNameCollision(assignment: SimpleModuleAssignment, imports: ImportDefinition[]): void {

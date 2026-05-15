@@ -42,7 +42,7 @@ export function parseModuleDocstring(trimmedPython: string): { raw: string; valu
     }
     return {
       raw: trimmedPython,
-      value: trimmedPython.slice(quote.length, -quote.length),
+      value: trimDocstringBlankEdges(trimmedPython.slice(quote.length, -quote.length)),
     };
   }
   return null;
@@ -60,12 +60,16 @@ export function splitLeadingModuleDocstring(trimmedPython: string): { value: str
     }
 
     return {
-      value: trimmedPython.slice(quote.length, closeIndex),
+      value: trimDocstringBlankEdges(trimmedPython.slice(quote.length, closeIndex)),
       remainder: trimmedPython.slice(closeIndex + quote.length),
     };
   }
 
   return null;
+}
+
+function trimDocstringBlankEdges(value: string): string {
+  return value.replace(/^\r?\n/, '').replace(/\r?\n$/, '');
 }
 
 export function flattenFromImportBlocks(lines: string[]): string[] {
