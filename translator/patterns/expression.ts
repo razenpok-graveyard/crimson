@@ -172,6 +172,10 @@ export function stringNameMarker(name: string): string {
   return `__string__:${name}`;
 }
 
+export function colorNameMarker(name: string): string {
+  return `__color__:${name}`;
+}
+
 export function translatedExpressionLooksVector(tsExpression: string): boolean {
   const trimmed = tsExpression.trim();
   if (/^(?:Vec2\.|new Vec2\b)/.test(trimmed) && !/\.(?:length|toHeading)\(\)$/.test(trimmed)) {
@@ -231,6 +235,14 @@ export function translateExpression(
   const constructExpression = translateConstructExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
   if (constructExpression !== null) {
     return constructExpression;
+  }
+
+  const colorChannel = /^([A-Za-z_][A-Za-z0-9_]*)\.([rgba])$/.exec(trimmed);
+  if (colorChannel !== null) {
+    const translatedName = translateExpression(colorChannel[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (arrayNames.has(colorNameMarker(colorChannel[1])) || arrayNames.has(colorNameMarker(translatedName))) {
+      return `${translatedName}.${colorChannel[2]} * 255`;
+    }
   }
 
   const inlineRecord = translateInlineRecordLiteral(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -577,6 +589,14 @@ export function translateExpression(
     return `${translateExpression(vectorScale.left, nameMap, arrayNames, validatedTypeAliases, mapNames)}.mul(${translateExpression(stripBalancedOuterParens(vectorScale.right), nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
+  const multiplicativeWithFloorDivision = splitTopLevelMultiplicative(trimmed);
+  if (
+    multiplicativeWithFloorDivision !== null
+    && (multiplicativeWithFloorDivision.left.includes(' // ') || multiplicativeWithFloorDivision.right.includes(' // '))
+  ) {
+    return `${translateExpression(stripBalancedOuterParens(multiplicativeWithFloorDivision.left), nameMap, arrayNames, validatedTypeAliases, mapNames)} * ${translateExpression(stripBalancedOuterParens(multiplicativeWithFloorDivision.right), nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
+  }
+
   const vectorSubMethod = /^\((.+) - (.+)\)\.to_heading\(\)$/.exec(trimmed);
   if (vectorSubMethod !== null) {
     return `${translateExpression(vectorSubMethod[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.sub(${translateExpression(vectorSubMethod[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}).toHeading()`;
@@ -845,6 +865,12 @@ export function translateExpression(
     )
     .replaceAll(/\b(?:list|tuple)\(([^()]*)\)/g, 'Array.from($1)')
     .replaceAll(/\b(?:float|str|bool)\(([^()]*)\)/g, '$1')
+    .replaceAll(/\b([A-Za-z_][A-Za-z0-9_]*)\.([rgba])\b/g, (_match, name: string, channel: string) => {
+      const translatedName = translateExpression(name, nameMap, arrayNames, validatedTypeAliases, mapNames);
+      return arrayNames.has(colorNameMarker(name)) || arrayNames.has(colorNameMarker(translatedName))
+        ? `(${translatedName}.${channel} * 255)`
+        : _match;
+    })
     .replaceAll(/\b([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.count\(([^()]*)\)/g, (_match, name: string, countArgsText: string) => {
       const translatedName = translateExpression(name, nameMap, arrayNames, validatedTypeAliases, mapNames);
       if (!arrayNames.has(stringNameMarker(name)) && !arrayNames.has(stringNameMarker(translatedName))) {

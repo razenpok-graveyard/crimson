@@ -199,9 +199,9 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
 
     const aliasedFromImport = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*) as ([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);
     if (aliasedFromImport !== null) {
-      const importedName = tsExportNameForPythonName(aliasedFromImport[2]);
       const aliasName = tsExportNameForPythonName(aliasedFromImport[3]);
       const modulePath = tsImportPathForPythonImport(aliasedFromImport[1], relativePath);
+      const importedName = tsImportNameForPythonName(modulePath, aliasedFromImport[2], relativePath);
       imports.push({
         modulePath,
         names: [`${importedName} as ${aliasName}`],
@@ -237,18 +237,27 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
 
     const fromImport = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
     if (fromImport !== null) {
-      const names = fromImport[2].split(', ').map(tsExportNameForPythonName);
       const modulePath = tsImportPathForPythonImport(fromImport[1], relativePath);
+      const importBindings = fromImport[2].split(', ').map((name) => ({
+        pythonName: name,
+        importedName: tsImportNameForPythonName(modulePath, name, relativePath),
+        defaultName: tsExportNameForPythonName(name),
+      }));
       imports.push({
         modulePath,
-        names,
+        names: importBindings.map((binding) => binding.importedName),
       });
       recordImportedStructConstructorFields(
         modulePath,
-        names.map((name) => ({ importedName: name, localName: name })),
+        importBindings.map((binding) => ({ importedName: binding.importedName, localName: binding.importedName })),
         relativePath,
         structConstructorFields,
       );
+      for (const binding of importBindings) {
+        if (binding.importedName !== binding.defaultName) {
+          moduleNameMap.set(binding.pythonName, binding.importedName);
+        }
+      }
       index += 1;
       continue;
     }
@@ -1196,6 +1205,30 @@ function reexportsForAllNames(imports: ImportDefinition[], allNames: string[], r
 
 function tsReexportName(modulePath: string, name: string, relativePath: string): string {
   return tsModuleExportsTypeOnly(modulePath, name, relativePath) ? `type ${name}` : name;
+}
+
+function tsImportNameForPythonName(modulePath: string, pythonName: string, relativePath: string): string {
+  const exactName = tsExportNameForPythonName(pythonName);
+  const publicName = tsPublicNameForPythonName(pythonName);
+  if (
+    exactName !== publicName
+    && !tsModuleExportsName(modulePath, exactName, relativePath)
+    && tsModuleExportsName(modulePath, publicName, relativePath)
+  ) {
+    return publicName;
+  }
+  return exactName;
+}
+
+function tsModuleExportsName(modulePath: string, name: string, relativePath: string): boolean {
+  const sourcePath = tsSourcePathForImportPath(modulePath, relativePath);
+  if (sourcePath === null || !fs.existsSync(sourcePath)) {
+    return false;
+  }
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^export\\s+(?:declare\\s+)?(?:const|let|var|function|class|type|interface|enum)\\s+${escapedName}\\b`, 'm').test(source)
+    || new RegExp(`^export\\s+\\{[^}]*\\b${escapedName}\\b[^}]*\\}`, 'm').test(source);
 }
 
 function tsModuleExportsTypeOnly(modulePath: string, name: string, relativePath: string): boolean {

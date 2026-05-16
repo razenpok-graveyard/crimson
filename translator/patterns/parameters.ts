@@ -5,7 +5,7 @@ import type {
 } from '../model.js';
 import { tsExportNameForPythonName, tsTypeExpression } from '../naming.js';
 import { splitTopLevelComma } from './common.js';
-import { stringNameMarker, translateExpression } from './expression.js';
+import { colorNameMarker, stringNameMarker, translateExpression } from './expression.js';
 
 export function parseFunctionParametersText(
   parametersText: string,
@@ -52,6 +52,11 @@ export function parseFunctionParameterText(
       const parameterName = tsExportNameForPythonName(typedParameter[1]);
       arrayNames.add(stringNameMarker(typedParameter[1]));
       arrayNames.add(stringNameMarker(parameterName));
+    }
+    if (typeExpression === 'rl.Color' || typeExpression === 'wgl.Color') {
+      const parameterName = tsExportNameForPythonName(typedParameter[1]);
+      arrayNames.add(colorNameMarker(typedParameter[1]));
+      arrayNames.add(colorNameMarker(parameterName));
     }
     return {
       name: tsExportNameForPythonName(typedParameter[1]),
