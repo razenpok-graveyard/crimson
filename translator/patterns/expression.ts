@@ -1739,6 +1739,20 @@ export function translateExpression(
     vectorAdditive !== null
     && vectorAdditive.parts.length === 2
     && vectorAdditive.operators[0] === '+'
+  ) {
+    const left = translateExpression(vectorAdditive.parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const right = translateExpression(vectorAdditive.parts[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (
+      (arrayNames.has(vectorAdditive.parts[0]) || arrayNames.has(left))
+      && (arrayNames.has(vectorAdditive.parts[1]) || arrayNames.has(right) || right.startsWith('['))
+    ) {
+      return `${left}.concat(${right})`;
+    }
+  }
+  if (
+    vectorAdditive !== null
+    && vectorAdditive.parts.length === 2
+    && vectorAdditive.operators[0] === '+'
     && expressionIsKnownVector(vectorAdditive.parts[0], nameMap, arrayNames)
     && expressionIsKnownVector(vectorAdditive.parts[1], nameMap, arrayNames)
   ) {

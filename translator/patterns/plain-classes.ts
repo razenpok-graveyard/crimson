@@ -411,6 +411,8 @@ export function parsePlainClass(
     nextIndex = method.nextIndex;
   }
 
+  refineAnyFieldsFromConstructorAssignments(fieldMap, methods);
+
   const mutableFields = new Set<string>();
   for (const method of methods) {
     for (const statement of method.statements) {
@@ -450,6 +452,28 @@ export function parsePlainClass(
   };
 }
 
+function refineAnyFieldsFromConstructorAssignments(
+  fieldMap: Map<string, PlainClassDefinition['fields'][number]>,
+  methods: SimpleModuleFunction[],
+): void {
+  for (const method of methods) {
+    for (const statement of method.statements) {
+      const constructorAssignment = /^this\.([A-Za-z_$][A-Za-z0-9_$]*) = new ([A-Z][A-Za-z0-9_$]*)\(/.exec(statement.trim());
+      if (constructorAssignment === null) {
+        continue;
+      }
+      const field = fieldMap.get(constructorAssignment[1]);
+      if (field?.typeExpression !== 'any') {
+        continue;
+      }
+      fieldMap.set(field.name, {
+        ...field,
+        typeExpression: `${constructorAssignment[2]} | null`,
+      });
+    }
+  }
+}
+
 function rewritePlainClassStaticMethodCalls(
   statements: string[],
   className: string,
@@ -486,6 +510,9 @@ function inferPlainClassFieldType(
   fieldTypes: ReadonlyMap<string, string>,
   nameMap: ReadonlyMap<string, string> = new Map(),
 ): string | null {
+  if (valueText.trim() === 'None') {
+    return 'any';
+  }
   if (/^Path\([A-Za-z_][A-Za-z0-9_]*\)$/.test(valueText)) {
     return 'string';
   }

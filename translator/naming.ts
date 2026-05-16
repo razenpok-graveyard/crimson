@@ -156,6 +156,9 @@ export function tsTypeExpression(pythonType: string): string {
   if (trimmed === 'object') {
     return 'unknown';
   }
+  if (trimmed === 'Exception' || trimmed === 'BaseException') {
+    return 'unknown';
+  }
   if (trimmed === 'msgspec.msgpack.Encoder') {
     return 'MsgpackEncoder';
   }

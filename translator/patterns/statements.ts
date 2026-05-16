@@ -136,6 +136,17 @@ function tsLocalImportNameForPythonName(pythonName: string): string {
   return pythonName === '__version__' ? 'VERSION' : tsExportNameForPythonName(pythonName);
 }
 
+function tsLocalDeclarationNameForAssignment(tsName: string, assignedRight: string): string {
+  if (!new RegExp(`(^|[^.A-Za-z0-9_$])${escapeRegExp(tsName)}\\s*\\(`).test(assignedRight)) {
+    return tsName;
+  }
+  return `${tsName}Value`;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function appendTrailingCommentToResult<T extends { statements: string[]; nextIndex: number }>(
   result: T,
   comment: string | null,
@@ -2709,6 +2720,18 @@ export function translateStraightLineStatement(
         nextIndex: (lines[index + 1] ?? '').trim() === 'rl.rl_set_texture(0)' ? index + 2 : index + 1,
       };
     }
+    if (callStatement[1] === 'ui.draw()' && nameMap.get('self') === 'this') {
+      return {
+        statements: [
+          'const resources = this.state.resources;',
+          'if (resources === null) {',
+          '  return;',
+          '}',
+          'ui.draw({ resources });',
+        ],
+        nextIndex: index + 1,
+      };
+    }
     const simpleCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\((.*)\)$/.exec(callStatement[1]);
     if (simpleCall !== null) {
       const args = splitTopLevelComma(simpleCall[2]);
@@ -4072,11 +4095,15 @@ function translateStraightLineAssignment(
       };
     }
     declaredNames.add(localAssignment[1]);
-    const localAssignedRight = assignedRightAsKnownVector(localAssignment[1], tsName, assignedRight, arrayNames);
-    recordLocalAssignmentMarkers(localAssignment[1], tsName, localAssignedRight, nameMap, arrayNames, mapNames);
+    const localTsName = tsLocalDeclarationNameForAssignment(tsName, assignedRight);
+    if (localTsName !== tsName) {
+      nameMap.set(localAssignment[1], localTsName);
+    }
+    const localAssignedRight = assignedRightAsKnownVector(localAssignment[1], localTsName, assignedRight, arrayNames);
+    recordLocalAssignmentMarkers(localAssignment[1], localTsName, localAssignedRight, nameMap, arrayNames, mapNames);
     return {
       statements: [
-        `${reassignedNames.has(localAssignment[1]) ? 'let' : 'const'} ${tsName} = ${localAssignedRight};`,
+        `${reassignedNames.has(localAssignment[1]) ? 'let' : 'const'} ${localTsName} = ${localAssignedRight};`,
       ],
       nextIndex,
     };
