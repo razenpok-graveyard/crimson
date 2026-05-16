@@ -79,7 +79,7 @@ export function isTypingOnlyImport(trimmedLine: string): boolean {
   }
   return typeImport[1]
     .split(', ')
-    .every((name) => ['Annotated', 'Any', 'Callable', 'Literal', 'Protocol', 'TYPE_CHECKING', 'TypeAlias', 'TypeVar', 'cast'].includes(name));
+    .every((name) => ['Annotated', 'Any', 'Callable', 'Final', 'Literal', 'Protocol', 'TYPE_CHECKING', 'TypeAlias', 'TypeVar', 'cast'].includes(name));
 }
 
 export function parseTypeCheckingImports(

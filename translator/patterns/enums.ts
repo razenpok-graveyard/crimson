@@ -175,21 +175,22 @@ export function parseStringEnumClass(
     const member = stringValued
       ? /^    ([A-Z][A-Z0-9_]*) = (["'][^"']*["'])$/.exec(parsedLine.code)
       : autoValued
-        ? /^    ([A-Z][A-Z0-9_]*) = (auto\(\)|-?(?:0x[0-9A-Fa-f]+|\d+))$/.exec(parsedLine.code)
+        ? /^    ([A-Z][A-Z0-9_]*) = (auto\(\)|["'][^"']*["']|-?(?:0x[0-9A-Fa-f]+|\d+))$/.exec(parsedLine.code)
         : /^    ([A-Z][A-Z0-9_]*) = (-?(?:0x[0-9A-Fa-f]+|\d+))$/.exec(parsedLine.code);
     if (member === null) {
       return null;
     }
     const value = autoValued && member[2] === 'auto()'
       ? String(nextAutoValue)
-      : stringValued ? translateExpression(member[2]) : member[2];
+      : stringValued || /^["']/.test(member[2]) ? translateExpression(member[2]) : member[2];
     members.push({
       name: member[1],
       value,
       leadingComments: pendingMemberComments.splice(0),
       trailingComment: parsedLine.comment ?? undefined,
     });
-    nextAutoValue = Number.parseInt(value, 0) + 1;
+    const numericValue = Number.parseInt(value, 0);
+    nextAutoValue = Number.isFinite(numericValue) ? numericValue + 1 : nextAutoValue + 1;
     nextIndex += 1;
   }
 

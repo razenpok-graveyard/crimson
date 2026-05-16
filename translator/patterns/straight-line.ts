@@ -419,7 +419,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     const namedAssignment = /^([A-Za-z_][A-Za-z0-9_]*)(?:: .+?)? = /.exec(lines[index] ?? '');
     if (namedAssignment !== null) {
       moduleNameMap.set(namedAssignment[1], assignment.assignment.name);
-      if (assignment.assignment.typeExpression?.startsWith('Map<') === true) {
+      if (assignment.assignment.typeExpression?.startsWith('Map<') === true || assignment.assignment.typeExpression?.startsWith('ReadonlyMap<') === true) {
         mapNames.add(assignment.assignment.name);
       }
     }
@@ -745,7 +745,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     attachPendingAssignmentComments(assignment.assignment, pendingAssignmentComments);
     avoidImportedPrivateNameCollision(assignment.assignment, imports);
     assignments.push(assignment.assignment);
-    if (assignment.assignment.typeExpression?.startsWith('Map<') === true) {
+    if (assignment.assignment.typeExpression?.startsWith('Map<') === true || assignment.assignment.typeExpression?.startsWith('ReadonlyMap<') === true) {
       mapNames.add(assignment.assignment.name);
     }
     index = assignment.nextIndex;

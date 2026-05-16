@@ -1,5 +1,15 @@
 // Port of grim/sfx_map.py
 
+export class SfxSpec {
+  readonly entryName: string;
+
+  constructor(opts: {
+    entryName: string;
+  }) {
+    this.entryName = opts.entryName;
+  }
+}
+
 export enum SfxId {
   TROOPER_INPAIN_01 = 'sfx_trooper_inpain_01',
   TROOPER_INPAIN_02 = 'sfx_trooper_inpain_02',
@@ -73,14 +83,6 @@ export enum SfxId {
   UI_CLINK_01 = 'sfx_ui_clink_01',
   BLOODSPILL_01 = 'sfx_bloodspill_01',
   BLOODSPILL_02 = 'sfx_bloodspill_02',
-}
-
-export class SfxSpec {
-  readonly entryName: string;
-
-  constructor(opts: { entryName: string }) {
-    this.entryName = opts.entryName;
-  }
 }
 
 const _SFX_NATIVE_SPECS: readonly [SfxId, SfxSpec][] = [
@@ -157,9 +159,7 @@ const _SFX_NATIVE_SPECS: readonly [SfxId, SfxSpec][] = [
   [SfxId.BLOODSPILL_01, new SfxSpec({ entryName: 'bloodSpill_01.ogg' })],
   [SfxId.BLOODSPILL_02, new SfxSpec({ entryName: 'bloodSpill_02.ogg' })],
 ];
-
 export const SFX_SPECS: ReadonlyMap<SfxId, SfxSpec> = new Map(_SFX_NATIVE_SPECS);
-
 // Extracted from `audio_init_sfx` (FUN_0043caa0) in `crimsonland.exe`.
 // `sfx_load_sample()` allocates the first free slot, so the load order defines stable ids.
-export const SFX_NATIVE_ORDER: readonly SfxId[] = _SFX_NATIVE_SPECS.map(([id]) => id);
+export const SFX_NATIVE_ORDER: readonly SfxId[] = _SFX_NATIVE_SPECS.map(([sfxId, _spec]) => sfxId);

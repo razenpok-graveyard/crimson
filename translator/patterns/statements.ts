@@ -3764,14 +3764,15 @@ export function parseTopLevelAssignment(
   const pythonName = annotatedAssignment?.[1] ?? plainAssignment?.[1] ?? '';
   const value = annotatedAssignment?.[3] ?? plainAssignment?.[2] ?? '';
   const annotatedType = annotatedAssignment?.[2] ?? null;
+  const assignmentShapeType = annotatedType === null ? null : stripFinalTypeExpression(annotatedType);
   const publicUppercaseName = !pythonName.startsWith('_') && /^[A-Z0-9_]+$/.test(pythonName);
-  const dictKeyType = /^dict\[([^,\]]+), .+\]$/.exec(annotatedType?.trim() ?? '')?.[1] ?? null;
+  const dictKeyType = /^dict\[([^,\]]+), .+\]$/.exec(assignmentShapeType?.trim() ?? '')?.[1] ?? null;
   const privateUppercaseName = (
     pythonName.startsWith('_')
     && /^[A-Z0-9_]+$/.test(pythonName.replace(/^_+/, ''))
     && (
-      /^frozenset\[/.test(annotatedType?.trim() ?? '')
-      || /^tuple\[/.test(annotatedType?.trim() ?? '')
+      /^frozenset\[/.test(assignmentShapeType?.trim() ?? '')
+      || /^tuple\[/.test(assignmentShapeType?.trim() ?? '')
       || (dictKeyType !== null && mapKeyTypeHasStableIdentity(dictKeyType))
     )
   );
@@ -3909,11 +3910,30 @@ export function parseTopLevelAssignment(
     return null;
   }
 
-  if (value === '{}' && annotatedType?.trim().startsWith('dict[') === true) {
+  if (value === '{}' && assignmentShapeType?.trim().startsWith('dict[') === true) {
     return {
       assignment: { ...baseAssignment, declaration: 'const', valueLines: ['new Map()'] },
       nextIndex: index + 1,
     };
+  }
+
+  const typedDictCall = /^dict\((.*)\)$/.exec(value);
+  if (typedDictCall !== null && assignmentShapeType?.trim().startsWith('dict[') === true) {
+    const args = splitTopLevelComma(typedDictCall[1]);
+    if (args.length <= 1) {
+      return {
+        assignment: {
+          ...baseAssignment,
+          declaration: 'const',
+          valueLines: [
+            args.length === 0
+              ? 'new Map()'
+              : `new Map(${translateExpression(args[0], nameMap)})`,
+          ],
+        },
+        nextIndex: index + 1,
+      };
+    }
   }
 
   const oneLineFrozenSet = /^frozenset\(\{(.*)\}\)$/.exec(value);
@@ -4107,6 +4127,12 @@ function parseMultilineKeywordCallValueLines(
 
 function mapKeyTypeHasStableIdentity(pythonType: string): boolean {
   return ['str', 'int', 'float', 'bool'].includes(pythonType.trim()) || /Id$/.test(pythonType.trim());
+}
+
+function stripFinalTypeExpression(pythonType: string): string {
+  const trimmed = pythonType.trim();
+  const finalType = /^Final\[(.+)\]$/.exec(trimmed);
+  return finalType === null ? trimmed : finalType[1];
 }
 
 function splitInlineComment(line: string): { code: string; comment: string | null } {

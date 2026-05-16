@@ -48,6 +48,19 @@ export function tsTypeExpression(pythonType: string): string {
       });
     return [...new Set(parts)].join(' | ');
   }
+  const finalType = parseGenericTypeArgs(trimmed, 'Final');
+  if (finalType !== null && finalType.length === 1) {
+    const innerType = finalType[0].trim();
+    const dictType = parseGenericTypeArgs(innerType, 'dict');
+    if (dictType !== null && dictType.length === 2) {
+      return `ReadonlyMap<${tsMapKeyTypeExpression(dictType[0])}, ${tsTypeExpression(dictType[1])}>`;
+    }
+    const orderedDictType = parseGenericTypeArgs(innerType, 'OrderedDict');
+    if (orderedDictType !== null && orderedDictType.length === 2) {
+      return `ReadonlyMap<${tsMapKeyTypeExpression(orderedDictType[0])}, ${tsTypeExpression(orderedDictType[1])}>`;
+    }
+    return tsTypeExpression(innerType);
+  }
   const dictType = parseGenericTypeArgs(trimmed, 'dict');
   if (dictType !== null && dictType.length === 2) {
     if (dictType[0].trim() === 'str' && dictType[1].trim() === 'object') {

@@ -882,6 +882,10 @@ export function translateExpression(
       if (argsText === '') {
         return '[]';
       }
+      const tupleTargetGenerator = parseTupleTargetGeneratorExpression(argsText);
+      if (tupleTargetGenerator !== null) {
+        return tupleTargetGeneratorExpressionToArray(tupleTargetGenerator, nameMap, arrayNames, validatedTypeAliases, mapNames);
+      }
       const generator = parseSimpleGeneratorExpression(argsText);
       if (generator !== null) {
         const itemName = tsExportNameForPythonName(generator.itemName);
@@ -2255,6 +2259,57 @@ function parseSimpleGeneratorExpression(pythonExpression: string): { expression:
   };
 }
 
+function parseTupleTargetGeneratorExpression(
+  pythonExpression: string,
+): { expression: string; targetNames: string[]; iterable: string; condition: string | null } | null {
+  const trimmed = stripBalancedOuterParens(pythonExpression.trim());
+  const forIndex = findTopLevelToken(trimmed, ' for ');
+  if (forIndex === null) {
+    return null;
+  }
+  const expression = trimmed.slice(0, forIndex).replace(/,$/, '').trim();
+  const rest = trimmed.slice(forIndex + ' for '.length).trim();
+  const ifIndex = findTopLevelToken(rest, ' if ');
+  const forClause = ifIndex === null ? rest : rest.slice(0, ifIndex).trim();
+  const condition = ifIndex === null ? null : rest.slice(ifIndex + ' if '.length).trim();
+  const generator = /^([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+) in (.+)$/.exec(forClause);
+  if (expression === '' || generator === null || condition === '') {
+    return null;
+  }
+  return {
+    expression,
+    targetNames: generator[1].split(', '),
+    iterable: generator[2],
+    condition,
+  };
+}
+
+function tupleTargetGeneratorExpressionToArray(
+  generator: { expression: string; targetNames: string[]; iterable: string; condition: string | null },
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string {
+  const itemNameMap = new Map(nameMap);
+  const targetNames = generator.targetNames.map((targetName) => tsGeneratorTargetName(targetName));
+  generator.targetNames.forEach((targetName, targetIndex) => {
+    itemNameMap.set(targetName, targetNames[targetIndex]);
+  });
+  const mapParameter = `[${targetNames.join(', ')}]`;
+  const iterable = iterableExpressionForIteration(generator.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const filtered = generator.condition === null
+    ? iterable
+    : `${iterable}.filter((${mapParameter}) => ${translateExpression(generator.condition, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  return `${filtered}.map((${mapParameter}) => ${translateExpression(generator.expression, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+}
+
+function tsGeneratorTargetName(pythonName: string): string {
+  return pythonName.startsWith('_') && !/^_+$/.test(pythonName)
+    ? `_${tsExportNameForPythonName(pythonName)}`
+    : tsExportNameForPythonName(pythonName);
+}
+
 function generatorExpressionToArray(
   pythonExpression: string,
   nameMap: Map<string, string>,
@@ -2262,6 +2317,10 @@ function generatorExpressionToArray(
   validatedTypeAliases: ReadonlySet<string>,
   mapNames: ReadonlySet<string>,
 ): string | null {
+  const tupleTargetGenerator = parseTupleTargetGeneratorExpression(pythonExpression);
+  if (tupleTargetGenerator !== null) {
+    return tupleTargetGeneratorExpressionToArray(tupleTargetGenerator, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  }
   const generator = parseSimpleGeneratorExpression(pythonExpression);
   if (generator === null) {
     return null;
