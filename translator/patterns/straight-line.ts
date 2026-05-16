@@ -49,6 +49,7 @@ import {
   parseStraightLineFunctionHeader,
   parseTopLevelAssignment,
   reassignedLocalNames,
+  rewriteStructPositionalConstructors,
   translateStraightLineStatement,
 } from './statements.js';
 import { parsePlainClass, parseStructClass } from './structs.js';
@@ -72,6 +73,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   const allNames: string[] = [];
   const moduleNameMap = new Map<string, string>();
   const mapNames = new Set<string>();
+  const structConstructorFields = new Map<string, string[]>();
   const pendingAssignmentComments: string[] = [];
   let index = 0;
 
@@ -175,6 +177,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     const structClass = parseStructClass(lines, index);
     if (structClass !== null) {
       classes.push(structClass.structClass);
+      structConstructorFields.set(structClass.structClass.name, structClass.structClass.fields.map((field) => field.name));
       index = structClass.nextIndex;
       continue;
     }
@@ -198,10 +201,17 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     if (aliasedFromImport !== null) {
       const importedName = tsExportNameForPythonName(aliasedFromImport[2]);
       const aliasName = tsExportNameForPythonName(aliasedFromImport[3]);
+      const modulePath = tsImportPathForPythonImport(aliasedFromImport[1], relativePath);
       imports.push({
-        modulePath: tsImportPathForPythonImport(aliasedFromImport[1], relativePath),
+        modulePath,
         names: [`${importedName} as ${aliasName}`],
       });
+      recordImportedStructConstructorFields(
+        modulePath,
+        [{ importedName, localName: aliasName }],
+        relativePath,
+        structConstructorFields,
+      );
       moduleNameMap.set(aliasedFromImport[3], aliasName);
       index += 1;
       continue;
@@ -228,10 +238,17 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     const fromImport = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
     if (fromImport !== null) {
       const names = fromImport[2].split(', ').map(tsExportNameForPythonName);
+      const modulePath = tsImportPathForPythonImport(fromImport[1], relativePath);
       imports.push({
-        modulePath: tsImportPathForPythonImport(fromImport[1], relativePath),
+        modulePath,
         names,
       });
+      recordImportedStructConstructorFields(
+        modulePath,
+        names.map((name) => ({ importedName: name, localName: name })),
+        relativePath,
+        structConstructorFields,
+      );
       index += 1;
       continue;
     }
@@ -344,6 +361,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       const structClass = parseStructClass(lines, index);
       if (structClass !== null) {
         classes.push(structClass.structClass);
+        structConstructorFields.set(structClass.structClass.name, structClass.structClass.fields.map((field) => field.name));
         index = structClass.nextIndex;
         continue;
       }
@@ -537,6 +555,16 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
   }
 
+  rewriteStructConstructorCalls(
+    structConstructorFields,
+    leadingStatements,
+    trailingStatements,
+    functions,
+    [...leadingAssignments, ...assignments],
+    classes,
+    plainClasses,
+  );
+
   if (straightLineModuleUsesPythonRepr([...leadingStatements, ...trailingStatements], classes, plainClasses, functions, [...leadingAssignments, ...assignments])) {
     const helperStatements = pythonReprHelperStatements();
     if (leadingStatements.length > 0) {
@@ -561,6 +589,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   }
   if (moduleValueText.includes('pythonStringCount(')) {
     const helperStatements = pythonStringCountHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
+  if (moduleValueText.includes('pythonEquals(')) {
+    const helperStatements = pythonEqualsHelperStatements();
     if (leadingStatements.length > 0) {
       helperStatements.push('');
     }
@@ -700,6 +735,84 @@ function moduleValueUsageText(
   ].join('\n'));
 }
 
+function recordImportedStructConstructorFields(
+  modulePath: string,
+  names: { importedName: string; localName: string }[],
+  relativePath: string,
+  structConstructorFields: Map<string, string[]>,
+): void {
+  for (const name of names) {
+    const fields = importedStructConstructorFields(modulePath, name.importedName, relativePath);
+    if (fields !== null) {
+      structConstructorFields.set(name.localName, fields);
+    }
+  }
+}
+
+function importedStructConstructorFields(modulePath: string, className: string, relativePath: string): string[] | null {
+  const sourcePath = tsSourcePathForImportPath(modulePath, relativePath);
+  if (sourcePath === null || !fs.existsSync(sourcePath)) {
+    return null;
+  }
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const escapedName = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const classStart = source.search(new RegExp(`export\\s+class\\s+${escapedName}\\b`));
+  if (classStart === -1) {
+    return null;
+  }
+  const nextExport = source.slice(classStart + 1).search(/\nexport\s+/);
+  const classSource = nextExport === -1
+    ? source.slice(classStart)
+    : source.slice(classStart, classStart + 1 + nextExport);
+  const constructor = /constructor\(opts: \{([\s\S]*?)\}\s*=?.*?\)/.exec(classSource);
+  if (constructor === null) {
+    return null;
+  }
+  const fields = [...constructor[1].matchAll(/(?:^|[;\n])\s*([A-Za-z_$][A-Za-z0-9_$]*)\??:/g)]
+    .map((match) => match[1]);
+  return fields.length === 0 ? null : fields;
+}
+
+function rewriteStructConstructorCalls(
+  structConstructorFields: ReadonlyMap<string, string[]>,
+  leadingStatements: string[],
+  trailingStatements: string[],
+  functions: SimpleModuleFunction[],
+  assignments: SimpleModuleAssignment[],
+  classes: StructModule['classes'],
+  plainClasses: PlainClassDefinition[],
+): void {
+  if (structConstructorFields.size === 0) {
+    return;
+  }
+  rewriteStatementArray(leadingStatements, structConstructorFields);
+  rewriteStatementArray(trailingStatements, structConstructorFields);
+  for (const fn of functions) {
+    rewriteStatementArray(fn.statements, structConstructorFields);
+  }
+  for (const assignment of assignments) {
+    rewriteStatementArray(assignment.valueLines, structConstructorFields);
+  }
+  for (const structClass of classes) {
+    rewriteStatementArray(structClass.postInitStatements, structConstructorFields);
+    for (const method of structClass.methods) {
+      rewriteStatementArray(method.statements, structConstructorFields);
+    }
+  }
+  for (const plainClass of plainClasses) {
+    rewriteStatementArray(plainClass.constructorDefinition.statements, structConstructorFields);
+    for (const method of plainClass.methods) {
+      rewriteStatementArray(method.statements, structConstructorFields);
+    }
+  }
+}
+
+function rewriteStatementArray(statements: string[], structConstructorFields: ReadonlyMap<string, string[]>): void {
+  for (let index = 0; index < statements.length; index += 1) {
+    statements[index] = rewriteStructPositionalConstructors(statements[index], structConstructorFields);
+  }
+}
+
 function structFloatBufferStatements(): string[] {
   return [
     'const _f32buf = new Float32Array(1);',
@@ -768,6 +881,26 @@ function pythonStringCountHelperStatements(): string[] {
     '    count += 1;',
     '    start = index + needle.length;',
     '  }',
+    '}',
+  ];
+}
+
+function pythonEqualsHelperStatements(): string[] {
+  return [
+    'function pythonEquals(left: object | string | number | boolean | null | undefined, right: object | string | number | boolean | null | undefined): boolean {',
+    "  if (left !== null && left !== undefined && typeof left === 'object') {",
+    "    const equal = Reflect.get(left, 'equal');",
+    "    if (typeof equal === 'function') {",
+    '      return Boolean(equal.call(left, right));',
+    '    }',
+    '  }',
+    "  if (right !== null && right !== undefined && typeof right === 'object') {",
+    "    const equal = Reflect.get(right, 'equal');",
+    "    if (typeof equal === 'function') {",
+    '      return Boolean(equal.call(right, left));',
+    '    }',
+    '  }',
+    '  return left === right;',
     '}',
   ];
 }

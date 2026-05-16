@@ -256,6 +256,19 @@ export function translateExpression(
     return `${translateExpression(listComprehension[3], nameMap, arrayNames, validatedTypeAliases, mapNames)}.map((${itemName}) => ${translateExpression(listComprehension[1], itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
+  for (const [pythonName, tsMethod] of [['any', 'some'], ['all', 'every']] as const) {
+    const generatorCall = parseCallPrefix(trimmed, pythonName);
+    if (generatorCall !== null && generatorCall.rest === '') {
+      const generator = /^(.+?)(?:,)? for ([A-Za-z_][A-Za-z0-9_]*) in (.+)$/.exec(generatorCall.argsText.trim());
+      if (generator !== null) {
+        const itemName = tsExportNameForPythonName(generator[2]);
+        const itemNameMap = new Map(nameMap);
+        itemNameMap.set(generator[2], itemName);
+        return `${translateExpression(generator[3], nameMap, arrayNames, validatedTypeAliases, mapNames)}.${tsMethod}((${itemName}) => ${translateExpression(generator[1], itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+      }
+    }
+  }
+
   const listUnpack = /^\[\*(.+)\]$/.exec(trimmed);
   if (listUnpack !== null) {
     return `[...${translateExpression(listUnpack[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}]`;
@@ -740,12 +753,18 @@ export function translateExpression(
 
   const binaryComparison = /^(.+?) (<=|>=|<|>|==|!=) (.+)$/.exec(trimmed);
   if (binaryComparison !== null) {
+    const left = translateExpression(binaryComparison[1], nameMap, arrayNames, validatedTypeAliases);
+    const right = translateExpression(binaryComparison[3], nameMap, arrayNames, validatedTypeAliases);
+    if ((binaryComparison[2] === '==' || binaryComparison[2] === '!=') && comparisonNeedsPythonEquality(left, right)) {
+      const equality = `pythonEquals(${left}, ${right})`;
+      return binaryComparison[2] === '==' ? equality : `!${equality}`;
+    }
     const operator = binaryComparison[2] === '=='
       ? '==='
       : binaryComparison[2] === '!='
         ? '!=='
         : binaryComparison[2];
-    return `${translateExpression(binaryComparison[1], nameMap, arrayNames, validatedTypeAliases)} ${operator} ${translateExpression(binaryComparison[3], nameMap, arrayNames, validatedTypeAliases)}`;
+    return `${left} ${operator} ${right}`;
   }
 
   const prefixSlice = /^(.+)\[:(.+)\]$/.exec(trimmed);
@@ -899,6 +918,10 @@ function translateIdentifierName(name: string, nameMap: Map<string, string>): st
     root,
     ...parts.slice(1).map((part) => nameMap.get(part) ?? tsExportNameForPythonName(part)),
   ].join('.');
+}
+
+function comparisonNeedsPythonEquality(left: string, right: string): boolean {
+  return /\bnew [A-Z][A-Za-z0-9_$]*\(/.test(left) || /\bnew [A-Z][A-Za-z0-9_$]*\(/.test(right);
 }
 
 export function translateMapKeyExpression(mapName: string, keyExpression: string): string {

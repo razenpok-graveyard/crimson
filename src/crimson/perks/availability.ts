@@ -4,9 +4,10 @@ import { GameMode } from '@crimson/game-modes.ts';
 import type { GameStatus } from '@crimson/persistence/save-status.ts';
 import { allQuests } from '@crimson/quests/index.ts';
 import { QuestLevel } from '@crimson/quests/level.ts';
-import { PERK_COUNT_SIZE, type GameplayState, type PlayerState } from '@crimson/sim/state-types.ts';
-import { perkCountGet } from './helpers.ts';
-import { PERK_BY_ID, PerkFlags, PerkId } from './ids.ts';
+import type { GameplayState, PlayerState } from '@crimson/sim/state-types.ts';
+import { PERK_COUNT_SIZE } from '@crimson/sim/state-types.ts';
+import { perkCountGet } from '@crimson/perks/helpers.ts';
+import { PERK_BY_ID, PerkFlags, PerkId } from '@crimson/perks/ids.ts';
 
 const _PERK_BASE_AVAILABLE_MAX_ID = int(PerkId.BONUS_MAGNET);
 const _PERK_ALWAYS_AVAILABLE: readonly PerkId[] = [
@@ -16,32 +17,47 @@ const _PERK_ALWAYS_AVAILABLE: readonly PerkId[] = [
   PerkId.TOUGH_RELOADER,
 ];
 
+function pythonEquals(left: object | string | number | boolean | null | undefined, right: object | string | number | boolean | null | undefined): boolean {
+  if (left !== null && left !== undefined && typeof left === 'object') {
+    const equal = Reflect.get(left, 'equal');
+    if (typeof equal === 'function') {
+      return Boolean(equal.call(left, right));
+    }
+  }
+  if (right !== null && right !== undefined && typeof right === 'object') {
+    const equal = Reflect.get(right, 'equal');
+    if (typeof equal === 'function') {
+      return Boolean(equal.call(right, left));
+    }
+  }
+  return left === right;
+}
+
 export function buildPerkAvailability(opts: { status: GameStatus | null }): boolean[] {
-  const available: boolean[] = new Array(PERK_COUNT_SIZE).fill(false);
+  const status = opts.status;
+  const available = Array.from({ length: PERK_COUNT_SIZE }, () => false);
   let unlockIndex = 0;
-  if (opts.status !== null) {
-    unlockIndex = opts.status.questUnlockIndex;
+  if (status !== null) {
+    unlockIndex = status.questUnlockIndex;
   }
 
-  for (let perkId = 1; perkId <= _PERK_BASE_AVAILABLE_MAX_ID; perkId++) {
+  for (let perkId = 1; perkId < _PERK_BASE_AVAILABLE_MAX_ID + 1; perkId++) {
     if (perkId >= 0 && perkId < available.length) {
       available[perkId] = true;
     }
   }
 
   for (const perkId of _PERK_ALWAYS_AVAILABLE) {
-    const idx = int(perkId);
-    if (idx >= 0 && idx < available.length) {
-      available[idx] = true;
+    if (perkId >= 0 && perkId < available.length) {
+      available[perkId] = true;
     }
   }
 
   if (unlockIndex > 0) {
     const quests = allQuests();
-    for (let i = 0; i < Math.min(unlockIndex, quests.length); i++) {
-      const quest = quests[i];
+    for (const quest of quests.slice(0, unlockIndex)) {
       const perkId = quest.unlockPerkId;
-      if (perkId !== null && perkId > 0 && perkId < available.length) {
+      if (perkId !== null && 0 < perkId && perkId < available.length) {
         available[perkId] = true;
       }
     }
@@ -55,32 +71,24 @@ export function preparePerkAvailability(state: GameplayState): void {
   state.perkAvailable.splice(0, state.perkAvailable.length, ...buildPerkAvailability({ status: state.status }));
 }
 
-export function perkCanOffer(
-  state: GameplayState,
-  player: PlayerState,
-  perkId: PerkId,
-  opts: { gameMode: GameMode; playerCount: number },
-): boolean {
+export function perkCanOffer(state: GameplayState, player: PlayerState, perkId: PerkId, opts: { gameMode: GameMode; playerCount: number }): boolean {
   // Return whether `perk_id` is eligible for selection.
   //
   // Modeled after `perk_can_offer` (0x0042fb10).
 
+  const gameMode = opts.gameMode;
+  const playerCount = opts.playerCount;
   if (perkId === PerkId.ANTIPERK) {
     return false;
   }
 
   // Hardcore quest 2-10 blocks poison-related perks.
-  if (
-    opts.gameMode === GameMode.QUESTS &&
-    state.hardcore &&
-    state.questLevel !== null && state.questLevel.equal(new QuestLevel({ major: 2, minor: 10 })) &&
-    (perkId === PerkId.POISON_BULLETS || perkId === PerkId.VEINS_OF_POISON || perkId === PerkId.PLAGUEBEARER)
-  ) {
+  if (gameMode === GameMode.QUESTS && state.hardcore && pythonEquals(state.questLevel, new QuestLevel({ major: 2, minor: 10 })) && (perkId === PerkId.POISON_BULLETS || perkId === PerkId.VEINS_OF_POISON || perkId === PerkId.PLAGUEBEARER)) {
     return false;
   }
 
-  const meta = PERK_BY_ID.get(perkId);
-  if (meta === undefined) {
+  const meta = PERK_BY_ID.get(perkId) ?? null;
+  if (meta === null) {
     return false;
   }
 
@@ -91,19 +99,15 @@ export function perkCanOffer(
   // - in multiplayer, offered perks must have bit 0x2 set
   // The original game only had 1p/2p, but the port extends this gate to all
   // multiplayer counts for consistent 3p/4p behavior.
-  if (opts.gameMode === GameMode.QUESTS && (flags & PerkFlags.QUEST_MODE_ALLOWED) === 0) {
+  if (gameMode === GameMode.QUESTS && (flags & PerkFlags.QUEST_MODE_ALLOWED) === 0) {
     return false;
   }
-  if (opts.playerCount > 1 && (flags & PerkFlags.MULTIPLAYER_ALLOWED) === 0) {
+  if (playerCount > 1 && (flags & PerkFlags.MULTIPLAYER_ALLOWED) === 0) {
     return false;
   }
 
-  if (meta.prereq.length > 0) {
-    for (const req of meta.prereq) {
-      if (perkCountGet(player, req) <= 0) {
-        return false;
-      }
-    }
+  if (meta.prereq && meta.prereq.some((req) => perkCountGet(player, req) <= 0)) {
+    return false;
   }
 
   return true;

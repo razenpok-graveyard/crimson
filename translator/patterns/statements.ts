@@ -1776,6 +1776,11 @@ export function rewriteStructPositionalConstructors(
 
     const argsText = statement.slice(argsStart, closeIndex);
     const args = splitTopLevelComma(argsText);
+    if (argsText.trim() === '') {
+      output += statement.slice(index, closeIndex + 1);
+      index = closeIndex + 1;
+      continue;
+    }
     if (args.length > fields.length || args[0]?.trim().startsWith('{') === true) {
       output += statement.slice(index, closeIndex + 1);
       index = closeIndex + 1;
@@ -1869,6 +1874,7 @@ export function parseTopLevelAssignment(
     && /^[A-Z0-9_]+$/.test(pythonName.replace(/^_+/, ''))
     && (
       /^frozenset\[/.test(annotatedType?.trim() ?? '')
+      || /^tuple\[/.test(annotatedType?.trim() ?? '')
       || (dictKeyType !== null && mapKeyTypeHasStableIdentity(dictKeyType))
     )
   );
