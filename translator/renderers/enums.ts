@@ -42,6 +42,9 @@ export function renderEnumDefinition(lines: string[], enumDefinition: EnumDefini
 
   lines.push(`export enum ${enumDefinition.name} {`);
   for (const member of enumDefinition.members) {
+    for (const comment of member.leadingComments ?? []) {
+      lines.push(`  // ${comment}`);
+    }
     lines.push(`  ${member.name} = ${member.value},${member.trailingComment === undefined ? '' : ` // ${member.trailingComment}`}`);
   }
   lines.push('}');

@@ -932,6 +932,11 @@ function tsStructFieldDefaultValue(pythonValue: string): string | null {
     return translateExpression(lambdaFactory[1]);
   }
 
+  const dottedFactory = /^msgspec\.field\(default_factory=([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+)\)$/.exec(trimmed);
+  if (dottedFactory !== null) {
+    return `${translateExpression(dottedFactory[1])}()`;
+  }
+
   const factory = /^msgspec\.field\(default_factory=([A-Za-z_][A-Za-z0-9_]*)\)$/.exec(trimmed);
   if (factory !== null) {
     return `new ${tsExportNameForPythonName(factory[1])}()`;

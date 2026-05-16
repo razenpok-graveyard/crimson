@@ -28,11 +28,17 @@ export function parseIntEnumModule(trimmedPython: string): EnumDefinition | null
 
   let docstring: string | null = null;
   const members: EnumDefinition['members'] = [];
+  const pendingMemberComments: string[] = [];
   let valueFunction: EnumDefinition['valueFunction'] | undefined;
   while (index < lines.length) {
     const line = lines[index];
     const trimmed = line.trim();
     if (trimmed === '') {
+      index += 1;
+      continue;
+    }
+    if (trimmed.startsWith('#')) {
+      pendingMemberComments.push(trimmed.replace(/^# ?/, ''));
       index += 1;
       continue;
     }
@@ -50,6 +56,7 @@ export function parseIntEnumModule(trimmedPython: string): EnumDefinition | null
       members.push({
         name: member[1],
         value: member[2],
+        leadingComments: pendingMemberComments.splice(0),
         trailingComment: parsedLine.comment ?? undefined,
       });
       index += 1;
@@ -137,6 +144,7 @@ export function parseStringEnumClass(
   let nextIndex = index + 1;
   let docstring: string | null = null;
   const members: EnumDefinition['members'] = [];
+  const pendingMemberComments: string[] = [];
   while (nextIndex < lines.length) {
     const line = lines[nextIndex];
     const trimmed = line.trim();
@@ -146,6 +154,11 @@ export function parseStringEnumClass(
     }
     if (!line.startsWith('    ')) {
       break;
+    }
+    if (trimmed.startsWith('#')) {
+      pendingMemberComments.push(trimmed.replace(/^# ?/, ''));
+      nextIndex += 1;
+      continue;
     }
 
     const docstringMatch = /^    """(.*)"""$/.exec(line);
@@ -165,6 +178,7 @@ export function parseStringEnumClass(
     members.push({
       name: member[1],
       value: stringValued ? translateExpression(member[2]) : member[2],
+      leadingComments: pendingMemberComments.splice(0),
       trailingComment: parsedLine.comment ?? undefined,
     });
     nextIndex += 1;

@@ -2,8 +2,10 @@
 
 import { Vec2 } from '@grim/geom.ts';
 import { OwnerRef } from '@crimson/owner-ref.ts';
+export { OwnerRef } from '@crimson/owner-ref.ts';
 
-export { OwnerRef };
+export type CreatureDamageApplier = (arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void;
+export type SecondaryDetonationKillHandler = (arg0: number) => void;
 
 export const MAIN_PROJECTILE_POOL_SIZE = 0x60;
 export const SECONDARY_PROJECTILE_POOL_SIZE = 0x40;
@@ -17,19 +19,19 @@ export enum ProjectileTemplateId {
   SUBMACHINE_GUN = 0x05,
   GAUSS_GUN = 0x06,
   PLASMA_RIFLE = 0x09,
-  PLASMA_MINIGUN = 0x0b,
+  PLASMA_MINIGUN = 0x0B,
   PULSE_GUN = 0x13,
   ION_RIFLE = 0x15,
   ION_MINIGUN = 0x16,
   ION_CANNON = 0x17,
   SHRINKIFIER = 0x18,
   BLADE_GUN = 0x19,
-  SPIDER_PLASMA = 0x1a,
-  PLASMA_CANNON = 0x1c,
-  SPLITTER_GUN = 0x1d,
+  SPIDER_PLASMA = 0x1A,
+  PLASMA_CANNON = 0x1C,
+  SPLITTER_GUN = 0x1D,
   PLAGUE_SPREADER = 0x29,
-  RAINBOW_GUN = 0x2b,
-  FIRE_BULLETS = 0x2d,
+  RAINBOW_GUN = 0x2B,
+  FIRE_BULLETS = 0x2D,
 }
 
 export enum SecondaryProjectileTypeId {
@@ -39,16 +41,6 @@ export enum SecondaryProjectileTypeId {
   DETONATION = 3,
   ROCKET_MINIGUN = 4,
 }
-
-export type CreatureDamageApplier = (
-  creatureIndex: number,
-  damage: number,
-  damageType: number,
-  knockback: Vec2,
-  owner: OwnerRef,
-) => void;
-
-export type SecondaryDetonationKillHandler = (creatureIndex: number) => void;
 
 export class ProjectileCollisionProfile {
   readonly hitRadius: number;
