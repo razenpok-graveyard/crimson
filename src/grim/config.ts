@@ -79,7 +79,10 @@ export class CrimsonDisplayConfig {
     this.violenceDisabled = opts.violenceDisabled;
   }
 
-  fxDetailEnabled(level: number, _default: boolean = false): boolean {
+  fxDetailEnabled(opts: { level: number; default?: boolean }): boolean;
+  fxDetailEnabled(level: number, _default?: boolean): boolean;
+  fxDetailEnabled(levelOrOpts: number | { level: number; default?: boolean }, _default: boolean = false): boolean {
+    const level = typeof levelOrOpts === 'number' ? levelOrOpts : levelOrOpts.level;
     return Boolean(this.fxDetail[int(level)]);
   }
 

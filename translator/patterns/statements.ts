@@ -253,6 +253,7 @@ function parseNestedFunctionStatement(
   index: number,
   indent: string,
   outerNameMap: Map<string, string>,
+  outerArrayNames: ReadonlySet<string>,
   validatedTypeAliases: ReadonlySet<string>,
   relativePath: string | null,
   mapNames: ReadonlySet<string>,
@@ -262,7 +263,7 @@ function parseNestedFunctionStatement(
     return null;
   }
 
-  const arrayNames = new Set<string>();
+  const arrayNames = new Set<string>(outerArrayNames);
   const parsedParams = parseFunctionParametersText(header.parametersText, arrayNames);
   if (parsedParams === null) {
     return null;
@@ -396,6 +397,7 @@ export function translateStraightLineStatement(
     index,
     indent,
     nameMap,
+    arrayNames,
     validatedTypeAliases,
     relativePath,
     mapNames,

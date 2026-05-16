@@ -103,6 +103,25 @@ export function drawCircleLines(x: number, y: number, radius: number, color: Col
   ctx.endQuads();
 }
 
+export function drawCircle(x: number, y: number, radius: number, color: Color): void {
+  const r = Math.max(1.0, radius);
+  const segments = Math.max(24, Math.trunc(r * 1.5 + 0.5));
+  const step = (Math.PI * 2.0) / segments;
+
+  ctx.beginQuads(ctx.whiteTexture);
+  ctx.texCoord2f(0.5, 0.5);
+  ctx.color4f(color.r, color.g, color.b, color.a);
+  for (let i = 0; i < segments; i += 1) {
+    const a0 = i * step;
+    const a1 = (i + 1) * step;
+    ctx.vertex2f(x, y);
+    ctx.vertex2f(x, y);
+    ctx.vertex2f(x + Math.cos(a0) * r, y + Math.sin(a0) * r);
+    ctx.vertex2f(x + Math.cos(a1) * r, y + Math.sin(a1) * r);
+  }
+  ctx.endQuads();
+}
+
 export function beginBlendMode(mode: BlendMode): void { ctx.setBlendMode(mode); }
 export function endBlendMode(): void { ctx.setBlendMode(BlendMode.ALPHA); }
 
