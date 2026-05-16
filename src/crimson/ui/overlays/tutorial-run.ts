@@ -55,12 +55,12 @@ export function drawTutorialPromptPanel(text: string, opts: { alpha: number; pos
     return;
   }
   const [rect, lines, lineH] = tutorialPromptPanelRect(text, { measureTextWidth: measureTextWidth, measureLineHeight: measureLineHeight, pos: pos, scale: 1.0 });
-  const fill = wgl.makeColor(0 / 255, 0 / 255, 0 / 255, int(255 * alpha * 0.8) / 255);
-  const border = wgl.makeColor(255 / 255, 255 / 255, 255 / 255, int(255 * alpha) / 255);
-  wgl.drawRectangle(int(rect.x), int(rect.y), int(rect.w), int(rect.h), fill);
-  wgl.drawRectangleLines(int(rect.x), int(rect.y), int(rect.w), int(rect.h), border);
+  const fill = wgl.makeColor(0 / 255, 0 / 255, 0 / 255, Math.trunc(255 * alpha * 0.8) / 255);
+  const border = wgl.makeColor(255 / 255, 255 / 255, 255 / 255, Math.trunc(255 * alpha) / 255);
+  wgl.drawRectangle(Math.trunc(rect.x), Math.trunc(rect.y), Math.trunc(rect.w), Math.trunc(rect.h), fill);
+  wgl.drawRectangleLines(Math.trunc(rect.x), Math.trunc(rect.y), Math.trunc(rect.w), Math.trunc(rect.h), border);
 
-  const textAlpha = int(255 * Math.min(1.0, Math.max(0.0, alpha * 0.9)));
+  const textAlpha = Math.trunc(255 * Math.min(1.0, Math.max(0.0, alpha * 0.9)));
   const color = wgl.makeColor(255 / 255, 255 / 255, 255 / 255, textAlpha / 255);
   const x = rect.x + TUTORIAL_PANEL_PADDING.x;
   let lineY = rect.y + TUTORIAL_PANEL_PADDING.y;

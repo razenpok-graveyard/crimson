@@ -15,7 +15,7 @@ export function creatureFindInRadius(creatures: readonly CreatureState[], opts: 
   const pos = opts.pos;
   const radius = opts.radius;
   let startIndex = opts.startIndex;
-  startIndex = Math.max(0, int(startIndex));
+  startIndex = Math.max(0, Math.trunc(startIndex));
   const maxIndex = Math.min(creatures.length, 0x180);
   if (startIndex >= maxIndex) {
     return -1;
@@ -66,35 +66,35 @@ export class PerksUpdateEffectsCtx {
   }
 
   aimTargetForPlayer(playerIndex: number): number {
-    playerIndex = int(playerIndex);
+    playerIndex = Math.trunc(playerIndex);
     if (this._aimTargetByPlayerIndex.has(playerIndex)) {
-      return int(this._aimTargetByPlayerIndex.get(playerIndex)!);
+      return Math.trunc(this._aimTargetByPlayerIndex.get(playerIndex)!);
     }
 
     let target = -1;
     if (this.creatures === null) {
-      this._aimTargetByPlayerIndex.set(playerIndex, int(target));
-      return int(target);
+      this._aimTargetByPlayerIndex.set(playerIndex, Math.trunc(target));
+      return Math.trunc(target);
     }
 
     if (this.state.preserveBugs && playerIndex !== 0) {
-      this._aimTargetByPlayerIndex.set(playerIndex, int(target));
-      return int(target);
+      this._aimTargetByPlayerIndex.set(playerIndex, Math.trunc(target));
+      return Math.trunc(target);
     }
 
     if (!(playerIndex >= 0 && playerIndex < this.players.length)) {
-      this._aimTargetByPlayerIndex.set(playerIndex, int(target));
-      return int(target);
+      this._aimTargetByPlayerIndex.set(playerIndex, Math.trunc(target));
+      return Math.trunc(target);
     }
 
     const player = this.players[playerIndex];
     if (!this.state.preserveBugs && player.health <= 0.0) {
-      this._aimTargetByPlayerIndex.set(playerIndex, int(target));
-      return int(target);
+      this._aimTargetByPlayerIndex.set(playerIndex, Math.trunc(target));
+      return Math.trunc(target);
     }
 
     target = creatureFindInRadius(this.creatures, { pos: player.aim, radius: 12.0, startIndex: 0 });
-    this._aimTargetByPlayerIndex.set(playerIndex, int(target));
-    return int(target);
+    this._aimTargetByPlayerIndex.set(playerIndex, Math.trunc(target));
+    return Math.trunc(target);
   }
 }

@@ -38,7 +38,7 @@ export function edgeMidpoints(width: number, height: number | null = null, offse
   return new EdgePoints({ left: new Vec2(-offset, center.y), right: new Vec2(width + offset, center.y), top: new Vec2(center.x, -offset), bottom: new Vec2(center.x, height + offset) });
 }
 
-export function cornerPoints(width: number, height: number | null = null, offset: number = 64.0): readonly Vec2[] {
+export function cornerPoints(width: number, height: number | null = null, offset: number = 64.0): Vec2[] {
   if (height === null) {
     height = width;
   }

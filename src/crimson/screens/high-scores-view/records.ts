@@ -35,43 +35,43 @@ function passesDateFilter(entry: HighScoreRecord, opts: { dateMode: number; now:
   //   3 = Best of day
   const dateMode = opts.dateMode;
   const now = opts.now;
-  const mode = int(dateMode);
+  const mode = Math.trunc(dateMode);
   if (mode <= 0) {
     return true;
   }
 
-  const day = int(entry.day);
-  const month = int(entry.month);
-  const yearOff = int(entry.yearOffset);
+  const day = Math.trunc(entry.day);
+  const month = Math.trunc(entry.month);
+  const yearOff = Math.trunc(entry.yearOffset);
   if (day <= 0 || month <= 0) {
     return false;
   }
   const year = 2000 + yearOff;
   if (mode === 1) {
-    return int(month) === int(now.getMonth() + 1) && int(year) === int(now.getFullYear());
+    return Math.trunc(month) === Math.trunc(now.getMonth() + 1) && Math.trunc(year) === Math.trunc(now.getFullYear());
   }
   if (mode === 3) {
-    return int(day) === int(now.getDate()) && int(month) === int(now.getMonth() + 1) && int(year) === int(now.getFullYear());
+    return Math.trunc(day) === Math.trunc(now.getDate()) && Math.trunc(month) === Math.trunc(now.getMonth() + 1) && Math.trunc(year) === Math.trunc(now.getFullYear());
   }
   if (mode === 2) {
     // Week-of-year checksum stored at record byte 0x41.
 
-    const stored = int(entry.data[0x41]);
-    const checksum = int(highscoreDateChecksum(now.getFullYear(), now.getMonth() + 1, now.getDate()));
-    return int(stored) === int(checksum) && int(year) === int(now.getFullYear());
+    const stored = Math.trunc(entry.data[0x41]);
+    const checksum = Math.trunc(highscoreDateChecksum(now.getFullYear(), now.getMonth() + 1, now.getDate()));
+    return Math.trunc(stored) === Math.trunc(checksum) && Math.trunc(year) === Math.trunc(now.getFullYear());
   }
   return true;
 }
 
 export function loadRecords(state: GameState, request: HighScoresRequest): HighScoreRecord[] {
-  const path = scoresPathForMode(state.baseDir, request.gameModeId, { hardcore: state.config.gameplay.hardcore, questStageMajor: request.questLevel === null ? 0 : int(request.questLevel.major), questStageMinor: request.questLevel === null ? 0 : int(request.questLevel.minor), playerCount: state.config.gameplay.playerCount });
+  const path = scoresPathForMode(state.baseDir, request.gameModeId, { hardcore: state.config.gameplay.hardcore, questStageMajor: request.questLevel === null ? 0 : Math.trunc(request.questLevel.major), questStageMinor: request.questLevel === null ? 0 : Math.trunc(request.questLevel.minor), playerCount: state.config.gameplay.playerCount });
   let records: ReturnType<typeof readHighscoreTable>;
   try {
     records = readHighscoreTable(path, { gameModeId: request.gameModeId });
   } catch (exc) {
     return [];
   }
-  const dateMode = int(state.config.profile.scoreDateMode);
+  const dateMode = Math.trunc(state.config.profile.scoreDateMode);
   if (dateMode > 0) {
     const now = new Date();
     records = records.filter((entry) => passesDateFilter(entry, { dateMode: dateMode, now: now }));

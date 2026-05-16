@@ -52,14 +52,14 @@ export function packPlayerInput(inp: PlayerInput, opts: { quant?: InputQuantizat
   ax = quantizeF32(ax);
   ay = quantizeF32(ay);
   const flags = packInputFlags({ fireDown: inp.fireDown, firePressed: inp.firePressed, reloadPressed: inp.reloadPressed, reloadDown: inp.reloadDown, moveMode: inp.moveMode, aimScheme: inp.aimScheme, moveForwardPressed: inp.moveForwardPressed, moveBackwardPressed: inp.moveBackwardPressed, turnLeftPressed: inp.turnLeftPressed, turnRightPressed: inp.turnRightPressed });
-  return [mx, my, ax, ay, int(flags)];
+  return [mx, my, ax, ay, Math.trunc(flags)];
 }
 
 export function unpackPlayerInput(packed: PackedPlayerInput): PlayerInput {
   const [mx, my, ax, ay, flags] = unpackPackedPlayerInput(packed);
-  const [fireDown, firePressed, reloadPressed, reloadDown] = unpackInputFlags(int(flags));
-  const [moveMode, aimScheme] = unpackInputModeFlags(int(flags));
-  const [moveForwardPressed, moveBackwardPressed, turnLeftPressed, turnRightPressed] = unpackInputMoveKeyFlags(int(flags));
+  const [fireDown, firePressed, reloadPressed, reloadDown] = unpackInputFlags(Math.trunc(flags));
+  const [moveMode, aimScheme] = unpackInputModeFlags(Math.trunc(flags));
+  const [moveForwardPressed, moveBackwardPressed, turnLeftPressed, turnRightPressed] = unpackInputMoveKeyFlags(Math.trunc(flags));
   return new PlayerInput({ move: new Vec2(mx, my), aim: new Vec2(ax, ay), moveMode: moveMode, aimScheme: aimScheme, fireDown: fireDown, firePressed: firePressed, reloadPressed: reloadPressed, reloadDown: reloadDown, moveForwardPressed: moveForwardPressed, moveBackwardPressed: moveBackwardPressed, turnLeftPressed: turnLeftPressed, turnRightPressed: turnRightPressed });
 }
 

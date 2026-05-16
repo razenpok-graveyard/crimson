@@ -11,7 +11,7 @@ function entityUidSet(row: TickRecord, kind: string): Set<number> {
   const samples = entitySamplesChannelRequired(row);
   const out: Set<number> = new Set();
   for (const item of entityRows(samples, { kind: kind })) {
-    out.add(int(item.uid));
+    out.add(Math.trunc(item.uid));
   }
   return out;
 }
@@ -20,7 +20,7 @@ export function focusTick(opts: { goldenTrace: string; candidateTrace: string; t
   const goldenTrace = opts.goldenTrace;
   const candidateTrace = opts.candidateTrace;
   const tickIndex = opts.tickIndex;
-  const tick = int(tickIndex);
+  const tick = Math.trunc(tickIndex);
   const expected = new TraceReader(goldenTrace);
   const candidate = new TraceReader(candidateTrace);
   let expectedRow: ReturnType<typeof expected.tick>;
@@ -64,5 +64,5 @@ export function focusTick(opts: { goldenTrace: string; candidateTrace: string; t
 
   let diverged = checkpointDiff !== null || !(rngStream['ok'] ?? null) || entityDiverged || !entitySamplesOk || !simStateOk;
 
-  return toBuiltinObject({ 'tick_index': int(tick), 'diverged': diverged, 'checkpoint_diff_count': checkpointDiff === null ? 0 : int(checkpointDiff.diffCount), 'checkpoint_diff': checkpointDiff === null ? null : { 'payload': checkpointDiff.payload, 'pretty': checkpointDiff.pretty }, 'rng_stream': rngStream, 'entity_presence': entityPresence, 'entity_samples': { 'ok': entitySamplesOk, 'detail': entitySamplesDetail }, 'sim_state': { 'ok': simStateOk, 'detail': simStateDetail } }, { field: 'focus_tick' });
+  return toBuiltinObject({ 'tick_index': Math.trunc(tick), 'diverged': diverged, 'checkpoint_diff_count': checkpointDiff === null ? 0 : Math.trunc(checkpointDiff.diffCount), 'checkpoint_diff': checkpointDiff === null ? null : { 'payload': checkpointDiff.payload, 'pretty': checkpointDiff.pretty }, 'rng_stream': rngStream, 'entity_presence': entityPresence, 'entity_samples': { 'ok': entitySamplesOk, 'detail': entitySamplesDetail }, 'sim_state': { 'ok': simStateOk, 'detail': simStateDetail } }, { field: 'focus_tick' });
 }

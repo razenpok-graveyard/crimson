@@ -121,22 +121,22 @@ function checkpointToObj(checkpoint: ReplayCheckpoint, opts: { includeRngFields:
 
 export function checkpointDeepdiff(expected: ReplayCheckpoint, actual: ReplayCheckpoint): CheckpointDeepDiff | null {
   const [mismatches, diffCount, pretty] = strictMismatchPayload(expected, actual);
-  if (int(diffCount) <= 0) {
+  if (Math.trunc(diffCount) <= 0) {
     return null;
   }
 
   const payload = toBuiltinObject({ 'mismatches': mismatches }, { field: 'checkpoint_diff.payload' });
-  return new CheckpointDeepDiff({ payload: payload, pretty: pythonJsonDumps(payload, { sortKeys: true, indent: 2 }), diffCount: int(diffCount) });
+  return new CheckpointDeepDiff({ payload: payload, pretty: pythonJsonDumps(payload, { sortKeys: true, indent: 2 }), diffCount: Math.trunc(diffCount) });
 }
 
 export function compareCheckpoints(expected: readonly ReplayCheckpoint[], actual: readonly ReplayCheckpoint[]): ReplayDiffResult {
-  const actualByTick = new Map(Array.from(actual, (ckpt) => [int(ckpt.tickIndex), ckpt] as const));
+  const actualByTick = new Map(Array.from(actual, (ckpt) => [Math.trunc(ckpt.tickIndex), ckpt] as const));
   let firstRngOnlyTick: number | null = null;
   let checkedCount = 0;
 
   for (const exp of expected) {
     checkedCount += 1;
-    const tick = int(exp.tickIndex);
+    const tick = Math.trunc(exp.tickIndex);
     const act = actualByTick.has(tick) ? actualByTick.get(tick)! : null;
     if (act === null) {
       return new ReplayDiffResult({ ok: false, checkedCount: checkedCount, firstRngOnlyTick: firstRngOnlyTick, failure: new ReplayDiffFailure({ kind: 'missing_checkpoint', tickIndex: tick, expected: exp, actual: null }) });

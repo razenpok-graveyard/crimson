@@ -76,7 +76,7 @@ export function statusFromReplayStatusFields(opts: { questUnlockIndex: number; q
   const questUnlockIndex = opts.questUnlockIndex;
   const questUnlockIndexFull = opts.questUnlockIndexFull;
   const weaponUsageCounts = opts.weaponUsageCounts ?? [];
-  return GameStatus.fromData({ path: 'replay://status', data: new GameStatusData({ questUnlockIndex: int(questUnlockIndex), questUnlockIndexFull: int(questUnlockIndexFull), weaponUsageCounts: Array.from(weaponUsageCounts) }) });
+  return GameStatus.fromData({ path: 'replay://status', data: new GameStatusData({ questUnlockIndex: Math.trunc(questUnlockIndex), questUnlockIndexFull: Math.trunc(questUnlockIndexFull), weaponUsageCounts: Array.from(weaponUsageCounts) }) });
 }
 
 export function resetPlayers(players: PlayerState[], opts: { state: GameplayState; worldSize: number; playerCount: number; spawnPos?: Vec2 | null }): void {
@@ -88,7 +88,7 @@ export function resetPlayers(players: PlayerState[], opts: { state: GameplayStat
   const spawnPos = opts.spawnPos ?? null;
   resetWorldPlayers(
     players,
-    { state: state, worldSize: worldSize, playerCount: int(playerCount), spawnPos: spawnPos },
+    { state: state, worldSize: worldSize, playerCount: Math.trunc(playerCount), spawnPos: spawnPos },
   );
 }
 
@@ -96,10 +96,10 @@ export function player0Shots(state: GameplayState): [number, number] {
   if (state.shotsFired.length <= 0 || state.shotsHit.length <= 0) {
     return [0, 0];
   }
-  let fired = int(state.shotsFired[0]);
-  let hit = int(state.shotsHit[0]);
-  fired = Math.max(0, int(fired));
-  hit = Math.max(0, Math.min(int(hit), fired));
+  let fired = Math.trunc(state.shotsFired[0]);
+  let hit = Math.trunc(state.shotsHit[0]);
+  fired = Math.max(0, Math.trunc(fired));
+  hit = Math.max(0, Math.min(Math.trunc(hit), fired));
   return [fired, hit];
 }
 

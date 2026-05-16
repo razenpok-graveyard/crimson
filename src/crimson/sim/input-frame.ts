@@ -21,7 +21,7 @@ export class InputFrame {
 export function normalizeInputFrame(inputs: readonly PlayerInput[] | null, opts: { playerCount: number }): InputFrame {
   // Return a fixed-size, player-index-ordered input frame.
   const playerCount = opts.playerCount;
-  const count = Math.max(0, int(playerCount));
+  const count = Math.max(0, Math.trunc(playerCount));
   const frame = Array.from({ length: Math.max(0, count) }, (_, i) => i).map((_) => new PlayerInput());
   if (inputs !== null) {
     const limit = Math.min(inputs.length, count);

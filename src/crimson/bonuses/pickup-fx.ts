@@ -21,7 +21,7 @@ function applyDefaultPickupBurst(opts: { state: GameplayState; pickup: BonusPick
     pos: pickup.pos,
     count: 12,
     rng: state.rng,
-    detailPreset: int(detailPreset),
+    detailPreset: Math.trunc(detailPreset),
     lifetime: 0.4,
     scaleStep: 0.1,
     color: new RGBA(0.4, 0.5, 1.0, 0.5),
@@ -42,10 +42,10 @@ export function emitBonusPickupEffects(opts: { state: GameplayState; pickups: Bo
   const pickups = opts.pickups;
   const detailPreset = opts.detailPreset;
   for (const pickup of pickups) {
-    applyDefaultPickupBurst({ state: state, pickup: pickup, detailPreset: int(detailPreset) });
+    applyDefaultPickupBurst({ state: state, pickup: pickup, detailPreset: Math.trunc(detailPreset) });
     const hook = _BONUS_PICKUP_HOOKS.get(pickup.bonusId) ?? null;
     if (hook !== null) {
-      hook(state, pickup, int(detailPreset));
+      hook(state, pickup, Math.trunc(detailPreset));
     }
   }
 }

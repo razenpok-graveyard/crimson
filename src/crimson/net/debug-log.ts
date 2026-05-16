@@ -117,7 +117,7 @@ export function initLanDebugLog(opts: { baseDir: string; role: string; mode: str
 
   lanDebugLog(
     'init',
-    { role: roleName, mode: mode, buildId: buildId, host: host, port: int(port), playerCount: int(playerCount), autoStart: autoStart, debug: debugEnabled, pid: int(globalThis.process?.pid ?? 0) },
+    { role: roleName, mode: mode, buildId: buildId, host: host, port: Math.trunc(port), playerCount: Math.trunc(playerCount), autoStart: autoStart, debug: debugEnabled, pid: Math.trunc(globalThis.process?.pid ?? 0) },
   );
   return path;
 }

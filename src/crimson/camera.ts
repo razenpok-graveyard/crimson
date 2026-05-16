@@ -18,7 +18,7 @@ export function cameraShakeStart(state: GameplayState, opts: { pulses: number; t
 
   const pulses = opts.pulses;
   const timer = opts.timer;
-  state.cameraShakePulses = int(pulses);
+  state.cameraShakePulses = Math.trunc(pulses);
   state.cameraShakeTimer = timer;
 }
 
@@ -55,7 +55,7 @@ export function cameraShakeUpdate(state: GameplayState, dt: number): void {
   //   iVar4 = camera_shake_pulses * 0x3c;
   //   iVar1 = rand() % (iVar4 / 0x14) + rand() % 10;
   // ... where (pulses * 0x3c) / 0x14 == pulses * 3.
-  const maxAmp = int(state.cameraShakePulses) * 3;
+  const maxAmp = Math.trunc(state.cameraShakePulses) * 3;
   if (maxAmp <= 0) {
     state.cameraShakeOffset = new Vec2();
     state.cameraShakeTimer = 0.0;

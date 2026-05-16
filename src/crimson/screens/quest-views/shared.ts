@@ -89,7 +89,7 @@ export function playerNameDefault(config: CrimsonConfig): string {
 }
 
 export function nextQuestLevel(level: QuestLevel): QuestLevel | null {
-  const nextIndex = int(level.globalIndex) + 1;
+  const nextIndex = Math.trunc(level.globalIndex) + 1;
   if (nextIndex >= 50) {
     return null;
   }

@@ -14,7 +14,7 @@ export function coerceBuiltinValue(value: unknown, opts: { field: string }): Bui
     return value;
   }
   if (typeof value === 'number' && Number.isInteger(value)) {
-    return int(value);
+    return Math.trunc(value);
   }
   if (typeof value === 'number') {
     return value;

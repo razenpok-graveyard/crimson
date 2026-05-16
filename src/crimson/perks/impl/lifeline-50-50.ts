@@ -12,7 +12,7 @@ export function applyLifeline5050(ctx: PerkApplyCtx): void {
 
   let killToggle = false;
   for (const creature of creatures) {
-    if (killToggle && creature.active && creature.hp <= 500.0 && (int(creature.flags) & 0x04) === 0) {
+    if (killToggle && creature.active && creature.hp <= 500.0 && (Math.trunc(creature.flags) & 0x04) === 0) {
       creature.active = false;
       ctx.state.effects.spawnBurst({
         pos: creature.pos,

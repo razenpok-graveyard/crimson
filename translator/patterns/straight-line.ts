@@ -586,7 +586,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       index = statement.nextIndex;
     }
 
-    const returnType = tsTypeExpression(header.returnType);
+    const returnType = tsFunctionReturnTypeExpression(header.returnType);
     functions.push({
       name: tsExportNameForPythonName(header.name),
       exported: !header.name.startsWith('_'),
@@ -888,7 +888,7 @@ function isEnumOnlyImport(trimmedLine: string): boolean {
   if (enumImport === null) {
     return false;
   }
-  return enumImport[1].split(', ').every((name) => ['Enum', 'IntEnum', 'IntFlag', 'unique'].includes(name));
+  return enumImport[1].split(', ').every((name) => ['Enum', 'IntEnum', 'IntFlag', 'auto', 'unique'].includes(name));
 }
 
 function parseTypeVarAssignment(trimmedLine: string): string | null {
@@ -2258,4 +2258,9 @@ function tsLocalNameForPythonAlias(pythonName: string): string {
   return pythonName.startsWith('_')
     ? `_${tsExportNameForPythonName(pythonName)}`
     : tsExportNameForPythonName(pythonName);
+}
+
+function tsFunctionReturnTypeExpression(pythonType: string): string {
+  const typeExpression = tsTypeExpression(pythonType);
+  return pythonType.includes('tuple[') ? typeExpression.replace(/\breadonly /g, '') : typeExpression;
 }

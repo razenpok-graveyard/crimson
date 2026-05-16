@@ -76,7 +76,7 @@ export class AudioRouter {
     }
     const weapon = WEAPON_BY_ID.get(player.weapon.weaponId)!;
 
-    if (int(player.shotSeq) > int(prevShotSeq)) {
+    if (Math.trunc(player.shotSeq) > Math.trunc(prevShotSeq)) {
       if (player.fireBulletsTimer > 0.0) {
         // player_update (crimsonland.exe): when Fire Bullets is active, the regular per-weapon
         // shot sfx is suppressed and replaced by Fire Bullets + Plasma Minigun fire sfx.
@@ -123,7 +123,7 @@ export class AudioRouter {
         gameTuneStarted = true;
         continue;
       }
-      const typeId = int(hits[idx].typeId);
+      const typeId = Math.trunc(hits[idx].typeId);
       this.playSfx(this._hitSfxForType(typeId, { beamTypes: beamTypes, rng: rng }));
     }
   }

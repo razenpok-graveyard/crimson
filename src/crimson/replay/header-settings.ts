@@ -23,7 +23,7 @@ export function replayHeaderFromSessionSettings(settings: LockstepSessionSetting
   const modeRaw = settings.modeId;
   let gameModeId: GameMode;
   try {
-    gameModeId = Object.values(GameMode).includes(modeRaw as GameMode) ? modeRaw as GameMode : (() => { const value = int(modeRaw); if (!Object.values(GameMode).includes(value as GameMode)) { throw new Error('invalid GameMode'); } return value as GameMode; })();
+    gameModeId = Object.values(GameMode).includes(modeRaw as GameMode) ? modeRaw as GameMode : (() => { const value = Math.trunc(modeRaw); if (!Object.values(GameMode).includes(value as GameMode)) { throw new Error('invalid GameMode'); } return value as GameMode; })();
   } catch (exc) {
     throw new Error(`unsupported replay game_mode_id=${modeRaw}`);
   }

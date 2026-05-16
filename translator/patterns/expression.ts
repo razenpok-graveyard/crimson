@@ -869,7 +869,7 @@ export function translateExpression(
 
   const intCall = parseCallPrefix(trimmed, 'int');
   if (intCall !== null && intCall.rest === '') {
-    return `int(${translateExpression(intCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    return `Math.trunc(${translateExpression(intCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
   for (const primitiveName of ['float']) {
@@ -1445,6 +1445,7 @@ export function translateExpression(
     )
     .replaceAll(/\b[A-Z][A-Za-z0-9_]*Id\(([^()]*)\)/g, (_match, value: string) => translateExpression(value, nameMap, arrayNames, validatedTypeAliases, mapNames))
     .replaceAll(/\b(?:list|tuple)\(([^()]*)\)/g, 'Array.from($1)')
+    .replaceAll(/\bint\(([^()]*)\)/g, 'Math.trunc($1)')
     .replaceAll(/\b(?:float|str|bool)\(([^()]*)\)/g, '$1')
     .replaceAll(/\b([A-Za-z_][A-Za-z0-9_]*)\.([rgba])\b/g, (_match, name: string, channel: string) => {
       const translatedName = translateExpression(name, nameMap, arrayNames, validatedTypeAliases, mapNames);

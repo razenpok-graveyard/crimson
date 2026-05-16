@@ -56,8 +56,8 @@ export function loadSmallFont(assetsRoot: string): SmallFontData {
 }
 
 export function drawSmallText(font: SmallFontData, text: string, pos: Vec2, color: rl.Color): void {
-  let xPos = int(pos.x);
-  let yPos = int(pos.y);
+  let xPos = Math.trunc(pos.x);
+  let yPos = Math.trunc(pos.y);
   const baseX = xPos;
   const lineHeight = font.cellSize;
   const origin = wgl.makeVector2(0.0, 0.0);

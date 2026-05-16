@@ -115,6 +115,32 @@ export function parseStraightLineFunctionHeader(
       };
     }
 
+    const multilineReturnStart = /^\) -> (.+)$/.exec(lines[nextIndex] ?? '');
+    if (multilineReturnStart !== null) {
+      const returnTypeLines = [multilineReturnStart[1]];
+      nextIndex += 1;
+      while (nextIndex < lines.length) {
+        const returnLine = lines[nextIndex] ?? '';
+        const trimmed = returnLine.trim();
+        const returnTypeClose = /^(.*):$/.exec(trimmed);
+        if (returnTypeClose !== null) {
+          returnTypeLines.push(returnTypeClose[1]);
+          return {
+            name: start[1],
+            parametersText: parameterLines.join(', '),
+            returnType: normalizeMultilineTypeExpression(returnTypeLines),
+            nextIndex: nextIndex + 1,
+          };
+        }
+        if (trimmed === '') {
+          return null;
+        }
+        returnTypeLines.push(trimmed);
+        nextIndex += 1;
+      }
+      return null;
+    }
+
     const parameterLine = /^    (.+),$/.exec(lines[nextIndex] ?? '');
     if (parameterLine === null) {
       return null;
@@ -125,6 +151,22 @@ export function parseStraightLineFunctionHeader(
 
   return null;
 }
+
+function normalizeMultilineTypeExpression(lines: string[]): string {
+  return lines
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\[\s+/g, '[')
+    .replace(/\s+]/g, ']')
+    .replace(/,\s*]/g, ']')
+    .trim();
+}
+
+function tsFunctionReturnTypeExpression(pythonType: string): string {
+  const typeExpression = tsTypeExpression(pythonType);
+  return pythonType.includes('tuple[') ? typeExpression.replace(/\breadonly /g, '') : typeExpression;
+}
+
 function pushImportDefinition(imports: ImportDefinition[], importDefinition: ImportDefinition): void {
   const existing = imports.find((candidate) => (
     candidate.modulePath === importDefinition.modulePath
@@ -300,7 +342,7 @@ function parseNestedFunctionStatement(
   }
 
   const async = statements.some((statement) => statement.includes('await '));
-  const returnType = tsTypeExpression(header.returnType);
+  const returnType = tsFunctionReturnTypeExpression(header.returnType);
   return {
     statements: [
       `${async ? 'async ' : ''}function ${tsExportNameForPythonName(header.name)}(${params.join(', ')}): ${async ? `Promise<${returnType}>` : returnType} {`,
@@ -1439,6 +1481,32 @@ export function translateStraightLineStatement(
         mapNames,
       );
     }
+    if (assignment[3] === '[') {
+      const listLiteral = collectMultilineListLiteral(
+        lines,
+        index + 1,
+        indent,
+        nameMap,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+      );
+      if (listLiteral === null) {
+        return null;
+      }
+      return translateStraightLineAssignment(
+        assignment[1],
+        assignment[2],
+        `[${listLiteral.items.join(', ')}]`,
+        listLiteral.nextIndex,
+        nameMap,
+        declaredNames,
+        reassignedNames,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+      );
+    }
     if (assignment[3] === '(') {
       const expressionLines: string[] = [];
       let nextIndex = index + 1;
@@ -1616,6 +1684,23 @@ export function translateStraightLineStatement(
         }
         positionalParts.push(dictLiteral.expression);
         nextIndex = dictLiteral.nextIndex;
+        continue;
+      }
+      if (arg === '(' || arg === '[') {
+        const sequenceLiteral = collectMultilineSequenceLiteral(
+          lines,
+          nextIndex + 1,
+          arg === '(' ? ')' : ']',
+          nameMap,
+          arrayNames,
+          validatedTypeAliases,
+          mapNames,
+        );
+        if (sequenceLiteral === null) {
+          return null;
+        }
+        positionalParts.push(`[${sequenceLiteral.items.join(', ')}]`);
+        nextIndex = sequenceLiteral.nextIndex;
         continue;
       }
       const conditionalArg = parseMultilineConditionalArgument(
@@ -1943,6 +2028,53 @@ function collectMultilineListLiteral(
   return null;
 }
 
+function collectMultilineSequenceLiteral(
+  lines: string[],
+  startIndex: number,
+  closeLine: ')' | ']',
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): { items: string[]; nextIndex: number } | null {
+  const items: string[] = [];
+  let nextIndex = startIndex;
+  while (nextIndex < lines.length) {
+    const trimmed = lines[nextIndex].trim();
+    if (trimmed === closeLine || trimmed === `${closeLine},`) {
+      return { items, nextIndex: nextIndex + 1 };
+    }
+    if (trimmed === '') {
+      nextIndex += 1;
+      continue;
+    }
+
+    const item = trimmed.replace(/,$/, '');
+    const multilineCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(item);
+    if (multilineCall !== null) {
+      const callExpression = parseMultilineCallExpression(
+        lines,
+        nextIndex + 1,
+        multilineCall[1],
+        nameMap,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+      );
+      if (callExpression === null) {
+        return null;
+      }
+      items.push(callExpression.expression);
+      nextIndex = callExpression.nextIndex;
+      continue;
+    }
+
+    items.push(translateExpression(item, nameMap, arrayNames, validatedTypeAliases, mapNames));
+    nextIndex += 1;
+  }
+  return null;
+}
+
 function collectMultilineDictLiteral(
   lines: string[],
   startIndex: number,
@@ -1952,11 +2084,16 @@ function collectMultilineDictLiteral(
   mapNames: ReadonlySet<string>,
 ): { expression: string; nextIndex: number } | null {
   const parts: string[] = [];
+  const entries: string[] = [];
+  let requiresMap = false;
   let nextIndex = startIndex;
   while (nextIndex < lines.length) {
     const trimmed = lines[nextIndex].trim();
     if (trimmed === '}' || trimmed === '},') {
-      return { expression: `{ ${parts.join(', ')} }`, nextIndex: nextIndex + 1 };
+      return {
+        expression: requiresMap ? `new Map([${entries.join(', ')}])` : `{ ${parts.join(', ')} }`,
+        nextIndex: nextIndex + 1,
+      };
     }
     if (trimmed === '') {
       nextIndex += 1;
@@ -1975,9 +2112,14 @@ function collectMultilineDictLiteral(
       valueParts.push(lines[nextIndex].trim());
       nextIndex += 1;
     }
-    const key = renderObjectLiteralKey(item[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
     const value = stripBalancedOuterParens(valueParts.join(' ').replace(/,\s*$/, ''));
-    parts.push(`${key}: ${translateExpression(value, nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
+    const translatedValue = translateExpression(value, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const stringKey = parsePythonStringExpression(item[1]);
+    if (stringKey === null) {
+      requiresMap = true;
+    }
+    entries.push(`[${translateExpression(item[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translatedValue}]`);
+    parts.push(`${renderObjectLiteralKey(item[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}: ${translatedValue}`);
   }
   return null;
 }
@@ -2521,6 +2663,26 @@ function parseMultilineCallParts(
       nextIndex = dictLiteral.nextIndex;
       continue;
     }
+    if (arg === '(' || arg === '[') {
+      if (sawKeyword) {
+        return null;
+      }
+      const sequenceLiteral = collectMultilineSequenceLiteral(
+        lines,
+        nextIndex + 1,
+        arg === '(' ? ')' : ']',
+        nameMap,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+      );
+      if (sequenceLiteral === null) {
+        return null;
+      }
+      positionalParts.push(`[${sequenceLiteral.items.join(', ')}]`);
+      nextIndex = sequenceLiteral.nextIndex;
+      continue;
+    }
     const stringLiteral = parsePythonStringExpression(arg);
     if (stringLiteral !== null && !trimmed.endsWith(',')) {
       const adjacentStrings = [arg];
@@ -2680,6 +2842,10 @@ function translateStraightLineAssignment(
       arrayNames.add(localAssignment[1]);
     }
     if (/^Array\.from\(/.test(assignedRight)) {
+      arrayNames.add(localAssignment[1]);
+      arrayNames.add(tsName);
+    }
+    if (assignedRight.startsWith('[')) {
       arrayNames.add(localAssignment[1]);
       arrayNames.add(tsName);
     }

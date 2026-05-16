@@ -136,16 +136,18 @@ export function parseStringEnumClass(
   index: number,
 ): { enumDefinition: EnumDefinition; nextIndex: number } | null {
   const classIndex = (lines[index] ?? '').trim() === '@unique' ? index + 1 : index;
-  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\((str, Enum|IntEnum|IntFlag)\):$/.exec(lines[classIndex] ?? '');
+  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\((str, Enum|Enum|IntEnum|IntFlag)\):$/.exec(lines[classIndex] ?? '');
   if (header === null) {
     return null;
   }
   const stringValued = header[2] === 'str, Enum';
+  const autoValued = header[2] === 'Enum';
 
   let nextIndex = classIndex + 1;
   let docstring: string | null = null;
   const members: EnumDefinition['members'] = [];
   const pendingMemberComments: string[] = [];
+  let nextAutoValue = 1;
   while (nextIndex < lines.length) {
     const line = lines[nextIndex];
     const trimmed = line.trim();
@@ -172,16 +174,22 @@ export function parseStringEnumClass(
     const parsedLine = splitInlineComment(line);
     const member = stringValued
       ? /^    ([A-Z][A-Z0-9_]*) = (["'][^"']*["'])$/.exec(parsedLine.code)
-      : /^    ([A-Z][A-Z0-9_]*) = (-?(?:0x[0-9A-Fa-f]+|\d+))$/.exec(parsedLine.code);
+      : autoValued
+        ? /^    ([A-Z][A-Z0-9_]*) = (auto\(\)|-?(?:0x[0-9A-Fa-f]+|\d+))$/.exec(parsedLine.code)
+        : /^    ([A-Z][A-Z0-9_]*) = (-?(?:0x[0-9A-Fa-f]+|\d+))$/.exec(parsedLine.code);
     if (member === null) {
       return null;
     }
+    const value = autoValued && member[2] === 'auto()'
+      ? String(nextAutoValue)
+      : stringValued ? translateExpression(member[2]) : member[2];
     members.push({
       name: member[1],
-      value: stringValued ? translateExpression(member[2]) : member[2],
+      value,
       leadingComments: pendingMemberComments.splice(0),
       trailingComment: parsedLine.comment ?? undefined,
     });
+    nextAutoValue = Number.parseInt(value, 0) + 1;
     nextIndex += 1;
   }
 

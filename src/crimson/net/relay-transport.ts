@@ -26,9 +26,9 @@ export class RelayUdpTransport {
   get boundPort(): number {
     const sock = this._sock;
     if (sock === null) {
-      return int(this.bindPort);
+      return Math.trunc(this.bindPort);
     }
-    return int(sock.getsockname()[1]);
+    return Math.trunc(sock.getsockname()[1]);
   }
 
   open(): void {
@@ -37,7 +37,7 @@ export class RelayUdpTransport {
     }
     const sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM);
     sock.setblocking(false);
-    sock.bind([String(this.bindHost), int(this.bindPort)]);
+    sock.bind([String(this.bindHost), Math.trunc(this.bindPort)]);
     this._sock = sock;
   }
 
@@ -60,7 +60,7 @@ export class RelayUdpTransport {
       throw new Error('transport is not open');
     }
     const blob = encodePacket(packet);
-    sock.sendto(blob, [String(addr[0]), int(addr[1])]);
+    sock.sendto(blob, [String(addr[0]), Math.trunc(addr[1])]);
   }
 
   recvPackets(opts: { maxPackets?: number | null } = {}): [PeerAddr, RelayPacket][] {
@@ -70,19 +70,19 @@ export class RelayUdpTransport {
       return [];
     }
     const out: [PeerAddr, RelayPacket][] = [];
-    const cap = maxPackets === null ? null : Math.max(0, int(maxPackets));
+    const cap = maxPackets === null ? null : Math.max(0, Math.trunc(maxPackets));
     while (true) {
-      if (cap !== null && out.length >= int(cap)) {
+      if (cap !== null && out.length >= Math.trunc(cap)) {
         break;
       }
       let blob: ReturnType<typeof sock.recvfrom>[0];
       let rawAddr: ReturnType<typeof sock.recvfrom>[1];
       try {
-        [blob, rawAddr] = sock.recvfrom(int(this.recvBufferSize));
+        [blob, rawAddr] = sock.recvfrom(Math.trunc(this.recvBufferSize));
       } catch (exc) {
         break;
       }
-      const addr: PeerAddr = [String(rawAddr[0]), int(rawAddr[1])];
+      const addr: PeerAddr = [String(rawAddr[0]), Math.trunc(rawAddr[1])];
       let packet: ReturnType<typeof decodePacket>;
       try {
         packet = decodePacket(blob);

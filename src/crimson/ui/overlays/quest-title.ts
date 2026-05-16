@@ -56,13 +56,13 @@ export function layoutQuestTitleOverlay(opts: { screenWidth: number; screenHeigh
   const title = opts.title;
   const number = opts.number;
   const fontAdvance = opts.fontAdvance;
-  const titleScale = questTitleBaseScale(int(screenWidth));
+  const titleScale = questTitleBaseScale(Math.trunc(screenWidth));
   const numberScale = questNumberScale(titleScale);
 
   const titleWidth = Array.from(title).length * fontAdvance * titleScale;
   // The game uses integer division for screen center (width/2, height/2) before converting to float.
-  const centerX = Math.floor(int(screenWidth) / 2);
-  const centerY = Math.floor(int(screenHeight) / 2);
+  const centerX = Math.floor(Math.trunc(screenWidth) / 2);
+  const centerY = Math.floor(Math.trunc(screenHeight) / 2);
   const titlePos = new Vec2(centerX - (titleWidth / 2.0), centerY - QUEST_TITLE_Y_OFFSET);
 
   const numberX = titlePos.x - (Array.from(number).length * numberScale * QUEST_NUMBER_HALF_ADVANCE) - (numberScale * QUEST_NUMBER_BASE_GAP) - QUEST_NUMBER_FIXED_OFFSET;
@@ -76,8 +76,8 @@ export function drawQuestTitleOverlay(font: GrimMonoFont, title: string, number:
   alpha = Math.max(0.0, Math.min(1.0, alpha));
   const layout = layoutQuestTitleOverlay({ screenWidth: wgl.getScreenWidth(), screenHeight: wgl.getScreenHeight(), title: title, number: number, fontAdvance: font.advance });
 
-  const titleColor = wgl.makeColor(255 / 255, 255 / 255, 255 / 255, int(255 * QUEST_TITLE_ALPHA * alpha) / 255);
-  const numberColor = wgl.makeColor(255 / 255, 255 / 255, 255 / 255, int(255 * QUEST_TITLE_ALPHA * QUEST_NUMBER_ALPHA_RATIO * alpha) / 255);
+  const titleColor = wgl.makeColor(255 / 255, 255 / 255, 255 / 255, Math.trunc(255 * QUEST_TITLE_ALPHA * alpha) / 255);
+  const numberColor = wgl.makeColor(255 / 255, 255 / 255, 255 / 255, Math.trunc(255 * QUEST_TITLE_ALPHA * QUEST_NUMBER_ALPHA_RATIO * alpha) / 255);
 
   drawGrimMonoText(font, title, layout.titlePos, layout.titleScale, titleColor);
   drawGrimMonoText(font, number, layout.numberPos, layout.numberScale, numberColor);

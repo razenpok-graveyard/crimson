@@ -24,6 +24,6 @@ export function drawScreenFade(state: GameState): void {
   if (alpha <= 0.0) {
     return;
   }
-  const shade = int(Math.max(0.0, Math.min(1.0, alpha)) * 255.0);
-  wgl.drawRectangle(0, 0, int(wgl.getScreenWidth()), int(wgl.getScreenHeight()), wgl.makeColor(0 / 255, 0 / 255, 0 / 255, shade / 255));
+  const shade = Math.trunc(Math.max(0.0, Math.min(1.0, alpha)) * 255.0);
+  wgl.drawRectangle(0, 0, Math.trunc(wgl.getScreenWidth()), Math.trunc(wgl.getScreenHeight()), wgl.makeColor(0 / 255, 0 / 255, 0 / 255, shade / 255));
 }

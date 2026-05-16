@@ -78,10 +78,10 @@ export class QuestDefinition {
   }
 
   get major(): number {
-    return int(this.level.major);
+    return Math.trunc(this.level.major);
   }
 
   get minor(): number {
-    return int(this.level.minor);
+    return Math.trunc(this.level.minor);
   }
 }

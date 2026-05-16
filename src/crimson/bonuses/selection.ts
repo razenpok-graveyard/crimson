@@ -82,12 +82,12 @@ export function bonusPickRandomType(pool: BonusPool, state: GameplayState, playe
       }
     } else {
       bucketOffset = roll - 14;
-      bonusValue = int(BonusId.WEAPON);
+      bonusValue = Math.trunc(BonusId.WEAPON);
       while (bucketOffset > 10) {
         bucketOffset -= 10;
         bonusValue += 1;
         if (bonusValue >= 15) {
-          bonusValue = int(BonusId.UNUSED);
+          bonusValue = Math.trunc(BonusId.UNUSED);
           break;
         }
       }

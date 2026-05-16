@@ -29,7 +29,7 @@ export function applyReflexBoostPickupFx(opts: { state: GameplayState; pickup: B
   const detailPreset = opts.detailPreset;
   state.effects.spawnRing({
     pos: pickup.pos,
-    detailPreset: int(detailPreset),
+    detailPreset: Math.trunc(detailPreset),
     color: new RGBA(0.6, 0.6, 1.0, 1.0),
   });
 }
