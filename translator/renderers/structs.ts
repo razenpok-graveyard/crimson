@@ -170,7 +170,8 @@ export function renderStructClasses(lines: string[], classes: StructModule['clas
         const allOptsHaveDefaults = method.optsParams.every((param) => param.defaultValue !== null);
         params.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
       }
-      lines.push(`  ${method.static === true ? 'static ' : ''}${method.async === true ? 'async ' : ''}${method.name}${renderTypeParameters(method)}(${params.join(', ')}): ${renderFunctionReturnType(method)} {`);
+      const returnType = method.name.startsWith('set ') ? '' : `: ${renderFunctionReturnType(method)}`;
+      lines.push(`  ${method.static === true ? 'static ' : ''}${method.async === true ? 'async ' : ''}${method.name}${renderTypeParameters(method)}(${params.join(', ')})${returnType} {`);
       for (const param of method.optsParams) {
         const declaration = functionBodyAssignsName(method.statements, param.name) ? 'let' : 'const';
         if (param.defaultValue === null) {

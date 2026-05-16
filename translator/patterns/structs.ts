@@ -26,6 +26,7 @@ import {
 } from './common.js';
 import {
   arrayValueMapNameMarker,
+  receiverTypeNameMarker,
   translateExpression,
   tupleElementArrayNameMarker,
   tupleKeyMapNameMarker,
@@ -34,6 +35,7 @@ import {
   functionSignatureMarker,
   parseStraightLineFunctionHeader,
 } from './function-headers.js';
+import { recordImportedInstanceMethodSignatures } from './imported-classes.js';
 import { parseFunctionParameterText, parseFunctionParametersText, pythonParameterNames } from './parameters.js';
 import {
   reassignedLocalNames,
@@ -138,11 +140,19 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
     if (fromImport === null) {
       break;
     }
+    const modulePath = tsImportPathForPythonImport(fromImport[1], relativePath);
+    const names = fromImport[2].split(', ').map(tsExportNameForPythonName);
     imports.push({
-      modulePath: tsImportPathForPythonImport(fromImport[1], relativePath),
-      names: fromImport[2].split(', ').map(tsExportNameForPythonName),
+      modulePath,
+      names,
     });
-    if (tsImportPathForPythonImport(fromImport[1], relativePath) === '@crimson/bonuses/hud.ts') {
+    recordImportedInstanceMethodSignatures(
+      modulePath,
+      names.map((name) => ({ importedName: name, localName: name })),
+      relativePath,
+      moduleNameMap,
+    );
+    if (modulePath === '@crimson/bonuses/hud.ts') {
       for (const name of fromImport[2].split(', ')) {
         if (name === '_TimerRef') {
           structConstructorFields.set('TimerRef', ['kind', 'key', 'playerIndex']);
@@ -369,6 +379,7 @@ export function parseStructClass(
   const methods: SimpleModuleFunction[] = [];
   const arrayFieldNames = new Set<string>();
   const mapFieldNames = new Set<string>(initialMapNames);
+  const classNameMap = new Map(moduleNameMap);
   let postInitStatements: string[] = [];
   const pendingFieldComments: string[] = [];
   while (nextIndex < lines.length) {
@@ -394,7 +405,7 @@ export function parseStructClass(
 
     if (trimmedField === '@property') {
       pendingFieldComments.length = 0;
-      const propertyMethod = parseStructMethod(lines, nextIndex + 1, false, arrayFieldNames, mapFieldNames, moduleNameMap);
+      const propertyMethod = parseStructMethod(lines, nextIndex + 1, false, arrayFieldNames, mapFieldNames, classNameMap);
       if (propertyMethod === null || propertyMethod.method.parameters.length > 0 || propertyMethod.method.optsParams.length > 0) {
         return null;
       }
@@ -406,9 +417,29 @@ export function parseStructClass(
       continue;
     }
 
+    const propertySetter = /^@([A-Za-z_][A-Za-z0-9_]*)\.setter$/.exec(trimmedField);
+    if (propertySetter !== null) {
+      pendingFieldComments.length = 0;
+      const setterMethod = parseStructMethod(lines, nextIndex + 1, false, arrayFieldNames, mapFieldNames, classNameMap);
+      if (
+        setterMethod === null
+        || setterMethod.method.name !== tsAttributeNameForPythonName(propertySetter[1])
+        || setterMethod.method.parameters.length !== 1
+        || setterMethod.method.optsParams.length > 0
+      ) {
+        return null;
+      }
+      methods.push({
+        ...setterMethod.method,
+        name: `set ${setterMethod.method.name}`,
+      });
+      nextIndex = setterMethod.nextIndex;
+      continue;
+    }
+
     if (trimmedField === '@staticmethod') {
       pendingFieldComments.length = 0;
-      const staticMethod = parseStructMethod(lines, nextIndex + 1, true, arrayFieldNames, mapFieldNames, moduleNameMap);
+      const staticMethod = parseStructMethod(lines, nextIndex + 1, true, arrayFieldNames, mapFieldNames, classNameMap);
       if (staticMethod === null) {
         return null;
       }
@@ -419,7 +450,7 @@ export function parseStructClass(
 
     if (trimmedField === '@classmethod') {
       pendingFieldComments.length = 0;
-      const classMethod = parseStructMethod(lines, nextIndex + 1, true, arrayFieldNames, mapFieldNames, moduleNameMap, className);
+      const classMethod = parseStructMethod(lines, nextIndex + 1, true, arrayFieldNames, mapFieldNames, classNameMap, className);
       if (classMethod === null) {
         return null;
       }
@@ -428,7 +459,7 @@ export function parseStructClass(
       continue;
     }
 
-    const method = parseStructMethod(lines, nextIndex, false, arrayFieldNames, mapFieldNames, moduleNameMap);
+    const method = parseStructMethod(lines, nextIndex, false, arrayFieldNames, mapFieldNames, classNameMap);
     if (method !== null) {
       pendingFieldComments.length = 0;
       if (method.method.name === '__post_init__') {
@@ -454,6 +485,11 @@ export function parseStructClass(
     const defaultValue = defaultValueText === null ? null : tsStructFieldDefaultValue(defaultValueText.value);
     const fieldName = tsAttributeNameForPythonName(field[1]);
     const typeExpression = tsStructFieldType(field[2]);
+    const fieldTypeName = simpleClassTypeName(typeExpression);
+    if (fieldTypeName !== null) {
+      classNameMap.set(receiverTypeNameMarker(`self.${field[1]}`), fieldTypeName);
+      classNameMap.set(receiverTypeNameMarker(`this.${fieldName}`), fieldTypeName);
+    }
     if (typeExpression.endsWith('[]')) {
       arrayFieldNames.add(`self.${field[1]}`);
       arrayFieldNames.add(`this.${fieldName}`);
@@ -660,6 +696,12 @@ function parseStructMethod(
   } else if (!staticMethod) {
     nameMap.set('self', 'this');
   }
+  for (const parameter of [...parameters, ...optsParams]) {
+    const parameterTypeName = simpleClassTypeName(parameter.typeExpression);
+    if (parameterTypeName !== null) {
+      nameMap.set(receiverTypeNameMarker(parameter.name), parameterTypeName);
+    }
+  }
   const declaredNames = new Set<string>(pythonParameterNames(extraParameters));
   const reassignedNames = reassignedLocalNames(lines, header.nextIndex);
   let nextIndex = header.nextIndex;
@@ -737,6 +779,18 @@ function pythonMapValueIsList(pythonType: string): boolean {
 function pythonListElementCanBeTuple(pythonType: string): boolean {
   const listType = /^list\[(.+)\]$/.exec(pythonType.trim());
   return listType !== null && listType[1].includes('tuple[');
+}
+
+function simpleClassTypeName(typeExpression: string): string | null {
+  const typeParts = typeExpression
+    .split('|')
+    .map((part) => part.trim())
+    .filter((part) => part !== 'null' && part !== 'undefined');
+  if (typeParts.length !== 1) {
+    return null;
+  }
+  const typeName = /^([A-Z][A-Za-z0-9_$]*)$/.exec(typeParts[0]);
+  return typeName?.[1] ?? null;
 }
 
 function parseSimpleProtocolClass(

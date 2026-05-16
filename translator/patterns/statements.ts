@@ -27,12 +27,14 @@ import {
   translatePositionalCallExpression,
   arrayValueMapNameMarker,
   dateNameMarker,
+  instanceMethodSignatureMarker,
   nullableNameMarker,
   numberArrayNameMarker,
   objectNameMarker,
   pathArrayNameMarker,
   pathNameMarker,
   rectangleNameMarker,
+  receiverTypeNameMarker,
   setNameMarker,
   splitTopLevelLogicalOperator,
   stringNameMarker,
@@ -396,6 +398,18 @@ export function translateStraightLineStatement(
       nameMap.set(name, tsMutableNameForPythonName(name));
     }
     return { statements: [], nextIndex: index + 1 };
+  }
+
+  const assertStatement = /^assert (.+?)(?:, (.+))?$/.exec(statement);
+  if (assertStatement !== null) {
+    const condition = translateConditionExpression(assertStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const message = assertStatement[2] === undefined
+      ? ''
+      : translateExpression(assertStatement[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return {
+      statements: [`if (!(${condition})) throw new Error(${message});`],
+      nextIndex: index + 1,
+    };
   }
 
   const sideEffectImport = /^from (\.+) import ([A-Za-z_][A-Za-z0-9_]*) as (_[A-Za-z_][A-Za-z0-9_]*)(?:\s+#.*)?$/.exec(statement);
@@ -2677,7 +2691,7 @@ function translateMultilineCallWithLocalSignature(
   if (callParts.keywordArgParts.length === 0) {
     return null;
   }
-  const signature = parseLocalFunctionCallSignature(pythonCallee, nameMap);
+  const signature = parseKnownFunctionCallSignature(pythonCallee, nameMap, arrayNames, validatedTypeAliases);
   if (signature === null) {
     return null;
   }
@@ -2685,12 +2699,14 @@ function translateMultilineCallWithLocalSignature(
   const consumedKeywords = new Set<string>();
   const args = callParts.positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
   for (const pythonName of signature.positional.slice(args.length)) {
-    const keywordPart = callParts.keywordArgParts.find((part) => part.pythonName === pythonName);
+    const keywordPart = callParts.keywordArgParts.find((part) => (
+      part.pythonName === pythonName || tsExportNameForPythonName(part.pythonName) === pythonName
+    ));
     if (keywordPart === undefined) {
       break;
     }
     args.push(keywordPart.expression);
-    consumedKeywords.add(pythonName);
+    consumedKeywords.add(keywordPart.pythonName);
   }
 
   const keywordParts = callParts.keywordArgParts
@@ -2700,6 +2716,54 @@ function translateMultilineCallWithLocalSignature(
     args.push(`{ ${keywordParts.join(', ')} }`);
   }
   return `${callPrefix}(${args.join(', ')})`;
+}
+
+function parseKnownFunctionCallSignature(
+  pythonCallee: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+): FunctionCallSignature | null {
+  const localSignature = parseLocalFunctionCallSignature(pythonCallee, nameMap);
+  if (localSignature !== null) {
+    return localSignature;
+  }
+  const dotted = /^(.+)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(pythonCallee);
+  if (dotted === null) {
+    return null;
+  }
+  const receiver = translateExpression(dotted[1], nameMap, arrayNames, validatedTypeAliases);
+  const receiverType = nameMap.get(receiverTypeNameMarker(dotted[1])) ?? nameMap.get(receiverTypeNameMarker(receiver));
+  if (receiverType === undefined) {
+    return null;
+  }
+  return parseFunctionCallSignatureText(
+    nameMap.get(instanceMethodSignatureMarker(receiverType, tsAttributeNameForPythonName(dotted[2]))),
+  );
+}
+
+function tsAttributeNameForPythonName(pythonName: string): string {
+  return pythonName.startsWith('_')
+    ? `_${tsExportNameForPythonName(pythonName)}`
+    : tsExportNameForPythonName(pythonName);
+}
+
+function parseFunctionCallSignatureText(signatureText: string | undefined): FunctionCallSignature | null {
+  if (signatureText === undefined) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(signatureText) as Partial<FunctionCallSignature>;
+    if (!Array.isArray(parsed.positional) || !parsed.positional.every((name) => typeof name === 'string')) {
+      return null;
+    }
+    return {
+      positional: parsed.positional,
+      returnTupleMarkers: parsed.returnTupleMarkers,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function parseLocalFunctionCallSignature(

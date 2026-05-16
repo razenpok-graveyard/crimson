@@ -154,6 +154,24 @@ export function parsePlainClass(
       nextIndex = propertyMethod.nextIndex;
       continue;
     }
+    const propertySetter = /^@([A-Za-z_][A-Za-z0-9_]*)\.setter$/.exec(trimmed);
+    if (propertySetter !== null) {
+      const setterMethod = parsePlainClassMethod(lines, nextIndex + 1, fieldNameMap, moduleNameMap, false, fieldArrayNames);
+      if (
+        setterMethod === null
+        || setterMethod.method.name !== tsExportNameForPythonName(propertySetter[1])
+        || setterMethod.method.parameters.length !== 1
+        || setterMethod.method.optsParams.length > 0
+      ) {
+        return null;
+      }
+      methods.push({
+        ...setterMethod.method,
+        name: `set ${setterMethod.method.name}`,
+      });
+      nextIndex = setterMethod.nextIndex;
+      continue;
+    }
     if (trimmed === '@staticmethod') {
       const staticMethod = parsePlainClassMethod(lines, nextIndex + 1, fieldNameMap, moduleNameMap, true, fieldArrayNames);
       if (staticMethod === null) {

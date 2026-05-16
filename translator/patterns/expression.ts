@@ -309,6 +309,31 @@ export function staticClassMethodNameMarker(className: string, methodName: strin
   return `__static_class_method__:${className}:${methodName}`;
 }
 
+export function instanceMethodSignatureMarker(className: string, methodName: string): string {
+  return `__instance_method_signature__:${className}:${methodName}`;
+}
+
+type FunctionCallSignature = {
+  positional: string[];
+};
+
+function parseFunctionCallSignature(signatureText: string | undefined): FunctionCallSignature | null {
+  if (signatureText === undefined) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(signatureText) as Partial<FunctionCallSignature>;
+    if (!Array.isArray(parsed.positional) || !parsed.positional.every((name) => typeof name === 'string')) {
+      return null;
+    }
+    return {
+      positional: parsed.positional,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function translateStaticMethodCalleeIfKnown(pythonCallee: string, nameMap: Map<string, string>): string | null {
   const dotted = /^([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(pythonCallee);
   if (dotted === null) {
@@ -3407,7 +3432,7 @@ function translateMixedKeywordCall(
   }
 
   const parts = splitTopLevelComma(call[2]);
-  const keywordParts: string[] = [];
+  const keywordParts: { pythonName: string; tsName: string; expression: string }[] = [];
   const positionalParts: string[] = [];
   let sawKeyword = false;
   for (const part of parts) {
@@ -3420,22 +3445,97 @@ function translateMixedKeywordCall(
       continue;
     }
     sawKeyword = true;
-    keywordParts.push(`${tsExportNameForPythonName(keyword[1])}: ${translateExpression(keyword[2], nameMap, arrayNames, validatedTypeAliases)}`);
+    keywordParts.push({
+      pythonName: keyword[1],
+      tsName: tsExportNameForPythonName(keyword[1]),
+      expression: translateExpression(keyword[2], nameMap, arrayNames, validatedTypeAliases),
+    });
   }
   if (keywordParts.length === 0) {
     return null;
   }
+  const knownSignatureCall = translateMixedKeywordCallWithKnownInstanceSignature(
+    call[1],
+    positionalParts,
+    keywordParts,
+    nameMap,
+    arrayNames,
+    validatedTypeAliases,
+  );
+  if (knownSignatureCall !== null) {
+    return knownSignatureCall;
+  }
   const callee = translateStaticMethodCalleeIfKnown(call[1], nameMap)
     ?? translateExpression(call[1], nameMap, arrayNames, validatedTypeAliases);
   const callPrefix = /^[A-Z][A-Za-z0-9_]*$/.test(callee) ? `new ${callee}` : callee;
+  const optsExpression = `{ ${keywordParts.map((part) => `${part.tsName}: ${part.expression}`).join(', ')} }`;
   if (positionalParts.length === 0) {
-    return `${callPrefix}({ ${keywordParts.join(', ')} })`;
+    return `${callPrefix}(${optsExpression})`;
   }
 
   return `${callPrefix}(${[
     ...positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases)),
-    `{ ${keywordParts.join(', ')} }`,
+    optsExpression,
   ].join(', ')})`;
+}
+
+function translateMixedKeywordCallWithKnownInstanceSignature(
+  pythonCallee: string,
+  positionalParts: string[],
+  keywordParts: { pythonName: string; tsName: string; expression: string }[],
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+): string | null {
+  const knownMethod = knownInstanceMethodCall(pythonCallee, nameMap, arrayNames, validatedTypeAliases);
+  if (knownMethod === null) {
+    return null;
+  }
+  const consumedKeywords = new Set<string>();
+  const args = positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases));
+  for (const positionalName of knownMethod.signature.positional.slice(args.length)) {
+    const keywordPart = keywordParts.find((part) => (
+      !consumedKeywords.has(part.pythonName)
+      && (part.pythonName === positionalName || part.tsName === positionalName)
+    ));
+    if (keywordPart === undefined) {
+      break;
+    }
+    args.push(keywordPart.expression);
+    consumedKeywords.add(keywordPart.pythonName);
+  }
+  if (consumedKeywords.size === 0) {
+    return null;
+  }
+  const remainingKeywordParts = keywordParts
+    .filter((part) => !consumedKeywords.has(part.pythonName))
+    .map((part) => `${part.tsName}: ${part.expression}`);
+  if (remainingKeywordParts.length > 0) {
+    args.push(`{ ${remainingKeywordParts.join(', ')} }`);
+  }
+  return `${knownMethod.callee}(${args.join(', ')})`;
+}
+
+function knownInstanceMethodCall(
+  pythonCallee: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+): { callee: string; signature: FunctionCallSignature } | null {
+  const dotted = /^(.+)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(pythonCallee);
+  if (dotted === null) {
+    return null;
+  }
+  const receiver = translateExpression(dotted[1], nameMap, arrayNames, validatedTypeAliases);
+  const receiverType = nameMap.get(receiverTypeNameMarker(dotted[1])) ?? nameMap.get(receiverTypeNameMarker(receiver));
+  if (receiverType === undefined) {
+    return null;
+  }
+  const methodName = tsMemberNameForPythonName(dotted[2]);
+  const signature = parseFunctionCallSignature(nameMap.get(instanceMethodSignatureMarker(receiverType, methodName)));
+  return signature === null
+    ? null
+    : { callee: `${receiver}.${methodName}`, signature };
 }
 
 function translateMixedKeywordCallWithRest(

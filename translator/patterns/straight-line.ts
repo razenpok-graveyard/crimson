@@ -55,6 +55,7 @@ import {
   parseStraightLineFunctionHeader,
   tsFunctionReturnTypeExpression,
 } from './function-headers.js';
+import { recordImportedInstanceMethodSignatures } from './imported-classes.js';
 import { parseFunctionParameterText, pythonParameterNames } from './parameters.js';
 import {
   bytesFromHelperStatements,
@@ -1195,6 +1196,7 @@ function recordImportedStaticClassMethods(
   relativePath: string,
   moduleNameMap: Map<string, string>,
 ): void {
+  recordImportedInstanceMethodSignatures(modulePath, names, relativePath, moduleNameMap);
   for (const name of names) {
     if (importedClassSource(modulePath, name.importedName, relativePath) !== null) {
       moduleNameMap.set(importedClassNameMarker(name.localName), 'true');
