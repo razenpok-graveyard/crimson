@@ -132,7 +132,7 @@ export function translatePositionalCallExpression(
   const reorderedArgs = (callee === 'rl.rlSetBlendFactorsSeparate' || callee === 'wgl.rlSetBlendFactorsSeparate') && args.length === 6
     ? [args[0], args[1], args[4], args[2], args[3], args[5]]
     : args;
-  const callPrefix = constructUppercase && /^[A-Z]/.test(callee) ? `new ${callee}` : callee;
+  const callPrefix = constructUppercase && /^[A-Z][A-Za-z0-9_]*$/.test(callee) ? `new ${callee}` : callee;
   return `${callPrefix}(${reorderedArgs.join(', ')})`;
 }
 

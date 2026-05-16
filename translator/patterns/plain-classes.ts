@@ -8,6 +8,7 @@ import {
   isIndentedBlockLine,
   parseIndentedDocstring,
   parseIndentedFunctionHeader,
+  splitTopLevelComma,
 } from './common.js';
 import { translateExpression } from './expression.js';
 import { parseFunctionParametersText, pythonParameterNames } from './parameters.js';
@@ -163,6 +164,16 @@ export function parsePlainClass(
       nextIndex = staticMethod.nextIndex;
       continue;
     }
+    if (trimmed === '@classmethod') {
+      const classMethod = parsePlainClassMethod(lines, nextIndex + 1, fieldNameMap, moduleNameMap, true, fieldArrayNames, className);
+      if (classMethod === null) {
+        return null;
+      }
+      methods.push(classMethod.method);
+      staticMethodNames.add(classMethod.method.name);
+      nextIndex = classMethod.nextIndex;
+      continue;
+    }
     const method = parsePlainClassMethod(lines, nextIndex, fieldNameMap, moduleNameMap, false, fieldArrayNames);
     if (method === null) {
       return null;
@@ -267,17 +278,23 @@ function parsePlainClassMethod(
   moduleNameMap: ReadonlyMap<string, string>,
   staticMethod = false,
   initialArrayNames: ReadonlySet<string> = new Set(),
+  classBindingName: string | null = null,
 ): { method: SimpleModuleFunction; nextIndex: number } | null {
   const header = parseIndentedFunctionHeader(lines, index, '    ');
   if (header === null || header.name === '__init__') {
     return null;
   }
   const parametersText = header.parametersText;
-  if (!staticMethod && parametersText !== 'self' && !parametersText.startsWith('self, ')) {
+  if (classBindingName === null && !staticMethod && parametersText !== 'self' && !parametersText.startsWith('self, ')) {
+    return null;
+  }
+  const parameterParts = parametersText === '' ? [] : splitTopLevelComma(parametersText);
+  const classReceiver = classBindingName === null ? null : parameterParts[0]?.match(/^([A-Za-z_][A-Za-z0-9_]*)(?:: .+)?$/)?.[1] ?? null;
+  if (classBindingName !== null && classReceiver === null) {
     return null;
   }
   const extraParameters = staticMethod
-    ? parametersText
+    ? classBindingName === null ? parametersText : parameterParts.slice(1).join(', ')
     : parametersText === 'self' ? '' : parametersText.slice('self, '.length);
   const arrayNames = new Set<string>(initialArrayNames);
   const parsedParams = parseFunctionParametersText(
@@ -289,7 +306,18 @@ function parsePlainClassMethod(
   }
 
   const statements: string[] = [];
-  const nameMap = new Map<string, string>(staticMethod ? moduleNameMap : [...moduleNameMap, ['self', 'this'], ...fieldNameMap]);
+  const nameMap = new Map<string, string>(moduleNameMap);
+  if (classBindingName !== null) {
+    if (classReceiver === null) {
+      return null;
+    }
+    nameMap.set(classReceiver, classBindingName);
+  } else if (!staticMethod) {
+    for (const [name, value] of fieldNameMap) {
+      nameMap.set(name, value);
+    }
+    nameMap.set('self', 'this');
+  }
   const declaredNames = new Set<string>(pythonParameterNames(
     extraParameters,
   ));
