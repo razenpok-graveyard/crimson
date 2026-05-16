@@ -855,6 +855,23 @@ export function translateStraightLineStatement(
   if (statement === 'return') {
     return { statements: ['return;'], nextIndex: index + 1 };
   }
+  if (statement === 'return [') {
+    const listComprehension = parseMultilineListComprehension(
+      lines,
+      index + 1,
+      indent,
+      nameMap,
+      arrayNames,
+      validatedTypeAliases,
+      mapNames,
+    );
+    if (listComprehension !== null) {
+      return {
+        statements: [`return ${listComprehension.expression};`],
+        nextIndex: listComprehension.nextIndex,
+      };
+    }
+  }
   if (statement === 'break') {
     return { statements: ['break;'], nextIndex: index + 1 };
   }
@@ -1263,6 +1280,64 @@ function parseWrappedMultilineExpression(
     nextIndex += 1;
   }
   return null;
+}
+
+function parseMultilineListComprehension(
+  lines: string[],
+  startIndex: number,
+  indent: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): { expression: string; nextIndex: number } | null {
+  const innerIndent = `${indent}    `;
+  const firstLine = lines[startIndex] ?? '';
+  if (!firstLine.startsWith(innerIndent)) {
+    return null;
+  }
+  const firstExpression = firstLine.trim().replace(/,$/, '');
+  let itemExpression: string;
+  let nextIndex: number;
+  const multilineCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(firstExpression);
+  if (multilineCall !== null) {
+    const callExpression = parseMultilineCallExpression(
+      lines,
+      startIndex + 1,
+      multilineCall[1],
+      nameMap,
+      arrayNames,
+      validatedTypeAliases,
+      mapNames,
+    );
+    if (callExpression === null) {
+      return null;
+    }
+    itemExpression = callExpression.expression;
+    nextIndex = callExpression.nextIndex;
+  } else {
+    itemExpression = translateExpression(firstExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    nextIndex = startIndex + 1;
+  }
+
+  const forLine = lines[nextIndex] ?? '';
+  if (!forLine.startsWith(innerIndent)) {
+    return null;
+  }
+  const forClause = /^for ([A-Za-z_][A-Za-z0-9_]*) in (.+)$/.exec(forLine.trim());
+  if (forClause === null) {
+    return null;
+  }
+  const closeLine = lines[nextIndex + 1] ?? '';
+  if (!closeLine.startsWith(indent) || closeLine.trim() !== ']') {
+    return null;
+  }
+  const itemName = tsExportNameForPythonName(forClause[1]);
+  const iterable = translateExpression(forClause[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  return {
+    expression: `${iterable}.map((${itemName}) => ${itemExpression})`,
+    nextIndex: nextIndex + 2,
+  };
 }
 
 function collectMultilineDictLiteral(
