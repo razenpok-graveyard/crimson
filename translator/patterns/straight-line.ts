@@ -509,7 +509,12 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         }
       }
     }
-    moduleNameMap.set(functionSignatureMarker(header.name), JSON.stringify({ positional: signaturePositionalNames }));
+    const signature = {
+      positional: signaturePositionalNames,
+      returnTupleMarkers: returnTupleMarkersForType(header.returnType),
+    };
+    moduleNameMap.set(functionSignatureMarker(header.name), JSON.stringify(signature));
+    moduleNameMap.set(functionSignatureMarker(tsExportNameForPythonName(header.name)), JSON.stringify(signature));
 
     const statements: string[] = [];
     const nameMap = new Map(moduleNameMap);
@@ -707,6 +712,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     leadingStatements.unshift(...helperStatements);
   }
+  if (moduleValueText.includes('pythonSplitlines(')) {
+    const helperStatements = pythonSplitlinesHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
   if (moduleValueText.includes('pythonJsonDumps(')) {
     const helperStatements = pythonJsonDumpsHelperStatements();
     if (leadingStatements.length > 0) {
@@ -856,6 +868,36 @@ function simpleFunctionTypeParams(
   ].join('\n');
   const usedTypeVars = [...typeVarNames].filter((name) => identifierPattern(name).test(typeText));
   return usedTypeVars.length === 0 ? undefined : usedTypeVars;
+}
+
+function returnTupleMarkersForType(
+  pythonReturnType: string,
+): ('array' | 'object' | 'rectangle' | 'set' | 'string' | null)[] | undefined {
+  const tupleReturn = /^tuple\[(.+)\]$/.exec(pythonReturnType.trim());
+  if (tupleReturn === null) {
+    return undefined;
+  }
+  return splitTopLevelComma(tupleReturn[1]).map(returnMarkerForType);
+}
+
+function returnMarkerForType(pythonType: string): 'array' | 'object' | 'rectangle' | 'set' | 'string' | null {
+  const trimmed = pythonType.trim();
+  if (/^(?:r[dl]\.|wgl\.)?Rectangle$/.test(trimmed)) {
+    return 'rectangle';
+  }
+  if (trimmed === 'str') {
+    return 'string';
+  }
+  if (/^(?:list|Sequence|tuple)\[/.test(trimmed)) {
+    return 'array';
+  }
+  if (/^(?:set|frozenset)\[/.test(trimmed)) {
+    return 'set';
+  }
+  if (/^dict\[/.test(trimmed) || trimmed === 'object') {
+    return 'object';
+  }
+  return null;
 }
 
 function straightLineModuleUsesPythonRepr(
@@ -1086,6 +1128,21 @@ function pythonStringCountHelperStatements(): string[] {
     '    count += 1;',
     '    start = index + needle.length;',
     '  }',
+    '}',
+  ];
+}
+
+function pythonSplitlinesHelperStatements(): string[] {
+  return [
+    'function pythonSplitlines(text: string): string[] {',
+    "  if (text === '') {",
+    '    return [];',
+    '  }',
+    '  const lines = text.split(/\\r\\n|\\r|\\n/);',
+    '  if (/(?:\\r\\n|\\r|\\n)$/.test(text)) {',
+    '    lines.pop();',
+    '  }',
+    '  return lines;',
     '}',
   ];
 }

@@ -47,6 +47,21 @@ export function drawRectangle(x: number, y: number, w: number, h: number, color:
   ctx.drawRectangle(x, y, w, h, color.r, color.g, color.b, color.a);
 }
 
+export function drawRectangleLines(x: number, y: number, w: number, h: number, color: Color): void {
+  drawRectangle(x, y, w, 1, color);
+  drawRectangle(x, y + h - 1, w, 1, color);
+  drawRectangle(x, y + 1, 1, h - 2, color);
+  drawRectangle(x + w - 1, y + 1, 1, h - 2, color);
+}
+
+export function drawRectangleLinesEx(rect: Rectangle, lineThick: number, color: Color): void {
+  const thick = Math.max(1, Math.trunc(lineThick));
+  drawRectangle(rect.x, rect.y, rect.w, thick, color);
+  drawRectangle(rect.x, rect.y + rect.h - thick, rect.w, thick, color);
+  drawRectangle(rect.x, rect.y, thick, rect.h, color);
+  drawRectangle(rect.x + rect.w - thick, rect.y, thick, rect.h, color);
+}
+
 export function drawCircleLines(x: number, y: number, radius: number, color: Color): void {
   const r = Math.max(1.0, radius);
   const innerR = Math.max(0.0, r - 0.5);

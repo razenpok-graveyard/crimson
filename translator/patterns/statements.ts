@@ -29,6 +29,7 @@ import {
   objectNameMarker,
   pathArrayNameMarker,
   pathNameMarker,
+  rectangleNameMarker,
   setNameMarker,
   stringNameMarker,
   translatedExpressionLooksVector,
@@ -50,8 +51,11 @@ type WithItem = {
   close: false;
 };
 
+type FunctionReturnMarker = 'array' | 'object' | 'rectangle' | 'set' | 'string';
+
 type FunctionCallSignature = {
   positional: string[];
+  returnTupleMarkers?: (FunctionReturnMarker | null)[];
 };
 
 type MultilineKeywordPart = {
@@ -2125,9 +2129,64 @@ function parseLocalFunctionCallSignature(
     if (!Array.isArray(parsed.positional) || !parsed.positional.every((name) => typeof name === 'string')) {
       return null;
     }
-    return { positional: parsed.positional };
+    if (
+      parsed.returnTupleMarkers !== undefined
+      && (
+        !Array.isArray(parsed.returnTupleMarkers)
+        || !parsed.returnTupleMarkers.every((marker) => marker === null || marker === 'array' || marker === 'object' || marker === 'rectangle' || marker === 'set' || marker === 'string')
+      )
+    ) {
+      return null;
+    }
+    return {
+      positional: parsed.positional,
+      returnTupleMarkers: parsed.returnTupleMarkers,
+    };
   } catch {
     return null;
+  }
+}
+
+function applyTupleAssignmentReturnMarkers(
+  names: string[],
+  assignedRight: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+): void {
+  const call = /^([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)?)\(/.exec(assignedRight.trim());
+  if (call === null) {
+    return;
+  }
+  const signature = parseLocalFunctionCallSignature(call[1], nameMap);
+  if (signature?.returnTupleMarkers === undefined) {
+    return;
+  }
+  for (let index = 0; index < names.length; index += 1) {
+    const pythonName = names[index];
+    if (pythonName === '_') {
+      continue;
+    }
+    const marker = signature.returnTupleMarkers[index];
+    if (marker === undefined || marker === null) {
+      continue;
+    }
+    const tsName = tsExportNameForPythonName(pythonName);
+    if (marker === 'array') {
+      arrayNames.add(pythonName);
+      arrayNames.add(tsName);
+    } else if (marker === 'object') {
+      arrayNames.add(objectNameMarker(pythonName));
+      arrayNames.add(objectNameMarker(tsName));
+    } else if (marker === 'rectangle') {
+      arrayNames.add(rectangleNameMarker(pythonName));
+      arrayNames.add(rectangleNameMarker(tsName));
+    } else if (marker === 'set') {
+      arrayNames.add(setNameMarker(pythonName));
+      arrayNames.add(setNameMarker(tsName));
+    } else if (marker === 'string') {
+      arrayNames.add(stringNameMarker(pythonName));
+      arrayNames.add(stringNameMarker(tsName));
+    }
   }
 }
 
@@ -2530,6 +2589,10 @@ function translateStraightLineAssignment(
       arrayNames.add(objectNameMarker(localAssignment[1]));
       arrayNames.add(objectNameMarker(tsName));
     }
+    if (/^(?:[A-Za-z_$][A-Za-z0-9_$]*\.)?makeRectangle\(/.test(assignedRight)) {
+      arrayNames.add(rectangleNameMarker(localAssignment[1]));
+      arrayNames.add(rectangleNameMarker(tsName));
+    }
     if (/^(?:'[^']*'|"[^"]*"|`[^`]*`)$/.test(assignedRight)) {
       arrayNames.add(stringNameMarker(localAssignment[1]));
       arrayNames.add(stringNameMarker(tsName));
@@ -2586,6 +2649,7 @@ function translateStraightLineAssignment(
         declaredNames.add(name);
       }
     }
+    applyTupleAssignmentReturnMarkers(names, assignedRight, nameMap, arrayNames);
     return {
       statements: [
         ...preDeclarations,

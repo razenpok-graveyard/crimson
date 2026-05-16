@@ -193,6 +193,10 @@ export function colorNameMarker(name: string): string {
   return `__color__:${name}`;
 }
 
+export function rectangleNameMarker(name: string): string {
+  return `__rectangle__:${name}`;
+}
+
 export function setNameMarker(name: string): string {
   return `__set__:${name}`;
 }
@@ -396,11 +400,24 @@ export function translateExpression(
     }
   }
 
+  const stringSplitlinesCall = /^(.+)\.splitlines\(\)$/.exec(trimmed);
+  if (stringSplitlinesCall !== null) {
+    return `pythonSplitlines(${translateExpression(stringSplitlinesCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
   const colorChannel = /^([A-Za-z_][A-Za-z0-9_]*)\.([rgba])$/.exec(trimmed);
   if (colorChannel !== null) {
     const translatedName = translateExpression(colorChannel[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (arrayNames.has(colorNameMarker(colorChannel[1])) || arrayNames.has(colorNameMarker(translatedName))) {
       return `${translatedName}.${colorChannel[2]} * 255`;
+    }
+  }
+
+  const rectangleDimension = /^(.+)\.(width|height)$/.exec(trimmed);
+  if (rectangleDimension !== null) {
+    const translatedName = translateExpression(rectangleDimension[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (arrayNames.has(rectangleNameMarker(rectangleDimension[1])) || arrayNames.has(rectangleNameMarker(translatedName))) {
+      return `${translatedName}.${rectangleDimension[2] === 'width' ? 'w' : 'h'}`;
     }
   }
 
