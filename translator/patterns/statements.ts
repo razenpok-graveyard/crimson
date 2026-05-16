@@ -581,6 +581,19 @@ export function translateStraightLineStatement(
   }
 
   if (statement === 'try:') {
+    const keyErrorLookup = translateKeyErrorLookupStatement(
+      lines,
+      index,
+      indent,
+      nameMap,
+      arrayNames,
+      validatedTypeAliases,
+      mapNames,
+    );
+    if (keyErrorLookup !== null) {
+      return keyErrorLookup;
+    }
+
     const innerIndent = `${indent}    `;
     const translateBlock = (startIndex: number): { statements: string[]; nextIndex: number } | null => {
       const blockStatements: string[] = [];
@@ -3084,6 +3097,55 @@ function translateRaiseExpression(
 function parseExceptClause(statement: string): { name: string | null } | null {
   const clause = /^except (?:(?:[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)|\((?:[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)(?:, [A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)+\))(?: as ([A-Za-z_][A-Za-z0-9_]*))?:$/.exec(statement);
   return clause === null ? null : { name: clause[1] ?? null };
+}
+
+function translateKeyErrorLookupStatement(
+  lines: string[],
+  index: number,
+  indent: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): { statements: string[]; nextIndex: number } | null {
+  const innerIndent = `${indent}    `;
+  const returnLine = lines[index + 1] ?? '';
+  const exceptLine = lines[index + 2] ?? '';
+  const raiseLine = lines[index + 3] ?? '';
+  if (
+    !returnLine.startsWith(innerIndent)
+    || !lineStartsAtIndent(exceptLine, indent)
+    || !raiseLine.startsWith(innerIndent)
+  ) {
+    return null;
+  }
+
+  const lookup = /^return ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[(.+)\]$/.exec(returnLine.trim());
+  const exceptClause = /^except KeyError as ([A-Za-z_][A-Za-z0-9_]*):$/.exec(exceptLine.trim());
+  const raise = /^raise ValueError\((.+)\) from ([A-Za-z_][A-Za-z0-9_]*)$/.exec(raiseLine.trim());
+  if (lookup === null || exceptClause === null || raise === null || raise[2] !== exceptClause[1]) {
+    return null;
+  }
+
+  const receiver = translateExpression(lookup[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const key = translateExpression(lookup[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const errorExpression = translateRaiseExpression(
+    'ValueError',
+    raise[1],
+    nameMap,
+    arrayNames,
+    validatedTypeAliases,
+    mapNames,
+  );
+  return {
+    statements: [
+      `if (!Object.prototype.hasOwnProperty.call(${receiver}, ${key})) {`,
+      `  throw ${errorExpression};`,
+      '}',
+      `return (${receiver} as Record<string, number>)[${key}];`,
+    ],
+    nextIndex: index + 4,
+  };
 }
 
 function parseWithItems(

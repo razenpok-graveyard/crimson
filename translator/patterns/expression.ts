@@ -1421,6 +1421,12 @@ export function translateExpression(
     return translateComparisonClause(left, binaryComparison[2], right, arrayNames);
   }
 
+  const negativeIndex = /^(.+)\[-(\d+)\]$/.exec(trimmed);
+  if (negativeIndex !== null) {
+    const receiver = translateExpression(negativeIndex[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return `${receiver}[${receiver}.length - ${negativeIndex[2]}]`;
+  }
+
   const prefixSlice = /^(.+)\[:(.+)\]$/.exec(trimmed);
   if (prefixSlice !== null) {
     return `${translateExpression(prefixSlice[1], nameMap, arrayNames, validatedTypeAliases)}.slice(0, ${translateExpression(prefixSlice[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
