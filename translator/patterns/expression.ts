@@ -651,6 +651,10 @@ export function translateExpression(
     return '[]';
   }
 
+  if (trimmed === 'iter(())') {
+    return '[][Symbol.iterator]()';
+  }
+
   for (const sequenceConstructor of ['list', 'tuple']) {
     const sequenceCall = parseCallPrefix(trimmed, sequenceConstructor);
     if (sequenceCall !== null && sequenceCall.rest === '') {
