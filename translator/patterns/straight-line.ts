@@ -308,6 +308,20 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
 
+    const relativeNamespaceImports = /^from (\.+) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
+    if (relativeNamespaceImports !== null) {
+      for (const moduleName of relativeNamespaceImports[2].split(', ')) {
+        const alias = tsLocalNameForPythonAlias(moduleName);
+        pushUniqueNamespaceImport(namespaceImports, {
+          alias,
+          modulePath: tsImportPathForPythonImport(`${relativeNamespaceImports[1]}${moduleName}`, relativePath),
+        });
+        moduleNameMap.set(moduleName, alias);
+      }
+      index += 1;
+      continue;
+    }
+
     const assignment = parseTopLevelAssignment(lines, index, moduleNameMap);
     if (assignment === null) {
       const topLevelStatement = translateStraightLineStatement(
