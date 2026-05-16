@@ -6,11 +6,11 @@
 // See: `docs/crimsonland-exe/player-damage.md`.
 
 import { SfxId } from '@grim/sfx-map.ts';
-import { f32 } from './math-parity.ts';
-import { PerkId } from './perks/ids.ts';
-import { perkActive } from './perks/helpers.ts';
-import { RngCallerStatic } from './rng-caller-static.ts';
-import type { GameplayState, PlayerState } from './sim/state-types.ts';
+import { f32 } from '@crimson/math-parity.ts';
+import { PerkId } from '@crimson/perks/index.ts';
+import { perkActive } from '@crimson/perks/helpers.ts';
+import { RngCallerStatic } from '@crimson/rng-caller-static.ts';
+import type { GameplayState, PlayerState } from '@crimson/sim/state-types.ts';
 
 const _PLAYER_PAIN_SFX: readonly SfxId[] = [
   SfxId.TROOPER_INPAIN_01,
@@ -20,22 +20,23 @@ const _PLAYER_PAIN_SFX: readonly SfxId[] = [
 const _PLAYER_DEATH_SFX: readonly SfxId[] = [SfxId.TROOPER_DIE_01, SfxId.TROOPER_DIE_02];
 const _THICK_SKINNED_DAMAGE_SCALE_F32 = 0.6660000085830688;
 
-export function playerTakeDamage(
-  state: GameplayState,
-  player: PlayerState,
-  damage: number,
-  opts: { dt?: number | null; players?: readonly PlayerState[] | null; onLethal?: (() => void) | null } = {},
-): number {
+export function playerTakeDamage(state: GameplayState, player: PlayerState, damage: number, opts: { dt?: number | null; players?: readonly PlayerState[] | null; onLethal?: (() => void) | null } = {}): number {
   // Apply damage to a player, returning the actual damage applied.
 
   const dt = opts.dt ?? null;
   const players = opts.players ?? null;
   const onLethal = opts.onLethal ?? null;
   const rawDamage = damage;
-  if (rawDamage <= 0.0) return 0.0;
-  if (state.debugGodMode) return 0.0;
+  if (rawDamage <= 0.0) {
+    return 0.0;
+  }
+  if (state.debugGodMode) {
+    return 0.0;
+  }
 
-  if (perkActive(player, PerkId.DEATH_CLOCK)) return 0.0;
+  if (perkActive(player, PerkId.DEATH_CLOCK)) {
+    return 0.0;
+  }
 
   let damageScaled = rawDamage;
   if (perkActive(player, PerkId.TOUGH_RELOADER) && player.weapon.reloadActive) {
@@ -45,12 +46,14 @@ export function playerTakeDamage(
 
   state.survivalRewardDamageSeen = true;
 
-  if (player.shieldTimer > 0.0) return 0.0;
+  if (player.shieldTimer > 0.0) {
+    return 0.0;
+  }
 
-  let wasAliveSource: PlayerState = player;
+  let wasAliveSource = player;
   // Native bug: the pre-hit alive flag is read from player 1 health even when
   // damaging player 2; preserve this under `--preserve-bugs`.
-  if (state.preserveBugs && players && players.length > 0) {
+  if (state.preserveBugs && players !== null && players.length > 0) {
     wasAliveSource = players[0];
   }
   const wasAlive = wasAliveSource.health > 0.0;
@@ -78,9 +81,9 @@ export function playerTakeDamage(
     }
   }
 
-  let lethalHit = player.health < 0.0;
   // Native routes exact-zero Highlander kills through the pain branch; default
   // rewrite mode treats `health == 0` as lethal here.
+  let lethalHit = player.health < 0.0;
   if (!state.preserveBugs && player.health === 0.0) {
     lethalHit = true;
   }
@@ -90,9 +93,7 @@ export function playerTakeDamage(
 
   // Native emits pain/death VO before heading jitter + low-health timer RNG work.
   if (!lethalHit) {
-    state.sfxQueue.push(
-      _PLAYER_PAIN_SFX[state.rng.rand({ caller: RngCallerStatic.PLAYER_TAKE_DAMAGE_PAIN_SFX }) % _PLAYER_PAIN_SFX.length],
-    );
+    state.sfxQueue.push(_PLAYER_PAIN_SFX[state.rng.rand({ caller: RngCallerStatic.PLAYER_TAKE_DAMAGE_PAIN_SFX }) % _PLAYER_PAIN_SFX.length]);
     if (!wasAlive) {
       return Math.max(0.0, healthBefore - player.health);
     }
@@ -123,20 +124,22 @@ export function playerTakeDamage(
   return Math.max(0.0, healthBefore - player.health);
 }
 
-export function playerTakeProjectileDamage(
-  state: GameplayState,
-  player: PlayerState,
-  damage: number,
-): number {
+export function playerTakeProjectileDamage(state: GameplayState, player: PlayerState, damage: number): number {
   // Apply projectile damage to a player (modeled after `projectile_update` player-hit logic).
   //
   // Native `projectile_update` does not call `player_take_damage` for projectile hits: it sets
   // `projectile.life_timer = 0.25` and subtracts a fixed amount (usually 10.0) if shield is down.
 
   const dmg = damage;
-  if (dmg <= 0.0) return 0.0;
-  if (state.debugGodMode) return 0.0;
-  if (player.shieldTimer > 0.0) return 0.0;
+  if (dmg <= 0.0) {
+    return 0.0;
+  }
+  if (state.debugGodMode) {
+    return 0.0;
+  }
+  if (player.shieldTimer > 0.0) {
+    return 0.0;
+  }
 
   player.health -= dmg;
   return dmg;

@@ -217,6 +217,10 @@ export function pathArrayNameMarker(name: string): string {
   return `__path_array__:${name}`;
 }
 
+export function nullableNameMarker(name: string): string {
+  return `__nullable__:${name}`;
+}
+
 export function translatedExpressionLooksVector(tsExpression: string): boolean {
   const trimmed = tsExpression.trim();
   if (/^(?:Vec2\.|new Vec2\b)/.test(trimmed) && !/\.(?:length|toHeading)\(\)$/.test(trimmed)) {
@@ -2691,7 +2695,7 @@ function parenthesizeForLogicalOr(value: string): string {
   return value.includes(' && ') && matchingCloseParen(value, 0) !== value.length - 1 ? `(${value})` : value;
 }
 
-function splitTopLevelLogicalOperator(value: string, operator: 'and' | 'or'): string[] | null {
+export function splitTopLevelLogicalOperator(value: string, operator: 'and' | 'or'): string[] | null {
   const parts: string[] = [];
   let start = 0;
   let depth = 0;

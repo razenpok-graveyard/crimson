@@ -9,6 +9,7 @@ import {
   colorNameMarker,
   dateNameMarker,
   objectNameMarker,
+  nullableNameMarker,
   rectangleNameMarker,
   stringNameMarker,
   translateExpression,
@@ -66,8 +67,13 @@ export function parseFunctionParameterText(
   if (typedParameter !== null) {
     const typeExpression = tsTypeExpression(typedParameter[2]);
     const parameterName = tsExportNameForPythonName(typedParameter[1]);
-    if (typeExpression.endsWith('[]')) {
+    if (typeExpressionIncludesArray(typeExpression)) {
       arrayNames.add(typedParameter[1]);
+      arrayNames.add(parameterName);
+    }
+    if (typeExpressionIncludesNull(typeExpression)) {
+      arrayNames.add(nullableNameMarker(typedParameter[1]));
+      arrayNames.add(nullableNameMarker(parameterName));
     }
     if (typeExpression === 'string') {
       arrayNames.add(stringNameMarker(typedParameter[1]));
@@ -110,6 +116,18 @@ export function parseFunctionParameterText(
   }
 
   return null;
+}
+
+function typeExpressionIncludesArray(typeExpression: string): boolean {
+  return typeExpression
+    .split(' | ')
+    .some((part) => part.trim().endsWith('[]'));
+}
+
+function typeExpressionIncludesNull(typeExpression: string): boolean {
+  return typeExpression
+    .split(' | ')
+    .some((part) => part.trim() === 'null');
 }
 
 export function pythonParameterNames(parametersText: string): string[] {

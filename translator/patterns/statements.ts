@@ -26,11 +26,13 @@ import {
   translateMapKeyExpression,
   translatePositionalCallExpression,
   dateNameMarker,
+  nullableNameMarker,
   objectNameMarker,
   pathArrayNameMarker,
   pathNameMarker,
   rectangleNameMarker,
   setNameMarker,
+  splitTopLevelLogicalOperator,
   stringNameMarker,
   translatedExpressionLooksVector,
   vectorNameMarker,
@@ -113,6 +115,18 @@ function translateConditionExpression(
   mapNames: ReadonlySet<string>,
 ): string {
   const trimmed = pythonExpression.trim();
+  const topLevelOrParts = splitTopLevelLogicalOperator(trimmed, 'or');
+  if (topLevelOrParts !== null) {
+    return topLevelOrParts
+      .map((part) => translateConditionExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames))
+      .join(' || ');
+  }
+  const topLevelAndParts = splitTopLevelLogicalOperator(trimmed, 'and');
+  if (topLevelAndParts !== null) {
+    return topLevelAndParts
+      .map((part) => parenthesizeAndConditionOperand(translateConditionExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)))
+      .join(' && ');
+  }
   const bareIdentifier = /^[A-Za-z_][A-Za-z0-9_]*$/.exec(trimmed);
   if (bareIdentifier !== null) {
     const translated = translateExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -120,13 +134,21 @@ function translateConditionExpression(
       return `${translated}.size > 0`;
     }
     if (arrayNames.has(setNameMarker(trimmed)) || arrayNames.has(setNameMarker(translated))) {
-      return `${translated}.size > 0`;
+      return arrayNames.has(nullableNameMarker(trimmed)) || arrayNames.has(nullableNameMarker(translated))
+        ? `${translated} !== null && ${translated}.size > 0`
+        : `${translated}.size > 0`;
     }
     if (arrayNames.has(trimmed) || arrayNames.has(translated)) {
-      return `${translated}.length > 0`;
+      return arrayNames.has(nullableNameMarker(trimmed)) || arrayNames.has(nullableNameMarker(translated))
+        ? `${translated} !== null && ${translated}.length > 0`
+        : `${translated}.length > 0`;
     }
   }
   return translateExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
+}
+
+function parenthesizeAndConditionOperand(value: string): string {
+  return value.includes(' || ') && matchingCloseParen(value, 0) !== value.length - 1 ? `(${value})` : value;
 }
 function caseBodyStops(statements: string[]): boolean {
   for (let index = statements.length - 1; index >= 0; index -= 1) {
