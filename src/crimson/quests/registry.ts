@@ -17,7 +17,7 @@ export function registerQuest(opts: { level: string; title: string; timeLimitMs:
   const unlockPerkId = opts.unlockPerkId ?? null;
   const unlockWeaponId = opts.unlockWeaponId ?? null;
   const terrainSlots = opts.terrainSlots ?? null;
-  function builderName(builderFn: QuestBuilder): string {
+  function _builderName(builderFn: QuestBuilder): string {
     return String(builderFn.name || String(builderFn));
   }
 
@@ -28,7 +28,7 @@ export function registerQuest(opts: { level: string; title: string; timeLimitMs:
     const quest = new QuestDefinition({ level: questLevel, title: title, builder: builder, timeLimitMs: timeLimitMs, startWeaponId: startWeaponId, unlockPerkId: unlockPerkId, unlockWeaponId: normalizedUnlockWeaponId, terrainSlots: resolvedTerrainSlots });
     const existing = quests.get(quest.level.text) ?? null;
     if (existing !== null) {
-      throw new Error(`duplicate quest level ${quest.level.text}: ${builderName(existing.builder)} vs ${builderName(builder)}`);
+      throw new Error(`duplicate quest level ${quest.level.text}: ${_builderName(existing.builder)} vs ${_builderName(builder)}`);
     }
     quests.set(quest.level.text, quest);
     return builder;

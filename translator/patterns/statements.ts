@@ -98,6 +98,13 @@ function pushImportDefinition(imports: ImportDefinition[], importDefinition: Imp
 function operatorIsAssignment(operator: string): boolean {
   return operator === '=';
 }
+
+function tsLocalFunctionNameForPythonName(pythonName: string): string {
+  return pythonName.startsWith('_')
+    ? `_${tsExportNameForPythonName(pythonName)}`
+    : tsExportNameForPythonName(pythonName);
+}
+
 function translateConditionExpression(
   pythonExpression: string,
   nameMap: Map<string, string>,
@@ -208,6 +215,9 @@ function parseNestedFunctionStatement(
     return null;
   }
 
+  const functionName = tsLocalFunctionNameForPythonName(header.name);
+  outerNameMap.set(header.name, functionName);
+
   const prologue: string[] = [];
   const params = parsedParams.parameters.map(renderInlineParameter);
   if (parsedParams.optsParams.length > 0) {
@@ -224,6 +234,7 @@ function parseNestedFunctionStatement(
   }
 
   const nestedNameMap = new Map(outerNameMap);
+  nestedNameMap.set(header.name, functionName);
   const statements: string[] = [];
   const declaredNames = new Set<string>(pythonParameterNames(header.parametersText));
   const reassignedNames = reassignedLocalNames(lines, header.nextIndex);
@@ -258,7 +269,7 @@ function parseNestedFunctionStatement(
   const returnType = tsFunctionReturnTypeExpression(header.returnType);
   return {
     statements: [
-      `${async ? 'async ' : ''}function ${tsExportNameForPythonName(header.name)}(${params.join(', ')}): ${async ? `Promise<${returnType}>` : returnType} {`,
+      `${async ? 'async ' : ''}function ${functionName}(${params.join(', ')}): ${async ? `Promise<${returnType}>` : returnType} {`,
       ...[...prologue, ...statements].map(indentStatementLine),
       '}',
     ],
@@ -294,7 +305,8 @@ export function translateStraightLineStatement(
   }
 
   if (statement.startsWith('#')) {
-    return { statements: [`// ${statement.replace(/^# ?/, '')}`], nextIndex: index + 1 };
+    const comment = statement.replace(/^# ?/, '');
+    return { statements: [comment === '' ? '//' : `// ${comment}`], nextIndex: index + 1 };
   }
 
   const globalStatement = /^global ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(statement);
@@ -1646,6 +1658,7 @@ export function translateStraightLineStatement(
             nameMap,
             arrayNames,
             validatedTypeAliases,
+            mapNames,
           );
           if (callExpression === null) {
             return null;
@@ -1657,6 +1670,24 @@ export function translateStraightLineStatement(
         positionalParts.push(arg);
       } else {
         sawKeyword = true;
+        const nestedCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(keywordArg[2]);
+        if (nestedCall !== null) {
+          const callExpression = parseMultilineCallExpression(
+            lines,
+            nextIndex + 1,
+            nestedCall[1],
+            nameMap,
+            arrayNames,
+            validatedTypeAliases,
+            mapNames,
+          );
+          if (callExpression === null) {
+            return null;
+          }
+          keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${callExpression.expression}`);
+          nextIndex = callExpression.nextIndex;
+          continue;
+        }
         keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${translateExpression(keywordArg[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
       }
       nextIndex += 1;

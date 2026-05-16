@@ -283,6 +283,14 @@ export function translateExpression(
     }
   }
 
+  const raylibColorConstant = /^(r[dl]|wgl)\.([A-Z_]+)$/.exec(trimmed);
+  if (raylibColorConstant !== null) {
+    const color = raylibNamedColor(raylibColorConstant[2]);
+    if (color !== null) {
+      return `${translateExpression(raylibColorConstant[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.makeColor(${color.join(', ')})`;
+    }
+  }
+
   const raylibInputNoArgCall = /^(?:r[dl]|wgl)\.(get_char_pressed|getCharPressed|get_key_pressed|getKeyPressed)\(\)$/.exec(trimmed);
   if (raylibInputNoArgCall !== null) {
     return raylibInputNoArgCall[1].includes('char') || raylibInputNoArgCall[1].includes('Char')
@@ -1508,7 +1516,8 @@ export function translateExpression(
       }
       return translateIdentifierName(name, nameMap);
     });
-  return replaceTranslatedRaylibConstructors(translated)
+  return replaceKnownRectangleDimensions(
+    replaceTranslatedRaylibConstructors(translated)
     .replaceAll(/__CRIMSON_STRING_(\d+)__/g, (_match, index: string) => stringLiterals[Number(index)] ?? _match)
     .replaceAll(/\.BLEND_CUSTOM_SEPARATE\b/g, '.CUSTOM')
     .replaceAll(/\.BLEND_CUSTOM\b/g, '.CUSTOM')
@@ -1519,7 +1528,9 @@ export function translateExpression(
     .replaceAll(/\.TEXTURE_FILTER_POINT\b/g, '.POINT')
     .replaceAll(/\.TEXTURE_FILTER_BILINEAR\b/g, '.BILINEAR')
     .replaceAll(/\.TEXTURE_WRAP_REPEAT\b/g, '.REPEAT')
-    .replaceAll(/\.TEXTURE_WRAP_CLAMP\b/g, '.CLAMP');
+    .replaceAll(/\.TEXTURE_WRAP_CLAMP\b/g, '.CLAMP'),
+    arrayNames,
+  );
 }
 
 function translateIdentifierName(name: string, nameMap: Map<string, string>): string {
@@ -1544,6 +1555,18 @@ function translateIdentifierNamePreservingPrivateMembers(name: string, nameMap: 
     root,
     ...parts.slice(1).map((part) => nameMap.get(part) ?? tsMemberNameForPythonName(part)),
   ].join('.');
+}
+
+function replaceKnownRectangleDimensions(tsExpression: string, arrayNames: Set<string>): string {
+  return tsExpression.replaceAll(
+    /\b([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\.(width|height)\b/g,
+    (match, receiver: string, dimension: string) => {
+      if (!arrayNames.has(rectangleNameMarker(receiver))) {
+        return match;
+      }
+      return `${receiver}.${dimension === 'width' ? 'w' : 'h'}`;
+    },
+  );
 }
 
 function looksLikeMappingConstantName(pythonName: string): boolean {
@@ -1658,6 +1681,38 @@ function raylibKeyboardKeyCode(name: string): number | null {
     KEY_KP_EQUAL: 187,
   };
   return keyCodes[name] ?? null;
+}
+
+function raylibNamedColor(name: string): [number, number, number, number] | null {
+  const colors: Record<string, [number, number, number, number]> = {
+    LIGHTGRAY: [200 / 255, 200 / 255, 200 / 255, 1],
+    GRAY: [130 / 255, 130 / 255, 130 / 255, 1],
+    DARKGRAY: [80 / 255, 80 / 255, 80 / 255, 1],
+    YELLOW: [253 / 255, 249 / 255, 0, 1],
+    GOLD: [1, 203 / 255, 0, 1],
+    ORANGE: [1, 161 / 255, 0, 1],
+    PINK: [1, 109 / 255, 194 / 255, 1],
+    RED: [230 / 255, 41 / 255, 55 / 255, 1],
+    MAROON: [190 / 255, 33 / 255, 55 / 255, 1],
+    GREEN: [0, 228 / 255, 48 / 255, 1],
+    LIME: [0, 158 / 255, 47 / 255, 1],
+    DARKGREEN: [0, 117 / 255, 44 / 255, 1],
+    SKYBLUE: [102 / 255, 191 / 255, 1, 1],
+    BLUE: [0, 121 / 255, 241 / 255, 1],
+    DARKBLUE: [0, 82 / 255, 172 / 255, 1],
+    PURPLE: [200 / 255, 122 / 255, 1, 1],
+    VIOLET: [135 / 255, 60 / 255, 190 / 255, 1],
+    DARKPURPLE: [112 / 255, 31 / 255, 126 / 255, 1],
+    BEIGE: [211 / 255, 176 / 255, 131 / 255, 1],
+    BROWN: [127 / 255, 106 / 255, 79 / 255, 1],
+    DARKBROWN: [76 / 255, 63 / 255, 47 / 255, 1],
+    WHITE: [1, 1, 1, 1],
+    BLACK: [0, 0, 0, 1],
+    BLANK: [0, 0, 0, 0],
+    MAGENTA: [1, 0, 1, 1],
+    RAYWHITE: [245 / 255, 245 / 255, 245 / 255, 1],
+  };
+  return colors[name] ?? null;
 }
 
 function shouldPreservePrivateDottedName(pythonName: string): boolean {

@@ -204,7 +204,7 @@ function renderTypeAliasValidator(lines: string[], alias: TypeAlias): void {
 function renderStraightLineAssignments(lines: string[], assignments: StraightLineModule['assignments']): void {
   for (const assignment of assignments) {
     for (const comment of assignment.comments ?? []) {
-      lines.push(`// ${comment}`);
+      lines.push(comment === '' ? '//' : `// ${comment}`);
     }
     const exportPrefix = assignment.exported ? 'export ' : '';
     const typeSuffix = assignment.typeExpression === undefined ? '' : `: ${assignment.typeExpression}`;

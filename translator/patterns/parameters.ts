@@ -5,7 +5,15 @@ import type {
 } from '../model.js';
 import { tsExportNameForPythonName, tsTypeExpression } from '../naming.js';
 import { splitTopLevelComma } from './common.js';
-import { colorNameMarker, dateNameMarker, objectNameMarker, stringNameMarker, translateExpression, vectorNameMarker } from './expression.js';
+import {
+  colorNameMarker,
+  dateNameMarker,
+  objectNameMarker,
+  rectangleNameMarker,
+  stringNameMarker,
+  translateExpression,
+  vectorNameMarker,
+} from './expression.js';
 
 export function parseFunctionParametersText(
   parametersText: string,
@@ -57,36 +65,36 @@ export function parseFunctionParameterText(
   const typedParameter = /^([A-Za-z_][A-Za-z0-9_]*): ([^=]+?)(?: = (.+))?$/.exec(parameterText);
   if (typedParameter !== null) {
     const typeExpression = tsTypeExpression(typedParameter[2]);
+    const parameterName = tsExportNameForPythonName(typedParameter[1]);
     if (typeExpression.endsWith('[]')) {
       arrayNames.add(typedParameter[1]);
     }
     if (typeExpression === 'string') {
-      const parameterName = tsExportNameForPythonName(typedParameter[1]);
       arrayNames.add(stringNameMarker(typedParameter[1]));
       arrayNames.add(stringNameMarker(parameterName));
     }
-    if (typeExpression === 'rl.Color' || typeExpression === 'wgl.Color') {
-      const parameterName = tsExportNameForPythonName(typedParameter[1]);
+    if (/^(?:r[dl]|wgl)\.Color$/.test(typeExpression)) {
       arrayNames.add(colorNameMarker(typedParameter[1]));
       arrayNames.add(colorNameMarker(parameterName));
     }
+    if (/^(?:r[dl]|wgl)\.Rectangle$/.test(typeExpression)) {
+      arrayNames.add(rectangleNameMarker(typedParameter[1]));
+      arrayNames.add(rectangleNameMarker(parameterName));
+    }
     if (typeExpression === 'Vec2') {
-      const parameterName = tsExportNameForPythonName(typedParameter[1]);
       arrayNames.add(vectorNameMarker(typedParameter[1]));
       arrayNames.add(vectorNameMarker(parameterName));
     }
     if (typeExpression === 'Date') {
-      const parameterName = tsExportNameForPythonName(typedParameter[1]);
       arrayNames.add(dateNameMarker(typedParameter[1]));
       arrayNames.add(dateNameMarker(parameterName));
     }
     if (typeExpression.startsWith('Record<')) {
-      const parameterName = tsExportNameForPythonName(typedParameter[1]);
       arrayNames.add(objectNameMarker(typedParameter[1]));
       arrayNames.add(objectNameMarker(parameterName));
     }
     return {
-      name: tsExportNameForPythonName(typedParameter[1]),
+      name: parameterName,
       typeExpression,
       ...(typedParameter[3] === undefined ? {} : { defaultValue: translateExpression(typedParameter[3], undefined, arrayNames) }),
     };
