@@ -1,6 +1,270 @@
 // Port of crimson/schema_inventory.py
 
+import { readFileSync, readdirSync } from 'node:fs';
+import pathModule from 'node:path';
+
 type JsonValue = null | string | number | boolean | JsonValue[] | { [key: string]: JsonValue };
+
+function _posixPath(value: string): string {
+  return value.replace(/\\/g, '/');
+}
+
+function _normalizedPosixPath(value: string): string {
+  return _posixPath(pathModule.normalize(value));
+}
+
+function _stripTrailingSlashes(value: string): string {
+  return value.replace(/\/+$/g, '');
+}
+
+function _rglobPy(root: string): string[] {
+  const out: string[] = [];
+  const visit = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const entryPath = pathModule.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        visit(entryPath);
+      } else if (entry.isFile() && entry.name.endsWith('.py')) {
+        out.push(_posixPath(entryPath));
+      }
+    }
+  };
+  visit(root);
+  return out.sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
+}
+
+function _topLevelImportStatements(text: string): string[] {
+  const statements: string[] = [];
+  const lines = text.split(/\r?\n/);
+  let tripleQuote: string | null = null;
+  for (let index = 0; index < lines.length; index += 1) {
+    const raw = lines[index];
+    const wasInTripleQuote = tripleQuote !== null;
+    tripleQuote = _nextTripleQuoteState(raw, tripleQuote);
+    if (wasInTripleQuote || tripleQuote !== null) {
+      continue;
+    }
+    if (/^\s/.test(raw)) {
+      continue;
+    }
+    let statement = _stripPythonLineComment(raw).trim();
+    if (!/^(?:import|from)\s/.test(statement)) {
+      continue;
+    }
+    let parenDepth = _parenDepthDelta(statement);
+    while ((parenDepth > 0 || statement.endsWith('\\')) && index + 1 < lines.length) {
+      index += 1;
+      const continuation = _stripPythonLineComment(lines[index]).trim();
+      statement = `${statement.replace(/\\$/, '')} ${continuation}`;
+      parenDepth += _parenDepthDelta(continuation);
+    }
+    statements.push(statement.replace(/\s+/g, ' ').trim());
+  }
+  return statements;
+}
+
+function _recordImportStatement(statement: string, currentModule: string, imports: Record<string, string>): void {
+  const importStatement = /^import\s+(.+)$/.exec(statement);
+  if (importStatement !== null) {
+    for (const alias of _parseImportAliases(importStatement[1])) {
+      imports[alias.asname ?? alias.name] = alias.name;
+    }
+    return;
+  }
+
+  const fromImport = /^from\s+([A-Za-z0-9_.]*)\s+import\s+(.+)$/.exec(statement);
+  if (fromImport === null) {
+    return;
+  }
+  const moduleSpec = fromImport[1];
+  const level = moduleSpec.match(/^\.+/)?.[0].length ?? 0;
+  const importedModule = moduleSpec.slice(level) || null;
+  const importModule = _resolveImportModule({ currentModule, importedModule, level });
+  for (const alias of _parseImportAliases(fromImport[2])) {
+    if (alias.name === '*') {
+      continue;
+    }
+    const target = alias.asname ?? alias.name;
+    imports[target] = importModule ? `${importModule}.${alias.name}` : alias.name;
+  }
+}
+
+function _parseImportAliases(value: string): Array<{ name: string; asname: string | null }> {
+  let body = value.trim();
+  if (body.startsWith('(') && body.endsWith(')')) {
+    body = body.slice(1, -1);
+  }
+  return _splitTopLevelComma(body)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+    .map((part) => {
+      const alias = /^(.+?)\s+as\s+([A-Za-z_][A-Za-z0-9_]*)$/.exec(part);
+      if (alias !== null) {
+        return { name: alias[1].trim(), asname: alias[2] };
+      }
+      return { name: part, asname: null };
+    });
+}
+
+function _classDefinitions(text: string): Array<{ name: string; bases: string[]; lineno: number }> {
+  const definitions: Array<{ name: string; bases: string[]; lineno: number }> = [];
+  const lines = text.split(/\r?\n/);
+  let tripleQuote: string | null = null;
+  for (let index = 0; index < lines.length; index += 1) {
+    const raw = lines[index];
+    const wasInTripleQuote = tripleQuote !== null;
+    tripleQuote = _nextTripleQuoteState(raw, tripleQuote);
+    if (wasInTripleQuote || tripleQuote !== null) {
+      continue;
+    }
+    let header = _stripPythonLineComment(raw).trim();
+    if (!header.startsWith('class ')) {
+      continue;
+    }
+    const lineno = index + 1;
+    let parenDepth = _parenDepthDelta(header);
+    while ((!header.endsWith(':') || parenDepth > 0) && index + 1 < lines.length) {
+      index += 1;
+      const continuation = _stripPythonLineComment(lines[index]).trim();
+      header = `${header} ${continuation}`;
+      parenDepth += _parenDepthDelta(continuation);
+    }
+    const parsed = _parseClassHeader(header);
+    if (parsed !== null) {
+      definitions.push({ ...parsed, lineno });
+    }
+  }
+  return definitions;
+}
+
+function _parseClassHeader(header: string): { name: string; bases: string[] } | null {
+  const classHeader = /^class\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s*\((.*)\))?\s*:\s*$/.exec(header.replace(/\s+/g, ' '));
+  if (classHeader === null) {
+    return null;
+  }
+  const bases = classHeader[2] === undefined
+    ? []
+    : _splitTopLevelComma(classHeader[2])
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0 && !/^[A-Za-z_][A-Za-z0-9_]*\s*=/.test(part));
+  return { name: classHeader[1], bases };
+}
+
+function _splitTopLevelComma(value: string): string[] {
+  const parts: string[] = [];
+  let start = 0;
+  let depth = 0;
+  let quote: string | null = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      if (char === quote && !_characterIsEscaped(value, index)) {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char === ')' || char === ']' || char === '}') {
+      depth -= 1;
+      continue;
+    }
+    if (char === ',' && depth === 0) {
+      parts.push(value.slice(start, index));
+      start = index + 1;
+    }
+  }
+  parts.push(value.slice(start));
+  return parts;
+}
+
+function _parenDepthDelta(value: string): number {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      if (char === quote && !_characterIsEscaped(value, index)) {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') {
+      depth += 1;
+    } else if (char === ')' || char === ']' || char === '}') {
+      depth -= 1;
+    }
+  }
+  return depth;
+}
+
+function _stripPythonLineComment(value: string): string {
+  let quote: string | null = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      if (char === quote && !_characterIsEscaped(value, index)) {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '#') {
+      return value.slice(0, index);
+    }
+  }
+  return value;
+}
+
+function _nextTripleQuoteState(value: string, activeQuote: string | null): string | null {
+  let quote = activeQuote;
+  let index = 0;
+  while (index < value.length) {
+    if (quote !== null) {
+      const closeIndex = value.indexOf(quote, index);
+      if (closeIndex === -1) {
+        return quote;
+      }
+      index = closeIndex + quote.length;
+      quote = null;
+      continue;
+    }
+    const singleIndex = value.indexOf("'''", index);
+    const doubleIndex = value.indexOf('"""', index);
+    if (singleIndex === -1 && doubleIndex === -1) {
+      return null;
+    }
+    if (doubleIndex === -1 || (singleIndex !== -1 && singleIndex < doubleIndex)) {
+      quote = "'''";
+      index = singleIndex + 3;
+    } else {
+      quote = '"""';
+      index = doubleIndex + 3;
+    }
+  }
+  return quote;
+}
+
+function _characterIsEscaped(value: string, index: number): boolean {
+  let slashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && value[cursor] === '\\'; cursor -= 1) {
+    slashCount += 1;
+  }
+  return slashCount % 2 === 1;
+}
 
 export class StructClass {
   readonly className: string;
@@ -43,11 +307,12 @@ export class InventorySummary {
 }
 
 function _moduleNameForPath(opts: { sourceRoot: string; pyPath: string }): string {
-  const sourceRoot = opts.sourceRoot.replace(/\/+$/g, '');
-  if (!(opts.pyPath === sourceRoot || opts.pyPath.startsWith(`${sourceRoot}/`))) {
+  const sourceRoot = _stripTrailingSlashes(_normalizedPosixPath(opts.sourceRoot));
+  const pyPath = _normalizedPosixPath(opts.pyPath);
+  if (!(pyPath === sourceRoot || pyPath.startsWith(`${sourceRoot}/`))) {
     throw new Error(`${opts.pyPath} is not in the subpath of ${opts.sourceRoot}`);
   }
-  const rel = opts.pyPath.slice(sourceRoot.length).replace(/^\/+/, '');
+  const rel = pyPath.slice(sourceRoot.length).replace(/^\/+/, '');
   const parts = rel.split('/').filter((part) => part.length > 0);
   if (parts.length > 0 && parts[parts.length - 1].endsWith('.py')) {
     parts[parts.length - 1] = parts[parts.length - 1].slice(0, -3);
@@ -75,9 +340,9 @@ function _resolveImportModule(opts: {
   return baseParts.join('.');
 }
 
-function _baseName(_base: object): string | null {
-  // Python ast.expr inspection is not available in the WebGL runtime.
-  throw new Error('schema inventory requires Python ast expression inspection');
+function _baseName(base: string): string | null {
+  const trimmed = base.trim();
+  return /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(trimmed) ? trimmed : null;
 }
 
 function _resolveSymbol(symbol: string, opts: { imports: Record<string, string> }): string {
@@ -120,13 +385,43 @@ class _ClassInfo {
   }
 }
 
-function _iterClassInfos(_sourceRoot: string): _ClassInfo[] {
-  void _baseName;
-  void _moduleNameForPath;
-  void _resolveImportModule;
-  void _resolveSymbol;
-  // Python ast parsing and filesystem traversal are not available in the WebGL runtime.
-  throw new Error('schema inventory requires Python ast parsing and filesystem traversal');
+function _iterClassInfos(sourceRoot: string): _ClassInfo[] {
+  const infos: _ClassInfo[] = [];
+  for (const pyPath of _rglobPy(sourceRoot)) {
+    const module = _moduleNameForPath({ sourceRoot, pyPath });
+    let text: string;
+    try {
+      text = readFileSync(pyPath, 'utf8');
+    } catch {
+      continue;
+    }
+
+    const imports: Record<string, string> = {};
+    for (const statement of _topLevelImportStatements(text)) {
+      _recordImportStatement(statement, module, imports);
+    }
+
+    for (const classDef of _classDefinitions(text)) {
+      const fullName = module ? `${module}.${classDef.name}` : classDef.name;
+      const bases: string[] = [];
+      for (const base of classDef.bases) {
+        const raw = _baseName(base);
+        if (raw === null) {
+          continue;
+        }
+        bases.push(_resolveSymbol(raw, { imports }));
+      }
+      infos.push(new _ClassInfo({
+        className: classDef.name,
+        fullName,
+        module,
+        path: _posixPath(pyPath),
+        lineno: classDef.lineno,
+        resolvedBases: bases,
+      }));
+    }
+  }
+  return infos;
 }
 
 function _bucketForPath(path: string): string {
