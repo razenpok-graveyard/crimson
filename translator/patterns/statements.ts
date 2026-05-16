@@ -2367,6 +2367,26 @@ export function translateStraightLineStatement(
         };
       }
     }
+    const updateCall = /^(.+)\.update\((.*)\)$/.exec(callStatement[1]);
+    if (updateCall !== null) {
+      const target = translateExpression(updateCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      if (arrayNames.has(setNameMarker(updateCall[1])) || arrayNames.has(setNameMarker(target))) {
+        const updateStatements = translateSetUpdateStatements(
+          target,
+          updateCall[2],
+          nameMap,
+          arrayNames,
+          validatedTypeAliases,
+          mapNames,
+        );
+        if (updateStatements !== null) {
+          return {
+            statements: updateStatements,
+            nextIndex: index + 1,
+          };
+        }
+      }
+    }
     const superMethodCall = /^super\(\)\.([A-Za-z_][A-Za-z0-9_]*)\((.*)\)$/.exec(callStatement[1]);
     if (superMethodCall !== null) {
       return {
@@ -2624,6 +2644,55 @@ function iterableExpressionForIteration(
     return `Array.from(${iterable})`;
   }
   return iterable;
+}
+
+function translateSetUpdateStatements(
+  target: string,
+  argsText: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string[] | null {
+  const args = splitTopLevelComma(argsText);
+  if (args.length !== 1) {
+    return null;
+  }
+  const generator = parseSimpleGeneratorExpression(args[0]);
+  if (generator !== null) {
+    const itemName = tsExportNameForPythonName(generator.itemName);
+    const itemNameMap = new Map(nameMap);
+    itemNameMap.set(generator.itemName, itemName);
+    const iterable = iterableExpressionForIteration(generator.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const value = translateExpression(generator.expression, itemNameMap, arrayNames, validatedTypeAliases, mapNames);
+    return [
+      `for (const ${itemName} of ${iterable}) {`,
+      ...(generator.condition === null
+        ? []
+        : [`  if (!(${translateExpression(generator.condition, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})) continue;`]),
+      `  ${target}.add(${value});`,
+      '}',
+    ];
+  }
+  return [
+    `for (const item of ${translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`,
+    `  ${target}.add(item);`,
+    '}',
+  ];
+}
+
+function parseSimpleGeneratorExpression(pythonExpression: string): { expression: string; itemName: string; iterable: string; condition: string | null } | null {
+  const trimmed = stripBalancedOuterParens(pythonExpression.trim());
+  const generator = /^(.+?)(?:,)? for ([A-Za-z_][A-Za-z0-9_]*) in (.+?)(?: if (.+))?$/.exec(trimmed);
+  if (generator === null) {
+    return null;
+  }
+  return {
+    expression: generator[1],
+    itemName: generator[2],
+    iterable: generator[3],
+    condition: generator[4] ?? null,
+  };
 }
 
 function collectMultilineListLiteral(

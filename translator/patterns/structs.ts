@@ -36,7 +36,7 @@ import {
   functionSignatureMarker,
   parseStraightLineFunctionHeader,
 } from './function-headers.js';
-import { recordImportedInstanceMethodSignatures, recordImportedStructConstructorFields } from './imported-classes.js';
+import { recordImportedInstanceMethodSignatures, recordImportedStructConstructorFields, recordImportedTupleTypeAliases } from './imported-classes.js';
 import { parseFunctionParameterText, parseFunctionParametersText, pythonParameterNames } from './parameters.js';
 import {
   reassignedLocalNames,
@@ -55,6 +55,7 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
   const classes: StructModule['classes'] = [];
   const protocols: StructModule['protocols'] = [];
   const structConstructorFields = new Map<string, string[]>();
+  const tupleTypeAliases = new Set<string>();
   const moduleNameMap = new Map<string, string>();
   let allNames: string[] = [];
   let sawMsgspecImport = false;
@@ -68,6 +69,10 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
     }
     if (trimmed === 'import msgspec') {
       sawMsgspecImport = true;
+      index += 1;
+      continue;
+    }
+    if (trimmed === 'import uuid') {
       index += 1;
       continue;
     }
@@ -160,6 +165,12 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       relativePath,
       structConstructorFields,
     );
+    recordImportedTupleTypeAliases(
+      modulePath,
+      names.map((name) => ({ importedName: name, localName: name })),
+      relativePath,
+      tupleTypeAliases,
+    );
     if (modulePath === '@crimson/bonuses/hud.ts') {
       for (const name of fromImport[2].split(', ')) {
         if (name === '_TimerRef') {
@@ -245,7 +256,7 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       continue;
     }
 
-    const structClass = parseStructClass(lines, index, moduleNameMap);
+    const structClass = parseStructClass(lines, index, moduleNameMap, new Set(), tupleTypeAliases);
     if (structClass === null) {
       return null;
     }
@@ -391,6 +402,7 @@ export function parseStructClass(
   index: number,
   moduleNameMap: ReadonlyMap<string, string> = new Map(),
   initialMapNames: ReadonlySet<string> = new Set(),
+  tupleTypeAliases: ReadonlySet<string> = new Set(),
 ): { structClass: StructModule['classes'][number]; nextIndex: number } | null {
   const dataclass = /^@dataclass\((?<options>[^)]*)\)$/.exec(lines[index] ?? '');
   const classIndex = dataclass === null ? index : index + 1;
@@ -527,7 +539,7 @@ export function parseStructClass(
     }
     const defaultValue = defaultValueText === null ? null : tsStructFieldDefaultValue(defaultValueText.value);
     const fieldName = tsAttributeNameForPythonName(field[1]);
-    const typeExpression = tsStructFieldType(field[2]);
+    const typeExpression = tsStructFieldType(field[2], tupleTypeAliases);
     const fieldTypeName = simpleClassTypeName(typeExpression);
     if (fieldTypeName !== null) {
       classNameMap.set(receiverTypeNameMarker(`self.${field[1]}`), fieldTypeName);
@@ -544,7 +556,7 @@ export function parseStructClass(
     if (typeExpression.startsWith('Map<')) {
       mapFieldNames.add(`self.${field[1]}`);
       mapFieldNames.add(`this.${fieldName}`);
-      if (pythonMapTypeHasTupleKey(field[2])) {
+      if (pythonMapTypeHasTupleKey(field[2], tupleTypeAliases)) {
         mapFieldNames.add(tupleKeyMapNameMarker(`self.${field[1]}`));
         mapFieldNames.add(tupleKeyMapNameMarker(`this.${fieldName}`));
       }
@@ -839,8 +851,14 @@ function pythonMapTypeArgs(pythonType: string): string[] | null {
   return mapType === null ? null : splitTopLevelComma(mapType[1]);
 }
 
-function pythonMapTypeHasTupleKey(pythonType: string): boolean {
-  return pythonMapTypeArgs(pythonType)?.[0]?.trim().startsWith('tuple[') === true;
+function pythonMapTypeHasTupleKey(pythonType: string, tupleTypeAliases: ReadonlySet<string> = new Set()): boolean {
+  const mapKeyType = pythonMapTypeArgs(pythonType)?.[0];
+  return mapKeyType !== undefined && pythonMapKeyHasTupleIdentity(mapKeyType, tupleTypeAliases);
+}
+
+function pythonMapKeyHasTupleIdentity(pythonType: string, tupleTypeAliases: ReadonlySet<string>): boolean {
+  const trimmed = pythonType.trim();
+  return trimmed.startsWith('tuple[') || tupleTypeAliases.has(trimmed) || tupleTypeAliases.has(tsExportNameForPythonName(trimmed));
 }
 
 function pythonMapValueIsList(pythonType: string): boolean {
@@ -1038,8 +1056,13 @@ function parseIndentedDocstring(
   return null;
 }
 
-function tsStructFieldType(pythonType: string): string {
-  return tsTypeExpression(pythonType.replace(/\bPath\b/g, 'str'));
+function tsStructFieldType(pythonType: string, tupleTypeAliases: ReadonlySet<string> = new Set()): string {
+  const normalized = pythonType.replace(/\bPath\b/g, 'str');
+  const mapArgs = pythonMapTypeArgs(normalized);
+  if (mapArgs !== null && pythonMapKeyHasTupleIdentity(mapArgs[0], tupleTypeAliases)) {
+    return `Map<string, ${tsTypeExpression(mapArgs[1])}>`;
+  }
+  return tsTypeExpression(normalized);
 }
 
 function tsStructFieldDefaultValue(pythonValue: string): string | null {

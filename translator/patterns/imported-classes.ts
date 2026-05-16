@@ -42,6 +42,24 @@ export function recordImportedStructConstructorFields(
   }
 }
 
+export function recordImportedTupleTypeAliases(
+  modulePath: string,
+  names: { importedName: string; localName: string }[],
+  relativePath: string,
+  tupleTypeAliases: Set<string>,
+): void {
+  const sourcePath = tsSourcePathForImportPath(modulePath, relativePath);
+  if (sourcePath === null || !fs.existsSync(sourcePath)) {
+    return;
+  }
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  for (const name of names) {
+    if (exportedTypeAliasLooksTuple(source, name.importedName)) {
+      tupleTypeAliases.add(name.localName);
+    }
+  }
+}
+
 export function recordImportedFunctionReturnTypes(
   modulePath: string,
   names: { importedName: string; localName: string }[],
@@ -239,6 +257,11 @@ function exportedClassSource(source: string, className: string): string | null {
   return nextExport === -1
     ? source.slice(classStart)
     : source.slice(classStart, classStart + 1 + nextExport);
+}
+
+function exportedTypeAliasLooksTuple(source: string, typeName: string): boolean {
+  const escapedName = typeName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`export\\s+type\\s+${escapedName}\\s*=\\s*(?:readonly\\s+)?\\[`).test(source);
 }
 
 function tsSourcePathForImportPath(modulePath: string, relativePath: string): string | null {

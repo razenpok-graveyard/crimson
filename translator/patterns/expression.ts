@@ -431,6 +431,10 @@ export function translateExpression(
     return 'globalThis.process?.pid ?? 0';
   }
 
+  if (trimmed === 'uuid.uuid4().hex') {
+    return "globalThis.crypto.randomUUID().replaceAll('-', '')";
+  }
+
   if (trimmed === 'int.from_bytes(os.urandom(4), "little")' || trimmed === "int.from_bytes(os.urandom(4), 'little')") {
     return 'globalThis.crypto.getRandomValues(new Uint32Array(1))[0]';
   }
@@ -750,6 +754,11 @@ export function translateExpression(
     return `Object.fromEntries(Array.from(${iterable}, ([${keyName}, ${valueName}]) => [${keyExpression}, ${valueExpression}] as const))`;
   }
 
+  const setLiteral = translateSetLiteralExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (setLiteral !== null) {
+    return setLiteral;
+  }
+
   const boolCall = parseCallPrefix(trimmed, 'bool');
   if (boolCall !== null && boolCall.rest === '') {
     return translateBooleanCast(boolCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -1061,6 +1070,14 @@ export function translateExpression(
       const value = translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
       const divisor = translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
       return `[Math.floor(${value} / ${divisor}), ${value} % ${divisor}]`;
+    }
+  }
+
+  const nextCall = parseCallPrefix(trimmed, 'next');
+  if (nextCall !== null && nextCall.rest === '') {
+    const nextExpression = translateNextCall(nextCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (nextExpression !== null) {
+      return nextExpression;
     }
   }
 
@@ -2757,7 +2774,8 @@ function expressionLooksBoolean(tsExpression: string): boolean {
     || /(?:===|!==|<=|>=|<|>|&&|\|\||\binstanceof\b)/.test(trimmed)
     || /^typeof\b/.test(trimmed)
     || /^(?:Array\.isArray|Number\.is(?:Finite|Integer|NaN))\(/.test(trimmed)
-    || /\.(?:has|includes|startsWith|endsWith)\(/.test(trimmed);
+    || /\.(?:has|includes|startsWith|endsWith)\(/.test(trimmed)
+    || /(?:^|\.)[A-Za-z_$][A-Za-z0-9_$]*(?:Ready|Connected|Started|Enabled|Available|Visible|Empty|Valid|Compatible|Allowed)\(\)$/.test(trimmed);
 }
 
 function expressionLooksSimpleValueReference(tsExpression: string): boolean {
@@ -2831,6 +2849,57 @@ function translateInlineDictMapExpression(
     entries.push(`[${translateExpression(key, nameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(value, nameMap, arrayNames, validatedTypeAliases, mapNames)}]`);
   }
   return `new Map([${entries.join(', ')}])`;
+}
+
+function translateSetLiteralExpression(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  const trimmed = pythonExpression.trim();
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
+    return null;
+  }
+  const body = trimmed.slice(1, -1).trim();
+  if (body === '') {
+    return null;
+  }
+  const items = splitTopLevelComma(body).filter((item) => item.trim() !== '');
+  if (items.length === 0 || items.some((item) => topLevelColonIndex(item) !== null)) {
+    return null;
+  }
+  return `new Set([${items.map((item) => translateExpression(item, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')}])`;
+}
+
+function translateNextCall(
+  argsText: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  const args = splitTopLevelComma(argsText);
+  if (args.length < 1 || args.length > 2) {
+    return null;
+  }
+  const generator = parseSimpleGeneratorExpression(args[0]);
+  if (generator === null) {
+    return null;
+  }
+  const itemName = tsExportNameForPythonName(generator.itemName);
+  const itemNameMap = new Map(nameMap);
+  itemNameMap.set(generator.itemName, itemName);
+  const iterable = iterableExpressionForIteration(generator.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const condition = generator.condition === null
+    ? ''
+    : ` if (${translateExpression(generator.condition, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  const value = translateExpression(generator.expression, itemNameMap, arrayNames, validatedTypeAliases, mapNames);
+  const fallback = args[1] === undefined
+    ? 'undefined'
+    : translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  return `(() => { for (const ${itemName} of ${iterable}) {${condition} return ${value}; } return ${fallback}; })()`;
 }
 
 function translateMsgspecStructsReplace(
