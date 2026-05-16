@@ -10,7 +10,7 @@ import { weaponUsageSlotForWeaponId } from '@crimson/weapon-usage.ts';
 import { WEAPON_TABLE, WeaponId } from '@crimson/weapons.ts';
 
 export const WEAPON_DROP_ID_COUNT = 0x21; // weapon ids 1..33
-export const WEAPON_AVAILABLE_COUNT = Math.max(...Array.from(WEAPON_TABLE, (entry) => Math.trunc(entry.weaponId))) + 1;
+export const WEAPON_AVAILABLE_COUNT = Math.max(...Array.from(WEAPON_TABLE, (entry) => int(entry.weaponId))) + 1;
 
 function pythonEquals(left: object | string | number | boolean | null | undefined, right: object | string | number | boolean | null | undefined): boolean {
   if (left === right) {

@@ -28,10 +28,10 @@ export function tickTypoSpawns(opts: { elapsedMs: number; spawnCooldownMs: numbe
   let playerCount = opts.playerCount;
   const worldWidth = opts.worldWidth;
   const worldHeight = opts.worldHeight;
-  elapsedMs = Math.trunc(elapsedMs);
-  let cooldown = Math.trunc(spawnCooldownMs);
-  const dtMs = Math.trunc(frameDtMs);
-  playerCount = Math.max(1, Math.trunc(playerCount));
+  elapsedMs = int(elapsedMs);
+  let cooldown = int(spawnCooldownMs);
+  const dtMs = int(frameDtMs);
+  playerCount = Math.max(1, int(playerCount));
 
   cooldown -= dtMs * playerCount;
 

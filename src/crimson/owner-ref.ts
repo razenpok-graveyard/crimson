@@ -28,20 +28,20 @@ export class OwnerRef {
   }
 
   static fromLocalPlayer(index: number): OwnerRef {
-    return new OwnerRef({ kind: OwnerKind.PLAYER, index: Math.trunc(index), localHost: true });
+    return new OwnerRef({ kind: OwnerKind.PLAYER, index: int(index), localHost: true });
   }
 
   static fromPlayer(index: number): OwnerRef {
-    return new OwnerRef({ kind: OwnerKind.PLAYER, index: Math.trunc(index), localHost: false });
+    return new OwnerRef({ kind: OwnerKind.PLAYER, index: int(index), localHost: false });
   }
 
   static fromCreature(index: number): OwnerRef {
-    return new OwnerRef({ kind: OwnerKind.CREATURE, index: Math.trunc(index), localHost: false });
+    return new OwnerRef({ kind: OwnerKind.CREATURE, index: int(index), localHost: false });
   }
 
   static fromLegacy(ownerId: number): OwnerRef {
-    const legacy = Math.trunc(ownerId);
-    if (legacy === Math.trunc(LOCAL_PLAYER_OWNER_ID)) {
+    const legacy = int(ownerId);
+    if (legacy === int(LOCAL_PLAYER_OWNER_ID)) {
       return OwnerRef.fromLocalPlayer(0);
     }
     if (legacy < 0) {
@@ -59,12 +59,12 @@ export class OwnerRef {
       return 0;
     }
     if (this.kind === OwnerKind.CREATURE) {
-      return Math.trunc(this.index);
+      return int(this.index);
     }
-    if (this.localHost && Math.trunc(this.index) === 0) {
-      return Math.trunc(LOCAL_PLAYER_OWNER_ID);
+    if (this.localHost && int(this.index) === 0) {
+      return int(LOCAL_PLAYER_OWNER_ID);
     }
-    return -1 - Math.trunc(this.index);
+    return -1 - int(this.index);
   }
 
   isPlayer(): boolean {
@@ -75,7 +75,7 @@ export class OwnerRef {
     if (this.kind !== OwnerKind.PLAYER) {
       return null;
     }
-    return Math.trunc(this.index);
+    return int(this.index);
   }
 
   playerIndexInBounds(playerCount: number): number | null {
@@ -83,8 +83,8 @@ export class OwnerRef {
     if (idx === null) {
       return null;
     }
-    if (0 <= idx && idx < Math.trunc(playerCount)) {
-      return Math.trunc(idx);
+    if (0 <= idx && idx < int(playerCount)) {
+      return int(idx);
     }
     return null;
   }
@@ -93,7 +93,7 @@ export class OwnerRef {
     if (this.kind !== OwnerKind.CREATURE) {
       return null;
     }
-    return Math.trunc(this.index);
+    return int(this.index);
   }
 
   creatureIndexInBounds(creatureCount: number): number | null {
@@ -101,8 +101,8 @@ export class OwnerRef {
     if (idx === null) {
       return null;
     }
-    if (0 <= idx && idx < Math.trunc(creatureCount)) {
-      return Math.trunc(idx);
+    if (0 <= idx && idx < int(creatureCount)) {
+      return int(idx);
     }
     return null;
   }

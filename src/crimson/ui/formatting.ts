@@ -1,7 +1,7 @@
 // Port of crimson/ui/formatting.py
 
 export function formatOrdinal(value1Based: number): string {
-  const value = Math.trunc(value1Based);
+  const value = int(value1Based);
   let suffix: string;
   if (value % 100 === 11 || value % 100 === 12 || value % 100 === 13) {
     suffix = 'th';
@@ -18,7 +18,7 @@ export function formatOrdinal(value1Based: number): string {
 }
 
 export function formatTimeMmSs(ms: number): string {
-  const totalS = Math.floor(Math.max(0, Math.trunc(ms)) / 1000);
+  const totalS = Math.floor(Math.max(0, int(ms)) / 1000);
   const minutes = Math.floor(totalS / 60);
   const seconds = totalS % 60;
   return `${minutes}:${String(seconds).padStart(2, '0')}`;

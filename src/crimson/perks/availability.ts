@@ -9,7 +9,7 @@ import { PERK_COUNT_SIZE } from '@crimson/sim/state-types.ts';
 import { perkCountGet } from '@crimson/perks/helpers.ts';
 import { PERK_BY_ID, PerkFlags, PerkId } from '@crimson/perks/ids.ts';
 
-const _PERK_BASE_AVAILABLE_MAX_ID = Math.trunc(PerkId.BONUS_MAGNET);
+const _PERK_BASE_AVAILABLE_MAX_ID = int(PerkId.BONUS_MAGNET);
 const _PERK_ALWAYS_AVAILABLE: readonly PerkId[] = [
   PerkId.MAN_BOMB,
   PerkId.LIVING_FORTRESS,
@@ -80,7 +80,7 @@ export function buildPerkAvailability(opts: { status: GameStatus | null }): bool
     }
   }
 
-  available[Math.trunc(PerkId.ANTIPERK)] = false;
+  available[int(PerkId.ANTIPERK)] = false;
   return available;
 }
 

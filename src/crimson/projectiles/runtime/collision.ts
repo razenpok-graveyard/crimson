@@ -79,12 +79,12 @@ export function applyDamageToCreature(creatures: readonly CreatureState[], creat
   if (damage <= 0.0) {
     return;
   }
-  const idx = Math.trunc(creatureIndex);
+  const idx = int(creatureIndex);
   if (!(idx >= 0 && idx < creatures.length)) {
     return;
   }
   if (applyCreatureDamage !== null) {
-    applyCreatureDamage(idx, damage, Math.trunc(damageType), impulse, owner);
+    applyCreatureDamage(idx, damage, int(damageType), impulse, owner);
   } else {
     creatures[idx].hp -= damage;
   }

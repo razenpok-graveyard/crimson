@@ -21,7 +21,7 @@ export function applyHardcoreSpawnTableAdjustment(entries: SpawnEntry[]): SpawnE
   const adjusted: SpawnEntry[] = [];
   for (const entry of entries) {
     const spawnId = entry.spawnId;
-    let count = Math.trunc(entry.count);
+    let count = int(entry.count);
     if (count > 1 && spawnId !== SpawnId.SPIDER_SP1_CONST_RANGED_VARIANT_3C) {
       if (spawnId === SpawnId.ALIEN_CONST_RED_FAST_2B) {
         count += 2;

@@ -20,7 +20,7 @@ export class ResyncFailureTracker {
 
   noteFailure(): boolean {
     this.failures += 1;
-    return Math.trunc(this.failures) >= Math.trunc(this.maxFailuresPerMatch);
+    return int(this.failures) >= int(this.maxFailuresPerMatch);
   }
 
   reset(): void {
@@ -49,15 +49,15 @@ export class HostLanAdapter {
     this.inputStallTimeoutMs = opts.inputStallTimeoutMs ?? 250;
     this.localSlotIndex = opts.localSlotIndex ?? 0;
     this.resyncFailures = opts.resyncFailures ?? new ResyncFailureTracker();
-    this.lockstep = new HostLockstepState({ playerCount: Math.trunc(this.playerCount), inputDelayTicks: Math.trunc(this.inputDelayTicks), inputStallTimeoutMs: Math.trunc(this.inputStallTimeoutMs) });
+    this.lockstep = new HostLockstepState({ playerCount: int(this.playerCount), inputDelayTicks: int(this.inputDelayTicks), inputStallTimeoutMs: int(this.inputStallTimeoutMs) });
   }
 
   submitLocalInput(opts: { tickIndex: number; packedInput: PackedPlayerInput }): void {
     const tickIndex = opts.tickIndex;
     const packedInput = opts.packedInput;
     this.lockstep.submitInputSample({
-      slotIndex: Math.trunc(this.localSlotIndex),
-      tickIndex: Math.trunc(tickIndex),
+      slotIndex: int(this.localSlotIndex),
+      tickIndex: int(tickIndex),
       packedInput: Array.from(packedInput),
     });
   }
@@ -68,12 +68,12 @@ export class HostLanAdapter {
 
   emitReadyFrames(opts: { nowMs: number }): HostReadyTick[] {
     const nowMs = opts.nowMs;
-    return this.lockstep.popReadyFrames({ nowMs: Math.trunc(nowMs) });
+    return this.lockstep.popReadyFrames({ nowMs: int(nowMs) });
   }
 
   updatePauseState(opts: { nowMs: number }): PauseState | null {
     const nowMs = opts.nowMs;
-    return this.lockstep.updatePauseState({ nowMs: Math.trunc(nowMs) });
+    return this.lockstep.updatePauseState({ nowMs: int(nowMs) });
   }
 }
 
@@ -95,7 +95,7 @@ export class ClientLanAdapter {
     this.inputDelayTicks = opts.inputDelayTicks ?? INPUT_DELAY_TICKS;
     this.inputStallTimeoutMs = opts.inputStallTimeoutMs ?? 250;
     this.resyncFailures = opts.resyncFailures ?? new ResyncFailureTracker();
-    this.lockstep = new ClientLockstepState({ localSlotIndex: Math.trunc(this.localSlotIndex), inputDelayTicks: Math.trunc(this.inputDelayTicks), inputStallTimeoutMs: Math.trunc(this.inputStallTimeoutMs) });
+    this.lockstep = new ClientLockstepState({ localSlotIndex: int(this.localSlotIndex), inputDelayTicks: int(this.inputDelayTicks), inputStallTimeoutMs: int(this.inputStallTimeoutMs) });
   }
 
   queueLocalInput(packedInput: PackedPlayerInput): InputBatch {
@@ -106,7 +106,7 @@ export class ClientLanAdapter {
     const nowMs = opts.nowMs;
     this.lockstep.ingestTickFrame(
       frame,
-      { nowMs: Math.trunc(nowMs) },
+      { nowMs: int(nowMs) },
     );
   }
 
@@ -116,6 +116,6 @@ export class ClientLanAdapter {
 
   updatePauseState(opts: { nowMs: number }): PauseState | null {
     const nowMs = opts.nowMs;
-    return this.lockstep.updatePauseState({ nowMs: Math.trunc(nowMs) });
+    return this.lockstep.updatePauseState({ nowMs: int(nowMs) });
   }
 }

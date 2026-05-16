@@ -37,7 +37,7 @@ export function summarizeTraceHealth(tracePath: string, opts: { tickStart?: numb
       ticksTotal += 1;
       ticksWithDt += 1;
       for (const channelName of TRACE_REQUIRED_CHANNELS) {
-        channelsPresent.set(channelName, Math.trunc(channelsPresent.get(channelName) ?? 0) + 1);
+        channelsPresent.set(channelName, int(channelsPresent.get(channelName) ?? 0) + 1);
         if (channelName === 'rng_stream') {
           rngStreamRows += rngStreamChannelRequired(tick).length;
         } else if (channelName === 'timing_samples') {
@@ -73,13 +73,13 @@ export function summarizeTraceHealth(tracePath: string, opts: { tickStart?: numb
     const metaRange = trace.meta.tickRange;
     if (ticksTotal > 0) {
       if (windowStart === null) {
-        windowStart = Math.trunc(metaRange.get('start_tick') ?? -1);
+        windowStart = int(metaRange.get('start_tick') ?? -1);
       }
       if (windowEnd === null) {
-        windowEnd = Math.trunc(metaRange.get('end_tick') ?? -1);
+        windowEnd = int(metaRange.get('end_tick') ?? -1);
       }
     }
-    return toBuiltinObject({ "trace_format_version": Math.trunc(trace.meta.traceFormatVersion), "trace_schema_version": Math.trunc(trace.meta.traceSchemaVersion), "tick_window": { 'requested_start': tickStart === null ? null : Math.trunc(tickStart), 'requested_end': tickEnd === null ? null : Math.trunc(tickEnd), 'actual_start': windowStart === null ? null : Math.trunc(windowStart), 'actual_end': windowEnd === null ? null : Math.trunc(windowEnd), 'ticks_in_window': Math.trunc(ticksTotal) }, "channels_present": Object.fromEntries(Array.from(Array.from(channelsPresent.entries()).sort((left, right) => left < right ? -1 : left > right ? 1 : 0), ([key, value]) => [String(key), Math.trunc(value)] as const)), "metrics": { 'ticks_with_dt_ms_i32': Math.trunc(ticksWithDt), 'rng_stream_rows': Math.trunc(rngStreamRows), 'sim_state_rows': Math.trunc(simStateRows), 'sample_creature_rows': Math.trunc(sampleCreatureRows), 'sample_projectile_rows': Math.trunc(sampleProjectileRows), 'sample_secondary_projectile_rows': Math.trunc(sampleSecondaryRows), 'sample_bonus_rows': Math.trunc(sampleBonusRows), 'timing_samples_rows': Math.trunc(timingSamplesRows) }, "issues": issues, "ok_for_movement_root_cause": issues.length === 0 }, { field: 'trace_health' });
+    return toBuiltinObject({ "trace_format_version": int(trace.meta.traceFormatVersion), "trace_schema_version": int(trace.meta.traceSchemaVersion), "tick_window": { 'requested_start': tickStart === null ? null : int(tickStart), 'requested_end': tickEnd === null ? null : int(tickEnd), 'actual_start': windowStart === null ? null : int(windowStart), 'actual_end': windowEnd === null ? null : int(windowEnd), 'ticks_in_window': int(ticksTotal) }, "channels_present": Object.fromEntries(Array.from(Array.from(channelsPresent.entries()).sort((left, right) => left < right ? -1 : left > right ? 1 : 0), ([key, value]) => [String(key), int(value)] as const)), "metrics": { 'ticks_with_dt_ms_i32': int(ticksWithDt), 'rng_stream_rows': int(rngStreamRows), 'sim_state_rows': int(simStateRows), 'sample_creature_rows': int(sampleCreatureRows), 'sample_projectile_rows': int(sampleProjectileRows), 'sample_secondary_projectile_rows': int(sampleSecondaryRows), 'sample_bonus_rows': int(sampleBonusRows), 'timing_samples_rows': int(timingSamplesRows) }, "issues": issues, "ok_for_movement_root_cause": issues.length === 0 }, { field: 'trace_health' });
   } finally {
     trace.close();
   }

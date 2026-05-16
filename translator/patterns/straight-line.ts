@@ -43,11 +43,14 @@ import {
 } from './common.js';
 import { parseStringEnumClass } from './enums.js';
 import { objectNameMarker, setNameMarker, stringNameMarker, translateExpression } from './expression.js';
-import { parseFunctionParameterText, pythonParameterNames } from './parameters.js';
-import { bytesFromHelperStatements, constructBinaryHelperStatements } from './runtime-helpers.js';
 import {
   functionSignatureMarker,
   parseStraightLineFunctionHeader,
+  tsFunctionReturnTypeExpression,
+} from './function-headers.js';
+import { parseFunctionParameterText, pythonParameterNames } from './parameters.js';
+import { bytesFromHelperStatements, constructBinaryHelperStatements } from './runtime-helpers.js';
+import {
   parseTopLevelAssignment,
   reassignedLocalNames,
   rewriteStructPositionalConstructors,
@@ -2258,9 +2261,4 @@ function tsLocalNameForPythonAlias(pythonName: string): string {
   return pythonName.startsWith('_')
     ? `_${tsExportNameForPythonName(pythonName)}`
     : tsExportNameForPythonName(pythonName);
-}
-
-function tsFunctionReturnTypeExpression(pythonType: string): string {
-  const typeExpression = tsTypeExpression(pythonType);
-  return pythonType.includes('tuple[') ? typeExpression.replace(/\breadonly /g, '') : typeExpression;
 }

@@ -51,7 +51,7 @@ export function tickQuestSpawnTimeline(entries: readonly SpawnEntry[], questSpaw
     const basePos = entry.pos;
     const offscreenX = basePos.x < 0.0 || f32(terrainWidth) < basePos.x;
 
-    for (let spawnIdx = 0; spawnIdx < Math.trunc(entry.count); spawnIdx++) {
+    for (let spawnIdx = 0; spawnIdx < int(entry.count); spawnIdx++) {
       const magnitude = f32(spawnIdx * 0x28);
       const offset = (spawnIdx & 1) === 0 ? magnitude : -magnitude;
       let pos: any;

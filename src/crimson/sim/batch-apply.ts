@@ -40,7 +40,7 @@ export function applySimMetadataTickResult(opts: { simWorld: SimMetadataSink; ti
     step: step,
     gameTuneStarted: gameTuneStarted,
   });
-  return new PresentationTickOutput({ tickIndex: Math.trunc(tickResult.sourceTick.tickIndex), dtSim: step.dtSim, presentation: step.presentation, terrainFx: step.terrainFx });
+  return new PresentationTickOutput({ tickIndex: int(tickResult.sourceTick.tickIndex), dtSim: step.dtSim, presentation: step.presentation, terrainFx: step.terrainFx });
 }
 
 export function applyTickToSim(opts: { simWorld: SimMetadataSink; step: DeterministicStepResult; gameTuneStarted: boolean }): void {

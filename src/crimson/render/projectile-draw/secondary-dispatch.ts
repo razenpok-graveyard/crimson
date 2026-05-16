@@ -15,7 +15,7 @@ const SECONDARY_PROJECTILE_DRAW_HANDLERS_BY_TYPE: Map<number, readonly Secondary
 ]);
 
 export function drawSecondaryProjectileFromRegistry(ctx: SecondaryProjectileDrawCtx): boolean {
-  const handlers = SECONDARY_PROJECTILE_DRAW_HANDLERS_BY_TYPE.get(Math.trunc(ctx.projType)) ?? [];
+  const handlers = SECONDARY_PROJECTILE_DRAW_HANDLERS_BY_TYPE.get(int(ctx.projType)) ?? [];
   for (const handler of handlers) {
     if (handler(ctx)) {
       return true;

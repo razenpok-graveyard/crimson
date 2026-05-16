@@ -56,15 +56,15 @@ export class TickRunner {
     let startTick = opts.startTick;
     let ticksRequested = opts.ticksRequested;
     const tickDt = opts.tickDt;
-    startTick = Math.trunc(startTick);
-    ticksRequested = Math.max(0, Math.trunc(ticksRequested));
+    startTick = int(startTick);
+    ticksRequested = Math.max(0, int(ticksRequested));
 
     if (tickDt <= 0.0) {
       throw new Error('tick_dt must be positive');
     }
 
     if (ticksRequested <= 0) {
-      return new TickBatchResult({ ticksCompleted: 0, batchStatus: InputStatus.READY, nextTickIndex: Math.trunc(startTick), completedResults: [] });
+      return new TickBatchResult({ ticksCompleted: 0, batchStatus: InputStatus.READY, nextTickIndex: int(startTick), completedResults: [] });
     }
 
     let ticksCompleted = 0;
@@ -72,7 +72,7 @@ export class TickRunner {
     const completedResults: TickResult[] = [];
 
     for (let tickOffset = 0; tickOffset < ticksRequested; tickOffset++) {
-      const tickIndex = Math.trunc(startTick + tickOffset);
+      const tickIndex = int(startTick + tickOffset);
       const tickSupply = this._inputProvider.pullTick(tickIndex, tickDt);
       const status = tickSupply.status;
       if (status === InputStatus.STALLED) {
@@ -100,7 +100,7 @@ export class TickRunner {
       ticksCompleted += 1;
     }
 
-    return new TickBatchResult({ ticksCompleted: ticksCompleted, batchStatus: batchStatus, nextTickIndex: Math.trunc(startTick) + Math.trunc(ticksCompleted), completedResults: Array.from(completedResults) });
+    return new TickBatchResult({ ticksCompleted: ticksCompleted, batchStatus: batchStatus, nextTickIndex: int(startTick) + int(ticksCompleted), completedResults: Array.from(completedResults) });
   }
 
   static _validatedSourceTick(opts: { tickSupply: any; expectedTickIndex: number }): ResolvedTick {
@@ -110,13 +110,13 @@ export class TickRunner {
     if (sourceTick === null) {
       throw new Error('ready tick supply must carry a resolved tick');
     }
-    if (Math.trunc(sourceTick.tickIndex) !== Math.trunc(expectedTickIndex)) {
-      throw new Error(`resolved tick index mismatch: expected=${Math.trunc(expectedTickIndex)} got=${Math.trunc(sourceTick.tickIndex)}`);
+    if (int(sourceTick.tickIndex) !== int(expectedTickIndex)) {
+      throw new Error(`resolved tick index mismatch: expected=${int(expectedTickIndex)} got=${int(sourceTick.tickIndex)}`);
     }
     const dtSeconds = sourceTick.dtSeconds;
     if (dtSeconds <= 0.0) {
       throw new Error('resolved tick dt_seconds must be positive');
     }
-    return new ResolvedTick({ tickIndex: Math.trunc(sourceTick.tickIndex), dtSeconds: dtSeconds, inputs: Array.from(sourceTick.inputs), commands: Array.from(sourceTick.commands) });
+    return new ResolvedTick({ tickIndex: int(sourceTick.tickIndex), dtSeconds: dtSeconds, inputs: Array.from(sourceTick.inputs), commands: Array.from(sourceTick.commands) });
   }
 }

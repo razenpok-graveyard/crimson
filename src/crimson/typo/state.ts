@@ -9,7 +9,7 @@ export function resetTypoState(typo: TypoState, opts: { creatureCapacity: number
   const dictionaryWords = opts.dictionaryWords ?? [];
   const highscoreNames = opts.highscoreNames ?? [];
   typo.typing = new TypingBuffer();
-  typo.names = CreatureNameTable.sized(Math.trunc(creatureCapacity));
+  typo.names = CreatureNameTable.sized(int(creatureCapacity));
   typo.spawnCooldownMs = 0;
   typo.dictionaryWords = dictionaryWords.map((word) => String(word));
   typo.highscoreNames = highscoreNames.map((name) => String(name));
@@ -18,7 +18,7 @@ export function resetTypoState(typo: TypoState, opts: { creatureCapacity: number
 }
 
 export function typoShotCounts(typo: TypoState): [number, number] {
-  return [Math.trunc(typo.typing.submitCount), Math.trunc(typo.typing.matchCount)];
+  return [int(typo.typing.submitCount), int(typo.typing.matchCount)];
 }
 
 export class TypoState {

@@ -8,7 +8,7 @@ const _f32buf = new Float32Array(1);
 const _u32buf = new Uint32Array(_f32buf.buffer);
 
 function f32FromBits(bits: number): number {
-  return (() => { _u32buf[0] = (Math.trunc(bits) >>> 0); return _f32buf[0]; })();
+  return (() => { _u32buf[0] = (int(bits) >>> 0); return _f32buf[0]; })();
 }
 
 export function f32(value: number): number {

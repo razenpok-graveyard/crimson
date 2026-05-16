@@ -29,7 +29,7 @@ export class DemoTrialOverlayInfo {
 }
 
 export function formatDemoTrialTime(ms: number): string {
-  let value = Math.trunc(ms);
+  let value = int(ms);
   if (value < 0) {
     value = 0;
   }
@@ -54,29 +54,29 @@ export function tickDemoTrialTimers(opts: { demoBuild: boolean; gameModeId: Game
   const questGraceElapsedMs = opts.questGraceElapsedMs;
   const dtMs = opts.dtMs;
   if (!demoBuild) {
-    return [Math.trunc(globalPlaytimeMs), Math.trunc(questGraceElapsedMs)];
+    return [int(globalPlaytimeMs), int(questGraceElapsedMs)];
   }
 
   switch (gameModeId) {
     case GameMode.TUTORIAL:
-      return [Math.trunc(globalPlaytimeMs), Math.trunc(questGraceElapsedMs)];
+      return [int(globalPlaytimeMs), int(questGraceElapsedMs)];
     default:
       break;
   }
-  let usedMs = Math.max(0, Math.trunc(globalPlaytimeMs));
-  let graceMs = Math.max(0, Math.trunc(questGraceElapsedMs));
+  let usedMs = Math.max(0, int(globalPlaytimeMs));
+  let graceMs = Math.max(0, int(questGraceElapsedMs));
   if (usedMs >= DEMO_TOTAL_PLAY_TIME_MS && graceMs < 1) {
     graceMs = 1;
   }
   usedMs = Math.min(DEMO_TOTAL_PLAY_TIME_MS, usedMs);
 
   if (overlayVisible) {
-    return [Math.trunc(usedMs), Math.trunc(graceMs)];
+    return [int(usedMs), int(graceMs)];
   }
 
-  const deltaMs = Math.trunc(dtMs);
+  const deltaMs = int(dtMs);
   if (deltaMs <= 0) {
-    return [Math.trunc(usedMs), Math.trunc(graceMs)];
+    return [int(usedMs), int(graceMs)];
   }
 
   usedMs = Math.min(DEMO_TOTAL_PLAY_TIME_MS, usedMs + deltaMs);
@@ -93,7 +93,7 @@ export function tickDemoTrialTimers(opts: { demoBuild: boolean; gameModeId: Game
         break;
     }
   }
-  return [Math.trunc(usedMs), Math.trunc(graceMs)];
+  return [int(usedMs), int(graceMs)];
 }
 
 export function demoTrialOverlayInfo(opts: { demoBuild: boolean; gameModeId: GameMode; globalPlaytimeMs: number; questGraceElapsedMs: number; questLevel: QuestLevel | null }): DemoTrialOverlayInfo {
@@ -120,27 +120,27 @@ export function demoTrialOverlayInfo(opts: { demoBuild: boolean; gameModeId: Gam
     default:
       break;
   }
-  const usedMs = Math.max(0, Math.trunc(globalPlaytimeMs));
-  const graceMs = Math.max(0, Math.trunc(questGraceElapsedMs));
+  const usedMs = Math.max(0, int(globalPlaytimeMs));
+  const graceMs = Math.max(0, int(questGraceElapsedMs));
 
   const globalRemainingMs = Math.max(0, DEMO_TOTAL_PLAY_TIME_MS - usedMs);
   const graceRemainingMs = Math.max(0, DEMO_QUEST_GRACE_TIME_MS - graceMs);
 
-  const tierLocked = gameModeId === GameMode.QUESTS && questLevel !== null && (Math.trunc(questLevel.major) > 1 || Math.trunc(questLevel.minor) > 10);
+  const tierLocked = gameModeId === GameMode.QUESTS && questLevel !== null && (int(questLevel.major) > 1 || int(questLevel.minor) > 10);
 
   if (graceMs > 0) {
     if (graceRemainingMs <= 0) {
       return new DemoTrialOverlayInfo({ visible: true, kind: 'time_up', remainingMs: 0, remainingLabel: formatDemoTrialTime(0), showRemainingLine: false });
     }
     if (tierLocked) {
-      return new DemoTrialOverlayInfo({ visible: true, kind: 'quest_tier_limit', remainingMs: Math.trunc(graceRemainingMs), remainingLabel: formatDemoTrialTime(graceRemainingMs), showRemainingLine: false });
+      return new DemoTrialOverlayInfo({ visible: true, kind: 'quest_tier_limit', remainingMs: int(graceRemainingMs), remainingLabel: formatDemoTrialTime(graceRemainingMs), showRemainingLine: false });
     }
     // During the quest-only grace period, the classic demo blocks other modes
     // and points the player back to Quests.
     if (gameModeId !== GameMode.QUESTS) {
-      return new DemoTrialOverlayInfo({ visible: true, kind: 'quest_grace_left', remainingMs: Math.trunc(graceRemainingMs), remainingLabel: formatDemoTrialTime(graceRemainingMs), showRemainingLine: false });
+      return new DemoTrialOverlayInfo({ visible: true, kind: 'quest_grace_left', remainingMs: int(graceRemainingMs), remainingLabel: formatDemoTrialTime(graceRemainingMs), showRemainingLine: false });
     }
-    return new DemoTrialOverlayInfo({ visible: false, kind: 'none', remainingMs: Math.trunc(graceRemainingMs), remainingLabel: formatDemoTrialTime(graceRemainingMs), showRemainingLine: false });
+    return new DemoTrialOverlayInfo({ visible: false, kind: 'none', remainingMs: int(graceRemainingMs), remainingLabel: formatDemoTrialTime(graceRemainingMs), showRemainingLine: false });
   }
 
   if (globalRemainingMs <= 0) {
@@ -150,8 +150,8 @@ export function demoTrialOverlayInfo(opts: { demoBuild: boolean; gameModeId: Gam
   // Demo tier gating: the classic demo lets you play stage 1 quests only; once
   // the player reaches stage > 1, it shows the upsell overlay even if time remains.
   if (tierLocked) {
-    return new DemoTrialOverlayInfo({ visible: true, kind: 'quest_tier_limit', remainingMs: Math.trunc(globalRemainingMs), remainingLabel: formatDemoTrialTime(globalRemainingMs), showRemainingLine: true });
+    return new DemoTrialOverlayInfo({ visible: true, kind: 'quest_tier_limit', remainingMs: int(globalRemainingMs), remainingLabel: formatDemoTrialTime(globalRemainingMs), showRemainingLine: true });
   }
 
-  return new DemoTrialOverlayInfo({ visible: false, kind: 'none', remainingMs: Math.trunc(globalRemainingMs), remainingLabel: formatDemoTrialTime(globalRemainingMs), showRemainingLine: false });
+  return new DemoTrialOverlayInfo({ visible: false, kind: 'none', remainingMs: int(globalRemainingMs), remainingLabel: formatDemoTrialTime(globalRemainingMs), showRemainingLine: false });
 }

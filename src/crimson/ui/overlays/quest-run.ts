@@ -74,6 +74,6 @@ export function drawQuestCompleteBannerOverlay(texture: rl.Texture, opts: { time
   const centerY = wgl.getScreenHeight() * 0.5;
   const src = wgl.makeRectangle(0.0, 0.0, texture.width, texture.height);
   const dst = wgl.makeRectangle(centerX - width * 0.5, centerY - height * 0.5, width, height);
-  const tint = wgl.makeColor(255 / 255, 255 / 255, 255 / 255, Math.trunc(clamp(alpha, 0.0, 1.0) * 255.0) / 255);
+  const tint = wgl.makeColor(255 / 255, 255 / 255, 255 / 255, int(clamp(alpha, 0.0, 1.0) * 255.0) / 255);
   wgl.drawTexturePro(texture, src, dst, wgl.makeVector2(0.0, 0.0), 0.0, tint);
 }

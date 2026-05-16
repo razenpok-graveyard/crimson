@@ -46,7 +46,7 @@ export class PlaybackStepRunner {
     const driver = opts.driver;
     const tickLimit = opts.tickLimit;
     this._driver = driver;
-    this._tickLimit = Math.trunc(tickLimit);
+    this._tickLimit = int(tickLimit);
   }
 
   beginFrame(frameCtx: FrameContext): void {
@@ -59,10 +59,10 @@ export class PlaybackStepRunner {
     const tickDt = opts.tickDt;
     const _ = tickDt;
     const completedResults: TickResult[] = [];
-    let nextTickIndex = Math.trunc(startTick);
+    let nextTickIndex = int(startTick);
     let batchStatus = InputStatus.READY;
-    while (completedResults.length < Math.max(0, Math.trunc(ticksRequested))) {
-      if (nextTickIndex >= Math.trunc(this._tickLimit)) {
+    while (completedResults.length < Math.max(0, int(ticksRequested))) {
+      if (nextTickIndex >= int(this._tickLimit)) {
         batchStatus = InputStatus.EOS;
         break;
       }
@@ -70,7 +70,7 @@ export class PlaybackStepRunner {
       nextTickIndex += 1;
     }
 
-    return new TickBatchResult({ ticksCompleted: completedResults.length, batchStatus: batchStatus, nextTickIndex: Math.trunc(nextTickIndex), completedResults: completedResults });
+    return new TickBatchResult({ ticksCompleted: completedResults.length, batchStatus: batchStatus, nextTickIndex: int(nextTickIndex), completedResults: completedResults });
   }
 }
 
@@ -84,12 +84,12 @@ export function advancePlaybackFrame(opts: { driver: PlaybackFrameDriver; simWor
   const maxTicks = opts.maxTicks;
   const tickLimit = opts.tickLimit;
   const gameTuneStarted = opts.gameTuneStarted;
-  let ticksRequested = Math.trunc(clock.advance(dtSeconds));
+  let ticksRequested = int(clock.advance(dtSeconds));
   if (maxTicks !== null) {
-    ticksRequested = Math.min(Math.trunc(ticksRequested), Math.max(0, Math.trunc(maxTicks)));
+    ticksRequested = Math.min(int(ticksRequested), Math.max(0, int(maxTicks)));
   }
 
-  const advance = advanceTickRunnerFrame({ runner: new PlaybackStepRunner({ driver: driver, tickLimit: Math.trunc(tickLimit) }), startTick: Math.trunc(startTick), frameIndex: Math.trunc(frameIndex), ticksRequested: Math.trunc(ticksRequested), dtSeconds: dtSeconds, tickDtSeconds: clock.dtTick, isNetworked: false, isReplay: true, refundClock: clock });
+  const advance = advanceTickRunnerFrame({ runner: new PlaybackStepRunner({ driver: driver, tickLimit: int(tickLimit) }), startTick: int(startTick), frameIndex: int(frameIndex), ticksRequested: int(ticksRequested), dtSeconds: dtSeconds, tickDtSeconds: clock.dtTick, isNetworked: false, isReplay: true, refundClock: clock });
   const tickResults = Array.from(advance.batch.completedResults);
   const outputs: PresentationTickOutput[] = [];
   for (const tickResult of tickResults) {
@@ -98,8 +98,8 @@ export function advancePlaybackFrame(opts: { driver: PlaybackFrameDriver; simWor
       step: tickResult.payload.step,
       gameTuneStarted: gameTuneStarted,
     });
-    outputs.push(new PresentationTickOutput({ tickIndex: Math.trunc(tickResult.sourceTick.tickIndex), dtSim: tickResult.payload.step.dtSim, presentation: tickResult.payload.step.presentation, terrainFx: tickResult.payload.step.terrainFx }));
+    outputs.push(new PresentationTickOutput({ tickIndex: int(tickResult.sourceTick.tickIndex), dtSim: tickResult.payload.step.dtSim, presentation: tickResult.payload.step.presentation, terrainFx: tickResult.payload.step.terrainFx }));
   }
 
-  return new PlaybackFrameAdvance({ outputs: Array.from(outputs), tickResults: Array.from(tickResults), frameIndex: Math.trunc(advance.frameIndex), nextTickIndex: Math.trunc(advance.nextTickIndex), ticksRequested: Math.trunc(advance.ticksRequested), ticksCompleted: Math.trunc(advance.batch.ticksCompleted) });
+  return new PlaybackFrameAdvance({ outputs: Array.from(outputs), tickResults: Array.from(tickResults), frameIndex: int(advance.frameIndex), nextTickIndex: int(advance.nextTickIndex), ticksRequested: int(advance.ticksRequested), ticksCompleted: int(advance.batch.ticksCompleted) });
 }

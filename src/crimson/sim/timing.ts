@@ -52,11 +52,11 @@ export class FrameTiming {
   }
 
   get dtMsI32(): number {
-    return Math.trunc(ftolMsI32(this.dt));
+    return int(ftolMsI32(this.dt));
   }
 
   get dtSimMsI32(): number {
-    return Math.trunc(ftolMsI32(this.dtSim));
+    return int(ftolMsI32(this.dtSim));
   }
 
   get dtPlayerLocal(): number {
@@ -98,5 +98,5 @@ export function ftolMsI32(dtSeconds: number): number {
 
   const dtF32 = f32(dtSeconds);
   const scaledMsF32 = f32(dtF32 * 1000.0);
-  return Math.trunc(Math.trunc(scaledMsF32));
+  return int(Math.trunc(scaledMsF32));
 }

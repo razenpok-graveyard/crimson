@@ -26,7 +26,7 @@ export const CHUNK_KIND_FOOTER = new TextDecoder('ascii').decode(_CHUNK_KIND_FOO
 export const TRAILER_MAGIC = new Uint8Array([67, 68, 84, 70, 84, 82, 49, 10]);
 export const CHUNK_FLAG_ZSTD = 1 << 0;
 export const CHUNK_FLAG_MSGPACK = 1 << 1;
-export const DEFAULT_CHUNK_FLAGS = Math.trunc(CHUNK_FLAG_ZSTD | CHUNK_FLAG_MSGPACK);
+export const DEFAULT_CHUNK_FLAGS = int(CHUNK_FLAG_ZSTD | CHUNK_FLAG_MSGPACK);
 
 export class TraceMeta {
   traceFormatVersion: number;
@@ -179,5 +179,5 @@ export class TraceFooter {
 }
 
 export function channelVersionsFor(channels: Iterable<string>): Map<string, number> {
-  return new Map(Array.from(channels, (channel) => [String(channel), Math.trunc(_DEFAULT_CHANNEL_VERSION)] as const));
+  return new Map(Array.from(channels, (channel) => [String(channel), int(_DEFAULT_CHANNEL_VERSION)] as const));
 }

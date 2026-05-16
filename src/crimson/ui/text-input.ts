@@ -27,7 +27,7 @@ export function pollTextInput(maxLen: number, opts: { allowSpace?: boolean } = {
     if (Array.from(out).length >= maxLen) {
       continue;
     }
-    out += String.fromCodePoint(Math.trunc(value));
+    out += String.fromCodePoint(int(value));
   }
   return out;
 }
@@ -96,7 +96,7 @@ export function gameplayControlsHeld(config: CrimsonConfig): boolean {
   }
 
   for (const code of _SINGLE_PLAYER_ALT_MOVE_CODES) {
-    if (inputCodeIsDown(Math.trunc(code), { playerIndex: 0 })) {
+    if (inputCodeIsDown(int(code), { playerIndex: 0 })) {
       return true;
     }
   }

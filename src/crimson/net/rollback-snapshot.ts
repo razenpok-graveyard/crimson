@@ -400,11 +400,11 @@ export class RollbackSnapshotRing<SnapshotT> {
     const tickIndex = opts.tickIndex;
     const snapshot = opts.snapshot;
     const force = opts.force ?? false;
-    const tick = Math.trunc(tickIndex);
+    const tick = int(tickIndex);
     if (tick < 0) {
       return false;
     }
-    const interval = Math.max(1, Math.trunc(this.intervalTicks));
+    const interval = Math.max(1, int(this.intervalTicks));
     if (!force && (tick % interval) !== 0) {
       return false;
     }
@@ -415,11 +415,11 @@ export class RollbackSnapshotRing<SnapshotT> {
   }
 
   hasTick(tickIndex: number): boolean {
-    return this._byTick.has(Math.trunc(tickIndex));
+    return this._byTick.has(int(tickIndex));
   }
 
   restoreExact(tickIndex: number): SnapshotT | null {
-    const blob = this._byTick.get(Math.trunc(tickIndex)) ?? null;
+    const blob = this._byTick.get(int(tickIndex)) ?? null;
     if (blob === null) {
       return null;
     }
@@ -427,11 +427,11 @@ export class RollbackSnapshotRing<SnapshotT> {
   }
 
   restoreLatestAtOrBefore(tickIndex: number): [number, SnapshotT] | null {
-    const target = Math.trunc(tickIndex);
+    const target = int(tickIndex);
     let candidate: number | null = null;
     for (const tick of this._byTick.keys()) {
-      if (Math.trunc(tick) <= Math.trunc(target)) {
-        candidate = Math.trunc(tick);
+      if (int(tick) <= int(target)) {
+        candidate = int(tick);
       } else {
         break;
       }
@@ -439,21 +439,21 @@ export class RollbackSnapshotRing<SnapshotT> {
     if (candidate === null) {
       return null;
     }
-    const blob = this._byTick.get(Math.trunc(candidate)) ?? null;
+    const blob = this._byTick.get(int(candidate)) ?? null;
     if (blob === null) {
       return null;
     }
-    return [Math.trunc(candidate), this.codec.loads(blob)];
+    return [int(candidate), this.codec.loads(blob)];
   }
 
   _prune(opts: { maxTick: number }): void {
     const maxTick = opts.maxTick;
-    const keepFrom = Math.trunc(maxTick) - Math.max(1, Math.trunc(this.maxTicks));
+    const keepFrom = int(maxTick) - Math.max(1, int(this.maxTicks));
     for (const tick of Array.from(this._byTick.keys())) {
-      if (Math.trunc(tick) >= Math.trunc(keepFrom)) {
+      if (int(tick) >= int(keepFrom)) {
         continue;
       }
-      this._byTick.delete(Math.trunc(tick));
+      this._byTick.delete(int(tick));
     }
   }
 }

@@ -93,7 +93,7 @@ export function controlsRebindPlan(opts: { aimScheme: AimScheme; moveMode: Movem
     moveRows.push(new RebindRowSpec({ label: 'Move to cursor:', target: RebindTarget.GLOBAL_RELOAD_CODE }));
   }
 
-  if (Math.trunc(playerIndex) === 0) {
+  if (int(playerIndex) === 0) {
     miscRows.push(new RebindRowSpec({ label: 'Level Up:', target: RebindTarget.GLOBAL_PICK_PERK_CODE }));
     if (moveMode !== MovementControlType.MOUSE_POINT_CLICK) {
       miscRows.push(new RebindRowSpec({ label: 'Reload:', target: RebindTarget.GLOBAL_RELOAD_CODE }));

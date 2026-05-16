@@ -9,9 +9,9 @@ import * as wgl from '@wgl';
 export function uiLineHeight(font: SmallFontData | null, opts: { scale?: number } = {}): number {
   const scale = opts.scale ?? 1.0;
   if (font !== null) {
-    return Math.trunc(font.cellSize * scale);
+    return int(font.cellSize * scale);
   }
-  return Math.trunc(20 * scale);
+  return int(20 * scale);
 }
 
 export function drawUiText(font: SmallFontData | null, text: string, pos: Vec2, opts: { color: rl.Color; scale?: number }): void {
@@ -20,6 +20,6 @@ export function drawUiText(font: SmallFontData | null, text: string, pos: Vec2, 
   if (font !== null) {
     drawSmallText(font, text, pos, color);
   } else {
-    wgl.drawText(text, Math.trunc(pos.x), Math.trunc(pos.y), Math.trunc(20 * scale), color);
+    wgl.drawText(text, int(pos.x), int(pos.y), int(20 * scale), color);
   }
 }

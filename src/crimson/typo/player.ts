@@ -21,7 +21,7 @@ export function enforceTypoPlayerFrame(player: PlayerState, opts: { state: Gamep
 
   player.weapon.shotCooldown = 0.0;
   player.spreadHeat = 0.0;
-  player.weapon.ammo = Math.max(0, Math.trunc(player.weapon.clipSize));
+  player.weapon.ammo = Math.max(0, int(player.weapon.clipSize));
 
   player.weapon.reloadActive = false;
   player.weapon.reloadTimer = 0.0;

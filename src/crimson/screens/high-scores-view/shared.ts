@@ -4,7 +4,7 @@ import { GameMode } from '@crimson/game-modes.ts';
 import type { HighScoreRecord } from '@crimson/persistence/highscores.ts';
 
 export function ordinal(value: number): string {
-  const n = Math.trunc(value);
+  const n = int(value);
   if (10 <= (n % 100) && (n % 100) <= 20) {
     return `${n}th`;
   }
@@ -13,15 +13,15 @@ export function ordinal(value: number): string {
 }
 
 export function formatElapsedMmSs(valueMs: number): string {
-  const total = Math.floor(Math.max(0, Math.trunc(valueMs)) / 1000);
+  const total = Math.floor(Math.max(0, int(valueMs)) / 1000);
   const [minutes, seconds] = [Math.floor(total / 60), total % 60];
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
 export function formatScoreDate(entry: HighScoreRecord): string {
-  const day = Math.trunc(entry.day);
-  const month = Math.trunc(entry.month);
-  const yearOff = Math.trunc(entry.yearOffset);
+  const day = int(entry.day);
+  const month = int(entry.month);
+  const yearOff = int(entry.yearOffset);
   if (day <= 0 || month <= 0) {
     return '';
   }
@@ -40,8 +40,8 @@ export function modeLabel(modeId: GameMode, questMajor: number, questMinor: numb
     case GameMode.TYPO:
       return 'Typ-o Shooter';
     case GameMode.QUESTS:
-      if (Math.trunc(questMajor) > 0 && Math.trunc(questMinor) > 0) {
-        return `Quest ${Math.trunc(questMajor)}.${Math.trunc(questMinor)}`;
+      if (int(questMajor) > 0 && int(questMinor) > 0) {
+        return `Quest ${int(questMajor)}.${int(questMinor)}`;
       }
       return 'Quests';
     default:

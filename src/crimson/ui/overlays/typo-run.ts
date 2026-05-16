@@ -57,8 +57,8 @@ export function drawTypoNameLabels(opts: { creatures: readonly CreatureState[]; 
     const x = screenPos.x - textW * 0.5;
 
     const bgAlpha = labelAlpha * NAME_LABEL_BG_ALPHA;
-    const bg = wgl.makeColor(0 / 255, 0 / 255, 0 / 255, Math.trunc(255 * bgAlpha) / 255);
-    const fg = wgl.makeColor(255 / 255, 255 / 255, 255 / 255, Math.trunc(255 * labelAlpha) / 255);
+    const bg = wgl.makeColor(0 / 255, 0 / 255, 0 / 255, int(255 * bgAlpha) / 255);
+    const fg = wgl.makeColor(255 / 255, 255 / 255, 255 / 255, int(255 * labelAlpha) / 255);
     wgl.drawRectangle(x - 4.0, y, textW + 8.0, textH, bg);
     drawText(text, new Vec2(x, y), fg, NAME_LABEL_SCALE);
   }
@@ -76,14 +76,14 @@ export function drawTypingBox(panelTexture: rl.Texture, opts: { text: string; cu
 
   const src = wgl.makeRectangle(0.0, 0.0, panelTexture.width, panelTexture.height);
   const dst = wgl.makeRectangle(panelX, panelY, TYPING_PANEL_WIDTH, TYPING_PANEL_HEIGHT);
-  const tint = wgl.makeColor(255 / 255, 255 / 255, 255 / 255, Math.trunc(255 * TYPING_PANEL_ALPHA) / 255);
+  const tint = wgl.makeColor(255 / 255, 255 / 255, 255 / 255, int(255 * TYPING_PANEL_ALPHA) / 255);
   wgl.drawTexturePro(panelTexture, src, dst, wgl.makeVector2(0.0, 0.0), 0.0, tint);
 
   drawText(TYPING_PROMPT + text, new Vec2(TYPING_TEXT_X, textY), wgl.makeColor(255 / 255, 255 / 255, 255 / 255, 255 / 255), 1.0);
 
   const cursorDim = Math.sin(cursorPulseTime * 4.0) > 0.0;
   const cursorAlpha = cursorDim ? 0.4 : 1.0;
-  const cursorColor = wgl.makeColor(255 / 255, 255 / 255, 255 / 255, Math.trunc(255 * cursorAlpha) / 255);
+  const cursorColor = wgl.makeColor(255 / 255, 255 / 255, 255 / 255, int(255 * cursorAlpha) / 255);
   const textW = measureTextWidth(text, 1.0);
   const cursorX = textW + TYPING_CURSOR_X_OFFSET;
   drawText(TYPING_CURSOR, new Vec2(cursorX, textY), cursorColor, 1.0);

@@ -78,7 +78,7 @@ export class BonusApplyCtx {
     } else {
       this.state.bonusHud.register(
         this.bonusId,
-        { label: this.label, iconId: this.iconId, timerRef: new TimerRef({ kind: 'player', key: timerKey, playerIndex: Math.trunc(this.player.index) }) },
+        { label: this.label, iconId: this.iconId, timerRef: new TimerRef({ kind: 'player', key: timerKey, playerIndex: int(this.player.index) }) },
       );
     }
   }

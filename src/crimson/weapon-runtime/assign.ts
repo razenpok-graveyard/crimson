@@ -28,7 +28,7 @@ export function weaponEntry(weaponId: WeaponId): Weapon {
 
 function weaponAssignClipAmmoManiac(ctx: WeaponAssignCtx): void {
   if (perkActive(ctx.player, PerkId.AMMO_MANIAC)) {
-    ctx.clipSize += Math.max(1, Math.trunc(ctx.clipSize * 0.25));
+    ctx.clipSize += Math.max(1, int(ctx.clipSize * 0.25));
   }
 }
 
@@ -49,7 +49,7 @@ export function weaponAssignPlayer(player: PlayerState, weaponId: WeaponId, opts
 
   const state = opts.state;
   if (state.status !== null && !state.demoModeActive) {
-    const usageSlot = weaponUsageSlotForWeaponId(Math.trunc(weaponId));
+    const usageSlot = weaponUsageSlotForWeaponId(int(weaponId));
     if (usageSlot !== null) {
       state.status.incrementWeaponUsageSlot(usageSlot);
     }
@@ -58,12 +58,12 @@ export function weaponAssignPlayer(player: PlayerState, weaponId: WeaponId, opts
   const weapon = weaponEntry(weaponId);
   player.weapon.weaponId = weaponId;
 
-  const clipSize = Math.trunc(weapon.clipSize);
+  const clipSize = int(weapon.clipSize);
   const clipCtx = new WeaponAssignCtx({ player: player, clipSize: Math.max(0, clipSize) });
   for (const modifier of _WEAPON_ASSIGN_CLIP_MODIFIERS) {
     modifier(clipCtx);
   }
-  player.weapon.clipSize = Math.max(0, Math.trunc(clipCtx.clipSize));
+  player.weapon.clipSize = Math.max(0, int(clipCtx.clipSize));
   player.weapon.ammo = player.weapon.clipSize;
   player.weaponResetLatch = 0;
   player.weapon.reloadActive = false;
@@ -82,13 +82,13 @@ export function mostUsedWeaponIdForPlayer(state: GameplayState, opts: { playerIn
 
   const playerIndex = opts.playerIndex;
   const fallbackWeaponId = opts.fallbackWeaponId;
-  const idx = Math.trunc(playerIndex);
+  const idx = int(playerIndex);
   if (idx >= 0 && idx < state.weaponShotsFired.length) {
     const counts = state.weaponShotsFired[idx];
     if (counts.length > 0) {
       const start = counts.length > 1 ? 1 : 0;
-      const best = Array.from({ length: Math.max(0, counts.length - start) }, (_, i) => start + i).reduce((best, candidate) => Math.trunc(counts[candidate]) > Math.trunc(counts[best]) ? candidate : best);
-      if (Math.trunc(counts[best]) > 0) {
+      const best = Array.from({ length: Math.max(0, counts.length - start) }, (_, i) => start + i).reduce((best, candidate) => int(counts[candidate]) > int(counts[best]) ? candidate : best);
+      if (int(counts[best]) > 0) {
         return best;
       }
     }

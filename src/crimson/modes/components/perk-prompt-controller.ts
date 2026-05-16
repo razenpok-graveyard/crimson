@@ -31,7 +31,7 @@ export class PerkPromptState {
 
   resetIfPending(opts: { pendingCount: number }): void {
     const pendingCount = opts.pendingCount;
-    if (Math.trunc(pendingCount) > 0) {
+    if (int(pendingCount) > 0) {
       this.reset();
     }
   }
@@ -49,15 +49,15 @@ export class PerkPromptState {
     const paused = opts.paused;
     const menuActive = opts.menuActive;
     const promptScale = opts.promptScale ?? 1.0;
-    if (Math.trunc(pendingCount) <= 0 || !anyAlive || paused || menuActive) {
+    if (int(pendingCount) <= 0 || !anyAlive || paused || menuActive) {
       return false;
     }
-    const label = PerkPromptUi.label(config, { pendingCount: Math.trunc(pendingCount) });
+    const label = PerkPromptUi.label(config, { pendingCount: int(pendingCount) });
     if (label) {
       const rect = PerkPromptUi.rect({ resources: ctx.resources, scale: promptScale });
       this.hover = rect.contains(ctx.mouse);
     }
-    if (this._promptOpenRequested({ config: config, playerCount: Math.trunc(playerCount) })) {
+    if (this._promptOpenRequested({ config: config, playerCount: int(playerCount) })) {
       this.pulse = 1000.0;
       return true;
     }
@@ -70,7 +70,7 @@ export class PerkPromptState {
     const paused = opts.paused;
     const menuActive = opts.menuActive;
     const dtUiMs = opts.dtUiMs;
-    const promptVisible = Math.trunc(pendingCount) > 0 && anyAlive && !paused && !menuActive;
+    const promptVisible = int(pendingCount) > 0 && anyAlive && !paused && !menuActive;
     const timerDelta = promptVisible ? dtUiMs : -dtUiMs;
     this.timerMs = clamp(this.timerMs + timerDelta, 0.0, PERK_PROMPT_MAX_TIMER_MS);
   }
@@ -92,10 +92,10 @@ export class PerkPromptState {
     if (menuActive || !anyAlive) {
       return;
     }
-    if (Math.trunc(pendingCount) <= 0) {
+    if (int(pendingCount) <= 0) {
       return;
     }
-    const label = PerkPromptUi.label(config, { pendingCount: Math.trunc(pendingCount) });
+    const label = PerkPromptUi.label(config, { pendingCount: int(pendingCount) });
     if (!label) {
       return;
     }
@@ -113,12 +113,12 @@ export class PerkPromptState {
   _promptOpenRequested(opts: { config: CrimsonConfig; playerCount: number }): boolean {
     const config = opts.config;
     const playerCount = opts.playerCount;
-    const fireKey = Math.trunc(config.controls.player(0).fireCode);
+    const fireKey = int(config.controls.player(0).fireCode);
     const pickKey = config.controls.pickPerkCode;
     if (inputCodeIsPressed(pickKey, { playerIndex: 0 }) && !inputCodeIsDown(fireKey, { playerIndex: 0 })) {
       return true;
     }
-    const fireCodes = Array.from({ length: Math.max(0, 4) }, (_, i) => i).map((idx) => Math.trunc(config.controls.player(idx).fireCode));
+    const fireCodes = Array.from({ length: Math.max(0, 4) }, (_, i) => i).map((idx) => int(config.controls.player(idx).fireCode));
     return this.hover && inputPrimaryJustPressed({ fireCodes: fireCodes, playerCount: playerCount });
   }
 }

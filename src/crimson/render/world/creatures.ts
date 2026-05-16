@@ -50,7 +50,7 @@ export function drawCreatureSprite(renderCtx: WorldRenderCtx, texture: rl.Textur
     // (creature_render_type). We approximate it with a black silhouette draw.
     // The observed pass is slightly bigger than the main sprite and offset
     // down-right by ~1px at default sizes.
-    const alpha = shadowAlpha !== null ? Math.trunc(shadowAlpha) : Math.trunc(clamp((tint.a * 255) * 0.4, 0.0, 255.0) + 0.5);
+    const alpha = shadowAlpha !== null ? int(shadowAlpha) : int(clamp((tint.a * 255) * 0.4, 0.0, 255.0) + 0.5);
     const shadowTint = wgl.makeColor(0 / 255, 0 / 255, 0 / 255, alpha / 255);
     const shadowScale = 1.07;
     const shadowW = width * shadowScale;

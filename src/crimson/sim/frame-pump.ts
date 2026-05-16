@@ -38,19 +38,19 @@ export function advanceTickRunnerFrame(opts: { runner: TickFrameRunner; startTic
   const isNetworked = opts.isNetworked;
   const isReplay = opts.isReplay;
   const refundClock = opts.refundClock ?? null;
-  const nextFrameIndex = Math.trunc(frameIndex) + 1;
-  ticksRequested = Math.max(0, Math.trunc(ticksRequested));
+  const nextFrameIndex = int(frameIndex) + 1;
+  ticksRequested = Math.max(0, int(ticksRequested));
 
-  runner.beginFrame(new FrameContext({ dtSeconds: dtSeconds, tickDtSeconds: tickDtSeconds, frameIndex: Math.trunc(nextFrameIndex), candidateTicks: Math.trunc(ticksRequested), isNetworked: isNetworked, isReplay: isReplay }));
-  const batch = runner.advanceTicks({ startTick: Math.trunc(startTick), ticksRequested: Math.trunc(ticksRequested), tickDt: tickDtSeconds });
-  const nextTickIndex = Math.trunc(batch.nextTickIndex);
+  runner.beginFrame(new FrameContext({ dtSeconds: dtSeconds, tickDtSeconds: tickDtSeconds, frameIndex: int(nextFrameIndex), candidateTicks: int(ticksRequested), isNetworked: isNetworked, isReplay: isReplay }));
+  const batch = runner.advanceTicks({ startTick: int(startTick), ticksRequested: int(ticksRequested), tickDt: tickDtSeconds });
+  const nextTickIndex = int(batch.nextTickIndex);
 
   if (refundClock !== null && (batch.batchStatus === InputStatus.STALLED || batch.batchStatus === InputStatus.EOS)) {
-    const unconsumedTicks = Math.max(0, Math.trunc(ticksRequested) - Math.trunc(batch.ticksCompleted));
+    const unconsumedTicks = Math.max(0, int(ticksRequested) - int(batch.ticksCompleted));
     if (unconsumedTicks > 0) {
       refundClock.accum += unconsumedTicks * tickDtSeconds;
     }
   }
 
-  return new TickFrameAdvance({ batch: batch, frameIndex: Math.trunc(nextFrameIndex), nextTickIndex: Math.trunc(nextTickIndex), ticksRequested: Math.trunc(ticksRequested) });
+  return new TickFrameAdvance({ batch: batch, frameIndex: int(nextFrameIndex), nextTickIndex: int(nextTickIndex), ticksRequested: int(ticksRequested) });
 }

@@ -55,13 +55,13 @@ export function bonusApply(state: GameplayState, player: PlayerState, bonusId: B
     return;
   }
   if (amount === null) {
-    amount = Math.trunc(meta.nativeAmount || 0);
+    amount = int(meta.nativeAmount || 0);
   }
 
   const economistMultiplier = perkCountGet(player, PerkId.BONUS_ECONOMIST) !== 0 ? 1.5 : 1.0;
-  const iconId = meta.iconId !== null ? Math.trunc(meta.iconId) : -1;
+  const iconId = meta.iconId !== null ? int(meta.iconId) : -1;
   const label = meta.name;
-  const ctx = new BonusApplyCtx({ state: state, player: player, bonusId: bonusId, amount: Math.trunc(amount), originPos: origin, creatures: creatures, players: players, detailPreset: Math.trunc(detailPreset), economistMultiplier: economistMultiplier, label: String(label), iconId: Math.trunc(iconId), deferFreezeCorpseFx: deferFreezeCorpseFx, freezeCorpseIndices: freezeCorpseIndices });
+  const ctx = new BonusApplyCtx({ state: state, player: player, bonusId: bonusId, amount: int(amount), originPos: origin, creatures: creatures, players: players, detailPreset: int(detailPreset), economistMultiplier: economistMultiplier, label: String(label), iconId: int(iconId), deferFreezeCorpseFx: deferFreezeCorpseFx, freezeCorpseIndices: freezeCorpseIndices });
   const handler = _BONUS_APPLY_HANDLERS.get(bonusId) ?? null;
   if (handler !== null) {
     handler(ctx);

@@ -7,19 +7,19 @@ import type { PlayerState } from '@crimson/sim/state-types.ts';
 import { mostUsedWeaponIdForPlayer } from '@crimson/weapon-runtime/index.ts';
 
 export function clampShots(fired: number, hit: number): [number, number] {
-  fired = Math.max(0, Math.trunc(fired));
-  hit = Math.max(0, Math.min(Math.trunc(hit), fired));
+  fired = Math.max(0, int(fired));
+  hit = Math.max(0, Math.min(int(hit), fired));
   return [fired, hit];
 }
 
 export function shotsFromState(state: GameplayState, opts: { playerIndex: number }): [number, number] {
   const playerIndex = opts.playerIndex;
-  const index = Math.trunc(playerIndex);
+  const index = int(playerIndex);
   if (index < 0 || index >= state.shotsFired.length || index >= state.shotsHit.length) {
     return [0, 0];
   }
-  const fired = Math.trunc(state.shotsFired[index]);
-  const hit = Math.trunc(state.shotsHit[index]);
+  const fired = int(state.shotsFired[index]);
+  const hit = int(state.shotsHit[index]);
   return clampShots(fired, hit);
 }
 
@@ -33,20 +33,20 @@ export function buildHighscoreRecordForGameOver(opts: { state: GameplayState; pl
   const shotsHit = opts.shotsHit ?? null;
   const clampShotsHit = opts.clampShotsHit ?? true;
   const record = HighScoreRecord.blank();
-  record.scoreXp = Math.trunc(player.experience);
-  record.survivalElapsedMs = Math.trunc(survivalElapsedMs);
-  record.creatureKillCount = Math.trunc(creatureKillCount);
+  record.scoreXp = int(player.experience);
+  record.survivalElapsedMs = int(survivalElapsedMs);
+  record.creatureKillCount = int(creatureKillCount);
 
-  const weaponId = mostUsedWeaponIdForPlayer(state, { playerIndex: Math.trunc(player.index), fallbackWeaponId: player.weapon.weaponId });
+  const weaponId = mostUsedWeaponIdForPlayer(state, { playerIndex: int(player.index), fallbackWeaponId: player.weapon.weaponId });
   record.mostUsedWeaponId = weaponId;
 
   let fired: number;
   let hit: number;
   if (shotsFired === null || shotsHit === null) {
-    [fired, hit] = shotsFromState(state, { playerIndex: Math.trunc(player.index) });
+    [fired, hit] = shotsFromState(state, { playerIndex: int(player.index) });
   } else {
-    fired = Math.trunc(shotsFired);
-    hit = Math.trunc(shotsHit);
+    fired = int(shotsFired);
+    hit = int(shotsHit);
     if (clampShotsHit) {
       [fired, hit] = clampShots(fired, hit);
     }

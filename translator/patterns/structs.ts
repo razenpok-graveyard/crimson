@@ -25,10 +25,12 @@ import {
   stripTypeOnlyStatementSyntax,
 } from './common.js';
 import { translateExpression } from './expression.js';
-import { parseFunctionParameterText, parseFunctionParametersText, pythonParameterNames } from './parameters.js';
 import {
   functionSignatureMarker,
   parseStraightLineFunctionHeader,
+} from './function-headers.js';
+import { parseFunctionParameterText, parseFunctionParametersText, pythonParameterNames } from './parameters.js';
+import {
   reassignedLocalNames,
   rewriteStructPositionalConstructors,
   translateStraightLineStatement,

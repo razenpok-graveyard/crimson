@@ -4,7 +4,7 @@ import type { BonusApplyCtx } from '@crimson/bonuses/apply-context.ts';
 
 export function applyPoints(ctx: BonusApplyCtx): void {
   // Native adds Points directly to player0 XP (no Double XP multiplier).
-  const amount = Math.trunc(ctx.amount);
+  const amount = int(ctx.amount);
   if (amount <= 0) {
     return;
   }
@@ -12,5 +12,5 @@ export function applyPoints(ctx: BonusApplyCtx): void {
   if (ctx.players.length > 0) {
     target = ctx.players[0];
   }
-  target.experience += Math.trunc(amount);
+  target.experience += int(amount);
 }

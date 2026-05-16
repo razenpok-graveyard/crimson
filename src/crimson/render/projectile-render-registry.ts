@@ -56,15 +56,15 @@ export const PLASMA_PROJECTILE_RENDER_CONFIG_BY_TYPE_ID: Map<number, PlasmaProje
 ]);
 
 export function plasmaProjectileRenderConfig(typeId: number): PlasmaProjectileRenderConfig {
-  return PLASMA_PROJECTILE_RENDER_CONFIG_BY_TYPE_ID.get(Math.trunc(typeId)) ?? _DEFAULT_PLASMA_RENDER_CONFIG;
+  return PLASMA_PROJECTILE_RENDER_CONFIG_BY_TYPE_ID.get(int(typeId)) ?? _DEFAULT_PLASMA_RENDER_CONFIG;
 }
 
 export function beamEffectScale(typeId: number): number {
-  return BEAM_EFFECT_SCALE_BY_TYPE_ID.get(Math.trunc(typeId)) ?? 0.8;
+  return BEAM_EFFECT_SCALE_BY_TYPE_ID.get(int(typeId)) ?? 0.8;
 }
 
 export function knownProjRgb(typeId: number): [number, number, number] {
-  return KNOWN_PROJ_RGB_BY_TYPE_ID.get(Math.trunc(typeId)) ?? [240, 220, 160];
+  return KNOWN_PROJ_RGB_BY_TYPE_ID.get(int(typeId)) ?? [240, 220, 160];
 }
 
 export const BEAM_EFFECT_SCALE_BY_TYPE_ID: Map<number, number> = new Map([
