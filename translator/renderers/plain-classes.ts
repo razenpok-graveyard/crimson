@@ -65,6 +65,9 @@ export function renderPlainClasses(lines: string[], classes: StraightLineModule[
     }
     for (const method of plainClass.methods) {
       lines.push('');
+      for (const comment of method.leadingComments ?? []) {
+        lines.push(comment === '' ? '  //' : `  // ${comment}`);
+      }
       const params = method.parameters.map(renderParameter);
       if (method.optsParams.length > 0) {
         const optsType = method.optsParams

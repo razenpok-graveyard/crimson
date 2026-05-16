@@ -35,9 +35,9 @@ export class TickBatchResult {
 }
 
 export class TickRunner {
-  private readonly _session: DeterministicSession;
-  private readonly _inputProvider: InputProvider;
-  private readonly _config: TickRunnerConfig;
+  private _session: DeterministicSession;
+  private _inputProvider: InputProvider;
+  private _config: TickRunnerConfig;
 
   constructor(opts: { session: DeterministicSession; inputProvider: InputProvider; config?: TickRunnerConfig | null }) {
     const session = opts.session;

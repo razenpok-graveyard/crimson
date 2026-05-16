@@ -37,11 +37,11 @@ export class NullSink {
 
 // Video-export sink. Fail-fast by policy: presentation errors abort rendering.
 export class VideoSink {
-  readonly outputPath: string;
-  private readonly _openTransport: (() => void) | null;
-  private readonly _presentFrame: RenderPresent | null;
-  private readonly _flushTransport: (() => void) | null;
-  private readonly _closeTransport: (() => void) | null;
+  outputPath: string;
+  private _openTransport: (() => void) | null;
+  private _presentFrame: RenderPresent | null;
+  private _flushTransport: (() => void) | null;
+  private _closeTransport: (() => void) | null;
   private _opened: boolean;
   private _flushed: boolean;
 

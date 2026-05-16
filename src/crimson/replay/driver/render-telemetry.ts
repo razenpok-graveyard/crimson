@@ -41,7 +41,7 @@ export class RenderTelemetryFrameSnapshot {
 }
 
 export class SessionSink {
-  private readonly _session: RenderTelemetrySession;
+  private _session: RenderTelemetrySession;
 
   constructor(session: RenderTelemetrySession) {
     this._session = session;
@@ -53,7 +53,7 @@ export class SessionSink {
 }
 
 export class RenderTelemetrySession {
-  private readonly __INTERCEPT_APIS: readonly [string, string][] = [
+  private __INTERCEPT_APIS: readonly [string, string][] = [
     ['draw_texture_pro', 'draw_texture_pro'],
     ['draw_circle', 'draw_circle'],
     ['draw_circle_lines', 'draw_circle_lines'],
@@ -67,15 +67,15 @@ export class RenderTelemetrySession {
     ['end_blend_mode', 'end_blend_mode'],
   ];
   private _active: boolean;
-  private readonly _originals: Map<string, (...args: any[]) => unknown>;
-  private readonly _frames: RenderTelemetryFrameSnapshot[];
+  private _originals: Map<string, (...args: any[]) => unknown>;
+  private _frames: RenderTelemetryFrameSnapshot[];
   private _currentFrameIndex: number | null;
   private _currentTickBeforeUpdate: number | null;
   private _drawCallsTotal: number;
-  private readonly _drawCallsByApi: Map<string, number>;
-  private readonly _drawCallsByPass: Map<string, number>;
-  private readonly _passMs: Map<string, number>;
-  private readonly _sink: SessionSink;
+  private _drawCallsByApi: Map<string, number>;
+  private _drawCallsByPass: Map<string, number>;
+  private _passMs: Map<string, number>;
+  private _sink: SessionSink;
   private _prevSink: profileHooks.RenderProfileSink | null;
 
   constructor() {

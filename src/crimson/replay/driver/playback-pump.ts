@@ -39,8 +39,8 @@ export class PlaybackFrameAdvance {
 }
 
 export class PlaybackStepRunner {
-  private readonly _driver: PlaybackFrameDriver;
-  private readonly _tickLimit: number;
+  private _driver: PlaybackFrameDriver;
+  private _tickLimit: number;
 
   constructor(opts: { driver: PlaybackFrameDriver; tickLimit: number }) {
     const driver = opts.driver;

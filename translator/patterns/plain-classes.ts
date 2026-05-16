@@ -83,7 +83,7 @@ function parsePlainClassFieldAssignment(
     field: {
       name: fieldName,
       typeExpression,
-      readonly: true,
+      readonly: false,
       private: pythonName.startsWith('_'),
       defaultValueLines: assignment.assignment.valueLines,
     },
@@ -214,6 +214,13 @@ export function parsePlainClass(
         continue;
       }
       const statement = lines[bodyIndex].slice('        '.length);
+      const localConstructorAssignment = /^([A-Za-z_][A-Za-z0-9_]*) = (_?[A-Z][A-Za-z0-9_]*(?:\.[A-Z][A-Za-z0-9_]*)?)\($/.exec(statement);
+      if (localConstructorAssignment !== null) {
+        fieldTypes.set(
+          tsExportNameForPythonName(localConstructorAssignment[1]),
+          inferConstructorCallTypeExpression(localConstructorAssignment[2], constructorNameMap, constructorArrayNames, constructorMapNames),
+        );
+      }
       const annotatedFieldAssignment = /^self\.([A-Za-z_][A-Za-z0-9_]*): (.+?) = (.+)$/.exec(statement);
       const fieldAssignment = /^self\.([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(statement);
       const assignment = annotatedFieldAssignment ?? fieldAssignment;
@@ -222,11 +229,44 @@ export function parsePlainClass(
         const fieldName = tsAttributeNameForPythonName(pythonFieldName);
         fieldNameMap.set(pythonFieldName, fieldName);
         const valueText = annotatedFieldAssignment === null ? assignment[2] : assignment[3];
+        const multilineConstructorCall = /^(_?[A-Z][A-Za-z0-9_]*(?:\.[A-Z][A-Za-z0-9_]*)?)\($/.exec(valueText.trim());
         const typeExpression = annotatedFieldAssignment === null
-          ? inferPlainClassFieldType(valueText, fieldTypes)
+          ? multilineConstructorCall === null
+            ? inferPlainClassFieldType(valueText, fieldTypes)
+            : inferConstructorCallTypeExpression(multilineConstructorCall[1], constructorNameMap, constructorArrayNames, constructorMapNames)
           : tsTypeExpression(assignment[2]);
         if (typeExpression === null) {
           return null;
+        }
+        if (multilineConstructorCall !== null) {
+          recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, fieldArrayNames, fieldMapNames);
+          recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, constructorArrayNames, constructorMapNames);
+          fieldMap.set(fieldName, {
+            name: fieldName,
+            typeExpression,
+            readonly: false,
+            private: pythonFieldName.startsWith('_'),
+          });
+          constructorNameMap.set(pythonFieldName, fieldName);
+          const translated = translateStraightLineStatement(
+            lines,
+            bodyIndex,
+            '        ',
+            constructorNameMap,
+            constructorDeclaredNames,
+            constructorReassignedNames,
+            constructorArrayNames,
+            new Set(),
+            relativePath,
+            constructorMapNames,
+            imports,
+          );
+          if (translated === null) {
+            return null;
+          }
+          constructorStatements.push(...translated.statements);
+          bodyIndex = translated.nextIndex;
+          continue;
         }
         const value = valueText.trim() === '{}' && (typeExpression.startsWith('Map<') || typeExpression.startsWith('ReadonlyMap<'))
           ? 'new Map()'
@@ -236,7 +276,7 @@ export function parsePlainClass(
         fieldMap.set(fieldName, {
           name: fieldName,
           typeExpression,
-          readonly: true,
+          readonly: false,
           private: pythonFieldName.startsWith('_'),
         });
         constructorStatements.push(`this.${fieldName} = ${value};`);
@@ -267,10 +307,28 @@ export function parsePlainClass(
 
   const methods: SimpleModuleFunction[] = [];
   const staticMethodNames = new Set<string>();
+  const pendingMethodComments: string[] = [];
+  const takePendingMethodComments = (): string[] | undefined => {
+    if (pendingMethodComments.length === 0) {
+      return undefined;
+    }
+    const comments = [...pendingMethodComments];
+    pendingMethodComments.length = 0;
+    return comments;
+  };
+  const pendingMethodCommentFields = (): Pick<SimpleModuleFunction, 'leadingComments'> | Record<string, never> => {
+    const comments = takePendingMethodComments();
+    return comments === undefined ? {} : { leadingComments: comments };
+  };
   nextIndex = bodyIndex;
   while (nextIndex < lines.length) {
     const trimmed = lines[nextIndex].trim();
     if (trimmed === '') {
+      nextIndex += 1;
+      continue;
+    }
+    if (trimmed.startsWith('#')) {
+      pendingMethodComments.push(trimmed.replace(/^# ?/, ''));
       nextIndex += 1;
       continue;
     }
@@ -284,6 +342,7 @@ export function parsePlainClass(
       }
       methods.push({
         ...propertyMethod.method,
+        ...pendingMethodCommentFields(),
         name: `get ${propertyMethod.method.name}`,
       });
       nextIndex = propertyMethod.nextIndex;
@@ -302,6 +361,7 @@ export function parsePlainClass(
       }
       methods.push({
         ...setterMethod.method,
+        ...pendingMethodCommentFields(),
         name: `set ${setterMethod.method.name}`,
       });
       nextIndex = setterMethod.nextIndex;
@@ -312,7 +372,10 @@ export function parsePlainClass(
       if (staticMethod === null) {
         return null;
       }
-      methods.push(staticMethod.method);
+      methods.push({
+        ...staticMethod.method,
+        ...pendingMethodCommentFields(),
+      });
       staticMethodNames.add(staticMethod.method.name);
       nextIndex = staticMethod.nextIndex;
       continue;
@@ -322,7 +385,10 @@ export function parsePlainClass(
       if (classMethod === null) {
         return null;
       }
-      methods.push(classMethod.method);
+      methods.push({
+        ...classMethod.method,
+        ...pendingMethodCommentFields(),
+      });
       staticMethodNames.add(classMethod.method.name);
       nextIndex = classMethod.nextIndex;
       continue;
@@ -331,7 +397,10 @@ export function parsePlainClass(
     if (method === null) {
       return null;
     }
-    methods.push(method.method);
+    methods.push({
+      ...method.method,
+      ...pendingMethodCommentFields(),
+    });
     nextIndex = method.nextIndex;
   }
 
@@ -346,7 +415,7 @@ export function parsePlainClass(
   }
   const fields = [...fieldMap.values()].map((field) => ({
     ...field,
-    readonly: !mutableFields.has(field.name),
+    readonly: field.readonly && !mutableFields.has(field.name),
   }));
   const rewrittenMethods = methods.map((method) => (
     method.static === true
@@ -448,6 +517,18 @@ function inferPlainClassFieldType(valueText: string, fieldTypes: ReadonlyMap<str
   return literalType === 'any' ? null : literalType;
 }
 
+function inferConstructorCallTypeExpression(
+  pythonCallee: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  mapNames: ReadonlySet<string>,
+): string {
+  if (pythonCallee === 'Path') {
+    return 'string';
+  }
+  return translateExpression(pythonCallee, nameMap, arrayNames, new Set(), mapNames);
+}
+
 function parsePlainClassMethod(
   lines: string[],
   index: number,
@@ -499,9 +580,6 @@ function parsePlainClassMethod(
     }
     nameMap.set(classReceiver, classBindingName);
   } else if (!staticMethod) {
-    for (const [name, value] of fieldNameMap) {
-      nameMap.set(name, value);
-    }
     nameMap.set('self', 'this');
   }
   const declaredNames = new Set<string>(pythonParameterNames(

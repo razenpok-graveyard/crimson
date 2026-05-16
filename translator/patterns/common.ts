@@ -409,6 +409,12 @@ export function inferPythonExpressionType(pythonExpression: string): string {
   if (/^(?:proj_origin|Vec2)\(/.test(trimmed) || /^Vec2\./.test(trimmed)) {
     return 'Vec2';
   }
+  if (/^(?:self\.)?(?:camera|focus|screen_size)$/.test(trimmed) || trimmed === 'screenSize') {
+    return 'Vec2';
+  }
+  if (/\b(?:camera|focus|screen_size|screenSize)\b/.test(trimmed) && /\s(?:\+|-|\*)\s/.test(trimmed)) {
+    return 'Vec2';
+  }
   if (!/["'`]/.test(trimmed) && /\s(?:%|\*|\/\/|\/|-)\s/.test(trimmed)) {
     return 'number';
   }

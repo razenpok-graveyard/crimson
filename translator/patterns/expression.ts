@@ -1433,6 +1433,15 @@ export function translateExpression(
   }
 
   const vectorScale = splitTopLevelMultiplicative(trimmed);
+  if (
+    vectorScale !== null
+    && (
+      translateAggregateGeneratorCall(vectorScale.left, nameMap, arrayNames, validatedTypeAliases, mapNames) !== null
+      || translateAggregateGeneratorCall(vectorScale.right, nameMap, arrayNames, validatedTypeAliases, mapNames) !== null
+    )
+  ) {
+    return `${translateExpression(vectorScale.left, nameMap, arrayNames, validatedTypeAliases, mapNames)} * ${translateExpression(vectorScale.right, nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
+  }
   if (vectorScale !== null && expressionIsKnownVector(vectorScale.left, nameMap, arrayNames)) {
     return `${translateExpression(vectorScale.left, nameMap, arrayNames, validatedTypeAliases, mapNames)}.mul(${translateExpression(stripBalancedOuterParens(vectorScale.right), nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
@@ -1910,7 +1919,7 @@ export function translateExpression(
     .replaceAll(/\bmin\(/g, 'Math.min(')
     .replaceAll(/\bmax\(/g, 'Math.max(')
     .replaceAll(/\babs\(/g, 'Math.abs(')
-    .replaceAll(/\b[A-Za-z_][A-Za-z0-9_]*\b/g, (name) => {
+    .replaceAll(/\b[A-Za-z_][A-Za-z0-9_]*\b/g, (name, offset: number, fullText: string) => {
       if (name === 'True') {
         return 'true';
       }
@@ -1922,6 +1931,9 @@ export function translateExpression(
       }
       if (/^__CRIMSON_STRING_\d+__$/.test(name)) {
         return name;
+      }
+      if (name.startsWith('_') && shouldPreservePrivateDottedToken(fullText, offset, name)) {
+        return tsMemberNameForPythonName(name);
       }
       return translateIdentifierName(name, nameMap);
     });
@@ -1985,6 +1997,18 @@ function looksLikeMappingConstantName(pythonName: string): boolean {
 
 function shouldPreservePrivateDottedName(pythonName: string): boolean {
   return pythonName.startsWith('self.');
+}
+
+function shouldPreservePrivateDottedToken(fullText: string, offset: number, name: string): boolean {
+  if (fullText[offset - 1] !== '.') {
+    return false;
+  }
+  const beforeMember = fullText.slice(0, offset - 1);
+  const receiverMatch = /[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/.exec(beforeMember);
+  if (receiverMatch === null) {
+    return false;
+  }
+  return shouldPreservePrivateDottedName(`${receiverMatch[0]}.${name}`);
 }
 
 function tsMemberNameForPythonName(pythonName: string): string {
@@ -2146,6 +2170,26 @@ function translateAggregateGeneratorCall(
     }
     const defaultValue = translateExpression(defaultArg[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
     return `(() => { const values = ${values}; return values.length === 0 ? ${defaultValue} : ${tsName}(...values); })()`;
+  }
+  const sumCall = parseCallPrefix(pythonExpression, 'sum');
+  if (sumCall !== null && sumCall.rest === '') {
+    const args = splitTopLevelComma(sumCall.argsText);
+    if (args.length >= 1 && args.length <= 2) {
+      const generator = parseSimpleGeneratorExpression(args[0]);
+      if (generator !== null) {
+        const itemName = tsExportNameForPythonName(generator.itemName);
+        const itemNameMap = new Map(nameMap);
+        itemNameMap.set(generator.itemName, itemName);
+        const iterable = iterableExpressionForIteration(generator.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames);
+        const values = generator.condition === null
+          ? iterable
+          : `${iterable}.filter((${itemName}) => ${translateExpression(generator.condition, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+        const initialValue = args[1] === undefined
+          ? '0'
+          : translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+        return `${values}.reduce((total, ${itemName}) => total + ${translateExpression(generator.expression, itemNameMap, arrayNames, validatedTypeAliases, mapNames)}, ${initialValue})`;
+      }
+    }
   }
   return null;
 }
@@ -3007,6 +3051,9 @@ function expressionIsKnownVector(
 ): boolean {
   const trimmed = stripBalancedOuterParens(pythonExpression);
   if (trimmed.startsWith('Vec2.') || trimmed.startsWith('Vec2(')) {
+    return true;
+  }
+  if (/^(?:camera|focus|screen_size|screenSize)$/.test(trimmed)) {
     return true;
   }
   if (/\.(?:aim|pos|vel|[A-Za-z0-9_]*(?:_pos|_offset))$/.test(trimmed)) {

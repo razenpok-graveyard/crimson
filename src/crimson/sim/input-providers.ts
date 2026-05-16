@@ -147,10 +147,10 @@ export class TickSupply {
 
 // Adapter over local input polling.
 export class LocalInputProvider {
-  private readonly _playerCount: number;
-  private readonly _buildInputs: LocalInputBuilder;
-  private readonly _pendingCommands: GameCommand[];
-  private readonly _commandsForNextTick: GameCommand[];
+  private _playerCount: number;
+  private _buildInputs: LocalInputBuilder;
+  private _pendingCommands: GameCommand[];
+  private _commandsForNextTick: GameCommand[];
   private _frameInputs: PlayerInput[];
   private _edgeInputs: PlayerInput[];
   private _firstTickPending: boolean;

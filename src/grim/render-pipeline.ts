@@ -42,11 +42,11 @@ export class WindowSink {
 
 // Shared draw/present orchestration for live and replay contexts.
 export class RenderPipeline {
-  private readonly _sink: RenderSink;
-  private readonly _onResize: ((arg0: number, arg1: number) => void) | null;
-  private readonly _beginEndDrawing: boolean;
-  private readonly _beginDraw: (() => void) | null;
-  private readonly _endDraw: (() => void) | null;
+  private _sink: RenderSink;
+  private _onResize: ((arg0: number, arg1: number) => void) | null;
+  private _beginEndDrawing: boolean;
+  private _beginDraw: (() => void) | null;
+  private _endDraw: (() => void) | null;
   private _opened: boolean;
   private _width: number;
   private _height: number;

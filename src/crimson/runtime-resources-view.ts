@@ -5,8 +5,8 @@ import { loadRuntimeResources, unloadRuntimeResources } from '@grim/assets.ts';
 import type { View } from '@grim/view.ts';
 
 export class RuntimeResourcesView {
-  private readonly _view: View;
-  private readonly _assetsDir: string;
+  private _view: View;
+  private _assetsDir: string;
   private _resources: RuntimeResources | null;
 
   constructor(view: View, opts: { assetsDir: string }) {

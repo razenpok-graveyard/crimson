@@ -1199,6 +1199,14 @@ function moduleValueUsageText(
       ...method.optsParams.map((parameter) => parameter.defaultValue ?? ''),
     ])),
     ...plainClasses.map((plainClass) => plainClass.extendsName ?? ''),
+    ...plainClasses.flatMap((plainClass) => [
+      ...plainClass.constructorDefinition.parameters.map((parameter) => parameter.defaultValue ?? ''),
+      ...plainClass.constructorDefinition.optsParams.map((parameter) => parameter.defaultValue ?? ''),
+      ...plainClass.methods.flatMap((method) => [
+        ...method.parameters.map((parameter) => parameter.defaultValue ?? ''),
+        ...method.optsParams.map((parameter) => parameter.defaultValue ?? ''),
+      ]),
+    ]),
     ...plainClasses.flatMap((plainClass) => plainClass.constructorDefinition.statements),
     ...plainClasses.flatMap((plainClass) => plainClass.methods.flatMap((method) => method.statements)),
     ...statements,
@@ -1840,6 +1848,14 @@ function markTypeOnlyImports(
       ...method.optsParams.map((parameter) => parameter.defaultValue ?? ''),
     ])),
     ...plainClasses.map((plainClass) => plainClass.extendsName ?? ''),
+    ...plainClasses.flatMap((plainClass) => [
+      ...plainClass.constructorDefinition.parameters.map((parameter) => parameter.defaultValue ?? ''),
+      ...plainClass.constructorDefinition.optsParams.map((parameter) => parameter.defaultValue ?? ''),
+      ...plainClass.methods.flatMap((method) => [
+        ...method.parameters.map((parameter) => parameter.defaultValue ?? ''),
+        ...method.optsParams.map((parameter) => parameter.defaultValue ?? ''),
+      ]),
+    ]),
     ...plainClasses.flatMap((plainClass) => plainClass.constructorDefinition.statements),
     ...plainClasses.flatMap((plainClass) => plainClass.methods.flatMap((method) => method.statements)),
     ...leadingStatements,

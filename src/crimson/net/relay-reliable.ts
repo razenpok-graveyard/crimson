@@ -141,7 +141,7 @@ export class RelayReliableLink {
       if (this._rttEwmaMs <= 0.0) {
         this._rttEwmaMs = sampleMs;
       } else {
-        this._rttEwmaMs = this.rttEwmaMs * 0.9 + sampleMs * 0.1;
+        this._rttEwmaMs = this._rttEwmaMs * 0.9 + sampleMs * 0.1;
       }
     }
 

@@ -119,8 +119,8 @@ export class Crand extends CrtRand {
 }
 
 export class RecordingState {
-  readonly base: CrandLike;
-  readonly records: RngDrawRecord[];
+  base: CrandLike;
+  records: RngDrawRecord[];
 
   constructor(base: CrandLike) {
     this.base = base;
@@ -129,7 +129,7 @@ export class RecordingState {
 }
 
 export class RecordingCrand {
-  private readonly _shared: RecordingState;
+  private _shared: RecordingState;
 
   constructor(base: CrandLike, shared: RecordingState | null = null) {
     this._shared = shared === null ? new RecordingState(base) : shared;

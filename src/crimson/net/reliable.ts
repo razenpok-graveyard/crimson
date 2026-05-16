@@ -155,7 +155,7 @@ export class ReliableLink {
         this._rttEwmaMs = sampleMs;
       } else {
         // Heavily smoothed; this is for HUD/debug, not congestion control.
-        this._rttEwmaMs = this.rttEwmaMs * 0.9 + sampleMs * 0.1;
+        this._rttEwmaMs = this._rttEwmaMs * 0.9 + sampleMs * 0.1;
       }
     }
 
