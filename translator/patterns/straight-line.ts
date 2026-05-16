@@ -2363,7 +2363,7 @@ function markNamespaceImports(namespaceImports: NamespaceImportDefinition[], val
 }
 
 function moduleUsesRaylibInput(lines: string[]): boolean {
-  return lines.some((line) => /\br[dl]\.(?:get_char_pressed|get_key_pressed|is_key_pressed|is_key_pressed_repeat|is_key_down|get_mouse_position|is_mouse_button_pressed|is_mouse_button_down)\b/.test(line));
+  return lines.some((line) => /\br[dl]\.(?:get_char_pressed|get_key_pressed|is_key_pressed|is_key_pressed_repeat|is_key_down|get_mouse_position|get_mouse_wheel_move|is_mouse_button_pressed|is_mouse_button_down)\b/.test(line));
 }
 
 function importedBindingName(importName: string): string {

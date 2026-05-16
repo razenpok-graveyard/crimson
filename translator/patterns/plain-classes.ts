@@ -434,11 +434,12 @@ export function parsePlainClass(
     ...field,
     readonly: field.readonly && !mutableFields.has(field.name),
   }));
-  const abstractHookMethods = methods
+  const methodsWithBaseSignatures = adaptPlainClassMethodsToBaseSignatures(methods, extendsName, classNameMap);
+  const abstractHookMethods = methodsWithBaseSignatures
     .filter(isNotImplementedHookMethod)
     .map(abstractHookMethodDefinition);
   const abstractHookMethodByName = new Map(abstractHookMethods.map((method) => [method.name, method]));
-  const rewrittenMethods = methods.map((method) => (
+  const rewrittenMethods = methodsWithBaseSignatures.map((method) => (
     method.static === true
       ? abstractHookMethodByName.get(method.name) ?? method
       : {
@@ -553,17 +554,61 @@ function abstractHookMethodDefinition(method: SimpleModuleFunction): SimpleModul
   if (method.parameters.length === 0 || method.optsParams.length === 0) {
     return { ...method, abstract: true, statements: [] };
   }
+  return {
+    ...methodWithPositionalParametersAsOpts(method),
+    abstract: true,
+    statements: [],
+  };
+}
+
+function adaptPlainClassMethodsToBaseSignatures(
+  methods: SimpleModuleFunction[],
+  extendsName: string | undefined,
+  nameMap: ReadonlyMap<string, string>,
+): SimpleModuleFunction[] {
+  if (extendsName === undefined) {
+    return methods;
+  }
+  return methods.map((method) => {
+    if (
+      method.static === true
+      || method.parameters.length === 0
+      || method.optsParams.length === 0
+      || !baseMethodUsesOptsOnlySignature(extendsName, method.name, nameMap)
+    ) {
+      return method;
+    }
+    return methodWithPositionalParametersAsOpts(method);
+  });
+}
+
+function methodWithPositionalParametersAsOpts(method: SimpleModuleFunction): SimpleModuleFunction {
   const combinedOpts: OptionalFunctionParameter[] = [
     ...method.parameters.map((parameter) => ({ ...parameter, defaultValue: null })),
     ...method.optsParams,
   ];
   return {
     ...method,
-    abstract: true,
     parameters: [],
     optsParams: combinedOpts,
-    statements: [],
   };
+}
+
+function baseMethodUsesOptsOnlySignature(
+  extendsName: string,
+  methodName: string,
+  nameMap: ReadonlyMap<string, string>,
+): boolean {
+  const signatureText = nameMap.get(instanceMethodSignatureMarker(extendsName, methodName));
+  if (signatureText === undefined) {
+    return false;
+  }
+  try {
+    const signature = JSON.parse(signatureText) as { positional?: unknown };
+    return Array.isArray(signature.positional) && signature.positional.length === 0;
+  } catch {
+    return false;
+  }
 }
 
 function rewritePlainClassAbstractHookCalls(

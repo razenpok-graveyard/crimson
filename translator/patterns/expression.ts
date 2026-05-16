@@ -179,6 +179,9 @@ export function tsFStringTemplateContent(
             ? `Math.trunc(${translatedExpression}).toString(16)`
             : `String(${translatedExpression})`;
           translated += `\${${formatted}.padStart(${zeroPaddedInteger[1]}, '0')}`;
+        } else if (/^(?:\d+)?\.(\d+)f$/.test(format ?? '')) {
+          const digits = /^(?:\d+)?\.(\d+)f$/.exec(format ?? '')?.[1] ?? '0';
+          translated += `\${${tsPropertyAccessBase(translatedExpression)}.toFixed(${digits})}`;
         } else {
           translated += `\${${translatedExpression}}`;
         }
@@ -643,6 +646,11 @@ export function translateExpression(
   const raylibGetMousePositionCall = /^(?:r[dl]|wgl)\.(?:get_mouse_position|getMousePosition)\(\)$/.exec(trimmed);
   if (raylibGetMousePositionCall !== null) {
     return '(() => { const [x, y] = InputState.mousePosition(); return { x, y }; })()';
+  }
+
+  const raylibGetMouseWheelMoveCall = /^(?:r[dl]|wgl)\.(?:get_mouse_wheel_move|getMouseWheelMove)\(\)$/.exec(trimmed);
+  if (raylibGetMouseWheelMoveCall !== null) {
+    return 'InputState.mouseWheelDelta()';
   }
 
   const raylibMouseInputCall = /^(?:r[dl]|wgl)\.(is_mouse_button_pressed|isMouseButtonPressed|is_mouse_button_down|isMouseButtonDown)\((.*)\)$/.exec(trimmed);

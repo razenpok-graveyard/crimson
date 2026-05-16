@@ -96,7 +96,7 @@ export function recordImportedFunctionReturnTypes(
 
 function importedInstanceMethodSignatures(classSource: string): { methodName: string; positional: string[] }[] {
   const signatures: { methodName: string; positional: string[] }[] = [];
-  const methodStart = /^\s+(?!(?:constructor|static|get|set)\b)(?:(?:public|private|protected)\s+)?(?:async\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:<[^>\n]+>)?\(/gm;
+  const methodStart = /^\s+(?!(?:constructor|static|get|set)\b)(?:(?:public|private|protected)\s+)?(?:(?:abstract|async)\s+)*(?:async\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:<[^>\n]+>)?\(/gm;
   for (const match of classSource.matchAll(methodStart)) {
     const openIndex = classSource.indexOf('(', match.index);
     const closeIndex = matchingCloseParen(classSource, openIndex);
@@ -180,7 +180,7 @@ function inheritedStructConstructorFields(
   classSource: string,
   seen: Set<string>,
 ): string[] {
-  const inheritedClass = /^export\s+class\s+[A-Za-z_$][A-Za-z0-9_$]*(?:<[^>{]+>)?\s+extends\s+([A-Za-z_$][A-Za-z0-9_$]*)\b/m.exec(classSource);
+  const inheritedClass = /^export\s+(?:abstract\s+)?class\s+[A-Za-z_$][A-Za-z0-9_$]*(?:<[^>{]+>)?\s+extends\s+([A-Za-z_$][A-Za-z0-9_$]*)\b/m.exec(classSource);
   if (inheritedClass === null) {
     return [];
   }
@@ -282,7 +282,7 @@ function importedClassSource(modulePath: string, className: string, relativePath
 
 function exportedClassSource(source: string, className: string): string | null {
   const escapedName = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const classStart = source.search(new RegExp(`export\\s+class\\s+${escapedName}\\b`));
+  const classStart = source.search(new RegExp(`export\\s+(?:abstract\\s+)?class\\s+${escapedName}\\b`));
   if (classStart === -1) {
     return null;
   }

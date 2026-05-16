@@ -24,6 +24,7 @@ import {
   translateMapKeyExpression,
   translatePositionalCallExpression,
   arrayValueMapNameMarker,
+  colorNameMarker,
   dateNameMarker,
   functionReturnTypeMarker,
   instanceMethodSignatureMarker,
@@ -1131,6 +1132,9 @@ export function translateStraightLineStatement(
   if (enumerateStatement !== null) {
     const innerIndent = `${indent}    `;
     const innerStatements: string[] = [];
+    const branchDeclaredNames = new Set(declaredNames);
+    branchDeclaredNames.add(enumerateStatement[1]);
+    branchDeclaredNames.add(enumerateStatement[2]);
     let nextIndex = index + 1;
     while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, innerIndent)) {
       if (lines[nextIndex].trim() === '') {
@@ -1143,7 +1147,7 @@ export function translateStraightLineStatement(
         nextIndex,
         innerIndent,
         nameMap,
-        declaredNames,
+        branchDeclaredNames,
         reassignedNames,
         arrayNames,
         validatedTypeAliases,
@@ -4094,6 +4098,35 @@ function recordLocalAssignmentMarkers(
   arrayNames: Set<string>,
   mapNames: ReadonlySet<string>,
 ): void {
+  if (arrayNames.has(assignedRight)) {
+    arrayNames.add(pythonName);
+    arrayNames.add(tsName);
+  }
+  for (const marker of [
+    colorNameMarker,
+    dateNameMarker,
+    nullableNameMarker,
+    numberNameMarker,
+    objectNameMarker,
+    pathNameMarker,
+    pathArrayNameMarker,
+    pythonMappingNameMarker,
+    rectangleNameMarker,
+    setNameMarker,
+    stringNameMarker,
+    tupleElementArrayNameMarker,
+    vectorArrayNameMarker,
+    vectorNameMarker,
+  ]) {
+    if (arrayNames.has(marker(assignedRight))) {
+      arrayNames.add(marker(pythonName));
+      arrayNames.add(marker(tsName));
+    }
+  }
+  if (mapNames.has(assignedRight)) {
+    addMutableName(mapNames, pythonName);
+    addMutableName(mapNames, tsName);
+  }
   if (/^[A-Za-z_$][A-Za-z0-9_.$]*(?:creatures|pickups|players)$/.test(assignedRight)) {
     arrayNames.add(pythonName);
   }
