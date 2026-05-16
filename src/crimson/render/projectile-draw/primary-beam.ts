@@ -168,7 +168,7 @@ export function drawBeamEffect(ctx: ProjectileDrawCtx): boolean {
       if (particlesTexture !== null) {
         const glowAtlas = EFFECT_ID_ATLAS_TABLE_BY_ID.get(EffectId.GLOW);
         if (glowAtlas !== undefined) {
-          const glowGrid = SIZE_CODE_GRID[glowAtlas.sizeCode];
+          const glowGrid = SIZE_CODE_GRID.get(glowAtlas.sizeCode);
           if (glowGrid) {
             const cellW = particlesTexture.width / glowGrid;
             const cellH = particlesTexture.height / glowGrid;

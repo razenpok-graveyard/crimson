@@ -255,6 +255,14 @@ export function translateExpression(
     return callWithInlineRecord;
   }
 
+  const dictComprehension = /^\{(.+): (.+) for ([A-Za-z_][A-Za-z0-9_]*) in (.+)\}$/.exec(trimmed);
+  if (dictComprehension !== null) {
+    const itemName = tsExportNameForPythonName(dictComprehension[3]);
+    const itemNameMap = new Map(nameMap);
+    itemNameMap.set(dictComprehension[3], itemName);
+    return `new Map(${translateExpression(dictComprehension[4], nameMap, arrayNames, validatedTypeAliases, mapNames)}.map((${itemName}) => [${translateExpression(dictComprehension[1], itemNameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(dictComprehension[2], itemNameMap, arrayNames, validatedTypeAliases, mapNames)}] as const))`;
+  }
+
   const mathIsFinite = /^math\.isfinite\((.+)\)$/.exec(trimmed);
   if (mathIsFinite !== null) {
     return `Number.isFinite(${translateExpression(mathIsFinite[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
@@ -514,7 +522,7 @@ export function translateExpression(
       return `${namespaceName}.makeVector2(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;
     }
     if (raylibConstructor[2] === 'Rectangle' && args.length === 1 && args[0].trim().startsWith('*')) {
-      return translateExpression(args[0].trim().slice(1), nameMap, arrayNames, validatedTypeAliases);
+      return `${namespaceName}.makeRectangle(...${translateExpression(args[0].trim().slice(1), nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
     }
     if (raylibConstructor[2] === 'Rectangle' && args.length === 4) {
       return `${namespaceName}.makeRectangle(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;

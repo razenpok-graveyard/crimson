@@ -75,7 +75,7 @@ export function drawCursorGlow(
   );
   if (src === null) return;
 
-  const srcRect = wgl.makeRectangle(src.x, src.y, src.w, src.h);
+  const srcRect = wgl.makeRectangle(src[0], src[1], src[2], src[3]);
 
   wgl.beginBlendMode(wgl.BlendMode.ADDITIVE);
 

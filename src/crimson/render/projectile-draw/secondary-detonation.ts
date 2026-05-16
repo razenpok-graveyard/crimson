@@ -63,7 +63,7 @@ export function drawSecondaryDetonation(ctx: SecondaryProjectileDrawCtx): boolea
 
   const atlas = EFFECT_ID_ATLAS_TABLE_BY_ID.get(EffectId.GLOW);
   if (atlas === undefined) return true;
-  const grid = SIZE_CODE_GRID[atlas.sizeCode];
+  const grid = SIZE_CODE_GRID.get(atlas.sizeCode);
   if (!grid) return true;
   const frame = atlas.frame;
   const col = frame % grid;

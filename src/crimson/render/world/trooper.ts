@@ -119,7 +119,7 @@ export function drawPlayerTrooperSprite(
   if (perkActive(player, PerkId.RADIOACTIVE) && alpha > 1e-3) {
     const atlas = EFFECT_ID_ATLAS_TABLE_BY_ID.get(EffectId.AURA);
     if (atlas !== undefined) {
-      const auraGrid = SIZE_CODE_GRID[int(atlas.sizeCode)];
+      const auraGrid = SIZE_CODE_GRID.get(int(atlas.sizeCode));
       if (auraGrid) {
         const atlasFrame = int(atlas.frame);
         const col = atlasFrame % auraGrid;
@@ -205,7 +205,7 @@ export function drawPlayerTrooperSprite(
     if (player.shieldTimer > 1e-3 && alpha > 1e-3) {
       const atlas = EFFECT_ID_ATLAS_TABLE_BY_ID.get(EffectId.SHIELD_RING);
       if (atlas !== undefined) {
-        const shieldGrid = SIZE_CODE_GRID[int(atlas.sizeCode)];
+        const shieldGrid = SIZE_CODE_GRID.get(int(atlas.sizeCode));
         if (shieldGrid) {
           const atlasFrame = int(atlas.frame);
           const col = atlasFrame % shieldGrid;

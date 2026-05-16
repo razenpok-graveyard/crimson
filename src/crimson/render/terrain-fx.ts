@@ -5,6 +5,7 @@ import type { TerrainFxBatch } from '@crimson/sim/terrain-fx.ts';
 import type { rl } from '@grim/raylib-api.ts';
 import type { GroundRenderer } from '@grim/terrain-render.ts';
 import { GroundCorpseDecal, GroundDecal } from '@grim/terrain-render.ts';
+import * as wgl from '@wgl';
 
 export function bakeTerrainFxBatch(ground: GroundRenderer, opts: { batch: TerrainFxBatch; textures: FxQueueTextures; corpseFrameForType: (arg0: number) => number }): [boolean, boolean] {
   // Bake terrain FX batch into the ground render target (port of `fx_queue_render`).
@@ -18,7 +19,7 @@ export function bakeTerrainFxBatch(ground: GroundRenderer, opts: { batch: Terrai
     if (src === null) {
       continue;
     }
-    decals.push(new GroundDecal({ texture: textures.particles, src: src, pos: entry.pos, width: entry.width, height: entry.height, rotationRad: entry.rotation, tint: entry.color.toRl() }));
+    decals.push(new GroundDecal({ texture: textures.particles, src: wgl.makeRectangle(...src), pos: entry.pos, width: entry.width, height: entry.height, rotationRad: entry.rotation, tint: entry.color.toRl() }));
   }
 
   const corpseDecals: GroundCorpseDecal[] = [];

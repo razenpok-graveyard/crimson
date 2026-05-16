@@ -299,6 +299,7 @@ export function parseStructClass(
   lines: string[],
   index: number,
   moduleNameMap: ReadonlyMap<string, string> = new Map(),
+  initialMapNames: ReadonlySet<string> = new Set(),
 ): { structClass: StructModule['classes'][number]; nextIndex: number } | null {
   const dataclass = /^@dataclass\((?<options>[^)]*)\)$/.exec(lines[index] ?? '');
   const classIndex = dataclass === null ? index : index + 1;
@@ -321,7 +322,7 @@ export function parseStructClass(
   const fields: StructModule['classes'][number]['fields'] = [];
   const methods: SimpleModuleFunction[] = [];
   const arrayFieldNames = new Set<string>();
-  const mapFieldNames = new Set<string>();
+  const mapFieldNames = new Set<string>(initialMapNames);
   let postInitStatements: string[] = [];
   while (nextIndex < lines.length) {
     const line = lines[nextIndex];

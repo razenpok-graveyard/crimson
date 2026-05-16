@@ -205,7 +205,7 @@ export function effectSrcRect(
 ): wgl.Rectangle | null {
   const atlas = EFFECT_ID_ATLAS_TABLE_BY_ID.get(int(effectId));
   if (atlas === undefined) return null;
-  const grid = SIZE_CODE_GRID[int(atlas.sizeCode)];
+  const grid = SIZE_CODE_GRID.get(int(atlas.sizeCode));
   if (!grid) return null;
   const frame = int(atlas.frame);
   const col = frame % grid;

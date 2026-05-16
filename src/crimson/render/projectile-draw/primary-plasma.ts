@@ -29,7 +29,7 @@ export function drawPlasmaParticles(ctx: ProjectileDrawCtx): boolean {
 
   const atlas = EFFECT_ID_ATLAS_TABLE_BY_ID.get(EffectId.GLOW);
   if (atlas === undefined) return false;
-  const grid = SIZE_CODE_GRID[atlas.sizeCode];
+  const grid = SIZE_CODE_GRID.get(atlas.sizeCode);
   if (!grid) return false;
 
   const cellW = particlesTexture.width / grid;

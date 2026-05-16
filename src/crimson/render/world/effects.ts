@@ -24,7 +24,7 @@ function srcRectForEffect(
 ): wgl.Rectangle | null {
   const atlas = EFFECT_ID_ATLAS_TABLE_BY_ID.get(int(effectId));
   if (atlas === undefined) return null;
-  const grid = SIZE_CODE_GRID[int(atlas.sizeCode)];
+  const grid = SIZE_CODE_GRID.get(int(atlas.sizeCode));
   if (!grid) return null;
   const frame = int(atlas.frame);
   const col = frame % grid;
@@ -132,7 +132,7 @@ export function drawSpriteEffectPool(
 
   const atlas = EFFECT_ID_ATLAS_TABLE_BY_ID.get(EffectId.EXPLOSION_PUFF);
   if (atlas === undefined) return;
-  const grid = SIZE_CODE_GRID[int(atlas.sizeCode)];
+  const grid = SIZE_CODE_GRID.get(int(atlas.sizeCode));
   if (!grid) return;
   const atlasFrame = int(atlas.frame);
   const col = atlasFrame % grid;
@@ -183,7 +183,7 @@ export function drawEffectPool(
 
     const atlas = EFFECT_ID_ATLAS_TABLE_BY_ID.get(int(effectId));
     if (atlas === undefined) return null;
-    const grid = SIZE_CODE_GRID[int(atlas.sizeCode)];
+    const grid = SIZE_CODE_GRID.get(int(atlas.sizeCode));
     if (!grid) return null;
     const f = int(atlas.frame);
     const col = f % grid;

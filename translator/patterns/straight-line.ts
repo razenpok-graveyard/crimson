@@ -180,7 +180,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
 
-    const structClass = parseStructClass(lines, index);
+    const structClass = parseStructClass(lines, index, moduleNameMap, mapNames);
     if (structClass !== null) {
       classes.push(structClass.structClass);
       structConstructorFields.set(structClass.structClass.name, structClass.structClass.fields.map((field) => field.name));
@@ -380,7 +380,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         continue;
       }
 
-      const structClass = parseStructClass(lines, index);
+      const structClass = parseStructClass(lines, index, moduleNameMap, mapNames);
       if (structClass !== null) {
         classes.push(structClass.structClass);
         structConstructorFields.set(structClass.structClass.name, structClass.structClass.fields.map((field) => field.name));

@@ -85,7 +85,7 @@ function drawSecondaryRocketGlow(ctx: SecondaryProjectileDrawCtx, style: Seconda
 
   const atlas = EFFECT_ID_ATLAS_TABLE_BY_ID.get(EffectId.GLOW);
   if (atlas === undefined) return;
-  const grid = SIZE_CODE_GRID[atlas.sizeCode];
+  const grid = SIZE_CODE_GRID.get(atlas.sizeCode);
   if (!grid) return;
 
   const frame = atlas.frame;

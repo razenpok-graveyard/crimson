@@ -1,60 +1,54 @@
 // Port of crimson/effects_atlas.py
 
-import * as wgl from '@wgl';
-
-export const SIZE_CODE_GRID: Record<number, number> = {
-  0x10: 16,
-  0x20: 8,
-  0x40: 4,
-  0x80: 2,
-};
-
 export class EffectAtlasEntry {
   readonly effectId: number;
   readonly sizeCode: number;
   readonly frame: number;
 
-  constructor(opts: { effectId: number; sizeCode: number; frame: number }) {
+  constructor(opts: {
+    effectId: number;
+    sizeCode: number;
+    frame: number;
+  }) {
     this.effectId = opts.effectId;
     this.sizeCode = opts.sizeCode;
     this.frame = opts.frame;
   }
 
   get grid(): number {
-    return SIZE_CODE_GRID[this.sizeCode];
+    return SIZE_CODE_GRID.get(this.sizeCode)!;
   }
 }
 
-function entry(effectId: number, sizeCode: number, frame: number): EffectAtlasEntry {
-  return new EffectAtlasEntry({ effectId, sizeCode, frame });
-}
-
+export const SIZE_CODE_GRID: Map<number, number> = new Map([
+  [0x10, 16],
+  [0x20, 8],
+  [0x40, 4],
+  [0x80, 2],
+]);
 // Extracted from `effect_id_table` (`size_code`, `frame`) (see `docs/structs/effects.md`).
 export const EFFECT_ID_ATLAS_TABLE: readonly EffectAtlasEntry[] = [
-  entry(0x00, 0x80, 0x02),
-  entry(0x01, 0x80, 0x03),
-  entry(0x02, 0x20, 0x00),
-  entry(0x03, 0x20, 0x01),
-  entry(0x04, 0x20, 0x02),
-  entry(0x05, 0x20, 0x03),
-  entry(0x06, 0x20, 0x04),
-  entry(0x07, 0x20, 0x05),
-  entry(0x08, 0x20, 0x08),
-  entry(0x09, 0x20, 0x09),
-  entry(0x0a, 0x20, 0x0a),
-  entry(0x0b, 0x20, 0x0b),
-  entry(0x0c, 0x40, 0x05),
-  entry(0x0d, 0x40, 0x03),
-  entry(0x0e, 0x40, 0x04),
-  entry(0x0f, 0x40, 0x05),
-  entry(0x10, 0x40, 0x06),
-  entry(0x11, 0x40, 0x07),
-  entry(0x12, 0x10, 0x26),
+  new EffectAtlasEntry({ effectId: 0x00, sizeCode: 0x80, frame: 0x02 }),
+  new EffectAtlasEntry({ effectId: 0x01, sizeCode: 0x80, frame: 0x03 }),
+  new EffectAtlasEntry({ effectId: 0x02, sizeCode: 0x20, frame: 0x00 }),
+  new EffectAtlasEntry({ effectId: 0x03, sizeCode: 0x20, frame: 0x01 }),
+  new EffectAtlasEntry({ effectId: 0x04, sizeCode: 0x20, frame: 0x02 }),
+  new EffectAtlasEntry({ effectId: 0x05, sizeCode: 0x20, frame: 0x03 }),
+  new EffectAtlasEntry({ effectId: 0x06, sizeCode: 0x20, frame: 0x04 }),
+  new EffectAtlasEntry({ effectId: 0x07, sizeCode: 0x20, frame: 0x05 }),
+  new EffectAtlasEntry({ effectId: 0x08, sizeCode: 0x20, frame: 0x08 }),
+  new EffectAtlasEntry({ effectId: 0x09, sizeCode: 0x20, frame: 0x09 }),
+  new EffectAtlasEntry({ effectId: 0x0A, sizeCode: 0x20, frame: 0x0A }),
+  new EffectAtlasEntry({ effectId: 0x0B, sizeCode: 0x20, frame: 0x0B }),
+  new EffectAtlasEntry({ effectId: 0x0C, sizeCode: 0x40, frame: 0x05 }),
+  new EffectAtlasEntry({ effectId: 0x0D, sizeCode: 0x40, frame: 0x03 }),
+  new EffectAtlasEntry({ effectId: 0x0E, sizeCode: 0x40, frame: 0x04 }),
+  new EffectAtlasEntry({ effectId: 0x0F, sizeCode: 0x40, frame: 0x05 }),
+  new EffectAtlasEntry({ effectId: 0x10, sizeCode: 0x40, frame: 0x06 }),
+  new EffectAtlasEntry({ effectId: 0x11, sizeCode: 0x40, frame: 0x07 }),
+  new EffectAtlasEntry({ effectId: 0x12, sizeCode: 0x10, frame: 0x26 }),
 ];
-
-export const EFFECT_ID_ATLAS_TABLE_BY_ID: Map<number, EffectAtlasEntry> = new Map(
-  EFFECT_ID_ATLAS_TABLE.map((e) => [e.effectId, e]),
-);
+export const EFFECT_ID_ATLAS_TABLE_BY_ID: Map<number, EffectAtlasEntry> = new Map(EFFECT_ID_ATLAS_TABLE.map((entry) => [entry.effectId, entry] as const));
 
 export enum EffectId {
   BURST = 0x00,
@@ -67,37 +61,34 @@ export enum EffectId {
   BLOOD_SPLATTER = 0x07,
   FREEZE_SHARD_0 = 0x08,
   FREEZE_SHARD_1 = 0x09,
-  FREEZE_SHARD_2 = 0x0a,
-  EFFECT_0B = 0x0b,
-  EXPLOSION_BURST = 0x0c,
-  GLOW = 0x0d,
-  FREEZE_SHATTER = 0x0e,
-  EFFECT_0F = 0x0f,
+  FREEZE_SHARD_2 = 0x0A,
+  EFFECT_0B = 0x0B,
+  EXPLOSION_BURST = 0x0C,
+  GLOW = 0x0D,
+  FREEZE_SHATTER = 0x0E,
+  EFFECT_0F = 0x0F,
   AURA = 0x10,
   EXPLOSION_PUFF = 0x11,
   CASING = 0x12,
 }
 
-export function effectSrcRect(
-  effectId: number,
-  opts: {
-    textureWidth: number;
-    textureHeight: number;
-  },
-): wgl.Rectangle | null {
+export function effectSrcRect(effectId: number, opts: { textureWidth: number; textureHeight: number }): [number, number, number, number] | null {
   const textureWidth = opts.textureWidth;
   const textureHeight = opts.textureHeight;
+  const entry = EFFECT_ID_ATLAS_TABLE_BY_ID.get(int(effectId)) ?? null;
+  if (entry === null) {
+    return null;
+  }
 
-  const e = EFFECT_ID_ATLAS_TABLE_BY_ID.get(int(effectId));
-  if (e === undefined) return null;
+  const grid = SIZE_CODE_GRID.get(entry.sizeCode) ?? null;
+  if (!grid) {
+    return null;
+  }
 
-  const grid = SIZE_CODE_GRID[e.sizeCode];
-  if (!grid) return null;
-
-  const frame = int(e.frame);
+  const frame = int(entry.frame);
   const col = frame % grid;
   const row = Math.floor(frame / grid);
   const cellW = textureWidth / grid;
   const cellH = textureHeight / grid;
-  return wgl.makeRectangle(cellW * col, cellH * row, cellW, cellH);
+  return [cellW * col, cellH * row, cellW, cellH];
 }
