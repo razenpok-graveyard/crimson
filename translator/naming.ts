@@ -114,6 +114,9 @@ export function tsTypeExpression(pythonType: string): string {
   if (trimmed === 'float' || trimmed === 'int') {
     return 'number';
   }
+  if (/^[A-Z][A-Za-z0-9_]*Flags$/.test(trimmed)) {
+    return 'number';
+  }
   if (trimmed === 'str') {
     return 'string';
   }

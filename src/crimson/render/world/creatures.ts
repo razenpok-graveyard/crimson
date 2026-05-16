@@ -4,13 +4,13 @@ import type { Vec2 } from '@grim/geom.ts';
 import { clamp } from '@grim/math.ts';
 import type { rl } from '@grim/raylib-api.ts';
 import { creatureAnimSelectFrame } from '@crimson/creatures/anim.ts';
-import type { CreatureFlags, CreatureTypeId } from '@crimson/creatures/spawn.ts';
+import type { CreatureTypeId } from '@crimson/creatures/spawn.ts';
 import { CREATURE_ANIM } from '@crimson/sim/world-defs.ts';
 import { RAD_TO_DEG } from '@crimson/render/world/constants.ts';
 import type { WorldRenderCtx } from '@crimson/render/world/context.ts';
 import * as wgl from '@wgl';
 
-export function drawCreatureSprite(renderCtx: WorldRenderCtx, texture: rl.Texture, opts: { typeId: CreatureTypeId; flags: CreatureFlags; phase: number; mirrorLong?: boolean | null; shadowAlpha?: number | null; pos: Vec2; screenPos?: Vec2 | null; rotationRad: number; scale: number; sizeScale: number; tint: rl.Color; shadow?: boolean }): void {
+export function drawCreatureSprite(renderCtx: WorldRenderCtx, texture: rl.Texture, opts: { typeId: CreatureTypeId; flags: number; phase: number; mirrorLong?: boolean | null; shadowAlpha?: number | null; pos: Vec2; screenPos?: Vec2 | null; rotationRad: number; scale: number; sizeScale: number; tint: rl.Color; shadow?: boolean }): void {
   const typeId = opts.typeId;
   const flags = opts.flags;
   const phase = opts.phase;

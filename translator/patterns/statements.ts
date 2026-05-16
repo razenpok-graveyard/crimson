@@ -509,6 +509,7 @@ export function translateStraightLineStatement(
     const innerIndent = `${indent}    `;
     const translateBranch = (startIndex: number): { statements: string[]; nextIndex: number } | null => {
       const branchStatements: string[] = [];
+      const branchDeclaredNames = new Set(declaredNames);
       let nextIndex = startIndex;
       while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, innerIndent)) {
         if (lines[nextIndex].trim() === '') {
@@ -521,7 +522,7 @@ export function translateStraightLineStatement(
           nextIndex,
           innerIndent,
           nameMap,
-          declaredNames,
+          branchDeclaredNames,
           reassignedNames,
           arrayNames,
           validatedTypeAliases,
@@ -3037,6 +3038,13 @@ function translateStraightLineAssignment(
     const tsLeft = translateExpression(pythonLeft, nameMap, arrayNames, validatedTypeAliases, mapNames);
     return {
       statements: [`${tsLeft} = Math.floor(${tsLeft} / ${assignedRight});`],
+      nextIndex,
+    };
+  }
+  if (operator === '&=' && /^0xFFFFFFFF$/i.test(assignedRight.trim())) {
+    const tsLeft = translateExpression(pythonLeft, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return {
+      statements: [`${tsLeft} = ${tsLeft} >>> 0;`],
       nextIndex,
     };
   }

@@ -393,7 +393,7 @@ export function inferPythonExpressionType(pythonExpression: string): string {
     const uniqueTypes = [...new Set(itemTypes.filter((type) => type !== 'any'))];
     return `${uniqueTypes.length === 1 ? uniqueTypes[0] : 'any'}[]`;
   }
-  const enumCast = /^([A-Z][A-Za-z0-9_]*(?:Id|Mode|Type))\(.+\)$/.exec(trimmed);
+  const enumCast = /^([A-Z][A-Za-z0-9_]*(?:Id|Mode|Type|Flags))\(.+\)$/.exec(trimmed);
   if (enumCast !== null) {
     return tsExportNameForPythonName(enumCast[1]);
   }

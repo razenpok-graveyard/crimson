@@ -1251,6 +1251,18 @@ export function translateExpression(
     const right = translateExpression(stripBalancedOuterParens(multiplicativeWithFloorDivision.right), nameMap, arrayNames, validatedTypeAliases, mapNames);
     return `${parenthesizeForMultiplicative(left)} * ${parenthesizeForMultiplicative(right)}`;
   }
+  const divisionWithConditional = splitTopLevelDivision(trimmed);
+  if (
+    divisionWithConditional !== null
+    && (
+      parseTopLevelConditionalExpression(stripBalancedOuterParens(divisionWithConditional.left)) !== null
+      || parseTopLevelConditionalExpression(stripBalancedOuterParens(divisionWithConditional.right)) !== null
+    )
+  ) {
+    const left = translateExpression(stripBalancedOuterParens(divisionWithConditional.left), nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const right = translateExpression(stripBalancedOuterParens(divisionWithConditional.right), nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return `${parenthesizeForMultiplicative(left)} / ${parenthesizeForMultiplicative(right)}`;
+  }
 
   const vectorSubMethod = /^\((.+) - (.+)\)\.to_heading\(\)$/.exec(trimmed);
   if (vectorSubMethod !== null) {
@@ -1512,7 +1524,7 @@ export function translateExpression(
     return `${translateExpression(openEndedSlice[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.slice(${translateExpression(openEndedSlice[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
-  const enumIdCast = /^([A-Z][A-Za-z0-9_]*Id)\((.+)\)$/.exec(trimmed);
+  const enumIdCast = /^([A-Z][A-Za-z0-9_]*(?:Id|Type|Flags))\((.+)\)$/.exec(trimmed);
   if (enumIdCast !== null) {
     return translateExpression(enumIdCast[2], nameMap, arrayNames, validatedTypeAliases);
   }
@@ -2738,6 +2750,10 @@ function splitTopLevelMultiplicative(value: string): { left: string; right: stri
 
 function splitTopLevelModulo(value: string): { left: string; right: string } | null {
   return splitTopLevelSpacedOperator(value, '%');
+}
+
+function splitTopLevelDivision(value: string): { left: string; right: string } | null {
+  return splitTopLevelSpacedOperator(value, '/');
 }
 
 function splitTopLevelFloorDivision(value: string): { left: string; right: string } | null {
