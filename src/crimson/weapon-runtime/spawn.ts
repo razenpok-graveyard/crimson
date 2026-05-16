@@ -1,6 +1,6 @@
 // Port of crimson/weapon_runtime/spawn.py
 
-import { Vec2 } from '@grim/geom.ts';
+import type { Vec2 } from '@grim/geom.ts';
 import { OwnerRef } from '@crimson/owner-ref.ts';
 import { ProjectileTemplateId } from '@crimson/projectiles/types.ts';
 import type { GameplayState, PlayerState } from '@crimson/sim/state-types.ts';
@@ -21,77 +21,72 @@ export function travelBudgetForTypeId(typeId: ProjectileTemplateId): number {
   return weaponEntryForProjectileTypeId(typeId).travelBudget;
 }
 
-function resolvePlayerSlot(players: readonly PlayerState[], playerIndex: number): number | null {
+function resolvePlayerSlot(players: PlayerState[], opts: { playerIndex: number }): number | null {
+  const playerIndex = opts.playerIndex;
   const targetIndex = int(playerIndex);
   if (targetIndex >= 0 && targetIndex < players.length) {
     const direct = players[targetIndex];
     if (int(direct.index) === targetIndex) {
-      return targetIndex;
+      return int(targetIndex);
     }
   }
-  for (let slot = 0; slot < players.length; slot++) {
-    if (int(players[slot].index) === targetIndex) {
-      return slot;
+  for (const [slot, player] of players.entries()) {
+    if (int(player.index) === targetIndex) {
+      return int(slot);
     }
   }
   return null;
 }
 
-function shotsFiredPlayerIndex(
-  state: GameplayState,
-  players: readonly PlayerState[] | null,
-  owner: OwnerRef,
-  ownerPlayerIndex: number | null,
-): number | null {
-  const shotsFired = state.shotsFired;
+function shotsFiredPlayerIndex(opts: { state: GameplayState; players: PlayerState[] | null; owner: OwnerRef; ownerPlayerIndex: number | null }): number | null {
+  const state = opts.state;
+  const players = opts.players;
+  const owner = opts.owner;
+  const ownerPlayerIndex = opts.ownerPlayerIndex;
+  let playerIndex: number;
   if (ownerPlayerIndex !== null) {
-    const playerIndex = int(ownerPlayerIndex);
-    if (playerIndex >= 0 && playerIndex < shotsFired.length) {
-      return playerIndex;
+    playerIndex = int(ownerPlayerIndex);
+    if (playerIndex >= 0 && playerIndex < state.shotsFired.length) {
+      return int(playerIndex);
     }
   }
 
   if (owner.isPlayer() && !(owner.localHost && owner.index === 0)) {
-    const playerIndex = int(owner.index);
-    if (playerIndex >= 0 && playerIndex < shotsFired.length) {
-      return playerIndex;
+    playerIndex = int(owner.index);
+    if (playerIndex >= 0 && playerIndex < state.shotsFired.length) {
+      return int(playerIndex);
     }
   }
 
-  if (owner.localHost && owner.index === 0 && players && players.length === 1) {
-    const playerIndex = int(players[0].index);
-    if (playerIndex >= 0 && playerIndex < shotsFired.length) {
-      return playerIndex;
+  if (owner.localHost && owner.index === 0 && players !== null && players.length > 0 && players.length === 1) {
+    playerIndex = int(players[0].index);
+    if (playerIndex >= 0 && playerIndex < state.shotsFired.length) {
+      return int(playerIndex);
     }
   }
 
   return null;
 }
 
-function fireBulletsActive(
-  players: readonly PlayerState[] | null,
-  state: GameplayState,
-  owner: OwnerRef,
-  ownerPlayerIndex: number | null,
-): boolean {
-  if (!players || players.length === 0) {
+function fireBulletsActive(players: PlayerState[] | null, opts: { state: GameplayState; owner: OwnerRef; ownerPlayerIndex: number | null }): boolean {
+  const state = opts.state;
+  const owner = opts.owner;
+  const ownerPlayerIndex = opts.ownerPlayerIndex;
+  if (players === null || players.length === 0) {
     return false;
   }
 
   // Native `projectile_spawn` checks player-1/player-2 Fire Bullets timers
   // globally, regardless of projectile ownership.
   if (state.preserveBugs) {
-    for (let i = 0; i < Math.min(2, players.length); i++) {
-      if (players[i].fireBulletsTimer > 0.0) return true;
-    }
-    return false;
+    return players.slice(0, 2).some((player) => player.fireBulletsTimer > 0.0);
   }
 
   let resolvedOwnerSlot: number | null = null;
   if (ownerPlayerIndex !== null) {
-    resolvedOwnerSlot = resolvePlayerSlot(players, int(ownerPlayerIndex));
+    resolvedOwnerSlot = resolvePlayerSlot(players, { playerIndex: int(ownerPlayerIndex) });
   } else if (owner.isPlayer() && !(owner.localHost && owner.index === 0)) {
-    resolvedOwnerSlot = resolvePlayerSlot(players, int(owner.index));
+    resolvedOwnerSlot = resolvePlayerSlot(players, { playerIndex: int(owner.index) });
   } else if (owner.localHost && owner.index === 0 && players.length === 1) {
     // Callers that only pass one player are explicitly indicating the owner
     // context (for example OwnerRef.from_local_player(0) with friendly fire disabled).
@@ -107,59 +102,37 @@ function fireBulletsActive(
   return players[resolvedOwnerSlot].fireBulletsTimer > 0.0;
 }
 
-export function projectileSpawn(
-  state: GameplayState,
-  opts: { players: readonly PlayerState[] | null; pos: Vec2; angle: number; typeId: ProjectileTemplateId; owner: OwnerRef; ownerPlayerIndex?: number | null; hitsPlayers?: boolean },
-): number {
+export function projectileSpawn(state: GameplayState, opts: { players: PlayerState[] | null; pos: Vec2; angle: number; typeId: ProjectileTemplateId; owner: OwnerRef; ownerPlayerIndex?: number | null; hitsPlayers?: boolean }): number {
+  // Mirror `projectile_spawn` (0x00420440) Fire Bullets override.
   const players = opts.players;
   const pos = opts.pos;
   const angle = opts.angle;
-  const typeId = opts.typeId;
+  let typeId = opts.typeId;
   const owner = opts.owner;
   const ownerPlayerIndex = opts.ownerPlayerIndex ?? null;
   const hitsPlayers = opts.hitsPlayers ?? false;
-  const shotsFired = state.shotsFired;
-  let currentTypeId = typeId;
-
-  // Mirror `projectile_spawn` (0x00420440) Fire Bullets override.
   if (!state.bonusSpawnGuard && owner.isPlayer()) {
     while (true) {
-      const playerIndex = shotsFiredPlayerIndex(
-        state,
-        players,
-        owner,
-        ownerPlayerIndex,
-      );
-      state.shotsFiredTotal = state.shotsFiredTotal + 1;
+      const playerIndex = shotsFiredPlayerIndex({ state: state, players: players, owner: owner, ownerPlayerIndex: ownerPlayerIndex });
+      state.shotsFiredTotal += 1;
       if (playerIndex !== null) {
-        shotsFired[playerIndex] += 1;
+        state.shotsFired[playerIndex] += 1;
       }
-      if (currentTypeId === ProjectileTemplateId.FIRE_BULLETS) {
+      if (typeId === ProjectileTemplateId.FIRE_BULLETS) {
         break;
       }
-      if (!fireBulletsActive(players, state, owner, ownerPlayerIndex)) {
+      if (!fireBulletsActive(players, { state: state, owner: owner, ownerPlayerIndex: ownerPlayerIndex })) {
         break;
       }
-      currentTypeId = ProjectileTemplateId.FIRE_BULLETS;
+      typeId = ProjectileTemplateId.FIRE_BULLETS;
     }
   }
 
-  const meta = travelBudgetForTypeId(currentTypeId);
-  return state.projectiles.spawn({
-    pos,
-    angle,
-    typeId: currentTypeId,
-    owner,
-    travelBudget: meta,
-    hitsPlayers,
-  });
+  const meta = travelBudgetForTypeId(typeId);
+  return state.projectiles.spawn({ pos: pos, angle: angle, typeId: typeId, owner: owner, travelBudget: meta, hitsPlayers: hitsPlayers });
 }
 
-export function spawnProjectileRing(
-  state: GameplayState,
-  originPos: Vec2,
-  opts: { count: number; angleOffset: number; typeId: ProjectileTemplateId; owner: OwnerRef; ownerPlayerIndex?: number | null; players?: readonly PlayerState[] | null },
-): void {
+export function spawnProjectileRing(state: GameplayState, originPos: Vec2, opts: { count: number; angleOffset: number; typeId: ProjectileTemplateId; owner: OwnerRef; ownerPlayerIndex?: number | null; players?: PlayerState[] | null }): void {
   const count = opts.count;
   const angleOffset = opts.angleOffset;
   const typeId = opts.typeId;
@@ -169,11 +142,11 @@ export function spawnProjectileRing(
   if (count <= 0) {
     return;
   }
-  const step = Math.PI * 2.0 / count;
+  const step = (Math.PI * 2.0) / count;
   for (let idx = 0; idx < count; idx++) {
     projectileSpawn(
       state,
-      { players, pos: originPos, angle: idx * step + angleOffset, typeId, owner, ownerPlayerIndex },
+      { players: players, pos: originPos, angle: idx * step + angleOffset, typeId: typeId, owner: owner, ownerPlayerIndex: ownerPlayerIndex },
     );
   }
 }

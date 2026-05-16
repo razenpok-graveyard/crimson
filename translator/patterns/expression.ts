@@ -598,7 +598,14 @@ export function translateExpression(
     const itemName = tsExportNameForPythonName(listComprehension.itemName);
     const itemNameMap = new Map(nameMap);
     itemNameMap.set(listComprehension.itemName, itemName);
-    const iterable = translateExpression(listComprehension.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const translatedIterable = translateExpression(listComprehension.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const iterable = mapNames.has(translatedIterable)
+      ? `Array.from(${translatedIterable}.keys())`
+      : arrayNames.has(objectNameMarker(listComprehension.iterable)) || arrayNames.has(objectNameMarker(translatedIterable))
+        ? `Object.keys(${translatedIterable})`
+        : arrayNames.has(setNameMarker(listComprehension.iterable)) || arrayNames.has(setNameMarker(translatedIterable))
+          ? `Array.from(${translatedIterable})`
+          : translatedIterable;
     const translatedItem = translateExpression(listComprehension.expression, itemNameMap, arrayNames, validatedTypeAliases, mapNames);
     const filtered = listComprehension.condition === null
       ? iterable
@@ -1260,9 +1267,16 @@ export function translateExpression(
   if (notIdentifier !== null) {
     const value = translateExpression(notIdentifier[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (mapNames.has(value)) {
-      return `${value}.size === 0`;
+      return arrayNames.has(nullableNameMarker(notIdentifier[1])) || arrayNames.has(nullableNameMarker(value))
+        ? `${value} === null || ${value}.size === 0`
+        : `${value}.size === 0`;
     }
-    return arrayNames.has(notIdentifier[1]) || arrayNames.has(value) ? `${value}.length === 0` : `!${value}`;
+    if (arrayNames.has(notIdentifier[1]) || arrayNames.has(value)) {
+      return arrayNames.has(nullableNameMarker(notIdentifier[1])) || arrayNames.has(nullableNameMarker(value))
+        ? `${value} === null || ${value}.length === 0`
+        : `${value}.length === 0`;
+    }
+    return `!${value}`;
   }
 
   const notPlayersCollection = /^not ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\.players)$/.exec(trimmed);
@@ -1275,7 +1289,9 @@ export function translateExpression(
     const operand = stripBalancedOuterParens(notExpression[1]);
     const value = translateExpression(operand, nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (arrayNames.has(operand) || arrayNames.has(value)) {
-      return `${value}.length === 0`;
+      return arrayNames.has(nullableNameMarker(operand)) || arrayNames.has(nullableNameMarker(value))
+        ? `${value} === null || ${value}.length === 0`
+        : `${value}.length === 0`;
     }
     if (/^[A-Za-z_$][A-Za-z0-9_.$]*\(.*\)$/.test(value)) {
       return `!${value}`;

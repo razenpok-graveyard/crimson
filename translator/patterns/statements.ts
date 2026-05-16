@@ -1418,6 +1418,25 @@ export function translateStraightLineStatement(
 
   const assignment = /^(.+?) (\+=|-=|\*=|\/=|\|=|&=|\^=|=) (.+)$/.exec(statement);
   if (assignment !== null) {
+    const mapPopAssignment = /^(.+)\.pop\((.+)\)$/.exec(assignment[3]);
+    if (operatorIsAssignment(assignment[2]) && mapPopAssignment !== null) {
+      const popAssignment = translateMapPopAssignment(
+        assignment[1],
+        mapPopAssignment[1],
+        mapPopAssignment[2],
+        index + 1,
+        nameMap,
+        declaredNames,
+        reassignedNames,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+      );
+      if (popAssignment !== null) {
+        return popAssignment;
+      }
+    }
+
     const multilineCallAssignment = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(assignment[3]);
     if (
       operatorIsAssignment(assignment[2])
@@ -3064,6 +3083,59 @@ function translateStraightLineAssignment(
   }
   return {
     statements: [`${translateExpression(pythonLeft, nameMap, arrayNames, validatedTypeAliases, mapNames)} ${operator} ${assignedRight};`],
+    nextIndex,
+  };
+}
+
+function translateMapPopAssignment(
+  pythonLeft: string,
+  pythonMapExpression: string,
+  pythonKeyExpression: string,
+  nextIndex: number,
+  nameMap: Map<string, string>,
+  declaredNames: Set<string>,
+  reassignedNames: Set<string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): { statements: string[]; nextIndex: number } | null {
+  const localAssignment = /^([A-Za-z_][A-Za-z0-9_]*)$/.exec(pythonLeft);
+  if (localAssignment === null) {
+    return null;
+  }
+
+  const mapName = translateExpression(pythonMapExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const key = translateMapKeyExpression(mapName, translateExpression(pythonKeyExpression, nameMap, arrayNames, validatedTypeAliases, mapNames));
+  const valueExpression = mapNames.has(mapName) ? `${mapName}.get(${key})!` : `${mapName}[${key}]`;
+  const deleteStatement = mapNames.has(mapName) ? `${mapName}.delete(${key});` : `delete ${mapName}[${key}];`;
+  const globalName = nameMap.get(localAssignment[1]);
+  if (globalName !== undefined) {
+    return {
+      statements: [
+        `${globalName} = ${valueExpression};`,
+        deleteStatement,
+      ],
+      nextIndex,
+    };
+  }
+
+  const tsName = tsExportNameForPythonName(localAssignment[1]);
+  if (declaredNames.has(localAssignment[1])) {
+    return {
+      statements: [
+        `${tsName} = ${valueExpression};`,
+        deleteStatement,
+      ],
+      nextIndex,
+    };
+  }
+
+  declaredNames.add(localAssignment[1]);
+  return {
+    statements: [
+      `${reassignedNames.has(localAssignment[1]) ? 'let' : 'const'} ${tsName} = ${valueExpression};`,
+      deleteStatement,
+    ],
     nextIndex,
   };
 }
