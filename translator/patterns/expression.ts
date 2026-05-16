@@ -218,6 +218,15 @@ export function translateExpression(
     return `bytesFrom(${translateExpression(toBytesCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
+  const bytesDecodeCall = /^(.+)\.decode\((.*)\)$/.exec(trimmed);
+  if (bytesDecodeCall !== null) {
+    const args = splitTopLevelComma(bytesDecodeCall[2]);
+    const encoding = args[0] === undefined ? 'utf-8' : parsePythonStringExpression(args[0])?.content ?? null;
+    if (encoding !== null) {
+      return `new TextDecoder(${tsStringLiteral(JSON.stringify(encoding))}).decode(${translateExpression(bytesDecodeCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
+  }
+
   const stringEncodeCall = /^(.+)\.encode\((.*)\)$/.exec(trimmed);
   if (stringEncodeCall !== null) {
     const args = splitTopLevelComma(stringEncodeCall[2]);
@@ -278,7 +287,7 @@ export function translateExpression(
     const itemName = tsExportNameForPythonName(dictComprehension[3]);
     const itemNameMap = new Map(nameMap);
     itemNameMap.set(dictComprehension[3], itemName);
-    return `new Map(${translateExpression(dictComprehension[4], nameMap, arrayNames, validatedTypeAliases, mapNames)}.map((${itemName}) => [${translateExpression(dictComprehension[1], itemNameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(dictComprehension[2], itemNameMap, arrayNames, validatedTypeAliases, mapNames)}] as const))`;
+    return `new Map(Array.from(${translateExpression(dictComprehension[4], nameMap, arrayNames, validatedTypeAliases, mapNames)}, (${itemName}) => [${translateExpression(dictComprehension[1], itemNameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(dictComprehension[2], itemNameMap, arrayNames, validatedTypeAliases, mapNames)}] as const))`;
   }
 
   const boolCall = parseCallPrefix(trimmed, 'bool');
@@ -577,6 +586,17 @@ export function translateExpression(
   const setCall = parseCallPrefix(trimmed, 'set');
   if (setCall !== null && setCall.rest === '') {
     const args = splitTopLevelComma(setCall.argsText);
+    if (args.length === 0) {
+      return 'new Set()';
+    }
+    if (args.length === 1) {
+      return `new Set(${translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
+  }
+
+  const frozenSetCall = parseCallPrefix(trimmed, 'frozenset');
+  if (frozenSetCall !== null && frozenSetCall.rest === '') {
+    const args = splitTopLevelComma(frozenSetCall.argsText);
     if (args.length === 0) {
       return 'new Set()';
     }

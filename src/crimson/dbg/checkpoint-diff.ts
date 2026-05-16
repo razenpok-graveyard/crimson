@@ -130,7 +130,7 @@ export function checkpointDeepdiff(expected: ReplayCheckpoint, actual: ReplayChe
 }
 
 export function compareCheckpoints(expected: readonly ReplayCheckpoint[], actual: readonly ReplayCheckpoint[]): ReplayDiffResult {
-  const actualByTick = new Map(actual.map((ckpt) => [int(ckpt.tickIndex), ckpt] as const));
+  const actualByTick = new Map(Array.from(actual, (ckpt) => [int(ckpt.tickIndex), ckpt] as const));
   let firstRngOnlyTick: number | null = null;
   let checkedCount = 0;
 

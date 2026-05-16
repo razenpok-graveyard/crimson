@@ -48,7 +48,7 @@ export const EFFECT_ID_ATLAS_TABLE: readonly EffectAtlasEntry[] = [
   new EffectAtlasEntry({ effectId: 0x11, sizeCode: 0x40, frame: 0x07 }),
   new EffectAtlasEntry({ effectId: 0x12, sizeCode: 0x10, frame: 0x26 }),
 ];
-export const EFFECT_ID_ATLAS_TABLE_BY_ID: Map<number, EffectAtlasEntry> = new Map(EFFECT_ID_ATLAS_TABLE.map((entry) => [entry.effectId, entry] as const));
+export const EFFECT_ID_ATLAS_TABLE_BY_ID: Map<number, EffectAtlasEntry> = new Map(Array.from(EFFECT_ID_ATLAS_TABLE, (entry) => [entry.effectId, entry] as const));
 
 export enum EffectId {
   BURST = 0x00,

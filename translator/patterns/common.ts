@@ -7,12 +7,18 @@ export function isTypeAliasExpression(pythonExpression: string): boolean {
   if (/^(?:True|False|None|-?\d+(?:\.\d+)?|["'])/.test(trimmed)) {
     return false;
   }
+  if (trimmed.includes('(') || trimmed.includes('{')) {
+    return false;
+  }
   return /[\[\]|]/.test(trimmed) || /^(?:Callable|Literal|Sequence|dict|list|tuple)\b/.test(trimmed) || /^[A-Z][A-Za-z0-9_]*(?:\.[A-Z][A-Za-z0-9_]*)?$/.test(trimmed);
 }
 
 export function isBareTypeAliasExpression(pythonExpression: string): boolean {
   const trimmed = pythonExpression.trim();
   if (/^[A-Z][A-Z0-9_]*(?: \| [A-Z][A-Z0-9_]*)+$/.test(trimmed)) {
+    return false;
+  }
+  if (trimmed.includes('(') || trimmed.includes('{')) {
     return false;
   }
   return /[\[\]|]/.test(trimmed) || /^(?:Callable|Literal|Sequence|dict|list|tuple)\b/.test(trimmed);
@@ -35,7 +41,7 @@ export function isTypingOnlyImport(trimmedLine: string): boolean {
   }
   return typeImport[1]
     .split(', ')
-    .every((name) => ['Annotated', 'Callable', 'Literal', 'Protocol', 'TYPE_CHECKING', 'TypeAlias', 'TypeVar', 'cast'].includes(name));
+    .every((name) => ['Annotated', 'Any', 'Callable', 'Literal', 'Protocol', 'TYPE_CHECKING', 'TypeAlias', 'TypeVar', 'cast'].includes(name));
 }
 
 export function parseTypeCheckingImports(
