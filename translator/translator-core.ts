@@ -171,6 +171,7 @@ function usesUnsupportedRuntimeIo(trimmedPython: string): boolean {
   return [
     /^import shutil$/m,
     /^import tempfile$/m,
+    /^import structlog$/m,
     /^import urllib\.(?:error|request)$/m,
     /^from PIL import /m,
     /^import ast$/m,
