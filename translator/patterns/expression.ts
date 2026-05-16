@@ -167,18 +167,26 @@ function translateBoundMethodReference(
   arrayNames: Set<string>,
   validatedTypeAliases: ReadonlySet<string>,
 ): string | null {
-  const reference = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*){2,})$/.exec(pythonExpression.trim());
+  const reference = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+)$/.exec(pythonExpression.trim());
   if (reference === null) {
     return null;
   }
   const parts = reference[1].split('.');
-  const translatedRoot = nameMap.get(parts[0]) ?? tsExportNameForPythonName(parts[0]);
-  if (translatedRoot !== 'this') {
+  const method = parts[parts.length - 1];
+  if (parts.length === 2 && parts[0] === 'self' && !method.startsWith('_')) {
+    return null;
+  }
+  if (!attributeNameLooksLikeCallbackMethod(method)) {
     return null;
   }
   const receiver = translateExpression(parts.slice(0, -1).join('.'), nameMap, arrayNames, validatedTypeAliases);
-  const method = tsMemberNameForPythonName(parts[parts.length - 1]);
-  return `${receiver}.${method}.bind(${receiver})`;
+  const tsMethod = tsMemberNameForPythonName(method);
+  return `${receiver}.${tsMethod}.bind(${receiver})`;
+}
+
+function attributeNameLooksLikeCallbackMethod(pythonName: string): boolean {
+  const normalized = pythonName.replace(/^_+/, '');
+  return /^(?:apply|build|consume|create|draw|handle|on|play|process|registry|reset|sync|update)(?:_|$)/.test(normalized);
 }
 
 export function vectorNameMarker(name: string): string {

@@ -141,8 +141,8 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       isCollectionsAbcTypeImport(trimmed)
       || isTypingOnlyImport(trimmed)
       || isEnumOnlyImport(trimmed)
+      || isDataclassOnlyImport(trimmed)
       || trimmed === 'from collections import OrderedDict'
-      || trimmed === 'from dataclasses import dataclass'
       || trimmed === 'from pathlib import Path'
       || trimmed === 'from threading import Lock'
       || trimmed.startsWith('from construct import ')
@@ -899,6 +899,14 @@ function isEnumOnlyImport(trimmedLine: string): boolean {
     return false;
   }
   return enumImport[1].split(', ').every((name) => ['Enum', 'IntEnum', 'IntFlag', 'auto', 'unique'].includes(name));
+}
+
+function isDataclassOnlyImport(trimmedLine: string): boolean {
+  const dataclassImport = /^from dataclasses import (.+)$/.exec(trimmedLine);
+  if (dataclassImport === null) {
+    return false;
+  }
+  return dataclassImport[1].split(', ').every((name) => name === 'dataclass' || name === 'field');
 }
 
 function parseTypeVarAssignment(trimmedLine: string): string | null {

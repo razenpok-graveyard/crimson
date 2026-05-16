@@ -785,6 +785,10 @@ function tsStructFieldDefaultValue(pythonValue: string): string | null {
     return `new ${tsExportNameForPythonName(dataclassFactory[1])}()`;
   }
 
+  if (trimmed === 'field(init=False)') {
+    return 'undefined!';
+  }
+
   const lambdaFactory = /^msgspec\.field\(default_factory=lambda: (.+)\)$/.exec(trimmed);
   if (lambdaFactory !== null) {
     return translateExpression(lambdaFactory[1]);

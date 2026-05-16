@@ -1437,6 +1437,28 @@ export function translateStraightLineStatement(
       );
     }
     if (assignment[3] === '{') {
+      const dictComprehension = parseMultilineDictComprehensionExpression(
+        lines,
+        index + 1,
+        nameMap,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+      );
+      if (dictComprehension !== null) {
+        return translateStraightLineAssignment(
+          assignment[1],
+          assignment[2],
+          dictComprehension.expression,
+          dictComprehension.nextIndex,
+          nameMap,
+          declaredNames,
+          reassignedNames,
+          arrayNames,
+          validatedTypeAliases,
+          mapNames,
+        );
+      }
       const dictLiteral = collectMultilineDictLiteral(
         lines,
         index + 1,
@@ -1650,6 +1672,26 @@ export function translateStraightLineStatement(
         sawKeyword = true;
         continue;
       }
+      const lambdaCallKeyword = /^([A-Za-z_][A-Za-z0-9_]*)=lambda (.+): ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(arg);
+      if (lambdaCallKeyword !== null) {
+        const lambdaExpression = parseMultilineLambdaCallExpression(
+          lines,
+          nextIndex + 1,
+          lambdaCallKeyword[2],
+          lambdaCallKeyword[3],
+          nameMap,
+          arrayNames,
+          validatedTypeAliases,
+          mapNames,
+        );
+        if (lambdaExpression === null) {
+          return null;
+        }
+        keywordParts.push(`${tsExportNameForPythonName(lambdaCallKeyword[1])}: ${lambdaExpression.expression}`);
+        nextIndex = lambdaExpression.nextIndex;
+        sawKeyword = true;
+        continue;
+      }
       if (arg === '{') {
         const dictLiteral = collectMultilineDictLiteral(
           lines,
@@ -1743,7 +1785,7 @@ export function translateStraightLineStatement(
           nextIndex = callExpression.nextIndex;
           continue;
         }
-        keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${translateExpression(keywordArg[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
+        keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${translateCallArgumentExpression(keywordArg[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
       }
       nextIndex += 1;
     }
@@ -2258,6 +2300,59 @@ function parseMultilineLambdaTupleExpression(
   return null;
 }
 
+function parseMultilineLambdaCallExpression(
+  lines: string[],
+  startIndex: number,
+  paramsText: string,
+  pythonCallee: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): { expression: string; nextIndex: number } | null {
+  const lambdaNameMap = new Map(nameMap);
+  const params: string[] = [];
+  for (const paramText of splitTopLevelComma(paramsText)) {
+    const defaulted = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(paramText);
+    if (defaulted !== null) {
+      const tsName = tsExportNameForPythonName(defaulted[1]);
+      const defaultValue = translateExpression(defaulted[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      if (defaultValue === tsName) {
+        lambdaNameMap.set(defaulted[1], tsName);
+      } else {
+        const paramName = `${tsName}Param`;
+        params.push(`${paramName} = ${defaultValue}`);
+        lambdaNameMap.set(defaulted[1], paramName);
+      }
+      continue;
+    }
+    const plain = /^([A-Za-z_][A-Za-z0-9_]*)$/.exec(paramText);
+    if (plain === null) {
+      return null;
+    }
+    const tsName = tsExportNameForPythonName(plain[1]);
+    params.push(tsName);
+    lambdaNameMap.set(plain[1], tsName);
+  }
+
+  const callExpression = parseMultilineCallExpression(
+    lines,
+    startIndex,
+    pythonCallee,
+    lambdaNameMap,
+    arrayNames,
+    validatedTypeAliases,
+    mapNames,
+  );
+  if (callExpression === null) {
+    return null;
+  }
+  return {
+    expression: `(${params.join(', ')}) => ${callExpression.expression}`,
+    nextIndex: callExpression.nextIndex,
+  };
+}
+
 function parseMultilineCallExpression(
   lines: string[],
   startIndex: number,
@@ -2652,6 +2747,27 @@ function parseMultilineCallParts(
       sawKeyword = true;
       continue;
     }
+    const lambdaCallKeyword = /^([A-Za-z_][A-Za-z0-9_]*)=lambda (.+): ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(arg);
+    if (lambdaCallKeyword !== null) {
+      const lambdaExpression = parseMultilineLambdaCallExpression(
+        lines,
+        nextIndex + 1,
+        lambdaCallKeyword[2],
+        lambdaCallKeyword[3],
+        nameMap,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+      );
+      if (lambdaExpression === null) {
+        return null;
+      }
+      keywordParts.push(`${tsExportNameForPythonName(lambdaCallKeyword[1])}: ${lambdaExpression.expression}`);
+      keywordArgParts.push({ pythonName: lambdaCallKeyword[1], expression: lambdaExpression.expression });
+      nextIndex = lambdaExpression.nextIndex;
+      sawKeyword = true;
+      continue;
+    }
     if (arg === '{') {
       const dictLiteral = collectMultilineDictLiteral(
         lines,
@@ -2778,7 +2894,7 @@ function parseMultilineCallParts(
           consumedNestedCall = true;
           break;
         }
-        const expression = translateExpression(keywordArg[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+        const expression = translateCallArgumentExpression(keywordArg[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
         keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${expression}`);
         keywordArgParts.push({ pythonName: keywordArg[1], expression });
       }
@@ -3653,6 +3769,45 @@ function parseMultilineDictComprehension(
       ')',
     ],
     nextIndex: startIndex + 4,
+  };
+}
+
+function parseMultilineDictComprehensionExpression(
+  lines: string[],
+  startIndex: number,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): { expression: string; nextIndex: number } | null {
+  const keyValue = /^(.+): (.+)$/.exec((lines[startIndex] ?? '').trim());
+  const forClause = /^for ([A-Za-z_][A-Za-z0-9_]*) in (.+)$/.exec((lines[startIndex + 1] ?? '').trim());
+  if (keyValue === null || forClause === null) {
+    return null;
+  }
+  let closeIndex = startIndex + 2;
+  let filterExpression: string | null = null;
+  const ifClause = /^if (.+)$/.exec((lines[closeIndex] ?? '').trim());
+  if (ifClause !== null) {
+    filterExpression = ifClause[1];
+    closeIndex += 1;
+  }
+  if ((lines[closeIndex] ?? '').trim() !== '}') {
+    return null;
+  }
+
+  const itemName = tsExportNameForPythonName(forClause[1]);
+  const itemNameMap = new Map(nameMap);
+  itemNameMap.set(forClause[1], itemName);
+  const iterable = translateExpression(forClause[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const key = translateExpression(keyValue[1], itemNameMap, arrayNames, validatedTypeAliases, mapNames);
+  const value = translateExpression(keyValue[2], itemNameMap, arrayNames, validatedTypeAliases, mapNames);
+  const source = filterExpression === null
+    ? iterable
+    : `${iterable}.filter((${itemName}) => ${translateExpression(filterExpression, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  return {
+    expression: `new Map(Array.from(${source}, (${itemName}) => [${key}, ${value}] as const))`,
+    nextIndex: closeIndex + 1,
   };
 }
 

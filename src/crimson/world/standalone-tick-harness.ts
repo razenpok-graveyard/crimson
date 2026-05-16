@@ -1,40 +1,56 @@
 // Port of crimson/world/standalone_tick_harness.py
 
-import { GameMode } from '@crimson/game-modes.ts';
+import type { GameMode } from '@crimson/game-modes.ts';
 import { applyPresentationOutputs, applySimMetadataBatch } from '@crimson/sim/batch-apply.ts';
 import { FixedStepClock } from '@crimson/sim/clock.ts';
 import { advanceTickRunnerFrame } from '@crimson/sim/frame-pump.ts';
-import { PlayerInput } from '@crimson/sim/input.ts';
-import { FrameContext, LocalInputProvider } from '@crimson/sim/input-providers.ts';
-import { applyPostApplyReaction, buildPostApplyReaction, PostApplyReaction } from '@crimson/sim/presentation-reactions.ts';
+import type { PlayerInput } from '@crimson/sim/input.ts';
+import type { FrameContext } from '@crimson/sim/input-providers.ts';
+import { LocalInputProvider } from '@crimson/sim/input-providers.ts';
+import { PostApplyReaction, applyPostApplyReaction, buildPostApplyReaction } from '@crimson/sim/presentation-reactions.ts';
 import { DeterministicSession } from '@crimson/sim/sessions.ts';
-import { TickBatchResult, TickRunner, TickRunnerConfig } from '@crimson/sim/tick-runner.ts';
+import type { TickBatchResult } from '@crimson/sim/tick-runner.ts';
+import { TickRunner, TickRunnerConfig } from '@crimson/sim/tick-runner.ts';
 import type { WorldRuntime } from '@crimson/world/runtime.ts';
 
-export type WorldTickInputBuilder = (ctx: FrameContext) => readonly PlayerInput[];
+export type WorldTickInputBuilder = (arg0: FrameContext) => readonly PlayerInput[];
 
 // Standalone local runner for demo/debug screens outside BaseGameplayMode.
 export class StandaloneTickHarness {
   gameMode: GameMode;
   buildInputs: WorldTickInputBuilder;
   tickRate: number;
-  session: DeterministicSession | null = null;
-  runner: TickRunner | null = null;
-  worldState: object | null = null;
-  playerCount = 0;
+  session: DeterministicSession | null;
+  runner: TickRunner | null;
+  worldState: unknown | null;
+  playerCount: number;
   clock: FixedStepClock;
-  frameIndex = 0;
-  nextTickIndex = 0;
+  frameIndex: number;
+  nextTickIndex: number;
 
   constructor(opts: {
     gameMode: GameMode;
     buildInputs: WorldTickInputBuilder;
     tickRate?: number;
+    session?: DeterministicSession | null;
+    runner?: TickRunner | null;
+    worldState?: unknown | null;
+    playerCount?: number;
+    clock?: FixedStepClock;
+    frameIndex?: number;
+    nextTickIndex?: number;
   }) {
     this.gameMode = opts.gameMode;
     this.buildInputs = opts.buildInputs;
-    this.tickRate = Math.max(1, int(opts.tickRate ?? 60));
-    this.clock = new FixedStepClock({ tickRate: this.tickRate });
+    this.tickRate = opts.tickRate ?? 60;
+    this.session = opts.session ?? null;
+    this.runner = opts.runner ?? null;
+    this.worldState = opts.worldState ?? null;
+    this.playerCount = opts.playerCount ?? 0;
+    this.frameIndex = opts.frameIndex ?? 0;
+    this.nextTickIndex = opts.nextTickIndex ?? 0;
+    this.tickRate = Math.max(1, int(this.tickRate));
+    this.clock = new FixedStepClock({ tickRate: int(this.tickRate) });
   }
 
   reset(): void {
@@ -42,22 +58,18 @@ export class StandaloneTickHarness {
     this.runner = null;
     this.worldState = null;
     this.playerCount = 0;
-    this.clock = new FixedStepClock({ tickRate: this.tickRate });
+    this.clock = new FixedStepClock({ tickRate: int(this.tickRate) });
     this.frameIndex = 0;
     this.nextTickIndex = 0;
   }
 
-  private _ensureRunner(runtime: WorldRuntime): [TickRunner, DeterministicSession] {
+  _ensureRunner(runtime: WorldRuntime): [TickRunner, DeterministicSession] {
     const worldState = runtime.simWorld.worldState;
     const playerCount = runtime.simWorld.players.length;
-
-    if (
-      this.session !== null &&
-      this.runner !== null &&
-      this.worldState === worldState &&
-      int(this.playerCount) === int(playerCount)
-    ) {
-      return [this.runner, this.session];
+    let session = this.session;
+    let runner = this.runner;
+    if (session !== null && runner !== null && this.worldState === worldState && int(this.playerCount) === int(playerCount)) {
+      return [runner, session];
     }
 
     let detailPreset = 5;
@@ -68,106 +80,47 @@ export class StandaloneTickHarness {
       violenceDisabled = config.display.violenceDisabled;
     }
 
-    const session = new DeterministicSession({
-      world: worldState,
-      worldSize: runtime.worldSize,
-      damageScaleByType: runtime.simWorld.damageScaleByType,
-      gameMode: this.gameMode,
-      detailPreset: int(detailPreset),
-      violenceDisabled: int(violenceDisabled),
-      gameTuneStarted: Boolean(runtime.simWorld.gameTuneStarted),
-      demoModeActive: Boolean(runtime.demoModeActive),
-      perkProgressionEnabled: false,
-      applyWorldDtSteps: true,
-    });
-
-    const provider = new LocalInputProvider({
-      playerCount: int(playerCount),
-      buildInputs: this.buildInputs,
-    });
-
-    const runner = new TickRunner({
-      session,
-      inputProvider: provider,
-      config: new TickRunnerConfig(),
-    });
-
+    session = new DeterministicSession({ world: worldState, worldSize: runtime.worldSize, damageScaleByType: runtime.simWorld.damageScaleByType, gameMode: this.gameMode, detailPreset: int(detailPreset), violenceDisabled: int(violenceDisabled), gameTuneStarted: runtime.simWorld.gameTuneStarted, demoModeActive: runtime.demoModeActive, perkProgressionEnabled: false, applyWorldDtSteps: true });
+    const provider = new LocalInputProvider({ playerCount: int(playerCount), buildInputs: this.buildInputs });
+    runner = new TickRunner({ session: session, inputProvider: provider, config: new TickRunnerConfig() });
     this.session = session;
     this.runner = runner;
     this.worldState = worldState;
     this.playerCount = int(playerCount);
-    this.clock = new FixedStepClock({ tickRate: this.tickRate });
+    this.clock = new FixedStepClock({ tickRate: int(this.tickRate) });
     this.frameIndex = 0;
     this.nextTickIndex = 0;
     return [runner, session];
   }
 
-  private _applyTickBatch(
-    runtime: WorldRuntime,
-    opts: {
-      batch: TickBatchResult,
-      session: DeterministicSession,
-    },
-  ): number {
-    const { batch, session } = opts;
-    const outputs = applySimMetadataBatch({
-      simWorld: runtime.simWorld,
-      completedResults: batch.completedResults,
-      gameTuneStarted: session.gameTuneStarted,
-    });
-
-    const reactions = new Map<number, PostApplyReaction>();
-    for (const result of batch.completedResults) {
-      reactions.set(
-        int(result.sourceTick.tickIndex),
-        buildPostApplyReaction({ tickResult: result }),
-      );
-    }
-
+  _applyTickBatch(runtime: WorldRuntime, opts: { batch: TickBatchResult; session: DeterministicSession }): number {
+    const batch = opts.batch;
+    const session = opts.session;
+    const outputs = applySimMetadataBatch({ simWorld: runtime.simWorld, completedResults: batch.completedResults, gameTuneStarted: session.gameTuneStarted });
+    const reactions = new Map(Array.from(batch.completedResults, (result) => [int(result.sourceTick.tickIndex), buildPostApplyReaction({ tickResult: result })] as const));
     applyPresentationOutputs({
-      outputs,
-      syncAudioBridgeState: () => runtime.syncAudioBridgeState(),
-      applyAudioPlan: (plan, shouldApplyAudio) =>
-        runtime.audioBridge.applyPlan({ plan, applyAudio: Boolean(shouldApplyAudio) }),
-      applyTerrainFx: (batch) => runtime.renderResources.consumeTerrainFxBatch(batch),
-      updateCamera: (dtSim) => runtime.updateCamera(dtSim),
-      onOutputApplied: (output) => {
-        const reaction = reactions.get(int(output.tickIndex)) ?? new PostApplyReaction();
-        applyPostApplyReaction({
-          reaction,
-          playSfx: (sfx) => runtime.audioBridge.router.playSfx(sfx),
-        });
-      },
+      outputs: outputs,
+      syncAudioBridgeState: runtime.syncAudioBridgeState.bind(runtime),
+      applyAudioPlan: (plan, shouldApplyAudio) => runtime.audioBridge.applyPlan({ plan: plan, applyAudio: shouldApplyAudio }),
+      applyTerrainFx: runtime.renderResources.consumeTerrainFxBatch.bind(runtime.renderResources),
+      updateCamera: runtime.updateCamera.bind(runtime),
+      onOutputApplied: (output) => applyPostApplyReaction({ reaction: reactions.get(int(output.tickIndex)) ?? new PostApplyReaction(), playSfx: runtime.audioBridge.router.playSfx.bind(runtime.audioBridge.router) }),
       applyAudio: true,
     });
-
     return outputs.length;
   }
 
   advanceFrame(runtime: WorldRuntime, dt: number): number {
-    if (runtime.simWorld.players.length === 0) return 0;
+    if (runtime.simWorld.players.length === 0) {
+      return 0;
+    }
     runtime.terrainRuntime.processPending();
-
     const [runner, session] = this._ensureRunner(runtime);
-    session.demoModeActive = Boolean(runtime.demoModeActive);
-
-    dt = Number(dt);
+    session.demoModeActive = runtime.demoModeActive;
     const ticksRequested = int(this.clock.advance(dt));
-    const advance = advanceTickRunnerFrame({
-      runner,
-      startTick: int(this.nextTickIndex),
-      frameIndex: int(this.frameIndex),
-      ticksRequested: int(ticksRequested),
-      dtSeconds: dt,
-      tickDtSeconds: this.clock.dtTick,
-      isNetworked: false,
-      isReplay: false,
-      refundClock: this.clock,
-    });
-
+    const advance = advanceTickRunnerFrame({ runner: runner, startTick: int(this.nextTickIndex), frameIndex: int(this.frameIndex), ticksRequested: int(ticksRequested), dtSeconds: dt, tickDtSeconds: this.clock.dtTick, isNetworked: false, isReplay: false, refundClock: this.clock });
     this.frameIndex = int(advance.frameIndex);
     this.nextTickIndex = int(advance.nextTickIndex);
-
-    return this._applyTickBatch(runtime, { batch: advance.batch, session });
+    return this._applyTickBatch(runtime, { batch: advance.batch, session: session });
   }
 }
