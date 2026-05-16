@@ -184,6 +184,55 @@ function appendTrailingCommentToResult<T extends { statements: string[]; nextInd
   return { ...result, statements };
 }
 
+function collectMultilineParenthesizedExpression(
+  lines: string[],
+  index: number,
+  initialExpression: string,
+): { expression: string; nextIndex: number } | null {
+  const expressionLines = [initialExpression];
+  let balance = parenthesisDelta(initialExpression);
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length) {
+    const trimmed = lines[nextIndex].trim();
+    if (trimmed !== '') {
+      expressionLines.push(trimmed);
+      balance += parenthesisDelta(trimmed);
+      if (balance <= 0) {
+        return {
+          expression: expressionLines.join(' '),
+          nextIndex: nextIndex + 1,
+        };
+      }
+    }
+    nextIndex += 1;
+  }
+  return null;
+}
+
+function parenthesisDelta(line: string): number {
+  let quote: string | null = null;
+  let delta = 0;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (quote !== null) {
+      if (char === quote && line[index - 1] !== '\\') {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '(') {
+      delta += 1;
+    } else if (char === ')') {
+      delta -= 1;
+    }
+  }
+  return delta;
+}
+
 function caseBodyStops(statements: string[]): boolean {
   for (let index = statements.length - 1; index >= 0; index -= 1) {
     const trimmed = statements[index].trim();
@@ -370,6 +419,7 @@ function predeclareIfBranchAssignments(
   indent: string,
   declaredNames: Set<string>,
   reassignedNames: Set<string>,
+  nameMap: ReadonlyMap<string, string>,
 ): string[] {
   const innerIndent = `${indent}    `;
   const assignedTypes = new Map<string, Set<string>>();
@@ -386,7 +436,7 @@ function predeclareIfBranchAssignments(
       const assignment = rest.startsWith(' ') ? null : /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(rest);
       if (assignment !== null && reassignedNames.has(assignment[1]) && !declaredNames.has(assignment[1])) {
         const types = assignedTypes.get(assignment[1]) ?? new Set<string>();
-        types.add(inferPredeclaredAssignmentType(lines, nextIndex, innerIndent, assignment[2]));
+        types.add(inferPredeclaredAssignmentType(lines, nextIndex, innerIndent, assignment[2], nameMap));
         assignedTypes.set(assignment[1], types);
       }
       const tupleAssignment = rest.startsWith(' ') ? null : /^([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+) = (.+)$/.exec(rest);
@@ -427,7 +477,17 @@ function inferPredeclaredAssignmentType(
   index: number,
   indent: string,
   assignedExpression: string,
+  nameMap: ReadonlyMap<string, string>,
 ): string {
+  const callExpression = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\(/.exec(assignedExpression.trim());
+  if (callExpression !== null) {
+    const translatedCallee = nameMap.get(callExpression[1]) ?? tsExportNameForPythonName(callExpression[1]);
+    const returnType = nameMap.get(functionReturnTypeMarker(translatedCallee))
+      ?? nameMap.get(functionReturnTypeMarker(callExpression[1]));
+    if (returnType !== undefined) {
+      return returnType;
+    }
+  }
   if (assignedExpression !== '(') {
     return inferPythonExpressionType(assignedExpression);
   }
@@ -439,7 +499,7 @@ function inferPredeclaredAssignmentType(
     if (lineStartsAtIndent(line, indent) && trimmed === ')') {
       return expressionLines.length === 0
         ? 'any'
-        : inferPythonExpressionType(expressionLines.join(' '));
+        : inferPredeclaredAssignmentType(lines, index, indent, expressionLines.join(' '), nameMap);
     }
     if (trimmed !== '') {
       expressionLines.push(trimmed);
@@ -878,7 +938,7 @@ export function translateStraightLineStatement(
       return branchStatements.length === 0 ? null : { statements: branchStatements, nextIndex };
     };
 
-    const branchDeclarations = predeclareIfBranchAssignments(lines, index, indent, declaredNames, reassignedNames);
+    const branchDeclarations = predeclareIfBranchAssignments(lines, index, indent, declaredNames, reassignedNames, nameMap);
     const initialBranch = translateBranch(ifBodyStartIndex);
     if (initialBranch === null) {
       return null;
@@ -2000,28 +2060,20 @@ export function translateStraightLineStatement(
       );
     }
     if (assignment[3] === '(') {
-      const expressionLines: string[] = [];
-      let nextIndex = index + 1;
-      while (nextIndex < lines.length) {
-        const trimmed = lines[nextIndex].trim();
-        if (lineStartsAtIndent(lines[nextIndex] ?? '', indent) && trimmed === ')') {
-          return translateStraightLineAssignment(
-            assignment[1],
-            assignment[2],
-            translateExpression(expressionLines.join(' '), nameMap, arrayNames, validatedTypeAliases, mapNames),
-            nextIndex + 1,
-            nameMap,
-            declaredNames,
-            reassignedNames,
-            arrayNames,
-            validatedTypeAliases,
-            mapNames,
-          );
-        }
-        if (trimmed !== '') {
-          expressionLines.push(trimmed);
-        }
-        nextIndex += 1;
+      const expression = collectMultilineParenthesizedExpression(lines, index, assignment[3]);
+      if (expression !== null) {
+        return translateStraightLineAssignment(
+          assignment[1],
+          assignment[2],
+          translateExpression(expression.expression, nameMap, arrayNames, validatedTypeAliases, mapNames),
+          expression.nextIndex,
+          nameMap,
+          declaredNames,
+          reassignedNames,
+          arrayNames,
+          validatedTypeAliases,
+          mapNames,
+        );
       }
       return null;
     }
@@ -2049,6 +2101,23 @@ export function translateStraightLineStatement(
         validatedTypeAliases,
         mapNames,
       ), trailingComment);
+    }
+    if (parenthesisDelta(assignment[3]) > 0) {
+      const expression = collectMultilineParenthesizedExpression(lines, index, assignment[3]);
+      if (expression !== null) {
+        return appendTrailingCommentToResult(translateStraightLineAssignment(
+          assignment[1],
+          assignment[2],
+          translateExpression(expression.expression, nameMap, arrayNames, validatedTypeAliases, mapNames),
+          expression.nextIndex,
+          nameMap,
+          declaredNames,
+          reassignedNames,
+          arrayNames,
+          validatedTypeAliases,
+          mapNames,
+        ), trailingComment);
+      }
     }
     return appendTrailingCommentToResult(translateStraightLineAssignment(
       assignment[1],

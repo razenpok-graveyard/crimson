@@ -4,7 +4,7 @@ import { TextureId } from '@grim/assets.ts';
 import { drawSmallText, measureSmallTextWidth } from '@grim/fonts/small.ts';
 import { Vec2 } from '@grim/geom.ts';
 import { clamp } from '@grim/math.ts';
-import type { rl } from '@grim/raylib-api.ts';
+import { rl } from '@grim/raylib-api.ts';
 import { BONUS_BY_ID, BonusId } from '@crimson/bonuses/index.ts';
 import { bonusFindAimHoverEntry, bonusLabelForEntry } from '@crimson/bonuses/pool.ts';
 import { WEAPON_BY_ID } from '@crimson/weapons.ts';
@@ -79,7 +79,7 @@ export function drawBonusPickups(renderCtx: WorldRenderCtx, opts: { camera: Vec2
     const bonusId = bonus.bonusId;
     let pulse: number;
     let iconScale: number;
-    let src: any;
+    let src: rl.Rectangle;
     let dst: wgl.Rectangle;
     let origin: wgl.Vector2;
     if (bonusId === BonusId.WEAPON) {
@@ -167,7 +167,7 @@ export function drawBonusHoverLabels(renderCtx: WorldRenderCtx, opts: { camera: 
     let x = aimScreen.x + 16.0;
     const y = aimScreen.y - 7.0;
 
-    let textW: number;
+    let textW: ReturnType<typeof measureSmallTextWidth> | number;
     if (font !== null) {
       textW = measureSmallTextWidth(font, label);
     } else {

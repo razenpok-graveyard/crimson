@@ -126,7 +126,7 @@ export function demoTrialOverlayInfo(opts: { demoBuild: boolean; gameModeId: Gam
   const globalRemainingMs = Math.max(0, DEMO_TOTAL_PLAY_TIME_MS - usedMs);
   const graceRemainingMs = Math.max(0, DEMO_QUEST_GRACE_TIME_MS - graceMs);
 
-  const tierLocked = gameModeId === GameMode.QUESTS && questLevel !== null && (int(questLevel.major) > 1 || int(questLevel.minor) > 10);
+  const tierLocked = (gameModeId === GameMode.QUESTS && questLevel !== null && (int(questLevel.major) > 1 || int(questLevel.minor) > 10));
 
   if (graceMs > 0) {
     if (graceRemainingMs <= 0) {

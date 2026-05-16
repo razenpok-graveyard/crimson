@@ -63,13 +63,13 @@ export function cameraShakeUpdate(state: GameplayState, dt: number): void {
     return;
   }
 
-  let magX = state.rng.rand({ caller: RngCallerStatic.CAMERA_UPDATE_OFFSET_X_BASE }) % maxAmp + state.rng.rand({ caller: RngCallerStatic.CAMERA_UPDATE_OFFSET_X_SPREAD }) % 10;
+  let magX = (state.rng.rand({ caller: RngCallerStatic.CAMERA_UPDATE_OFFSET_X_BASE }) % maxAmp + state.rng.rand({ caller: RngCallerStatic.CAMERA_UPDATE_OFFSET_X_SPREAD }) % 10);
   if ((state.rng.rand({ caller: RngCallerStatic.CAMERA_UPDATE_OFFSET_X_SIGN }) & 1) === 0) {
     magX = -magX;
   }
   const offsetX = magX;
 
-  let magY = state.rng.rand({ caller: RngCallerStatic.CAMERA_UPDATE_OFFSET_Y_BASE }) % maxAmp + state.rng.rand({ caller: RngCallerStatic.CAMERA_UPDATE_OFFSET_Y_SPREAD }) % 10;
+  let magY = (state.rng.rand({ caller: RngCallerStatic.CAMERA_UPDATE_OFFSET_Y_BASE }) % maxAmp + state.rng.rand({ caller: RngCallerStatic.CAMERA_UPDATE_OFFSET_Y_SPREAD }) % 10);
   if ((state.rng.rand({ caller: RngCallerStatic.CAMERA_UPDATE_OFFSET_Y_SIGN }) & 1) === 0) {
     magY = -magY;
   }

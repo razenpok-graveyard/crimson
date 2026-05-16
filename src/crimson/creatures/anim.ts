@@ -104,7 +104,7 @@ export function creatureAnimAdvancePhase(phase: number, opts: { animRate: number
 
   const flagsBits = int(flags);
   const isLongStrip = (flagsBits & _FLAG_ANIM_PING_PONG) === 0 || (flagsBits & _FLAG_ANIM_LONG_STRIP) !== 0;
-  let limit: any;
+  let limit: number;
   if (isLongStrip) {
     limit = quantizeF32 ? f32(31.0) : 31.0;
     while (phase > limit) {

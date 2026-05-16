@@ -14,7 +14,7 @@ import { bonusApplySeconds } from '@crimson/bonuses/apply-context.ts';
 export function applyFireBullets(ctx: BonusApplyCtx): void {
   let shouldRegister = ctx.player.fireBulletsTimer <= 0.0;
   if (ctx.players.length > 1) {
-    shouldRegister = ctx.players[0].fireBulletsTimer <= 0.0 && ctx.players[1].fireBulletsTimer <= 0.0;
+    shouldRegister = (ctx.players[0].fireBulletsTimer <= 0.0 && ctx.players[1].fireBulletsTimer <= 0.0);
   }
   if (shouldRegister) {
     ctx.registerPlayer('fire_bullets_timer');
@@ -50,7 +50,7 @@ export function queueLargeHitDecalStreak(opts: { hit: ProjectileHit; baseAngle: 
     rng.rand({ caller: RngCallerStatic.PROJECTILE_UPDATE_LARGE_STREAK_BURN });
     if (spawnFreezeShard !== null && freezeOrigin !== null) {
       const freezePos = freezeOrigin.add(direction.mul(dist * 20.0));
-      const freezeAngle = baseAngle + rng.rand({ caller: RngCallerStatic.PROJECTILE_UPDATE_LARGE_STREAK_FREEZE_ANGLE }) % 100 * 0.01;
+      const freezeAngle = (baseAngle + rng.rand({ caller: RngCallerStatic.PROJECTILE_UPDATE_LARGE_STREAK_FREEZE_ANGLE }) % 100 * 0.01);
       spawnFreezeShard(freezePos, freezeAngle);
     }
     fxQueue.addRandom({

@@ -90,7 +90,7 @@ export class ModsMenuView extends PanelMenuView {
     const [panelScale, localShift] = this._menuItemScale(0);
     const panelW = MENU_PANEL_WIDTH * panelScale;
     const [angleRad, slideX] = uiElementAnim(this, { index: 1, startMs: PANEL_TIMELINE_START_MS, endMs: PANEL_TIMELINE_END_MS, width: panelW });
-    const panelTopLeft = new Vec2(this._panelPos.x + slideX, this._panelPos.y + this._widescreenYShift).add(this._panelOffset.mul(panelScale));
+    const panelTopLeft = (new Vec2(this._panelPos.x + slideX, this._panelPos.y + this._widescreenYShift).add(this._panelOffset.mul(panelScale)));
     const basePos = panelTopLeft.add(new Vec2(212.0 * panelScale, 32.0 * panelScale));
     const labelPos = basePos.offset({ dx: 8.0 * panelScale });
     return new ModsContentLayout({ scale: panelScale, basePos: basePos, labelPos: labelPos });

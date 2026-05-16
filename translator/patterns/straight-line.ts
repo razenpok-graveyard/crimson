@@ -43,6 +43,7 @@ import {
 } from './common.js';
 import { parseStringEnumClass } from './enums.js';
 import {
+  functionReturnTypeMarker,
   objectNameMarker,
   receiverTypeNameMarker,
   setNameMarker,
@@ -712,6 +713,8 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     if (returnType === 'string') {
       stringReturnFunctionNames.add(tsExportNameForPythonName(header.name));
     }
+    moduleNameMap.set(functionReturnTypeMarker(header.name), returnType);
+    moduleNameMap.set(functionReturnTypeMarker(tsExportNameForPythonName(header.name)), returnType);
   }
 
   while (index < lines.length) {
@@ -1066,6 +1069,12 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         ...(moduleValueText.includes('zstdDecompressSync(') ? ['zstdDecompressSync'] : []),
         ...(moduleValueText.includes('zlibConstants.') ? ['constants as zlibConstants'] : []),
       ],
+    });
+  }
+  if (moduleValueText.includes('new Vec2(') || moduleValueText.includes('Vec2.')) {
+    pushUniqueImportDefinition(imports, {
+      modulePath: '@grim/geom.ts',
+      names: ['Vec2'],
     });
   }
 

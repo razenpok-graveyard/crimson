@@ -24,7 +24,7 @@ export function applyNuke(ctx: BonusApplyCtx): void {
     const angle = int(rng.rand({ caller: RngCallerStatic.BONUS_APPLY_NUKE_PISTOL_ANGLE })) % 628 * 0.01;
     const projId = projectileSpawn(ctx.state, { players: ctx.players, pos: origin, angle: angle, typeId: ProjectileTemplateId.PISTOL, owner: OwnerRef.fromLocalPlayer(0), ownerPlayerIndex: ctx.player.index });
     if (projId !== -1) {
-      const speedScale = int(rng.rand({ caller: RngCallerStatic.BONUS_APPLY_NUKE_PISTOL_SPEED_SCALE })) % 50 * 0.01 + 0.5;
+      const speedScale = (int(rng.rand({ caller: RngCallerStatic.BONUS_APPLY_NUKE_PISTOL_SPEED_SCALE })) % 50 * 0.01 + 0.5);
       ctx.state.projectiles.entries[projId].speedScale *= speedScale;
     }
   }

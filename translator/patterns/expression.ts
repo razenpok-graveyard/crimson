@@ -365,7 +365,7 @@ function translateStaticMethodCalleeIfKnown(pythonCallee: string, nameMap: Map<s
 }
 
 export function translatedExpressionLooksVector(tsExpression: string): boolean {
-  const trimmed = tsExpression.trim();
+  const trimmed = stripBalancedOuterParens(tsExpression.trim());
   if (/^(?:Vec2\.|new Vec2\b|projOrigin\()/.test(trimmed) && !/\.(?:length|toHeading)\(\)$/.test(trimmed)) {
     return true;
   }

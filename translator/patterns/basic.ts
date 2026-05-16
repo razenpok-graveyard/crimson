@@ -92,10 +92,17 @@ export function parseProtocolClass(
   index: number,
 ): { protocol: ProtocolDefinition; nextIndex: number } | null {
   const classIndex = lines[index]?.trim() === '@runtime_checkable' ? index + 1 : index;
-  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\(Protocol\):$/.exec(lines[classIndex] ?? '');
+  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\((.+)\):$/.exec(lines[classIndex] ?? '');
   if (header === null) {
     return null;
   }
+  const bases = splitTopLevelComma(header[2]);
+  if (!bases.includes('Protocol')) {
+    return null;
+  }
+  const extendsNames = bases
+    .filter((base) => base !== 'Protocol')
+    .map((base) => tsTypeExpression(base));
 
   const methods: ProtocolMethod[] = [];
   let nextIndex = classIndex + 1;
@@ -111,6 +118,21 @@ export function parseProtocolClass(
     }
     if (!line.startsWith('    ')) {
       break;
+    }
+
+    const property = /^    ([A-Za-z_][A-Za-z0-9_]*): (.+)$/.exec(line);
+    if (property !== null) {
+      methods.push({
+        name: tsExportNameForPythonName(property[1]),
+        property: true,
+        readonly: false,
+        parameters: [],
+        optsParams: [],
+        optsOptional: false,
+        returnType: tsTypeExpression(property[2]),
+      });
+      nextIndex += 1;
+      continue;
     }
 
     if (line.trim() === '@property') {
@@ -135,7 +157,14 @@ export function parseProtocolClass(
   }
 
   return methods.length > 0
-    ? { protocol: { name: header[1], methods }, nextIndex }
+    ? {
+      protocol: {
+        name: header[1],
+        ...(extendsNames.length === 0 ? {} : { extendsNames }),
+        methods,
+      },
+      nextIndex,
+    }
     : null;
 }
 

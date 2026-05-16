@@ -33,7 +33,7 @@ export function terrainStampingDraws(opts: { width: number; height: number }): n
   const w = Math.max(0, width);
   const h = Math.max(0, height);
   const area = w * h;
-  const stamps = (Math.floor((area * TERRAIN_DENSITY_BASE) / (2 ** TERRAIN_DENSITY_SHIFT))) + (Math.floor((area * TERRAIN_DENSITY_OVERLAY) / (2 ** TERRAIN_DENSITY_SHIFT))) + (Math.floor((area * TERRAIN_DENSITY_DETAIL) / (2 ** TERRAIN_DENSITY_SHIFT)));
+  const stamps = ((Math.floor((area * TERRAIN_DENSITY_BASE) / (2 ** TERRAIN_DENSITY_SHIFT))) + (Math.floor((area * TERRAIN_DENSITY_OVERLAY) / (2 ** TERRAIN_DENSITY_SHIFT))) + (Math.floor((area * TERRAIN_DENSITY_DETAIL) / (2 ** TERRAIN_DENSITY_SHIFT))));
 
   return stamps * TERRAIN_RAND_DRAWS_PER_STAMP;
 }

@@ -20,7 +20,7 @@ export function drawBulletTrail(ctx: ProjectileDrawCtx): boolean {
   let drawn = false;
 
   const bulletTrail = resources.texture(TextureId.BULLET_TRAIL);
-  let origin: Vec2;
+  let origin: ReturnType<typeof projOrigin>;
   if (bulletTrail !== null) {
     origin = projOrigin(ctx.proj, ctx.pos);
     const originScreen = renderer.worldToScreen(origin);

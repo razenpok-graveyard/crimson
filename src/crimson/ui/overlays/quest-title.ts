@@ -65,7 +65,7 @@ export function layoutQuestTitleOverlay(opts: { screenWidth: number; screenHeigh
   const centerY = Math.floor(int(screenHeight) / 2);
   const titlePos = new Vec2(centerX - (titleWidth / 2.0), centerY - QUEST_TITLE_Y_OFFSET);
 
-  const numberX = titlePos.x - (Array.from(number).length * numberScale * QUEST_NUMBER_HALF_ADVANCE) - (numberScale * QUEST_NUMBER_BASE_GAP) - QUEST_NUMBER_FIXED_OFFSET;
+  const numberX = (titlePos.x - (Array.from(number).length * numberScale * QUEST_NUMBER_HALF_ADVANCE) - (numberScale * QUEST_NUMBER_BASE_GAP) - QUEST_NUMBER_FIXED_OFFSET);
   const numberY = titlePos.y + (numberScale * QUEST_NUMBER_Y_MULTIPLIER);
 
   return new QuestTitleOverlayLayout({ titlePos: titlePos, titleScale: titleScale, numberPos: new Vec2(numberX, numberY), numberScale: numberScale });
