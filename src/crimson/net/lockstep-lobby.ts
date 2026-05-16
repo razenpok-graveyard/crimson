@@ -81,7 +81,7 @@ export class HostLobby {
       used.add(int(peer.slotIndex));
     }
     for (let slot = 1; slot < int(this.playerCount); slot++) {
-      if (!((container: unknown, value: unknown) => container instanceof Set || container instanceof Map ? container.has(value) : Array.isArray(container) ? container.includes(value) : typeof container === 'string' ? container.includes(String(value)) : container !== null && typeof container === 'object' ? Object.prototype.hasOwnProperty.call(container, String(value)) : false)(used, slot)) {
+      if (!used.has(slot)) {
         return int(slot);
       }
     }

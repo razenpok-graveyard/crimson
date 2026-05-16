@@ -66,6 +66,10 @@ export function receiverTypeNameMarker(name: string): string {
   return `__receiver_type__:${name}`;
 }
 
+export function classFieldTypeMarker(className: string, fieldName: string): string {
+  return `__class_field_type__:${className}:${fieldName}`;
+}
+
 export function functionReturnTypeMarker(functionName: string): string {
   return `__function_return_type__:${functionName}`;
 }

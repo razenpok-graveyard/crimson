@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { tsTargetRoot } from '../paths.js';
 import { splitTopLevelComma } from './common.js';
-import { functionReturnTypeMarker, instanceMethodSignatureMarker } from './expression.js';
+import { classFieldTypeMarker, functionReturnTypeMarker, instanceMethodSignatureMarker } from './expression.js';
 
 export function recordImportedInstanceMethodSignatures(
   modulePath: string,
@@ -38,6 +38,24 @@ export function recordImportedStructConstructorFields(
     const fields = importedStructConstructorFields(modulePath, name.importedName, relativePath);
     if (fields.length > 0) {
       structConstructorFields.set(name.localName, fields);
+    }
+  }
+}
+
+export function recordImportedClassFieldTypes(
+  modulePath: string,
+  names: { importedName: string; localName: string }[],
+  relativePath: string,
+  moduleNameMap: Map<string, string>,
+): void {
+  for (const name of names) {
+    const classSource = importedClassSource(modulePath, name.importedName, relativePath);
+    if (classSource === null) {
+      continue;
+    }
+    for (const field of importedClassFieldTypes(classSource)) {
+      moduleNameMap.set(classFieldTypeMarker(name.localName, field.name), field.typeExpression);
+      moduleNameMap.set(classFieldTypeMarker(name.importedName, field.name), field.typeExpression);
     }
   }
 }
@@ -94,6 +112,14 @@ function importedInstanceMethodSignatures(classSource: string): { methodName: st
     });
   }
   return signatures;
+}
+
+function importedClassFieldTypes(classSource: string): { name: string; typeExpression: string }[] {
+  return [...classSource.matchAll(/^\s+(?:readonly\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\??:\s*([^;=\n]+);/gm)]
+    .map((match) => ({
+      name: match[1],
+      typeExpression: match[2].trim(),
+    }));
 }
 
 function importedStructConstructorFields(

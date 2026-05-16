@@ -6,6 +6,7 @@ import {
   tsStringLiteral,
 } from './common.js';
 import {
+  classFieldTypeMarker,
   colorNameMarker,
   dateNameMarker,
   functionReturnTypeMarker,
@@ -31,6 +32,7 @@ import {
 
 export {
   arrayValueMapNameMarker,
+  classFieldTypeMarker,
   colorNameMarker,
   dateNameMarker,
   functionReturnTypeMarker,
@@ -971,6 +973,9 @@ export function translateExpression(
       const key = translateMapKeyExpression(mapName, value, mapNames);
       return `!${mapName}.has(${key})`;
     }
+    if (arrayNames.has(setNameMarker(mapNotMembership[2])) || arrayNames.has(setNameMarker(mapName))) {
+      return `!${mapName}.has(${value})`;
+    }
     return `!${pythonContainsExpression(mapName, value)}`;
   }
 
@@ -981,6 +986,9 @@ export function translateExpression(
     if (mapNames.has(mapName)) {
       const key = translateMapKeyExpression(mapName, value, mapNames);
       return `${mapName}.has(${key})`;
+    }
+    if (arrayNames.has(setNameMarker(mapMembership[2])) || arrayNames.has(setNameMarker(mapName))) {
+      return `${mapName}.has(${value})`;
     }
     return pythonContainsExpression(mapName, value);
   }
@@ -1819,6 +1827,22 @@ export function translateExpression(
     if (/^[A-Za-z_$][A-Za-z0-9_.$]*\(.*\)$/.test(value)) {
       return `!${value}`;
     }
+    const dottedField = /^(.+)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(operand);
+    if (dottedField !== null) {
+      const receiver = translateExpression(dottedField[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const receiverType = nameMap.get(receiverTypeNameMarker(dottedField[1])) ?? nameMap.get(receiverTypeNameMarker(receiver));
+      const fieldName = tsMemberNameForPythonName(dottedField[2]);
+      const fieldType = receiverType === undefined ? undefined : nameMap.get(classFieldTypeMarker(receiverType, fieldName));
+      if (fieldType?.endsWith('[]') === true || fieldType?.startsWith('readonly ') === true && fieldType.endsWith('[]')) {
+        return `${value}.length === 0`;
+      }
+      if (fieldType?.startsWith('Set<') === true || fieldType?.startsWith('ReadonlySet<') === true) {
+        return `${value}.size === 0`;
+      }
+      if (fieldType?.startsWith('Map<') === true || fieldType?.startsWith('ReadonlyMap<') === true) {
+        return `${value}.size === 0`;
+      }
+    }
     return /^[A-Za-z_$][A-Za-z0-9_.$()[\]]*$/.test(value) ? `!${value}` : `!(${value})`;
   }
 
@@ -1875,6 +1899,24 @@ export function translateExpression(
     return splitTopLevelComma(inSet[2])
       .map((item) => `${value} === ${translateExpression(item, nameMap, arrayNames, validatedTypeAliases)}`)
       .join(' || ');
+  }
+
+  const slicedNotMembership = /^(.+?) not in (.+\[[^\]]*:[^\]]*\])$/.exec(trimmed);
+  if (slicedNotMembership !== null) {
+    const container = translateExpression(slicedNotMembership[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const value = translateExpression(slicedNotMembership[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return container.includes('.slice(')
+      ? `!${container}.includes(${value})`
+      : `!${pythonContainsExpression(container, value)}`;
+  }
+
+  const slicedMembership = /^(.+?) in (.+\[[^\]]*:[^\]]*\])$/.exec(trimmed);
+  if (slicedMembership !== null) {
+    const container = translateExpression(slicedMembership[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const value = translateExpression(slicedMembership[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return container.includes('.slice(')
+      ? `${container}.includes(${value})`
+      : pythonContainsExpression(container, value);
   }
 
   const tupleLiteral = /^\((.*)\)$/.exec(trimmed);
@@ -2378,7 +2420,9 @@ function translateAggregateGeneratorCall(
     const itemName = tsExportNameForPythonName(generator.itemName);
     const itemNameMap = new Map(nameMap);
     itemNameMap.set(generator.itemName, itemName);
-    const values = `Array.from(${translateExpression(generator.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames)}, (${itemName}) => ${translateExpression(generator.expression, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    const translatedIterable = translateExpression(generator.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const iterable = mapNames.has(translatedIterable) ? `${translatedIterable}.keys()` : translatedIterable;
+    const values = `Array.from(${iterable}, (${itemName}) => ${translateExpression(generator.expression, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
     const defaultArg = args
       .map((arg) => /^default=(.+)$/.exec(arg))
       .find((match): match is RegExpExecArray => match !== null);

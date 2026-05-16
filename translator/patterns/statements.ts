@@ -472,6 +472,67 @@ function predeclareIfBranchAssignments(
   return declarations;
 }
 
+function predeclareLoopBlockAssignments(
+  lines: string[],
+  index: number,
+  indent: string,
+  declaredNames: Set<string>,
+  nameMap: ReadonlyMap<string, string>,
+): string[] {
+  const innerIndent = `${indent}    `;
+  let blockEnd = index + 1;
+  while (blockEnd < lines.length) {
+    const line = lines[blockEnd] ?? '';
+    if (line.trim() !== '' && !line.startsWith(innerIndent)) {
+      break;
+    }
+    blockEnd += 1;
+  }
+
+  const assignedTypes = new Map<string, Set<string>>();
+  for (let nextIndex = index + 1; nextIndex < blockEnd; nextIndex += 1) {
+    const line = lines[nextIndex] ?? '';
+    if (line.trim() === '' || !line.startsWith(innerIndent)) {
+      continue;
+    }
+    const assignment = /^\s*([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(line);
+    if (assignment === null || declaredNames.has(assignment[1]) || !nameReferencedAfterBlock(lines, blockEnd, indent, assignment[1])) {
+      continue;
+    }
+    const types = assignedTypes.get(assignment[1]) ?? new Set<string>();
+    types.add(inferPredeclaredAssignmentType(lines, nextIndex, /^(\s*)/.exec(line)?.[1] ?? innerIndent, assignment[2], nameMap));
+    assignedTypes.set(assignment[1], types);
+  }
+
+  const declarations: string[] = [];
+  for (const [name, types] of assignedTypes) {
+    const concreteTypes = [...types].filter((type) => type !== 'any');
+    const candidateTypes = concreteTypes.length > 0 ? concreteTypes : [...types];
+    const uniqueTypes = [...new Set(candidateTypes)];
+    const type = uniqueTypes.length === 1 ? uniqueTypes[0] : uniqueTypes.join(' | ');
+    declarations.push(`let ${tsExportNameForPythonName(name)}: ${type};`);
+    declaredNames.add(name);
+  }
+  return declarations;
+}
+
+function nameReferencedAfterBlock(lines: string[], startIndex: number, indent: string, name: string): boolean {
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const referencePattern = new RegExp(`\\b${escapedName}\\b`);
+  let index = startIndex;
+  while (index < lines.length) {
+    const line = lines[index] ?? '';
+    if (line.trim() !== '' && !line.startsWith(indent)) {
+      break;
+    }
+    if (referencePattern.test(line.replace(/#.*/, ''))) {
+      return true;
+    }
+    index += 1;
+  }
+  return false;
+}
+
 function inferPredeclaredAssignmentType(
   lines: string[],
   index: number,
@@ -481,6 +542,9 @@ function inferPredeclaredAssignmentType(
 ): string {
   const callExpression = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\(/.exec(assignedExpression.trim());
   if (callExpression !== null) {
+    if (/^[A-Z][A-Za-z0-9_]*(?:Id|Type|Flags)$/.test(callExpression[1])) {
+      return tsExportNameForPythonName(callExpression[1]);
+    }
     const translatedCallee = nameMap.get(callExpression[1]) ?? tsExportNameForPythonName(callExpression[1]);
     const returnType = nameMap.get(functionReturnTypeMarker(translatedCallee))
       ?? nameMap.get(functionReturnTypeMarker(callExpression[1]));
@@ -576,6 +640,8 @@ function parseNestedFunctionStatement(
 
   const async = statements.some((statement) => statement.includes('await '));
   const returnType = tsFunctionReturnTypeExpression(header.returnType);
+  outerNameMap.set(functionReturnTypeMarker(header.name), returnType);
+  outerNameMap.set(functionReturnTypeMarker(functionName), returnType);
   return {
     statements: [
       `const ${functionName} = ${async ? 'async ' : ''}(${parsedParams.params.join(', ')}): ${async ? `Promise<${returnType}>` : returnType} => {`,
@@ -1274,6 +1340,7 @@ export function translateStraightLineStatement(
   const whileStatement = /^while (.+):$/.exec(statement);
   if (whileStatement !== null) {
     const innerIndent = `${indent}    `;
+    const loopDeclarations = predeclareLoopBlockAssignments(lines, index, indent, declaredNames, nameMap);
     const innerStatements: string[] = [];
     let sawBodyLine = false;
     let nextIndex = index + 1;
@@ -1308,6 +1375,7 @@ export function translateStraightLineStatement(
     }
     return {
       statements: [
+        ...loopDeclarations,
         `while (${translateConditionExpression(whileStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`,
         ...innerStatements,
         '}',
@@ -3153,6 +3221,16 @@ function parseMultilineCallExpression(
       nextIndex: callParts.nextIndex,
     };
   }
+  if (
+    /^[A-Z][A-Za-z0-9_]*(?:Id|Type|Flags)$/.test(pythonCallee)
+    && callParts.positionalParts.length === 1
+    && callParts.keywordParts.length === 0
+  ) {
+    return {
+      expression: translateExpression(callParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames),
+      nextIndex: callParts.nextIndex,
+    };
+  }
   if (pythonCallee === 'msgspec.msgpack.encode' && callParts.positionalParts.length === 1 && callParts.keywordParts.length === 0) {
     return {
       expression: `new MsgpackEncoder().encode(${translateExpression(callParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames)})`,
@@ -4313,6 +4391,7 @@ export function parseTopLevelAssignment(
   lines: string[],
   index: number,
   nameMap: Map<string, string> = new Map(),
+  mapNames: ReadonlySet<string> = new Set(),
 ): { assignment: SimpleModuleAssignment; nextIndex: number } | null {
   const parsedLine = splitInlineComment(lines[index] ?? '');
   const line = parsedLine.code;
@@ -4366,7 +4445,7 @@ export function parseTopLevelAssignment(
       if (tupleItem === null) {
         return null;
       }
-      valueLines.push(`  ${translateExpression(tupleItem[1], nameMap)},`);
+      valueLines.push(`  ${translateExpression(tupleItem[1], nameMap, new Set(), new Set(), mapNames)},`);
       nextIndex += 1;
     }
 
@@ -4410,7 +4489,7 @@ export function parseTopLevelAssignment(
       if (listItem === null) {
         return null;
       }
-      valueLines.push(`  ${translateExpression(listItem[1], nameMap)},`);
+      valueLines.push(`  ${translateExpression(listItem[1], nameMap, new Set(), new Set(), mapNames)},`);
       nextIndex += 1;
     }
     return null;
@@ -4445,7 +4524,7 @@ export function parseTopLevelAssignment(
       const parsedItemLine = splitInlineComment(trimmed);
       const dictItem = /^(.+): (.+),$/.exec(parsedItemLine.code);
       if (dictItem !== null) {
-        valueLines.push(`  [${translateExpression(dictItem[1], nameMap)}, ${translateExpression(dictItem[2], nameMap)}],${parsedItemLine.comment === null ? '' : ` // ${parsedItemLine.comment}`}`);
+        valueLines.push(`  [${translateExpression(dictItem[1], nameMap, new Set(), new Set(), mapNames)}, ${translateExpression(dictItem[2], nameMap, new Set(), new Set(), mapNames)}],${parsedItemLine.comment === null ? '' : ` // ${parsedItemLine.comment}`}`);
         nextIndex += 1;
         continue;
       }
@@ -4464,7 +4543,7 @@ export function parseTopLevelAssignment(
       if (callExpression === null) {
         return null;
       }
-      valueLines.push(`  [${translateExpression(multilineDictItem[1], nameMap)}, ${callExpression.expression}],`);
+      valueLines.push(`  [${translateExpression(multilineDictItem[1], nameMap, new Set(), new Set(), mapNames)}, ${callExpression.expression}],`);
       nextIndex = callExpression.nextIndex;
     }
 
@@ -4489,7 +4568,7 @@ export function parseTopLevelAssignment(
           valueLines: [
             args.length === 0
               ? 'new Map()'
-              : `new Map(${translateExpression(args[0], nameMap)})`,
+              : `new Map(${translateExpression(args[0], nameMap, new Set(), new Set(), mapNames)})`,
           ],
         },
         nextIndex: index + 1,
@@ -4506,7 +4585,7 @@ export function parseTopLevelAssignment(
         typeExpression: baseAssignment.typeExpression ?? 'ReadonlySet<number>',
         valueLines: [
           'new Set([',
-          ...items.map((item) => `  ${translateExpression(item, nameMap)},`),
+          ...items.map((item) => `  ${translateExpression(item, nameMap, new Set(), new Set(), mapNames)},`),
           '])',
         ],
       },
@@ -4531,7 +4610,7 @@ export function parseTopLevelAssignment(
 
   const setUnion = /^[A-Z][A-Z0-9_]*(?: \| [A-Z][A-Z0-9_]*)+$/.exec(value);
   if (setUnion !== null) {
-    const setNames = value.split(' | ').map((setName) => translateExpression(setName, nameMap));
+    const setNames = value.split(' | ').map((setName) => translateExpression(setName, nameMap, new Set(), new Set(), mapNames));
     return {
       assignment: {
         ...baseAssignment,
@@ -4574,7 +4653,7 @@ export function parseTopLevelAssignment(
     }
     const prefixValues = splitTopLevelComma(tuplePlusTupleGeneratorCall[1])
       .filter((part) => part !== '')
-      .map((part) => translateExpression(part, nameMap));
+      .map((part) => translateExpression(part, nameMap, new Set(), new Set(), mapNames));
     return {
       assignment: {
         ...baseAssignment,
@@ -4609,7 +4688,7 @@ export function parseTopLevelAssignment(
       if (arg === null) {
         return null;
       }
-      valueLines.push(`  ${translateExpression(arg[1], nameMap)},`);
+      valueLines.push(`  ${translateExpression(arg[1], nameMap, new Set(), new Set(), mapNames)},`);
       nextIndex += 1;
     }
     return null;
@@ -4618,7 +4697,7 @@ export function parseTopLevelAssignment(
   const keywordCall = /^([A-Za-z_][A-Za-z0-9_]*)\($/.exec(value);
   if (keywordCall === null) {
     return {
-      assignment: { ...baseAssignment, valueLines: [translateExpression(value, nameMap)] },
+      assignment: { ...baseAssignment, valueLines: [translateExpression(value, nameMap, new Set(), new Set(), mapNames)] },
       nextIndex: index + 1,
     };
   }
@@ -4641,7 +4720,7 @@ export function parseTopLevelAssignment(
     if (keywordArg === null) {
       return null;
     }
-    valueLines.push(`  ${tsExportNameForPythonName(keywordArg[1])}: ${translateExpression(keywordArg[2], nameMap)},`);
+    valueLines.push(`  ${tsExportNameForPythonName(keywordArg[1])}: ${translateExpression(keywordArg[2], nameMap, new Set(), new Set(), mapNames)},`);
     nextIndex += 1;
   }
 
@@ -4732,14 +4811,16 @@ function parseMultilineFrozenSet(
   lines: string[],
   startIndex: number,
 ): { valueLines: string[]; nextIndex: number } | null {
-  if ((lines[startIndex] ?? '').trim() !== '{') {
+  const opener = (lines[startIndex] ?? '').trim();
+  if (opener !== '{' && opener !== '(') {
     return null;
   }
+  const closingItems = opener === '{' ? new Set(['}', '},']) : new Set([')', '),']);
   const valueLines = ['new Set(['];
   let nextIndex = startIndex + 1;
   while (nextIndex < lines.length) {
     const trimmed = lines[nextIndex].trim();
-    if (trimmed === '}' || trimmed === '},') {
+    if (closingItems.has(trimmed)) {
       if ((lines[nextIndex + 1] ?? '').trim() !== ')') {
         return null;
       }

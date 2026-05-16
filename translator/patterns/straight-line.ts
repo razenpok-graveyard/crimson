@@ -56,7 +56,12 @@ import {
   parseStraightLineFunctionHeader,
   tsFunctionReturnTypeExpression,
 } from './function-headers.js';
-import { recordImportedFunctionReturnTypes, recordImportedInstanceMethodSignatures, recordImportedStructConstructorFields } from './imported-classes.js';
+import {
+  recordImportedClassFieldTypes,
+  recordImportedFunctionReturnTypes,
+  recordImportedInstanceMethodSignatures,
+  recordImportedStructConstructorFields,
+} from './imported-classes.js';
 import { parseFunctionParameterText, pythonParameterNames } from './parameters.js';
 import {
   bytesFromHelperStatements,
@@ -468,7 +473,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
 
-    const assignment = parseTopLevelAssignment(lines, index, moduleNameMap);
+    const assignment = parseTopLevelAssignment(lines, index, moduleNameMap, mapNames);
     if (assignment === null) {
       const topLevelStatement = translateStraightLineStatement(
         lines,
@@ -497,6 +502,9 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       moduleNameMap.set(namedAssignment[1], assignment.assignment.name);
       if (assignment.assignment.typeExpression?.startsWith('Map<') === true || assignment.assignment.typeExpression?.startsWith('ReadonlyMap<') === true) {
         mapNames.add(assignment.assignment.name);
+      }
+      if (assignment.assignment.typeExpression?.startsWith('Set<') === true || assignment.assignment.typeExpression?.startsWith('ReadonlySet<') === true) {
+        setReturnFunctionNames.add(assignment.assignment.name);
       }
     }
     index = assignment.nextIndex;
@@ -554,7 +562,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
 
-    const interleavedAssignment = parseTopLevelAssignment(lines, index, moduleNameMap);
+    const interleavedAssignment = parseTopLevelAssignment(lines, index, moduleNameMap, mapNames);
     if (interleavedAssignment !== null) {
       attachPendingAssignmentComments(interleavedAssignment.assignment, pendingAssignmentComments);
       avoidImportedPrivateNameCollision(interleavedAssignment.assignment, imports);
@@ -564,6 +572,9 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         moduleNameMap.set(namedAssignment[1], interleavedAssignment.assignment.name);
         if (interleavedAssignment.assignment.typeExpression?.startsWith('Map<') === true) {
           mapNames.add(interleavedAssignment.assignment.name);
+        }
+        if (interleavedAssignment.assignment.typeExpression?.startsWith('Set<') === true || interleavedAssignment.assignment.typeExpression?.startsWith('ReadonlySet<') === true) {
+          setReturnFunctionNames.add(interleavedAssignment.assignment.name);
         }
       }
       index = interleavedAssignment.nextIndex;
@@ -808,7 +819,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
 
-    const assignment = parseTopLevelAssignment(lines, index, moduleNameMap);
+    const assignment = parseTopLevelAssignment(lines, index, moduleNameMap, mapNames);
     if (assignment === null) {
       const trailingStatement = translateStraightLineStatement(
         lines,
@@ -1337,6 +1348,7 @@ function recordImportedStaticClassMethods(
   moduleNameMap: Map<string, string>,
 ): void {
   recordImportedInstanceMethodSignatures(modulePath, names, relativePath, moduleNameMap);
+  recordImportedClassFieldTypes(modulePath, names, relativePath, moduleNameMap);
   for (const name of names) {
     if (importedClassSource(modulePath, name.importedName, relativePath) !== null) {
       moduleNameMap.set(importedClassNameMarker(name.localName), 'true');
