@@ -755,6 +755,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     leadingStatements.unshift(...helperStatements);
   }
+  if (moduleValueText.includes('pythonTruthy(')) {
+    const helperStatements = pythonTruthyHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
   if (moduleValueText.includes('pythonJsonDumps(')) {
     const helperStatements = pythonJsonDumpsHelperStatements();
     if (leadingStatements.length > 0) {
@@ -1218,6 +1225,29 @@ function pythonSplitlinesHelperStatements(): string[] {
     '    lines.pop();',
     '  }',
     '  return lines;',
+    '}',
+  ];
+}
+
+function pythonTruthyHelperStatements(): string[] {
+  return [
+    'function pythonTruthy(value: unknown): boolean {',
+    '  if (value === null || value === undefined) {',
+    '    return false;',
+    '  }',
+    "  if (typeof value === 'boolean') {",
+    '    return value;',
+    '  }',
+    "  if (typeof value === 'number') {",
+    '    return value !== 0 && !Number.isNaN(value);',
+    '  }',
+    "  if (typeof value === 'string' || Array.isArray(value)) {",
+    '    return value.length > 0;',
+    '  }',
+    '  if (value instanceof Map || value instanceof Set) {',
+    '    return value.size > 0;',
+    '  }',
+    '  return true;',
     '}',
   ];
 }

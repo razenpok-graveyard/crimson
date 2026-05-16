@@ -2114,10 +2114,37 @@ function translatePythonTruthy(
   if (arrayNames.has(setNameMarker(trimmed)) || arrayNames.has(setNameMarker(translated))) {
     return `${translated}.size > 0`;
   }
+  if (mapNames.has(translated)) {
+    return `${translated}.size > 0`;
+  }
   if (arrayNames.has(trimmed) || arrayNames.has(translated)) {
     return `${translated}.length > 0`;
   }
-  return translated;
+  if (expressionLooksBoolean(translated) || expressionLooksSimpleValueReference(translated)) {
+    return translated;
+  }
+  return expressionLooksCallResult(translated) ? `pythonTruthy(${translated})` : translated;
+}
+
+function expressionLooksBoolean(tsExpression: string): boolean {
+  const trimmed = tsExpression.trim();
+  return trimmed === 'true'
+    || trimmed === 'false'
+    || /^!/.test(trimmed)
+    || /(?:===|!==|<=|>=|<|>|&&|\|\||\binstanceof\b)/.test(trimmed)
+    || /^typeof\b/.test(trimmed)
+    || /^(?:Array\.isArray|Number\.is(?:Finite|Integer|NaN))\(/.test(trimmed)
+    || /\.(?:has|includes|startsWith|endsWith)\(/.test(trimmed);
+}
+
+function expressionLooksSimpleValueReference(tsExpression: string): boolean {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*$/.test(tsExpression.trim());
+}
+
+function expressionLooksCallResult(tsExpression: string): boolean {
+  const trimmed = tsExpression.trim();
+  return /^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*\(.*\)$/.test(trimmed)
+    || /^new [A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*\(.*\)$/.test(trimmed);
 }
 
 function replaceTranslatedRaylibConstructors(value: string): string {
