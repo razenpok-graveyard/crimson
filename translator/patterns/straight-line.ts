@@ -1512,17 +1512,12 @@ export function parseTyperCliModule(trimmedPython: string): TyperCliModule | nul
       index += 1;
       continue;
     }
-    if (trimmed === 'import typer') {
+    if (trimmed === 'import typer' || trimmed === 'import typer as typer') {
       sawTyperImport = true;
       index += 1;
       continue;
     }
-    if (trimmed === 'from pathlib import Path') {
-      index += 1;
-      continue;
-    }
-    const fromImport = /^from \.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)* import .+$/.exec(trimmed);
-    if (fromImport !== null) {
+    if (isTyperCliIgnorableTopLevelLine(trimmed)) {
       index += 1;
       continue;
     }
@@ -1546,34 +1541,88 @@ export function parseTyperCliModule(trimmedPython: string): TyperCliModule | nul
       continue;
     }
 
-    const commandDecorator = new RegExp(`^@${appName.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)}\\.command\\("([^"]+)"\\)$`).exec(trimmed)
-      ?? new RegExp(`^@${appName}\\.command\\("([^"]+)"\\)$`).exec(trimmed);
-    if (commandDecorator === null) {
-      return null;
+    const commandName = typerCliCommandDecoratorName(trimmed, appName);
+    if (commandName !== null) {
+      const header = parseTyperCliFunctionHeader(lines, index + 1);
+      if (header === null) {
+        return null;
+      }
+
+      const optsParams = parseTyperCliParameters(header.parametersText);
+      if (optsParams === null) {
+        return null;
+      }
+      commands.push({
+        name: tsExportNameForPythonName(header.name),
+        commandName,
+        optsParams,
+      });
+
+      index = skipTyperCliCommandBody(lines, header.nextIndex, appName);
+      continue;
     }
 
-    const header = parseTyperCliFunctionHeader(lines, index + 1);
-    if (header === null) {
-      return null;
-    }
-
-    const optsParams = parseTyperCliParameters(header.parametersText);
-    if (optsParams === null) {
-      return null;
-    }
-    commands.push({
-      name: tsExportNameForPythonName(header.name),
-      commandName: commandDecorator[1],
-      optsParams,
-    });
-
-    index = header.nextIndex;
-    while (index < lines.length && isIndentedBlockLine(lines, index, '    ')) {
+    if (isTyperCliIgnorableTopLevelLine(trimmed)) {
       index += 1;
+      continue;
     }
+
+    const skippedDefinitionIndex = skipTyperCliHelperDefinition(lines, index);
+    if (skippedDefinitionIndex !== null) {
+      index = skippedDefinitionIndex;
+      continue;
+    }
+
+    return null;
   }
 
   return commands.length > 0 ? { appName, commands } : null;
+}
+
+function isTyperCliIgnorableTopLevelLine(trimmed: string): boolean {
+  return trimmed.startsWith('#')
+    || /^import [A-Za-z_][A-Za-z0-9_.]*(?: as [A-Za-z_][A-Za-z0-9_]*)?(?:, [A-Za-z_][A-Za-z0-9_.]*(?: as [A-Za-z_][A-Za-z0-9_]*)?)*$/.test(trimmed)
+    || /^from \.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)* import .+$/.test(trimmed);
+}
+
+function typerCliCommandDecoratorName(trimmed: string, appName: string): string | null {
+  const pythonAppName = appName.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+  return new RegExp(`^@${pythonAppName}\\.command\\("([^"]+)"\\)$`).exec(trimmed)?.[1]
+    ?? new RegExp(`^@${appName}\\.command\\("([^"]+)"\\)$`).exec(trimmed)?.[1]
+    ?? null;
+}
+
+function skipTyperCliCommandBody(lines: string[], index: number, appName: string): number {
+  let nextIndex = index;
+  while (nextIndex < lines.length) {
+    if (typerCliCommandDecoratorName(lines[nextIndex].trim(), appName) !== null) {
+      return nextIndex;
+    }
+    nextIndex += 1;
+  }
+  return nextIndex;
+}
+
+function skipTyperCliHelperDefinition(lines: string[], index: number): number | null {
+  let headerIndex = index;
+  while (/^@[A-Za-z_][A-Za-z0-9_.]*(?:\(.*\))?$/.test(lines[headerIndex]?.trim() ?? '')) {
+    headerIndex += 1;
+  }
+  if (!/^(?:def|class) [A-Za-z_][A-Za-z0-9_]*(?:\(|[:(])/.test(lines[headerIndex]?.trim() ?? '')) {
+    return null;
+  }
+
+  let nextIndex = headerIndex + 1;
+  while (nextIndex < lines.length && !/:\s*$/.test(lines[nextIndex - 1] ?? '')) {
+    if (lines[nextIndex] === undefined || (!lines[nextIndex].startsWith('    ') && lines[nextIndex].trim() !== '')) {
+      return null;
+    }
+    nextIndex += 1;
+  }
+  while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, '    ')) {
+    nextIndex += 1;
+  }
+  return nextIndex;
 }
 
 function parseTyperCliFunctionHeader(
