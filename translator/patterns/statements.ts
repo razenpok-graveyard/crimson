@@ -160,7 +160,7 @@ function predeclareIfBranchAssignments(
       const assignment = rest.startsWith(' ') ? null : /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(rest);
       if (assignment !== null && reassignedNames.has(assignment[1]) && !declaredNames.has(assignment[1])) {
         const types = assignedTypes.get(assignment[1]) ?? new Set<string>();
-        types.add(inferPythonExpressionType(assignment[2]));
+        types.add(inferPredeclaredAssignmentType(lines, nextIndex, innerIndent, assignment[2]));
         assignedTypes.set(assignment[1], types);
       }
       const tupleAssignment = rest.startsWith(' ') ? null : /^([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+) = (.+)$/.exec(rest);
@@ -195,6 +195,34 @@ function predeclareIfBranchAssignments(
   }
   return declarations;
 }
+
+function inferPredeclaredAssignmentType(
+  lines: string[],
+  index: number,
+  indent: string,
+  assignedExpression: string,
+): string {
+  if (assignedExpression !== '(') {
+    return inferPythonExpressionType(assignedExpression);
+  }
+  const expressionLines: string[] = [];
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length) {
+    const line = lines[nextIndex] ?? '';
+    const trimmed = line.trim();
+    if (lineStartsAtIndent(line, indent) && trimmed === ')') {
+      return expressionLines.length === 0
+        ? 'any'
+        : inferPythonExpressionType(expressionLines.join(' '));
+    }
+    if (trimmed !== '') {
+      expressionLines.push(trimmed);
+    }
+    nextIndex += 1;
+  }
+  return 'any';
+}
+
 function parseNestedFunctionStatement(
   lines: string[],
   index: number,

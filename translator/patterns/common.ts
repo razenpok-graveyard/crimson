@@ -376,6 +376,9 @@ export function inferPythonExpressionType(pythonExpression: string): string {
   if (/^(?:int|float)\(/.test(trimmed)) {
     return 'number';
   }
+  if (!/["'`]/.test(trimmed) && /\s(?:%|\*|\/\/|\/|-)\s/.test(trimmed)) {
+    return 'number';
+  }
   const enumCast = /^([A-Z][A-Za-z0-9_]*(?:Id|Mode|Type))\(.+\)$/.exec(trimmed);
   if (enumCast !== null) {
     return tsExportNameForPythonName(enumCast[1]);

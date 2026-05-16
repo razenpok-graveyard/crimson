@@ -70,7 +70,7 @@ export function bonusPickRandomType(pool: BonusPool, state: GameplayState, playe
     // - Bucketed ids 3..14 via a 10-step loop; if it would exceed 14, returns 0
     //   to force a reroll (matching the `goto LABEL_18` path leaving `v3 == 0`).
     let bonusId: BonusId;
-    let bucketOffset: any;
+    let bucketOffset: number;
     let bonusValue: number;
     if (roll <= 13) {
       bonusId = BonusId.POINTS;

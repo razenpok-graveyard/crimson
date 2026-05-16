@@ -2449,7 +2449,7 @@ function stripPrimitiveCallWrappers(value: string): string {
         index += 1;
         continue;
       }
-      const inner = output.slice(openIndex + 1, closeIndex);
+      const inner = normalizedPrimitiveWrapperInner(output.slice(openIndex + 1, closeIndex));
       nextOutput += primitiveWrapperNeedsParens(inner) ? `(${inner})` : inner;
       index = closeIndex + 1;
       changed = true;
@@ -2457,6 +2457,11 @@ function stripPrimitiveCallWrappers(value: string): string {
     output = nextOutput;
   }
   return output;
+}
+
+function normalizedPrimitiveWrapperInner(inner: string): string {
+  const parts = splitTopLevelComma(inner);
+  return parts.length === 1 && inner.trim().endsWith(',') ? parts[0] : inner;
 }
 
 function primitiveWrapperNeedsParens(inner: string): boolean {

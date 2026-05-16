@@ -10,7 +10,8 @@ import type { PerksUpdateEffectsCtx } from '@crimson/perks/runtime/effects-conte
 import { PerkHooks } from '@crimson/perks/runtime/hook-types.ts';
 
 function awardExperienceOnceFromReward(opts: { player: PlayerState; rewardValue: number }): number {
-  const { player, rewardValue } = opts;
+  const player = opts.player;
+  const rewardValue = opts.rewardValue;
   const rewardF32 = f32(rewardValue);
   if (rewardF32 <= 0.0) {
     return 0;
@@ -24,17 +25,17 @@ function awardExperienceOnceFromReward(opts: { player: PlayerState; rewardValue:
 }
 
 function awardExperienceFromReward(ctx: PerksUpdateEffectsCtx, opts: { rewardValue: number }): number {
-  const { rewardValue } = opts;
-  if (!ctx.players.length) {
+  const rewardValue = opts.rewardValue;
+  if (ctx.players.length === 0) {
     return 0;
   }
   const player = ctx.players[0];
-  let gained = awardExperienceOnceFromReward({ player, rewardValue });
+  let gained = awardExperienceOnceFromReward({ player: player, rewardValue: rewardValue });
   if (gained <= 0) {
     return 0;
   }
   if (ctx.state.bonuses.doubleExperience > 0.0) {
-    gained += awardExperienceOnceFromReward({ player, rewardValue });
+    gained += awardExperienceOnceFromReward({ player: player, rewardValue: rewardValue });
   }
   return int(gained);
 }
@@ -45,17 +46,15 @@ function selectJinxedAccidentTarget(ctx: PerksUpdateEffectsCtx): PlayerState {
     return player0;
   }
 
-  const alivePlayers = ctx.players.filter((p) => p.health > 0.0);
-  if (!alivePlayers.length) {
+  const alivePlayers = ctx.players.filter((player) => player.health > 0.0);
+  if (alivePlayers.length === 0) {
     return player0;
   }
   if (alivePlayers.length === 1) {
     return alivePlayers[0];
   }
 
-  const pick =
-    ctx.state.rng.rand({ caller: RngCallerStatic.REWRITE_JINXED_ACCIDENT_TARGET_PICK }) %
-    alivePlayers.length;
+  const pick = ctx.state.rng.rand({ caller: RngCallerStatic.REWRITE_JINXED_ACCIDENT_TARGET_PICK }) % alivePlayers.length;
   return alivePlayers[pick];
 }
 
@@ -69,54 +68,43 @@ export function updateJinxed(ctx: PerksUpdateEffectsCtx): void {
   if (ctx.state.jinxedTimer >= 0.0) {
     return;
   }
-  if (!ctx.players.length) {
+  if (ctx.players.length === 0) {
     return;
   }
   if (!perkActive(ctx.players[0], PerkId.JINXED)) {
     return;
   }
 
-  if (
-    ctx.state.rng.rand({
-      caller: RngCallerStatic.PERKS_UPDATE_EFFECTS_JINXED_ACCIDENT_GATE,
-    }) %
-      10 ===
-    3
-  ) {
+  if (ctx.state.rng.rand({ caller: RngCallerStatic.PERKS_UPDATE_EFFECTS_JINXED_ACCIDENT_GATE }) % 10 === 3) {
     const player = selectJinxedAccidentTarget(ctx);
     player.health = player.health - 5.0;
     if (ctx.fxQueue !== null) {
-      ctx.fxQueue.addRandom({ pos: player.pos, rng: ctx.state.rng });
-      ctx.fxQueue.addRandom({ pos: player.pos, rng: ctx.state.rng });
+      ctx.fxQueue.addRandom({
+        pos: player.pos,
+        rng: ctx.state.rng,
+      });
+      ctx.fxQueue.addRandom({
+        pos: player.pos,
+        rng: ctx.state.rng,
+      });
     }
   }
 
-  ctx.state.jinxedTimer =
-    (ctx.state.rng.rand({
-      caller: RngCallerStatic.PERKS_UPDATE_EFFECTS_JINXED_TIMER_RESET,
-    }) %
-      20) *
-      0.1 +
-    ctx.state.jinxedTimer +
-    2.0;
+  ctx.state.jinxedTimer = ctx.state.rng.rand({ caller: RngCallerStatic.PERKS_UPDATE_EFFECTS_JINXED_TIMER_RESET }) % 20 * 0.1 + ctx.state.jinxedTimer + 2.0;
 
+  let idx: number;
+  let attempts: number;
   if (ctx.state.bonuses.freeze <= 0.0 && ctx.creatures !== null) {
-    const poolLimit = ctx.state.preserveBugs ? 0x17f : 0x180;
+    const poolLimit = ctx.state.preserveBugs ? 0x17F : 0x180;
     const poolMod = Math.min(poolLimit, ctx.creatures.length);
     if (poolMod <= 0) {
       return;
     }
 
-    let idx =
-      ctx.state.rng.rand({
-        caller: RngCallerStatic.PERKS_UPDATE_EFFECTS_JINXED_CREATURE_PICK,
-      }) % poolMod;
-    let attempts = 0;
+    idx = ctx.state.rng.rand({ caller: RngCallerStatic.PERKS_UPDATE_EFFECTS_JINXED_CREATURE_PICK }) % poolMod;
+    attempts = 0;
     while (attempts < 10 && !ctx.creatures[idx].active) {
-      idx =
-        ctx.state.rng.rand({
-          caller: RngCallerStatic.PERKS_UPDATE_EFFECTS_JINXED_CREATURE_RETRY,
-        }) % poolMod;
+      idx = ctx.state.rng.rand({ caller: RngCallerStatic.PERKS_UPDATE_EFFECTS_JINXED_CREATURE_RETRY }) % poolMod;
       attempts += 1;
     }
     if (!ctx.creatures[idx].active) {
