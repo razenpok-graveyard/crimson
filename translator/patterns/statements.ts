@@ -2413,6 +2413,22 @@ export function translateStraightLineStatement(
         nextIndex: index + 1,
       };
     }
+    const raylibSetTexture = /^r[dl]\.rl_set_texture\((.+)\.id\)$/.exec(callStatement[1]);
+    if (
+      raylibSetTexture !== null
+      && (lines[index + 1] ?? '').trim() === 'rl.rl_begin(rd.RL_QUADS)'
+    ) {
+      return {
+        statements: [`wgl.beginQuads(${translateExpression(raylibSetTexture[1], nameMap, arrayNames, validatedTypeAliases, mapNames)});`],
+        nextIndex: index + 2,
+      };
+    }
+    if (callStatement[1] === 'rl.rl_end()') {
+      return {
+        statements: ['wgl.endQuads();'],
+        nextIndex: (lines[index + 1] ?? '').trim() === 'rl.rl_set_texture(0)' ? index + 2 : index + 1,
+      };
+    }
     const simpleCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\((.*)\)$/.exec(callStatement[1]);
     if (simpleCall !== null) {
       const args = splitTopLevelComma(simpleCall[2]);

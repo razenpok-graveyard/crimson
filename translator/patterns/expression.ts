@@ -177,6 +177,10 @@ export function translatePositionalCallExpression(
     const rect = translateExpression(positionalParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
     return `${drawRectangleRec[1]}.drawRectangle(${rect}.x, ${rect}.y, ${rect}.w, ${rect}.h, ${args[1]})`;
   }
+  const raylibColor4ub = /^(r[dl]|wgl)\.rlColor4ub$/.exec(callee);
+  if (raylibColor4ub !== null && positionalParts.length === 4) {
+    return `${raylibColor4ub[1]}.rlColor4f(${positionalParts.map((arg) => translateRaylibColorArg(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;
+  }
   const reorderedArgs = (callee === 'rl.rlSetBlendFactorsSeparate' || callee === 'wgl.rlSetBlendFactorsSeparate') && args.length === 6
     ? [args[0], args[1], args[4], args[2], args[3], args[5]]
     : args;
@@ -3108,7 +3112,29 @@ function expressionIsKnownVector(
 }
 
 function finalVectorMethodCall(tsExpression: string): boolean {
-  const vectorMethods = new Set(['add', 'sub', 'mul', 'rotated', 'mulComponents', 'divComponents', 'mul_components', 'div_components']);
+  const vectorMethods = new Set([
+    'add',
+    'sub',
+    'mul',
+    'rotated',
+    'normalized',
+    'perpLeft',
+    'perpRight',
+    'perp_left',
+    'perp_right',
+    'worldToScreen',
+    'worldToScreenWith',
+    'world_to_screen',
+    'world_to_screen_with',
+    'screenToWorld',
+    'screenToWorldWith',
+    'screen_to_world',
+    'screen_to_world_with',
+    'mulComponents',
+    'divComponents',
+    'mul_components',
+    'div_components',
+  ]);
   const methodPattern = /\.([A-Za-z_$][A-Za-z0-9_$]*)\(/g;
   let lastMatch: RegExpExecArray | null = null;
   let match: RegExpExecArray | null;
