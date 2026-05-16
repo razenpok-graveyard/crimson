@@ -67,6 +67,10 @@ export function tsTypeExpression(pythonType: string): string {
   if (setType !== null) {
     return `Set<${tsTypeExpression(setType[1])}>`;
   }
+  const frozenSetType = /^frozenset\[(.+)\]$/.exec(trimmed);
+  if (frozenSetType !== null) {
+    return `ReadonlySet<${tsTypeExpression(frozenSetType[1])}>`;
+  }
   const fixedTupleType = /^tuple\[(.+)\]$/.exec(trimmed);
   if (fixedTupleType !== null && !fixedTupleType[1].endsWith(', ...')) {
     return `[${fixedTupleType[1].split(topLevelCommaPattern()).map(tsTypeExpression).join(', ')}]`;

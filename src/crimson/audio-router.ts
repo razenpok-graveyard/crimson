@@ -1,18 +1,17 @@
 // Port of crimson/audio_router.py
 
 import type { AudioState } from '@grim/audio.ts';
-import { audioPlaySfx, audioTriggerGameTune } from '@grim/audio.ts';
-import type { CrandLike } from '@grim/rand.ts';
+import { playSfx, triggerGameTune } from '@grim/audio.ts';
+import type { Crand, CrandLike } from '@grim/rand.ts';
 import { SfxId } from '@grim/sfx-map.ts';
-import { GameMode } from './game-modes.ts';
-import { type ProjectileHit } from './projectiles/types.ts';
-import { RngCallerStatic } from './rng-caller-static.ts';
-import { WEAPON_BY_ID, WeaponId, weaponEntryForProjectileTypeId } from './weapons.ts';
-import type { PlayerState } from './sim/state-types.ts';
+import { GameMode } from '@crimson/game-modes.ts';
+import type { ProjectileHit } from '@crimson/projectiles/types.ts';
+import { RngCallerStatic } from '@crimson/rng-caller-static.ts';
+import { WEAPON_BY_ID, WeaponId, weaponEntryForProjectileTypeId } from '@crimson/weapons.ts';
+import type { PlayerState } from '@crimson/sim/state-types.ts';
 
 const _MAX_HIT_SFX_PER_FRAME = 4;
-
-const _BULLET_HIT_SFX: readonly SfxId[] = [
+const _BULLET_HIT_SFX = [
   SfxId.BULLET_HIT_01,
   SfxId.BULLET_HIT_02,
   SfxId.BULLET_HIT_03,
@@ -22,14 +21,14 @@ const _BULLET_HIT_SFX: readonly SfxId[] = [
 ];
 
 export class AudioRouter {
-  audioRng: CrandLike;
+  audioRng: Crand;
   audio: AudioState | null;
   demoModeActive: boolean;
   sfxEnabled: boolean;
   reflexBoostTimerSource: (() => number) | null;
 
   constructor(opts: {
-    audioRng: CrandLike;
+    audioRng: Crand;
     audio?: AudioState | null;
     demoModeActive?: boolean;
     sfxEnabled?: boolean;
@@ -42,45 +41,47 @@ export class AudioRouter {
     this.reflexBoostTimerSource = opts.reflexBoostTimerSource ?? null;
   }
 
-  private _reflexBoostTimer(): number {
+  _reflexBoostTimer(): number {
     const source = this.reflexBoostTimerSource;
-    if (source === null) return 0.0;
+    if (source === null) {
+      return 0.0;
+    }
     return source();
   }
 
   playSfx(sfx: SfxId): void {
-    if (this.audio === null || !this.sfxEnabled) return;
-    audioPlaySfx(this.audio, sfx, { reflexBoostTimer: this._reflexBoostTimer() });
+    if (this.audio === null || !this.sfxEnabled) {
+      return;
+    }
+    playSfx(
+      this.audio,
+      sfx,
+      { reflexBoostTimer: this._reflexBoostTimer() },
+    );
   }
 
   triggerGameTune(): string | null {
-    if (this.audio === null) return null;
-    return audioTriggerGameTune(this.audio, { rng: this.audioRng });
+    if (this.audio === null) {
+      return null;
+    }
+    return triggerGameTune(this.audio, { rng: this.audioRng });
   }
 
-  handlePlayerAudio(
-    player: PlayerState,
-    opts: { prevShotSeq: number; prevReloadActive: boolean; prevReloadTimer: number },
-  ): void {
-    if (this.audio === null) return;
-    const weapon = WEAPON_BY_ID.get(player.weapon.weaponId);
-    if (weapon === undefined) {
-      throw new Error(`No weapon entry for weapon id: ${player.weapon.weaponId}`);
+  handlePlayerAudio(player: PlayerState, opts: { prevShotSeq: number; prevReloadActive: boolean; prevReloadTimer: number }): void {
+    const prevShotSeq = opts.prevShotSeq;
+    const prevReloadActive = opts.prevReloadActive;
+    const prevReloadTimer = opts.prevReloadTimer;
+    if (this.audio === null) {
+      return;
     }
+    const weapon = WEAPON_BY_ID.get(player.weapon.weaponId)!;
 
-    const { prevShotSeq, prevReloadActive, prevReloadTimer } = opts;
     if (int(player.shotSeq) > int(prevShotSeq)) {
       if (player.fireBulletsTimer > 0.0) {
         // player_update (crimsonland.exe): when Fire Bullets is active, the regular per-weapon
         // shot sfx is suppressed and replaced by Fire Bullets + Plasma Minigun fire sfx.
-        const fireBullets = WEAPON_BY_ID.get(WeaponId.FIRE_BULLETS);
-        if (fireBullets === undefined) {
-          throw new Error(`No weapon entry for weapon id: ${WeaponId.FIRE_BULLETS}`);
-        }
-        const plasmaMinigun = WEAPON_BY_ID.get(WeaponId.PLASMA_MINIGUN);
-        if (plasmaMinigun === undefined) {
-          throw new Error(`No weapon entry for weapon id: ${WeaponId.PLASMA_MINIGUN}`);
-        }
+        const fireBullets = WEAPON_BY_ID.get(WeaponId.FIRE_BULLETS)!;
+        const plasmaMinigun = WEAPON_BY_ID.get(WeaponId.PLASMA_MINIGUN)!;
         this.playSfx(fireBullets.fireSound);
         this.playSfx(plasmaMinigun.fireSound);
       } else {
@@ -96,34 +97,34 @@ export class AudioRouter {
     }
   }
 
-  private _hitSfxForType(
-    typeId: number,
-    opts: { beamTypes: ReadonlySet<number>; rng: CrandLike },
-  ): SfxId {
-    const { rng } = opts;
-    const entry = weaponEntryForProjectileTypeId(typeId);
-    const ammoClass = entry.ammoClass;
-    if (ammoClass === 4) return SfxId.SHOCK_HIT_01;
+  _hitSfxForType(typeId: number, opts: { beamTypes: ReadonlySet<number>; rng: CrandLike }): SfxId {
+    const beamTypes = opts.beamTypes;
+    const rng = opts.rng;
+    const ammoClass = weaponEntryForProjectileTypeId(typeId).ammoClass;
+    if (ammoClass === 4) {
+      return SfxId.SHOCK_HIT_01;
+    }
     return _BULLET_HIT_SFX[rng.rand({ caller: RngCallerStatic.PROJECTILE_UPDATE_HIT_SFX }) % _BULLET_HIT_SFX.length];
   }
 
-  playHitSfx(
-    hits: ProjectileHit[],
-    opts: { gameMode: GameMode; rng: CrandLike; beamTypes: ReadonlySet<number> },
-  ): void {
-    const { gameMode, rng, beamTypes } = opts;
-    if (this.audio === null || hits.length === 0) return;
+  playHitSfx(hits: ProjectileHit[], opts: { gameMode: GameMode; rng: CrandLike; beamTypes: ReadonlySet<number> }): void {
+    const gameMode = opts.gameMode;
+    const rng = opts.rng;
+    const beamTypes = opts.beamTypes;
+    if (this.audio === null || !hits.length) {
+      return;
+    }
 
     const end = Math.min(hits.length, _MAX_HIT_SFX_PER_FRAME);
     let gameTuneStarted = this.audio.music.gameTuneStarted;
     for (let idx = 0; idx < end; idx++) {
       if (!this.demoModeActive && gameMode !== GameMode.RUSH && !gameTuneStarted) {
-        audioTriggerGameTune(this.audio, { rng });
+        triggerGameTune(this.audio, { rng: rng });
         gameTuneStarted = true;
         continue;
       }
       const typeId = int(hits[idx].typeId);
-      this.playSfx(this._hitSfxForType(typeId, { beamTypes, rng }));
+      this.playSfx(this._hitSfxForType(typeId, { beamTypes: beamTypes, rng: rng }));
     }
   }
 }

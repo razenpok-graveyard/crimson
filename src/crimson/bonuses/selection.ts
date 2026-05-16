@@ -50,10 +50,10 @@ function bonusPickSuppressed(opts: { state: GameplayState; players: PlayerState[
 
   const major = level.major;
   if (bonusId === BonusId.NUKE) {
-    return (major === 2 || major === 4 || major === 5 || (state.hardcore) && major === 3);
+    return major === 2 || major === 4 || major === 5 || (state.hardcore && major === 3);
   }
   if (bonusId === BonusId.FREEZE) {
-    return (major === 4 || (state.hardcore) && major === 2);
+    return major === 4 || (state.hardcore && major === 2);
   }
   return false;
 }

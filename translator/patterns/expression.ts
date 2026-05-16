@@ -594,6 +594,13 @@ export function translateExpression(
     }
   }
 
+  const mappingConstantSubscript = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[(.+)\]$/.exec(trimmed);
+  if (mappingConstantSubscript !== null && looksLikeMappingConstantName(mappingConstantSubscript[1])) {
+    const mapName = translateExpression(mappingConstantSubscript[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const key = translateMapKeyExpression(mapName, translateExpression(mappingConstantSubscript[2], nameMap, arrayNames, validatedTypeAliases, mapNames));
+    return `${mapName}.get(${key})!`;
+  }
+
   const mapSubscript = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[(.+)\]$/.exec(trimmed);
   if (mapSubscript !== null) {
     const mapName = translateExpression(mapSubscript[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -1103,18 +1110,18 @@ export function translateExpression(
     }
   }
 
-  if (trimmed.includes(' and ')) {
-    return trimmed
-      .split(' and ')
-      .map((part) => parenthesizeForLogicalAnd(translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)))
-      .join(' && ');
-  }
-
-  if (trimmed.includes(' or ')) {
-    return trimmed
-      .split(' or ')
+  const topLevelOrParts = splitTopLevelLogicalOperator(trimmed, 'or');
+  if (topLevelOrParts !== null) {
+    return topLevelOrParts
       .map((part) => parenthesizeForLogicalOr(translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)))
       .join(' || ');
+  }
+
+  const topLevelAndParts = splitTopLevelLogicalOperator(trimmed, 'and');
+  if (topLevelAndParts !== null) {
+    return topLevelAndParts
+      .map((part) => parenthesizeForLogicalAnd(translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)))
+      .join(' && ');
   }
 
   const parenthesizedNotExpression = /^\((not .*)\)$/.exec(trimmed);
@@ -1356,6 +1363,7 @@ export function translateExpression(
         `${translateExpression(callee, nameMap, arrayNames, validatedTypeAliases)}({ ${tsExportNameForPythonName(argName)}: ${translateExpression(argValue, nameMap, arrayNames, validatedTypeAliases)} })`
       ),
     )
+    .replaceAll(/\b[A-Z][A-Za-z0-9_]*Id\(([^()]*)\)/g, (_match, value: string) => translateExpression(value, nameMap, arrayNames, validatedTypeAliases, mapNames))
     .replaceAll(/\b(?:list|tuple)\(([^()]*)\)/g, 'Array.from($1)')
     .replaceAll(/\b(?:float|str|bool)\(([^()]*)\)/g, '$1')
     .replaceAll(/\b([A-Za-z_][A-Za-z0-9_]*)\.([rgba])\b/g, (_match, name: string, channel: string) => {
@@ -1456,6 +1464,11 @@ function translateIdentifierNamePreservingPrivateMembers(name: string, nameMap: 
     root,
     ...parts.slice(1).map((part) => nameMap.get(part) ?? tsMemberNameForPythonName(part)),
   ].join('.');
+}
+
+function looksLikeMappingConstantName(pythonName: string): boolean {
+  const finalName = pythonName.split('.').at(-1) ?? pythonName;
+  return /^[A-Z][A-Z0-9_]*_BY_[A-Z0-9_]+$/.test(finalName);
 }
 
 function raylibKeyboardKeyCode(name: string): number | null {
@@ -2434,6 +2447,45 @@ function parenthesizeForLogicalAnd(value: string): string {
 
 function parenthesizeForLogicalOr(value: string): string {
   return value.includes(' && ') && matchingCloseParen(value, 0) !== value.length - 1 ? `(${value})` : value;
+}
+
+function splitTopLevelLogicalOperator(value: string, operator: 'and' | 'or'): string[] | null {
+  const parts: string[] = [];
+  let start = 0;
+  let depth = 0;
+  let quote: string | null = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      if (char === quote && value[index - 1] !== '\\') {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char === ')' || char === ']' || char === '}') {
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
+    const token = ` ${operator} `;
+    if (depth === 0 && value.slice(index, index + token.length) === token) {
+      parts.push(value.slice(start, index).trim());
+      start = index + token.length;
+      index += token.length - 1;
+    }
+  }
+  if (parts.length === 0) {
+    return null;
+  }
+  parts.push(value.slice(start).trim());
+  return parts;
 }
 
 function parenthesizeForMultiplicative(value: string): string {
