@@ -263,6 +263,23 @@ export function translateExpression(
     return `new Map(${translateExpression(dictComprehension[4], nameMap, arrayNames, validatedTypeAliases, mapNames)}.map((${itemName}) => [${translateExpression(dictComprehension[1], itemNameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(dictComprehension[2], itemNameMap, arrayNames, validatedTypeAliases, mapNames)}] as const))`;
   }
 
+  const lengthComparison = /^(.+?) (<=|>=|<|>|==|!=) (.+)$/.exec(trimmed);
+  if (
+    lengthComparison !== null
+    && (lengthComparison[1].includes('len(') || lengthComparison[3].includes('len('))
+    && !/(?:<=|>=|<|>|==|!=)/.test(lengthComparison[1])
+    && !/(?:<=|>=|<|>|==|!=)/.test(lengthComparison[3])
+  ) {
+    const left = translateExpression(lengthComparison[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const right = translateExpression(lengthComparison[3], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const operator = lengthComparison[2] === '=='
+      ? '==='
+      : lengthComparison[2] === '!='
+        ? '!=='
+        : lengthComparison[2];
+    return `${left} ${operator} ${right}`;
+  }
+
   const mathIsFinite = /^math\.isfinite\((.+)\)$/.exec(trimmed);
   if (mathIsFinite !== null) {
     return `Number.isFinite(${translateExpression(mathIsFinite[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;

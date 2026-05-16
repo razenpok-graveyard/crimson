@@ -493,24 +493,40 @@ export function translateStraightLineStatement(
         nextIndex: finallyBlock.nextIndex,
       };
     }
-    const exceptStatement = /^except (?:(?:[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)|\([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+\))(?: as ([A-Za-z_][A-Za-z0-9_]*))?:$/.exec(afterTry);
-    if (exceptStatement !== null) {
-      const exceptBlock = translateBlock(tryBlock.nextIndex + 1);
-      if (exceptBlock === null) {
+    const exceptClause = parseExceptClause(afterTry);
+    if (exceptClause !== null) {
+      const exceptBlocks: Array<{ catchName: string; statements: string[] }> = [];
+      let exceptIndex = tryBlock.nextIndex;
+      while (exceptIndex < lines.length) {
+        const clause = parseExceptClause((lines[exceptIndex] ?? '').trim());
+        if (clause === null) {
+          break;
+        }
+        const exceptBlock = translateBlock(exceptIndex + 1);
+        if (exceptBlock === null) {
+          return null;
+        }
+        exceptBlocks.push({
+          catchName: tsExportNameForPythonName(clause.name ?? 'exc'),
+          statements: exceptBlock.statements,
+        });
+        exceptIndex = exceptBlock.nextIndex;
+      }
+      if (exceptBlocks.length === 0 || !exceptBlocksHaveSameBody(exceptBlocks)) {
         return null;
       }
       const hoistedTry = hoistTryBlockDeclarations(tryBlock.statements);
-      const catchName = tsExportNameForPythonName(exceptStatement[1] ?? 'exc');
+      const catchName = exceptBlocks[0].catchName;
       return {
         statements: [
           ...hoistedTry.declarations,
           'try {',
           ...hoistedTry.statements,
           `} catch (${catchName}) {`,
-          ...exceptBlock.statements,
+          ...exceptBlocks[0].statements,
           '}',
         ],
-        nextIndex: exceptBlock.nextIndex,
+        nextIndex: exceptIndex,
       };
     }
     return null;
@@ -1228,6 +1244,16 @@ export function translateStraightLineStatement(
         nextIndex: index + 1,
       };
     }
+    const simpleCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\((.*)\)$/.exec(callStatement[1]);
+    if (simpleCall !== null) {
+      const args = splitTopLevelComma(simpleCall[2]);
+      if (args.every((arg) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(arg))) {
+        return {
+          statements: [`${translatePositionalCallExpression(simpleCall[1], args, nameMap, arrayNames, validatedTypeAliases)};`],
+          nextIndex: index + 1,
+        };
+      }
+    }
     return { statements: [`${translateExpression(callStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)};`], nextIndex: index + 1 };
   }
 
@@ -1773,9 +1799,34 @@ function translateRaiseExpression(
   return `new ${translatedCallee}(${message})`;
 }
 
+function parseExceptClause(statement: string): { name: string | null } | null {
+  const clause = /^except (?:(?:[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)|\((?:[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)(?:, [A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)+\))(?: as ([A-Za-z_][A-Za-z0-9_]*))?:$/.exec(statement);
+  return clause === null ? null : { name: clause[1] ?? null };
+}
+
+function exceptBlocksHaveSameBody(blocks: Array<{ statements: string[] }>): boolean {
+  if (blocks.length <= 1) {
+    return true;
+  }
+  const [first, ...rest] = blocks;
+  const firstText = first.statements.join('\n');
+  return rest.every((block) => block.statements.join('\n') === firstText);
+}
+
 function hoistTryBlockDeclarations(statements: string[]): { declarations: string[]; statements: string[] } {
   const declarations: string[] = [];
   const rewritten = statements.map((statement) => {
+    const destructuringDeclaration = /^(\s*)const \[([A-Za-z_$][A-Za-z0-9_$]*(?:, [A-Za-z_$][A-Za-z0-9_$]*)*)\] = (.+);$/.exec(statement);
+    if (destructuringDeclaration !== null) {
+      const typeExpression = tsTypeForAssignedExpression(destructuringDeclaration[3]);
+      if (typeExpression !== null) {
+        const names = destructuringDeclaration[2].split(', ');
+        names.forEach((name, nameIndex) => {
+          declarations.push(`let ${name}: ${typeExpression}[${nameIndex}];`);
+        });
+        return `${destructuringDeclaration[1]}[${destructuringDeclaration[2]}] = ${destructuringDeclaration[3]};`;
+      }
+    }
     const declaration = /^(\s*)const ([A-Za-z_$][A-Za-z0-9_$]*) = (.+);$/.exec(statement);
     if (declaration === null) {
       return statement;

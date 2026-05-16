@@ -113,6 +113,15 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       index += 1;
       continue;
     }
+    if (trimmed === 'import socket') {
+      pushUniqueNamespaceImport(namespaceImports, {
+        alias: 'socket',
+        modulePath: '@grim/python-socket.ts',
+      });
+      moduleNameMap.set('socket', 'socket');
+      index += 1;
+      continue;
+    }
     if (
       isCollectionsAbcTypeImport(trimmed)
       || isTypingOnlyImport(trimmed)

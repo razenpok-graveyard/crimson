@@ -59,6 +59,15 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       index += 1;
       continue;
     }
+    if (trimmed === 'import socket') {
+      namespaceImports.push({
+        alias: 'socket',
+        modulePath: '@grim/python-socket.ts',
+      });
+      moduleNameMap.set('socket', 'socket');
+      index += 1;
+      continue;
+    }
     if (
       isCollectionsAbcTypeImport(trimmed)
       || isTypingOnlyImport(trimmed)
