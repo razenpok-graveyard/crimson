@@ -28,7 +28,6 @@ export class AudioBridge {
     this.demoModeActive = opts.demoModeActive ?? false;
     this.reflexBoostTimerSource = opts.reflexBoostTimerSource ?? zeroReflexBoost;
     this.audio = opts.audio ?? null;
-    this.router = opts.router ?? undefined!;
     this.router = new AudioRouter({ audioRng: this.audioRng, audio: this.audio, demoModeActive: this.demoModeActive, reflexBoostTimerSource: this.reflexBoostTimerSource });
   }
 

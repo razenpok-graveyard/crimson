@@ -73,6 +73,7 @@ export function renderStructClasses(lines: string[], classes: StructModule['clas
     if (structClass.tagged) {
       lines.push(`  readonly tag = '${structClass.name}';`);
     }
+    const postInitAssignedFields = fieldsAssignedByPostInit(structClass.postInitStatements);
     for (const field of structClass.fields) {
       lines.push(`  ${structClass.readonlyFields ? 'readonly ' : ''}${field.name}: ${field.typeExpression};`);
     }
@@ -91,6 +92,8 @@ export function renderStructClasses(lines: string[], classes: StructModule['clas
         for (const field of structClass.fields) {
           if (field.defaultValue === null) {
             lines.push(`    this.${field.name} = opts.${field.name};`);
+          } else if (field.defaultValue === 'undefined!' && postInitAssignedFields.has(field.name)) {
+            continue;
           } else {
             lines.push(`    this.${field.name} = ${defaultedOptionExpression(`opts.${field.name}`, field.typeExpression, field.defaultValue)};`);
           }
@@ -131,6 +134,17 @@ export function renderStructClasses(lines: string[], classes: StructModule['clas
       lines.push('');
     }
   }
+}
+
+function fieldsAssignedByPostInit(statements: readonly string[]): Set<string> {
+  const fields = new Set<string>();
+  for (const statement of statements) {
+    const assignment = /^this\.([A-Za-z_$][A-Za-z0-9_$]*) = /.exec(statement);
+    if (assignment !== null) {
+      fields.add(assignment[1]);
+    }
+  }
+  return fields;
 }
 
 export function renderPlainClasses(lines: string[], classes: StraightLineModule['plainClasses']): void {
