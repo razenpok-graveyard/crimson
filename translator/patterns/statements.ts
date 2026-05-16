@@ -1138,7 +1138,7 @@ export function translateStraightLineStatement(
   if (annotatedAssignment !== null) {
     const tsName = tsExportNameForPythonName(annotatedAssignment[1]);
     const typeExpression = tsTypeExpression(annotatedAssignment[2]);
-    const assignedRight = maybeAwaitAsyncCall(
+    let assignedRight = maybeAwaitAsyncCall(
       translateExpression(annotatedAssignment[3], nameMap, arrayNames, validatedTypeAliases, mapNames),
     );
     declaredNames.add(annotatedAssignment[1]);
@@ -1153,6 +1153,13 @@ export function translateStraightLineStatement(
     if (typeExpression === 'Date') {
       arrayNames.add(dateNameMarker(annotatedAssignment[1]));
       arrayNames.add(dateNameMarker(tsName));
+    }
+    if (typeExpression.startsWith('Map<')) {
+      addMutableName(mapNames, annotatedAssignment[1]);
+      addMutableName(mapNames, tsName);
+      if (assignedRight === '{}') {
+        assignedRight = 'new Map()';
+      }
     }
     return {
       statements: [

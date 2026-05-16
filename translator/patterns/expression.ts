@@ -633,6 +633,14 @@ export function translateExpression(
     return `String(${translateExpression(reprCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
+  const castCall = parseCallPrefix(trimmed, 'cast');
+  if (castCall !== null && castCall.rest === '') {
+    const args = splitTopLevelComma(castCall.argsText);
+    if (args.length === 2) {
+      return translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    }
+  }
+
   const stringCountCall = /^(.+)\.count\((.*)\)$/.exec(trimmed);
   if (stringCountCall !== null) {
     const args = splitTopLevelComma(stringCountCall[2]);
@@ -1061,6 +1069,20 @@ export function translateExpression(
     return `${translateExpression(openEndedSlice[1], nameMap, arrayNames, validatedTypeAliases)}.slice(${openEndedSlice[2]})`;
   }
 
+  const tupleLiteral = /^\((.*)\)$/.exec(trimmed);
+  if (tupleLiteral !== null && tupleLiteral[1].includes(',')) {
+    const values = splitTopLevelComma(tupleLiteral[1])
+      .map((part) => part.trim())
+      .filter((part) => part !== '')
+      .map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
+    return `[${values.join(', ')}]`;
+  }
+
+  const topLevelTupleParts = splitTopLevelComma(trimmed);
+  if (topLevelTupleParts.length > 1) {
+    return `[${topLevelTupleParts.map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')}]`;
+  }
+
   const enumIdCast = /^([A-Z][A-Za-z0-9_]*Id)\((.+)\)$/.exec(trimmed);
   if (enumIdCast !== null) {
     return translateExpression(enumIdCast[2], nameMap, arrayNames, validatedTypeAliases);
@@ -1106,21 +1128,6 @@ export function translateExpression(
       validatedTypeAliases,
       true,
     );
-  }
-
-  const tupleLiteral = /^\((.*)\)$/.exec(trimmed);
-  if (tupleLiteral !== null && tupleLiteral[1].includes(',')) {
-    const values = tupleLiteral[1]
-      .split(',')
-      .map((part) => part.trim())
-      .filter((part) => part !== '')
-      .map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases));
-    return `[${values.join(', ')}]`;
-  }
-
-  const topLevelTupleParts = splitTopLevelComma(trimmed);
-  if (topLevelTupleParts.length > 1) {
-    return `[${topLevelTupleParts.map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')}]`;
   }
 
   const withoutPrimitiveWrappers = stripPrimitiveCallWrappers(trimmed);

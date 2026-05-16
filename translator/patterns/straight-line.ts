@@ -225,7 +225,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
 
     const aliasedFromImport = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*) as ([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);
     if (aliasedFromImport !== null) {
-      const aliasName = tsExportNameForPythonName(aliasedFromImport[3]);
+      const aliasName = tsLocalNameForPythonAlias(aliasedFromImport[3]);
       const modulePath = tsImportPathForPythonImport(aliasedFromImport[1], relativePath);
       const importedName = tsImportNameForPythonName(modulePath, aliasedFromImport[2], relativePath);
       imports.push({
@@ -290,7 +290,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
 
     const namespaceImport = /^from (\.+) import ([A-Za-z_][A-Za-z0-9_]*) as ([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);
     if (namespaceImport !== null) {
-      const alias = tsExportNameForPythonName(namespaceImport[3]);
+      const alias = tsLocalNameForPythonAlias(namespaceImport[3]);
       namespaceImports.push({
         alias,
         modulePath: tsImportPathForPythonImport(`${namespaceImport[1]}${namespaceImport[2]}`, relativePath),
@@ -1660,4 +1660,10 @@ function markNamespaceImports(namespaceImports: NamespaceImportDefinition[], val
 
 function importedBindingName(importName: string): string {
   return /^.+ as ([A-Za-z_$][A-Za-z0-9_$]*)$/.exec(importName)?.[1] ?? importName;
+}
+
+function tsLocalNameForPythonAlias(pythonName: string): string {
+  return pythonName.startsWith('_')
+    ? `_${tsExportNameForPythonName(pythonName)}`
+    : tsExportNameForPythonName(pythonName);
 }
