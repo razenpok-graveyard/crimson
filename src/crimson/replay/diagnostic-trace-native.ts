@@ -805,7 +805,7 @@ class MsgpackReader {
 export const REPLAY_TICK_TRACE_SCHEMA_VERSION = 6;
 export const REPLAY_TICK_TRACE_MSGPACK_MAGIC = new Uint8Array([99, 114, 105, 109, 115, 111, 110, 95, 114, 101, 112, 108, 97, 121, 95, 116, 105, 99, 107, 95, 116, 114, 97, 99, 101, 95, 109, 115, 103, 112, 97, 99, 107, 95, 118, 51, 10]);
 const _ROW_LEN_STRUCT = pythonStructFormat('<I');
-const _ROW_DECODER = new MsgpackDecoder({ type: ReplayTickTraceRow });
+const _ROW_DECODER = new MsgpackDecoder<ReplayTickTraceRow>({ type: ReplayTickTraceRow });
 
 export function decodeReplayTickTraceMsgpackRow(payload: Uint8Array, opts: { field: string }): ReplayTickTraceRow {
   const field = opts.field;

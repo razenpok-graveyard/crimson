@@ -775,7 +775,7 @@ export const LINK_TIMEOUT_MS = 5_000;
 export const PING_INTERVAL_MS = 250;
 export const RESYNC_CHUNK_PAYLOAD_BYTES = 1_024;
 export const RESYNC_MAX_SNAPSHOT_BYTES = 2_097_152;
-const _PACKET_DECODER = new MsgpackDecoder({ type: RelayPacket });
+const _PACKET_DECODER = new MsgpackDecoder<RelayPacket>({ type: RelayPacket });
 
 export function encodePacket(packet: RelayPacket): Uint8Array {
   return new MsgpackEncoder().encode(packet);

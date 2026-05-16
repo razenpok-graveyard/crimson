@@ -490,7 +490,7 @@ export class ResyncAssembler {
       throw new ResyncBuildError(`compressed size mismatch: have=${ordered.length} expected=${int(begin.compressedSize)}`);
     }
     const packed = new Uint8Array(inflateSync(ordered));
-    const payload = new MsgpackDecoder({ type: ResyncPayload }).decode(packed);
+    const payload = new MsgpackDecoder<ResyncPayload>({ type: ResyncPayload }).decode(packed);
     if (payload.replayBlob.length !== int(begin.replaySize)) {
       throw new ResyncBuildError(`replay size mismatch: have=${payload.replayBlob.length} expected=${int(begin.replaySize)}`);
     }
@@ -529,7 +529,7 @@ export function buildResyncMessages(opts: { replayBlob: Uint8Array; checkpointsB
   const resolvedStreamId = String(streamId || secretsTokenHex(8));
 
   const begin = new ResyncBegin({ streamId: resolvedStreamId, totalChunks: chunksRaw.length, compressedSize: compressed.length, replaySize: replayBlob.length, checkpointsSize: checkpointsBlob.length });
-  const chunks = Array.from(chunksRaw.entries()).map(([idx, chunk]) => new ResyncChunk({ streamId: resolvedStreamId, chunkIndex: int(idx), payload: bytesFrom(chunk) }));
+  const chunks = chunksRaw.map((chunk, idx) => new ResyncChunk({ streamId: resolvedStreamId, chunkIndex: int(idx), payload: bytesFrom(chunk) }));
   const commit = new ResyncCommit({ streamId: resolvedStreamId, tickIndex: int(tickIndex) });
   return [begin, chunks, commit];
 }

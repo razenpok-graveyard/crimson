@@ -60,6 +60,7 @@ import { parseFunctionParameterText, pythonParameterNames } from './parameters.j
 import {
   bytesFromHelperStatements,
   bytesPrefixSuffixHelperStatements,
+  bytesStripHelperStatements,
   arrayRemoveHelperStatements,
   concatBytesHelperStatements,
   constructBinaryHelperStatements,
@@ -185,11 +186,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       || trimmed === 'from threading import Lock'
       || trimmed.startsWith('from construct import ')
       || trimmed === 'import msgspec'
+      || trimmed === 'import io'
       || trimmed === 'import secrets'
       || trimmed === 'import tempfile'
       || trimmed === 'import typer'
       || trimmed === 'import warnings'
       || trimmed === 'import zlib'
+      || trimmed === 'import zstandard as zstd'
     ) {
       index += 1;
       continue;
@@ -894,7 +897,12 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     leadingStatements.unshift(...helperStatements);
   }
-  if (moduleValueText.includes('MsgpackEncoder(') || moduleValueText.includes('MsgpackDecoder(')) {
+  if (
+    moduleValueText.includes('MsgpackEncoder(')
+    || moduleValueText.includes('MsgpackEncoder<')
+    || moduleValueText.includes('MsgpackDecoder(')
+    || moduleValueText.includes('MsgpackDecoder<')
+  ) {
     const helperStatements = msgpackCodecHelperStatements();
     if (leadingStatements.length > 0) {
       helperStatements.push('');
@@ -976,6 +984,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     leadingStatements.unshift(...helperStatements);
   }
+  if (moduleValueText.includes('pythonLstrip(')) {
+    const helperStatements = bytesStripHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
   if (moduleValueText.includes('pythonStructFormat(')) {
     const helperStatements = pythonStructFormatHelperStatements();
     if (leadingStatements.length > 0) {
@@ -1028,6 +1043,16 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       names: [
         ...(moduleValueText.includes('deflateSync(') ? ['deflateSync'] : []),
         ...(moduleValueText.includes('inflateSync(') ? ['inflateSync'] : []),
+      ],
+    });
+  }
+  if (moduleValueText.includes('zstdCompressSync(') || moduleValueText.includes('zstdDecompressSync(') || moduleValueText.includes('zlibConstants.')) {
+    pushUniqueImportDefinition(imports, {
+      modulePath: 'node:zlib',
+      names: [
+        ...(moduleValueText.includes('zstdCompressSync(') ? ['zstdCompressSync'] : []),
+        ...(moduleValueText.includes('zstdDecompressSync(') ? ['zstdDecompressSync'] : []),
+        ...(moduleValueText.includes('zlibConstants.') ? ['constants as zlibConstants'] : []),
       ],
     });
   }

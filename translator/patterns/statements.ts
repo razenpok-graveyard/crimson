@@ -1028,6 +1028,23 @@ export function translateStraightLineStatement(
     return null;
   }
 
+  const zstdStreamReadWith = /^with zstd\.ZstdDecompressor\(\)\.stream_reader\(io\.BytesIO\((.+)\)\) as ([A-Za-z_][A-Za-z0-9_]*):$/.exec(statement);
+  if (zstdStreamReadWith !== null) {
+    const innerIndent = `${indent}    `;
+    const readLine = lines[index + 1] ?? '';
+    const readStatement = new RegExp(`^([A-Za-z_][A-Za-z0-9_]*) = ${zstdStreamReadWith[2]}\\.read\\((.+)\\)$`).exec(readLine.trim());
+    if (!readLine.startsWith(innerIndent) || readStatement === null) {
+      return null;
+    }
+    const targetName = tsMutableNameForPythonName(readStatement[1]);
+    return {
+      statements: [
+        `const ${targetName} = new Uint8Array(zstdDecompressSync(${translateExpression(zstdStreamReadWith[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}, { maxOutputLength: ${translateExpression(readStatement[2], nameMap, arrayNames, validatedTypeAliases, mapNames)} }));`,
+      ],
+      nextIndex: index + 2,
+    };
+  }
+
   const withStatement = /^with (.+):$/.exec(statement);
   if (withStatement !== null) {
     const withItems = parseWithItems(withStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -2289,10 +2306,10 @@ export function translateStraightLineStatement(
 
   const callStatement = /^(.+\))$/.exec(statement);
   if (callStatement !== null) {
-    const pathlibWriteBytes = /^Path\((.+)\)\.write_bytes\((.+)\)$/.exec(callStatement[1]);
+    const pathlibWriteBytes = /^(?:Path\((.+)\)|(.+))\.write_bytes\((.+)\)$/.exec(callStatement[1]);
     if (pathlibWriteBytes !== null) {
       return {
-        statements: [`writeFileSync(String(${translateExpression(pathlibWriteBytes[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}), ${translateExpression(pathlibWriteBytes[2], nameMap, arrayNames, validatedTypeAliases, mapNames)});`],
+        statements: [`writeFileSync(String(${translateExpression(pathlibWriteBytes[1] ?? pathlibWriteBytes[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}), ${translateExpression(pathlibWriteBytes[3], nameMap, arrayNames, validatedTypeAliases, mapNames)});`],
         nextIndex: index + 1,
       };
     }
@@ -2613,6 +2630,16 @@ function parseMultilineListComprehension(
     ? tsExportNameForPythonName(targetNames[0])
     : `[${targetNames.map(tsExportNameForPythonName).join(', ')}]`;
   const enumerateIterable = /^enumerate\((.+)\)$/.exec(forClause[2]);
+  if (targetNames.length === 2 && enumerateIterable !== null && filterExpression === null) {
+    const indexName = tsExportNameForPythonName(targetNames[0]);
+    const itemName = tsExportNameForPythonName(targetNames[1]);
+    const iterable = iterableExpressionForIteration(enumerateIterable[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return {
+      expression: `${iterable}.map((${itemName}, ${indexName}) => ${itemExpression})`,
+      nextIndex: closeIndex + 1,
+      tupleElements,
+    };
+  }
   const iterable = targetNames.length > 1 && enumerateIterable !== null
     ? `Array.from(${iterableExpressionForIteration(enumerateIterable[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.entries())`
     : iterableExpressionForIteration(forClause[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -3048,6 +3075,21 @@ function parseMultilineCallExpression(
   if (msgspecStructsReplace !== null) {
     return {
       expression: msgspecStructsReplace,
+      nextIndex: callParts.nextIndex,
+    };
+  }
+  if (pythonCallee === 'msgspec.msgpack.encode' && callParts.positionalParts.length === 1 && callParts.keywordParts.length === 0) {
+    return {
+      expression: `new MsgpackEncoder().encode(${translateExpression(callParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames)})`,
+      nextIndex: callParts.nextIndex,
+    };
+  }
+  if (pythonCallee === 'msgspec.msgpack.decode' && callParts.positionalParts.length >= 1) {
+    const typeArg = callParts.keywordArgParts.find((part) => part.pythonName === 'type');
+    const typeExpression = typeArg === undefined ? 'undefined' : typeArg.expression;
+    const typeParameter = typeArg !== undefined && /^[A-Z][A-Za-z0-9_$]*$/.test(typeExpression) ? `<${typeExpression}>` : '';
+    return {
+      expression: `new MsgpackDecoder${typeParameter}({ type: ${typeExpression} }).decode(${translateExpression(callParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames)})`,
       nextIndex: callParts.nextIndex,
     };
   }

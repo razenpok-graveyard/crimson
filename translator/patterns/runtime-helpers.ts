@@ -58,6 +58,22 @@ export function bytesPrefixSuffixHelperStatements(): string[] {
   ];
 }
 
+export function bytesStripHelperStatements(): string[] {
+  return [
+    'function pythonLstrip(value: string | Uint8Array): string | Uint8Array {',
+    "  const isWhitespace = (byte: number): boolean => byte === 9 || byte === 10 || byte === 11 || byte === 12 || byte === 13 || byte === 32;",
+    "  if (typeof value === 'string') {",
+    '    return value.replace(/^\\s+/, \'\');',
+    '  }',
+    '  let start = 0;',
+    '  while (start < value.byteLength && isWhitespace(value[start])) {',
+    '    start += 1;',
+    '  }',
+    '  return value.slice(start);',
+    '}',
+  ];
+}
+
 export function pythonStructFormatHelperStatements(): string[] {
   return [
     'interface PythonStructFormat {',

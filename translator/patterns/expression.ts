@@ -402,9 +402,14 @@ export function translateExpression(
     return `new Uint8Array([${bytesLiteral.join(', ')}])`;
   }
 
-  const pathlibReadBytes = /^Path\((.+)\)\.read_bytes\(\)$/.exec(trimmed);
+  const pathlibReadBytes = /^(?:Path\((.+)\)|(.+))\.read_bytes\(\)$/.exec(trimmed);
   if (pathlibReadBytes !== null) {
-    return `readFileSync(String(${translateExpression(pathlibReadBytes[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}))`;
+    return `readFileSync(String(${translateExpression(pathlibReadBytes[1] ?? pathlibReadBytes[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}))`;
+  }
+
+  const lstripCall = /^(.+)\.lstrip\(\)$/.exec(trimmed);
+  if (lstripCall !== null) {
+    return `pythonLstrip(${translateExpression(lstripCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
   const toBytesCall = /^(.+)\.tobytes\(\)$/.exec(trimmed);
@@ -466,6 +471,11 @@ export function translateExpression(
   const zlibDecompressCall = parseCallPrefix(trimmed, 'zlib.decompress');
   if (zlibDecompressCall !== null && zlibDecompressCall.rest === '') {
     return `new Uint8Array(inflateSync(${translateExpression(zlibDecompressCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)}))`;
+  }
+
+  const zstdCompressCall = /^zstd\.ZstdCompressor\(level=(.+)\)\.compress\((.+)\)$/.exec(trimmed);
+  if (zstdCompressCall !== null) {
+    return `new Uint8Array(zstdCompressSync(${translateExpression(zstdCompressCall[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}, { params: { [zlibConstants.ZSTD_c_compressionLevel]: ${translateExpression(zstdCompressCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)} } }))`;
   }
 
   for (const method of ['floor', 'ceil', 'trunc', 'sqrt', 'pow', 'cos', 'sin', 'atan2'] as const) {
@@ -1430,7 +1440,8 @@ export function translateExpression(
     const typeExpression = typeArg === undefined
       ? 'undefined'
       : translateExpression(typeArg[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
-    return `new MsgpackDecoder({ type: ${typeExpression} })`;
+    const typeParameter = typeArg !== undefined && expressionCanBeTypeArgument(typeExpression) ? `<${typeExpression}>` : '';
+    return `new MsgpackDecoder${typeParameter}({ type: ${typeExpression} })`;
   }
 
   const msgpackDecodeCall = parseCallPrefix(trimmed, 'msgspec.msgpack.decode');
@@ -1443,7 +1454,8 @@ export function translateExpression(
       const typeExpression = typeArg === undefined
         ? 'undefined'
         : translateExpression(typeArg[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
-      return `new MsgpackDecoder({ type: ${typeExpression} }).decode(${translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+      const typeParameter = typeArg !== undefined && expressionCanBeTypeArgument(typeExpression) ? `<${typeExpression}>` : '';
+      return `new MsgpackDecoder${typeParameter}({ type: ${typeExpression} }).decode(${translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
     }
   }
 
@@ -3821,6 +3833,10 @@ function translateAttributeRest(rest: string): string {
 
 function pythonContainsExpression(containerExpression: string, valueExpression: string): string {
   return `((container: unknown, value: unknown) => container instanceof Set || container instanceof Map ? container.has(value) : Array.isArray(container) ? container.includes(value) : typeof container === 'string' ? container.includes(String(value)) : container !== null && typeof container === 'object' ? Object.prototype.hasOwnProperty.call(container, String(value)) : false)(${containerExpression}, ${valueExpression})`;
+}
+
+function expressionCanBeTypeArgument(expression: string): boolean {
+  return /^[A-Z][A-Za-z0-9_$]*$/.test(expression);
 }
 
 function parseCallPrefix(expression: string, callee: string): { argsText: string; rest: string } | null {
