@@ -741,7 +741,8 @@ export function translateStraightLineStatement(
         break;
       }
 
-      const caseStatement = /^case (.+):$/.exec(line.slice(caseIndent.length));
+      const parsedCaseLine = splitInlineComment(line.slice(caseIndent.length));
+      const caseStatement = /^case (.+):$/.exec(parsedCaseLine.code);
       if (caseStatement === null) {
         return null;
       }
@@ -749,15 +750,19 @@ export function translateStraightLineStatement(
       const translatedCase = caseStatement[1] === '_'
         ? 'default'
         : `case ${translateExpression(caseStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
-      statements.push(`  ${translatedCase}:`);
+      statements.push(`  ${translatedCase}:${parsedCaseLine.comment === null ? '' : ` // ${parsedCaseLine.comment}`}`);
 
       const caseStatements: string[] = [];
       nextIndex += 1;
+      let caseHadPass = false;
       while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, bodyIndent)) {
         if (lines[nextIndex].trim() === '') {
           caseStatements.push('');
           nextIndex += 1;
           continue;
+        }
+        if (lines[nextIndex].trim() === 'pass') {
+          caseHadPass = true;
         }
         const innerStatement = translateStraightLineStatement(
           lines,
@@ -778,7 +783,7 @@ export function translateStraightLineStatement(
         caseStatements.push(...innerStatement.statements);
         nextIndex = innerStatement.nextIndex;
       }
-      if (caseStatements.length === 0) {
+      if (!caseHadPass && caseStatements.length === 0) {
         return null;
       }
       statements.push(...caseStatements.map((caseLine) => indentStatementLine(indentStatementLine(caseLine))));

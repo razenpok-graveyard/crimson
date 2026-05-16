@@ -421,7 +421,8 @@ export function parseStructClass(
       continue;
     }
 
-    const field = /^    ([A-Za-z_][A-Za-z0-9_]*): (.+?)(?: = (.+))?$/.exec(line);
+    const parsedFieldLine = splitInlineComment(line);
+    const field = /^    ([A-Za-z_][A-Za-z0-9_]*): (.+?)(?: = (.+))?$/.exec(parsedFieldLine.code);
     if (field === null) {
       return null;
     }
@@ -440,6 +441,7 @@ export function parseStructClass(
       name: fieldName,
       typeExpression,
       defaultValue,
+      ...(parsedFieldLine.comment === null ? {} : { trailingComment: parsedFieldLine.comment }),
     });
     nextIndex += 1;
   }
@@ -457,6 +459,30 @@ export function parseStructClass(
     },
     nextIndex,
   };
+}
+
+function splitInlineComment(line: string): { code: string; comment: string | null } {
+  let quote: string | null = null;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (quote !== null) {
+      if (char === quote && line[index - 1] !== '\\') {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '#' && /\s/.test(line[index - 1] ?? '')) {
+      return {
+        code: line.slice(0, index).trimEnd(),
+        comment: line.slice(index + 1).trim(),
+      };
+    }
+  }
+  return { code: line, comment: null };
 }
 
 function parseStructMethod(

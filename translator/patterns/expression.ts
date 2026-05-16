@@ -1330,14 +1330,19 @@ export function translateExpression(
     return `Math.floor(${translateExpression(rightShift[1], nameMap, arrayNames, validatedTypeAliases, mapNames)} / (2 ** ${translateExpression(rightShift[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}))`;
   }
 
+  const modulo = splitTopLevelModulo(trimmed);
+  if (modulo !== null) {
+    return `${translateExpression(stripBalancedOuterParens(modulo.left), nameMap, arrayNames, validatedTypeAliases, mapNames)} % ${translateExpression(stripBalancedOuterParens(modulo.right), nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
+  }
+
   const additiveWithFloorDivision = /^(.+?) ([+-]) (.+ \/\/ .+)$/.exec(trimmed);
   if (additiveWithFloorDivision !== null) {
     return `${translateExpression(additiveWithFloorDivision[1], nameMap, arrayNames, validatedTypeAliases, mapNames)} ${additiveWithFloorDivision[2]} ${translateExpression(additiveWithFloorDivision[3], nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
   }
 
-  const floorDivision = /^(.+) \/\/ (.+)$/.exec(trimmed);
+  const floorDivision = splitTopLevelFloorDivision(trimmed);
   if (floorDivision !== null) {
-    return `Math.floor(${translateExpression(floorDivision[1], nameMap, arrayNames, validatedTypeAliases)} / ${translateExpression(floorDivision[2], nameMap, arrayNames, validatedTypeAliases)})`;
+    return `Math.floor(${translateExpression(floorDivision.left, nameMap, arrayNames, validatedTypeAliases, mapNames)} / ${translateExpression(floorDivision.right, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
   const uint32Mask = /^(.+) & 0xFFFFFFFF$/i.exec(trimmed);
@@ -2501,6 +2506,48 @@ function splitTopLevelMultiplicative(value: string): { left: string; right: stri
       return {
         left: value.slice(0, index - 1).trim(),
         right: value.slice(index + 2).trim(),
+      };
+    }
+  }
+  return null;
+}
+
+function splitTopLevelModulo(value: string): { left: string; right: string } | null {
+  return splitTopLevelSpacedOperator(value, '%');
+}
+
+function splitTopLevelFloorDivision(value: string): { left: string; right: string } | null {
+  return splitTopLevelSpacedOperator(value, '//');
+}
+
+function splitTopLevelSpacedOperator(value: string, operator: string): { left: string; right: string } | null {
+  let depth = 0;
+  let quote: string | null = null;
+  const token = ` ${operator} `;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      if (char === quote && value[index - 1] !== '\\') {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char === ')' || char === ']' || char === '}') {
+      depth -= 1;
+      continue;
+    }
+    if (depth === 0 && value.slice(index, index + token.length) === token) {
+      return {
+        left: value.slice(0, index).trim(),
+        right: value.slice(index + token.length).trim(),
       };
     }
   }

@@ -148,6 +148,7 @@ export interface StructFieldDefinition {
   name: string;
   typeExpression: string;
   defaultValue: string | null;
+  trailingComment?: string;
 }
 
 export interface PackageVersionModule {
