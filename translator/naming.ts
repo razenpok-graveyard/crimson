@@ -107,6 +107,10 @@ export function tsTypeExpression(pythonType: string): string {
   if (sequenceType !== null) {
     return `readonly ${tsArrayElementTypeExpression(sequenceType[1])}[]`;
   }
+  const mutableSequenceType = /^MutableSequence\[(.+)\]$/.exec(trimmed);
+  if (mutableSequenceType !== null) {
+    return `${tsArrayElementTypeExpression(mutableSequenceType[1])}[]`;
+  }
   const iterableType = /^Iterable\[(.+)\]$/.exec(trimmed);
   if (iterableType !== null) {
     return `Iterable<${tsTypeExpression(iterableType[1])}>`;

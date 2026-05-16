@@ -4261,7 +4261,7 @@ export function reassignedLocalNames(lines: string[], startIndex: number): Set<s
     if (lines[index].trim() !== '' && !lines[index].startsWith(baseIndent)) {
       break;
     }
-    const assignment = /^\s+([A-Za-z_][A-Za-z0-9_]*) (?:\+=|-=|\*=|\/=|\|=|&=|\^=|=) /.exec(lines[index]);
+    const assignment = /^\s+([A-Za-z_][A-Za-z0-9_]*) (?:\/\/=|\+=|-=|\*=|\/=|\|=|&=|\^=|=) /.exec(lines[index]);
     if (assignment !== null) {
       counts.set(assignment[1], (counts.get(assignment[1]) ?? 0) + 1);
     }

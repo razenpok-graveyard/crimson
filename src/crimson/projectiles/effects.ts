@@ -4,35 +4,27 @@ import { RGBA } from '@grim/color.ts';
 import { Vec2 } from '@grim/geom.ts';
 import type { CrandLike } from '@grim/rand.ts';
 import { SfxId } from '@grim/sfx-map.ts';
-import { EffectPool } from '@crimson/effects.ts';
+import type { EffectPool } from '@crimson/effects.ts';
 import { EffectId } from '@crimson/effects-atlas.ts';
 import { RngCallerStatic } from '@crimson/rng-caller-static.ts';
-import { ProjectileTemplateId } from './types.ts';
+import { ProjectileTemplateId } from '@crimson/projectiles/types.ts';
 
-export { _spawnShrinkifierHitEffects as spawnShrinkifierHitEffects };
-export { _spawnIonHitEffects as spawnIonHitEffects };
-export { _spawnPlasmaCannonHitEffects as spawnPlasmaCannonHitEffects };
-export { _spawnSplitterHitEffects as spawnSplitterHitEffects };
-
-export function _spawnShrinkifierHitEffects(
-  effects: EffectPool | null,
-  opts: {
-    pos: Vec2;
-    rng: CrandLike;
-    detailPreset: number;
-  },
-): void {
+export function spawnShrinkifierHitEffects(effects: EffectPool | null, opts: { pos: Vec2; rng: CrandLike; detailPreset: number }): void {
   // Port of `effect_spawn_shrinkifier_hit` (0x0042f080).
 
-  if (effects === null) return;
+  const pos = opts.pos;
+  const rng = opts.rng;
+  const detailPreset = opts.detailPreset;
+  if (effects === null) {
+    return;
+  }
 
-  const { pos, rng, detailPreset } = opts;
   const detail = int(detailPreset);
 
   // Core pulse (effect_id=1).
   effects.spawn({
-    effectId: EffectId.RING,
-    pos,
+    effectId: int(EffectId.RING),
+    pos: pos,
     vel: new Vec2(),
     rotation: 0.0,
     scale: 1.0,
@@ -51,16 +43,13 @@ export function _spawnShrinkifierHitEffects(
   const count = detail < 3 ? 2 : 4;
   for (let i = 0; i < count; i++) {
     const rotation = (rng.rand({ caller: RngCallerStatic.SHRINKIFIER_HIT_ROTATION }) & 0x7F) * 0.049087387;
-    const velocity = new Vec2(
-      ((rng.rand({ caller: RngCallerStatic.SHRINKIFIER_HIT_VEL_X }) & 0x7F) - 0x40) * 1.4,
-      ((rng.rand({ caller: RngCallerStatic.SHRINKIFIER_HIT_VEL_Y }) & 0x7F) - 0x40) * 1.4,
-    );
-    const scaleStep = (rng.rand({ caller: RngCallerStatic.SHRINKIFIER_HIT_SCALE_STEP }) % 100) * 0.01 + 0.1;
+    const velocity = new Vec2(((rng.rand({ caller: RngCallerStatic.SHRINKIFIER_HIT_VEL_X }) & 0x7F) - 0x40) * 1.4, ((rng.rand({ caller: RngCallerStatic.SHRINKIFIER_HIT_VEL_Y }) & 0x7F) - 0x40) * 1.4);
+    const scaleStep = rng.rand({ caller: RngCallerStatic.SHRINKIFIER_HIT_SCALE_STEP }) % 100 * 0.01 + 0.1;
     effects.spawn({
-      effectId: EffectId.BURST,
-      pos,
+      effectId: int(EffectId.BURST),
+      pos: pos,
       vel: velocity,
-      rotation,
+      rotation: rotation,
       scale: 1.0,
       halfWidth: 32.0,
       halfHeight: 32.0,
@@ -69,25 +58,21 @@ export function _spawnShrinkifierHitEffects(
       flags: 0x1D,
       color: new RGBA(0.4, 0.5, 1.0, 0.5),
       rotationStep: 0.0,
-      scaleStep,
+      scaleStep: scaleStep,
       detailPreset: detail,
     });
   }
 }
 
-export function _spawnIonHitEffects(
-  effects: EffectPool | null,
-  sfxQueue: SfxId[] | null,
-  opts: {
-    typeId: ProjectileTemplateId;
-    pos: Vec2;
-    rng: CrandLike;
-    detailPreset: number;
-  },
-): void {
-  if (effects === null) return;
+export function spawnIonHitEffects(effects: EffectPool | null, sfxQueue: SfxId[] | null, opts: { typeId: ProjectileTemplateId; pos: Vec2; rng: CrandLike; detailPreset: number }): void {
+  const typeId = opts.typeId;
+  const pos = opts.pos;
+  const rng = opts.rng;
+  const detailPreset = opts.detailPreset;
+  if (effects === null) {
+    return;
+  }
 
-  const { typeId, pos, rng, detailPreset } = opts;
   let ringScale = 0.0;
   let ringStrength = 0.0;
   let burstScale = 0.0;
@@ -113,13 +98,12 @@ export function _spawnIonHitEffects(
     default:
       return;
   }
-
   const detail = int(detailPreset);
 
   // Port of `FUN_0042f270(pos, ring_scale, ring_strength)`: ring burst (effect_id=1).
   effects.spawn({
-    effectId: EffectId.RING,
-    pos,
+    effectId: int(EffectId.RING),
+    pos: pos,
     vel: new Vec2(),
     rotation: 0.0,
     scale: 1.0,
@@ -146,38 +130,28 @@ export function _spawnIonHitEffects(
 
   for (let i = 0; i < Math.max(0, count); i++) {
     const rotation = (rng.rand({ caller: RngCallerStatic.ION_HIT_SPARK_ROTATION }) & 0x7F) * 0.049087387;
-    const velocity = new Vec2(
-      ((rng.rand({ caller: RngCallerStatic.ION_HIT_SPARK_VEL_X }) & 0x7F) - 0x40) * burst * 1.4,
-      ((rng.rand({ caller: RngCallerStatic.ION_HIT_SPARK_VEL_Y }) & 0x7F) - 0x40) * burst * 1.4,
-    );
-    const scaleStep = ((rng.rand({ caller: RngCallerStatic.ION_HIT_SPARK_SCALE_STEP }) % 100) * 0.01 + 0.1) * burst;
+    const velocity = new Vec2(((rng.rand({ caller: RngCallerStatic.ION_HIT_SPARK_VEL_X }) & 0x7F) - 0x40) * burst * 1.4, ((rng.rand({ caller: RngCallerStatic.ION_HIT_SPARK_VEL_Y }) & 0x7F) - 0x40) * burst * 1.4);
+    const scaleStep = (rng.rand({ caller: RngCallerStatic.ION_HIT_SPARK_SCALE_STEP }) % 100 * 0.01 + 0.1) * burst;
     effects.spawn({
-      effectId: EffectId.BURST,
-      pos,
+      effectId: int(EffectId.BURST),
+      pos: pos,
       vel: velocity,
-      rotation,
+      rotation: rotation,
       scale: 1.0,
       halfWidth: half,
       halfHeight: half,
       age: 0.0,
-      lifetime,
+      lifetime: lifetime,
       flags: 0x1D,
       color: new RGBA(0.4, 0.5, 1.0, 0.5),
       rotationStep: 0.0,
-      scaleStep,
+      scaleStep: scaleStep,
       detailPreset: detail,
     });
   }
 }
 
-export function _spawnPlasmaCannonHitEffects(
-  effects: EffectPool | null,
-  sfxQueue: SfxId[] | null,
-  opts: {
-    pos: Vec2;
-    detailPreset: number;
-  },
-): void {
+export function spawnPlasmaCannonHitEffects(effects: EffectPool | null, sfxQueue: SfxId[] | null, opts: { pos: Vec2; detailPreset: number }): void {
   // Port of `projectile_update` Plasma Cannon hit extras.
   //
   // Native does:
@@ -186,9 +160,12 @@ export function _spawnPlasmaCannonHitEffects(
   // - `FUN_0042f330(pos, 1.5, 1.0)`
   // - `FUN_0042f330(pos, 1.0, 1.0)`
 
-  if (effects === null) return;
+  const pos = opts.pos;
+  const detailPreset = opts.detailPreset;
+  if (effects === null) {
+    return;
+  }
 
-  const { pos, detailPreset } = opts;
   if (sfxQueue !== null) {
     sfxQueue.push(SfxId.EXPLOSION_MEDIUM);
     sfxQueue.push(SfxId.SHOCKWAVE);
@@ -199,8 +176,8 @@ export function _spawnPlasmaCannonHitEffects(
   const _spawnRing = (opts: { scale: number }): void => {
     const scale = opts.scale;
     effects.spawn({
-      effectId: EffectId.RING,
-      pos,
+      effectId: int(EffectId.RING),
+      pos: pos,
       vel: new Vec2(),
       rotation: 0.0,
       scale: 1.0,
@@ -220,29 +197,26 @@ export function _spawnPlasmaCannonHitEffects(
   _spawnRing({ scale: 1.0 });
 }
 
-export function _spawnSplitterHitEffects(
-  effects: EffectPool | null,
-  opts: {
-    pos: Vec2;
-    rng: CrandLike;
-    detailPreset: number;
-  },
-): void {
+export function spawnSplitterHitEffects(effects: EffectPool | null, opts: { pos: Vec2; rng: CrandLike; detailPreset: number }): void {
   // Port of `FUN_0042f3f0(pos, 26.0, 3)` from the Splitter Gun hit branch.
 
-  if (effects === null) return;
+  const pos = opts.pos;
+  const rng = opts.rng;
+  const detailPreset = opts.detailPreset;
+  if (effects === null) {
+    return;
+  }
 
-  const { pos, rng, detailPreset } = opts;
   const detail = int(detailPreset);
   for (let i = 0; i < 3; i++) {
-    const angle = (rng.rand({ caller: RngCallerStatic.SPLITTER_HIT_ANGLE }) & 0x1FF) * (Math.PI * 2.0 / 512.0);
+    const angle = (rng.rand({ caller: RngCallerStatic.SPLITTER_HIT_ANGLE }) & 0x1FF) * ((Math.PI * 2.0) / 512.0);
     const radius = rng.rand({ caller: RngCallerStatic.SPLITTER_HIT_RADIUS }) % 26;
     const jitterAge = -(rng.rand({ caller: RngCallerStatic.SPLITTER_HIT_AGE }) & 0xFF) * 0.0012;
     const lifetime = 0.1 - jitterAge;
 
     const offset = Vec2.fromAngle(angle).mul(radius);
     effects.spawn({
-      effectId: EffectId.BURST,
+      effectId: int(EffectId.BURST),
       pos: pos.add(offset),
       vel: new Vec2(),
       rotation: 0.0,
@@ -250,7 +224,7 @@ export function _spawnSplitterHitEffects(
       halfWidth: 4.0,
       halfHeight: 4.0,
       age: jitterAge,
-      lifetime,
+      lifetime: lifetime,
       flags: 0x19,
       color: new RGBA(1.0, 0.9, 0.1, 1.0),
       rotationStep: 0.0,
