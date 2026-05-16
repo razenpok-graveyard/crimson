@@ -23,6 +23,28 @@ function tsAttributeNameForPythonName(pythonName: string): string {
     : tsExportNameForPythonName(pythonName);
 }
 
+function skipSlotsAssignment(lines: string[], index: number): number {
+  const line = lines[index] ?? '';
+  if (!line.startsWith('    ') || !line.trim().startsWith('__slots__ = ')) {
+    return index;
+  }
+  const trimmed = line.trim();
+  if (trimmed.includes('(') && !trimmed.includes(')')) {
+    let nextIndex = index + 1;
+    while (nextIndex < lines.length) {
+      if ((lines[nextIndex] ?? '').trim() === ')') {
+        return nextIndex + 1;
+      }
+      if (!(lines[nextIndex] ?? '').startsWith('    ')) {
+        return index;
+      }
+      nextIndex += 1;
+    }
+    return index;
+  }
+  return index + 1;
+}
+
 export function parsePlainClass(
   lines: string[],
   index: number,
@@ -42,6 +64,10 @@ export function parsePlainClass(
   if (docstring !== null) {
     nextIndex = docstring.nextIndex;
   }
+  while (nextIndex < lines.length && lines[nextIndex].trim() === '') {
+    nextIndex += 1;
+  }
+  nextIndex = skipSlotsAssignment(lines, nextIndex);
   while (nextIndex < lines.length && lines[nextIndex].trim() === '') {
     nextIndex += 1;
   }
@@ -71,9 +97,20 @@ export function parsePlainClass(
   const fieldArrayNames = new Set<string>();
   const constructorStatements: string[] = [];
   const constructorNameMap = new Map<string, string>([...moduleNameMap, ['self', 'this']]);
+  for (const parameter of constructorParams.parameters) {
+    constructorNameMap.set(parameter.name, parameter.name);
+  }
   for (const parameter of constructorParams.optsParams) {
     constructorNameMap.set(parameter.name, parameter.name);
   }
+  for (const pythonParameterName of pythonParameterNames(constructorParametersText === 'self' ? '' : constructorParametersText.slice('self, '.length))) {
+    constructorNameMap.set(pythonParameterName, tsExportNameForPythonName(pythonParameterName));
+  }
+  const constructorExtraParametersText = constructorParametersText === 'self' ? '' : constructorParametersText.slice('self, '.length);
+  const constructorDeclaredNames = new Set<string>(pythonParameterNames(constructorExtraParametersText));
+  const constructorReassignedNames = constructorHeader === null
+    ? new Set<string>()
+    : reassignedLocalNames(lines, constructorHeader.nextIndex);
   let bodyIndex = constructorHeader?.nextIndex ?? nextIndex;
   if (constructorHeader !== null) {
     while (bodyIndex < lines.length && isIndentedBlockLine(lines, bodyIndex, '        ')) {
@@ -90,7 +127,6 @@ export function parsePlainClass(
         const pythonFieldName = assignment[1];
         const fieldName = tsAttributeNameForPythonName(pythonFieldName);
         fieldNameMap.set(pythonFieldName, fieldName);
-        constructorNameMap.set(pythonFieldName, fieldName);
         const valueText = annotatedFieldAssignment === null ? assignment[2] : assignment[3];
         const value = translateExpression(valueText, constructorNameMap, constructorArrayNames);
         const typeExpression = annotatedFieldAssignment === null
@@ -110,6 +146,7 @@ export function parsePlainClass(
           private: pythonFieldName.startsWith('_'),
         });
         constructorStatements.push(`this.${fieldName} = ${value};`);
+        constructorNameMap.set(pythonFieldName, fieldName);
         bodyIndex += 1;
         continue;
       }
@@ -118,8 +155,8 @@ export function parsePlainClass(
         bodyIndex,
         '        ',
         constructorNameMap,
-        new Set(),
-        new Set(),
+        constructorDeclaredNames,
+        constructorReassignedNames,
         constructorArrayNames,
       );
       if (translated === null) {
@@ -274,6 +311,26 @@ function inferPlainClassFieldType(valueText: string, fieldTypes: ReadonlyMap<str
         .split(' | ')
         .filter((part) => part !== 'null' && part !== 'undefined')
         .join(' | ');
+  }
+  const noneGuardedConstructor = /^([A-Z_][A-Za-z0-9_]*)\(.+\) if ([A-Za-z_][A-Za-z0-9_]*) is None else \2$/.exec(valueText.trim());
+  if (noneGuardedConstructor !== null) {
+    const directType = fieldTypes.get(tsExportNameForPythonName(noneGuardedConstructor[2]));
+    return directType === undefined
+      ? tsExportNameForPythonName(noneGuardedConstructor[1])
+      : directType
+        .split(' | ')
+        .filter((part) => part !== 'null' && part !== 'undefined')
+        .join(' | ');
+  }
+  const maskedNumber = /^([A-Za-z_][A-Za-z0-9_]*) & 0x[0-9A-Fa-f]+$/.exec(valueText.trim());
+  if (maskedNumber !== null) {
+    const directType = fieldTypes.get(tsExportNameForPythonName(maskedNumber[1]));
+    if (directType?.split(' | ').some((part) => part === 'number') === true) {
+      return 'number';
+    }
+  }
+  if (/^int\.from_bytes\(.+\)$/.test(valueText.trim())) {
+    return 'number';
   }
   if (/^-?\d+(?:\.\d+)?(?:\s*[+\-*/]\s*(?:-?\d+(?:\.\d+)?|(?:int|float)\(.+\)|[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?))*$/.test(valueText.trim())) {
     return 'number';

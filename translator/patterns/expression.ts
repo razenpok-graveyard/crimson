@@ -416,6 +416,10 @@ export function translateExpression(
     return 'globalThis.process?.pid ?? 0';
   }
 
+  if (trimmed === 'int.from_bytes(os.urandom(4), "little")' || trimmed === "int.from_bytes(os.urandom(4), 'little')") {
+    return 'globalThis.crypto.getRandomValues(new Uint32Array(1))[0]';
+  }
+
   const secretsTokenHexCall = parseCallPrefix(trimmed, 'secrets.token_hex');
   if (secretsTokenHexCall !== null && secretsTokenHexCall.rest === '') {
     return `secretsTokenHex(${translateExpression(secretsTokenHexCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
@@ -1627,6 +1631,16 @@ export function translateExpression(
     return joinTranslatedAdditive(additive, nameMap, arrayNames, validatedTypeAliases, mapNames);
   }
 
+  const uint32Mask = /^(.+) & 0xFFFFFFFF$/i.exec(trimmed);
+  if (uint32Mask !== null) {
+    return `(${translateExpression(uint32Mask[1], nameMap, arrayNames, validatedTypeAliases, mapNames)} >>> 0)`;
+  }
+
+  const bitwiseAnd = splitTopLevelSpacedOperator(trimmed, '&');
+  if (bitwiseAnd !== null) {
+    return `${translateExpression(stripBalancedOuterParens(bitwiseAnd.left), nameMap, arrayNames, validatedTypeAliases, mapNames)} & ${translateExpression(stripBalancedOuterParens(bitwiseAnd.right), nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
+  }
+
   const withoutOuterParens = stripBalancedOuterParens(trimmed);
   if (withoutOuterParens !== trimmed && withoutOuterParens.includes(' >> ')) {
     return translateExpression(withoutOuterParens, nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -1650,11 +1664,6 @@ export function translateExpression(
   const floorDivision = splitTopLevelFloorDivision(trimmed);
   if (floorDivision !== null) {
     return `Math.floor(${translateExpression(floorDivision.left, nameMap, arrayNames, validatedTypeAliases, mapNames)} / ${translateExpression(floorDivision.right, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
-  }
-
-  const uint32Mask = /^(.+) & 0xFFFFFFFF$/i.exec(trimmed);
-  if (uint32Mask !== null) {
-    return `(${translateExpression(uint32Mask[1], nameMap, arrayNames, validatedTypeAliases, mapNames)} >>> 0)`;
   }
 
   const identityComparison = /^(.+?) is( not)? (.+)$/.exec(trimmed);

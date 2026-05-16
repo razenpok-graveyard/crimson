@@ -1,12 +1,27 @@
 // Port of grim/rand.py
 
-// Exact static caller address when known.
 export type CallerStatic = number | null;
+export type RngTraceSink = (arg0: number, arg1: number, arg2: number, arg3: CallerStatic) => void;
 
+export interface CrandLike {
+  readonly state: number;
+  srand(seed: number): void;
+  rand(opts?: { caller?: CallerStatic }): number;
+  advance(draws: number): void;
+}
+
+// Exact static caller address when known.
 export const CRT_RAND_MULT = 214013;
 export const CRT_RAND_INC = 2531011;
 
-export type RngTraceSink = (stateBefore: number, stateAfter: number, value: number, caller: CallerStatic) => void;
+// Raised when strict RNG tracing sees an untagged gameplay draw.
+export class MissingRngCallerError extends Error {
+  constructor(message?: string) {
+    super(message);
+    this.name = 'MissingRngCallerError';
+  }
+}
+
 
 export class RngDrawRecord {
   readonly stateBefore: number;
@@ -27,39 +42,23 @@ export class RngDrawRecord {
   }
 }
 
-// Raised when strict RNG tracing sees an untagged gameplay draw.
-export class MissingRngCallerError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'MissingRngCallerError';
-  }
-}
-
-// Protocol for RNGs that follow the native CRT rand/srand/state contract.
-export interface CrandLike {
-  readonly state: number;
-  srand(seed: number): void;
-  rand(opts?: { caller?: CallerStatic }): number;
-  advance(draws: number): void;
-}
-
 // MSVCRT-compatible `rand()` LCG used by the original game.
+//
 // Matches:
 //   seed = seed * 214013 + 2531011
 //   return (seed >> 16) & 0x7fff
-export class CrtRand implements CrandLike {
+export class CrtRand {
   private _state: number;
-  private _traceSink: RngTraceSink | null = null;
-  private _traceRequireCaller = false;
+  private _traceSink: RngTraceSink | null;
+  private _traceRequireCaller: boolean;
 
-  constructor(seed?: number) {
-    if (seed === undefined) {
-      const arr = new Uint32Array(1);
-      crypto.getRandomValues(arr);
-      this._state = arr[0];
-    } else {
-      this._state = seed >>> 0;
+  constructor(seed: number | null = null) {
+    if (seed === null) {
+      seed = globalThis.crypto.getRandomValues(new Uint32Array(1))[0];
     }
+    this._state = (seed >>> 0);
+    this._traceSink = null;
+    this._traceRequireCaller = false;
   }
 
   get state(): number {
@@ -67,15 +66,17 @@ export class CrtRand implements CrandLike {
   }
 
   srand(seed: number): void {
-    this._state = seed >>> 0;
+    this._state = (seed >>> 0);
   }
 
   advance(draws: number): void {
     const steps = int(draws);
-    if (steps < 0) throw new Error(`draws must be >= 0, got ${draws}`);
+    if (steps < 0) {
+      throw new Error(`draws must be >= 0, got ${draws}`);
+    }
     let state = this._state;
     for (let i = 0; i < steps; i++) {
-      state = (Math.imul(state, CRT_RAND_MULT) + CRT_RAND_INC) >>> 0;
+      state = ((state * CRT_RAND_MULT + CRT_RAND_INC) >>> 0);
     }
     this._state = state;
   }
@@ -88,46 +89,50 @@ export class CrtRand implements CrandLike {
     return this._traceRequireCaller;
   }
 
-  setTraceSink(sink: RngTraceSink | null, opts?: { requireCaller?: boolean }): void {
+  setTraceSink(sink: RngTraceSink | null, opts: { requireCaller?: boolean } = {}): void {
+    const requireCaller = opts.requireCaller ?? false;
     this._traceSink = sink;
-    this._traceRequireCaller = Boolean(opts?.requireCaller ?? false);
+    this._traceRequireCaller = requireCaller;
   }
 
-  rand(opts?: { caller?: CallerStatic }): number {
-    const caller = opts?.caller ?? null;
+  rand(opts: { caller?: CallerStatic } = {}): number {
+    const caller = opts.caller ?? null;
     const stateBefore = this._state;
-    this._state = (Math.imul(this._state, CRT_RAND_MULT) + CRT_RAND_INC) >>> 0;
-    const value = (this._state >>> 16) & 0x7FFF;
-    if (caller !== null && (caller < 0 || caller > 0xFFFFFFFF)) {
+    this._state = ((this._state * CRT_RAND_MULT + CRT_RAND_INC) >>> 0);
+    const value = Math.floor(this._state / (2 ** 16)) & 0x7FFF;
+    if (caller !== null && !(0 <= caller && caller <= 0xFFFFFFFF)) {
       throw new Error(`caller must be a uint32, got ${caller}`);
     }
-    if (this._traceSink !== null) {
+    const traceSink = this._traceSink;
+    if (traceSink !== null) {
       if (this._traceRequireCaller && caller === null) {
         throw new MissingRngCallerError('strict RNG trace requires caller');
       }
-      this._traceSink(int(stateBefore), int(this._state), int(value), caller);
+      traceSink(int(stateBefore), int(this._state), int(value), caller);
     }
     return value;
   }
 }
 
 // MSVCRT-compatible `rand()` LCG.
-export class Crand extends CrtRand {}
+export class Crand extends CrtRand {
+}
 
-class RecordingState {
-  base: CrandLike;
-  records: RngDrawRecord[] = [];
+export class RecordingState {
+  readonly base: CrandLike;
+  readonly records: RngDrawRecord[];
 
   constructor(base: CrandLike) {
     this.base = base;
+    this.records = [];
   }
 }
 
-export class RecordingCrand implements CrandLike {
-  private _shared: RecordingState;
+export class RecordingCrand {
+  private readonly _shared: RecordingState;
 
-  constructor(base: CrandLike, shared?: RecordingState) {
-    this._shared = shared ?? new RecordingState(base);
+  constructor(base: CrandLike, shared: RecordingState | null = null) {
+    this._shared = shared === null ? new RecordingState(base) : shared;
   }
 
   get state(): number {
@@ -139,40 +144,43 @@ export class RecordingCrand implements CrandLike {
   }
 
   get records(): readonly RngDrawRecord[] {
-    return this._shared.records.slice();
+    return Array.from(this._shared.records);
   }
 
   srand(seed: number): void {
     this._shared.base.srand(int(seed));
-    this._shared.records.length = 0;
+    ((target: unknown) => {
+      if (target !== null && typeof target === 'object' && typeof (target as { clear?: unknown }).clear === 'function') {
+        (target as { clear: () => void }).clear();
+      } else if (target !== null && typeof target === 'object' && 'length' in target) {
+        (target as { length: number }).length = 0;
+      }
+    })(this._shared.records);
   }
 
-  rand(opts?: { caller?: CallerStatic }): number {
-    const caller = opts?.caller ?? null;
+  rand(opts: { caller?: CallerStatic } = {}): number {
+    const caller = opts.caller ?? null;
     const stateBefore = int(this._shared.base.state);
     const value = this._shared.base.rand();
     const stateAfter = int(this._shared.base.state);
-    this._shared.records.push(new RngDrawRecord({
-      stateBefore,
-      stateAfter,
-      value,
-      caller,
-    }));
+    this._shared.records.push(new RngDrawRecord({ stateBefore: stateBefore, stateAfter: stateAfter, value: value, caller: caller }));
     return value;
   }
 
   advance(draws: number): void {
     const steps = int(draws);
-    if (steps < 0) throw new Error(`draws must be >= 0, got ${draws}`);
+    if (steps < 0) {
+      throw new Error(`draws must be >= 0, got ${draws}`);
+    }
     this._shared.base.advance(steps);
   }
 
   recordsSince(startCall: number = 0): RngDrawRecord[] {
     const start = Math.max(0, int(startCall));
-    return this._shared.records.slice(start);
+    return Array.from(this._shared.records.slice(start));
   }
 
   valuesSince(startCall: number = 0): number[] {
-    return this.recordsSince(startCall).map(r => r.value);
+    return this.recordsSince(startCall).map((record) => record.value);
   }
 }

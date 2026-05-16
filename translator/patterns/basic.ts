@@ -29,6 +29,7 @@ import {
 } from '../python-utils.js';
 import {
   isCollectionsAbcTypeImport,
+  parseIndentedDocstring,
   parseOneLineAllNames,
   splitTopLevelComma,
 } from './common.js';
@@ -90,13 +91,18 @@ export function parseProtocolClass(
   lines: string[],
   index: number,
 ): { protocol: ProtocolDefinition; nextIndex: number } | null {
-  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\(Protocol\):$/.exec(lines[index] ?? '');
+  const classIndex = lines[index]?.trim() === '@runtime_checkable' ? index + 1 : index;
+  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\(Protocol\):$/.exec(lines[classIndex] ?? '');
   if (header === null) {
     return null;
   }
 
   const methods: ProtocolMethod[] = [];
-  let nextIndex = index + 1;
+  let nextIndex = classIndex + 1;
+  const docstring = parseIndentedDocstring(lines, nextIndex);
+  if (docstring !== null) {
+    nextIndex = docstring.nextIndex;
+  }
   while (nextIndex < lines.length) {
     const line = lines[nextIndex] ?? '';
     if (line.trim() === '') {
@@ -105,6 +111,19 @@ export function parseProtocolClass(
     }
     if (!line.startsWith('    ')) {
       break;
+    }
+
+    if (line.trim() === '@property') {
+      const propertyMethod = parseProtocolMethod(lines, nextIndex + 1);
+      if (propertyMethod === null || propertyMethod.method.parameters.length > 0 || propertyMethod.method.optsParams.length > 0) {
+        return null;
+      }
+      methods.push({
+        ...propertyMethod.method,
+        property: true,
+      });
+      nextIndex = propertyMethod.nextIndex;
+      continue;
     }
 
     const method = parseProtocolMethod(lines, nextIndex);

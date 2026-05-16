@@ -177,6 +177,7 @@ export interface LazyWrapperModule {
 
 export interface ProtocolMethod {
   name: string;
+  property?: boolean;
   parameters: FunctionParameter[];
   optsParams: FunctionParameter[];
   optsOptional: boolean;

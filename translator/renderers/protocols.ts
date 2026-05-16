@@ -35,6 +35,10 @@ export function renderProtocolDefinition(lines: string[], protocol: ProtocolDefi
 
   lines.push(`export interface ${protocol.name} {`);
   for (const method of protocol.methods) {
+    if (method.property === true) {
+      lines.push(`  readonly ${method.name}: ${method.returnType};`);
+      continue;
+    }
     const params = method.parameters.map(renderParameter);
     if (method.optsParams.length > 0) {
       const optsType = method.optsParams
