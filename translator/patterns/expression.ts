@@ -276,6 +276,10 @@ export function objectNameMarker(name: string): string {
   return `__object__:${name}`;
 }
 
+export function pythonMappingNameMarker(name: string): string {
+  return `__python_mapping__:${name}`;
+}
+
 export function dateNameMarker(name: string): string {
   return `__date__:${name}`;
 }
@@ -646,6 +650,11 @@ export function translateExpression(
     return `pythonSplitlines(${translateExpression(stringSplitlinesCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
+  const stringIsIdentifierCall = /^(.+)\.isidentifier\(\)$/.exec(trimmed);
+  if (stringIsIdentifierCall !== null) {
+    return `pythonIsIdentifier(${translateExpression(stringIsIdentifierCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
   const colorChannel = /^([A-Za-z_][A-Za-z0-9_]*)\.([rgba])$/.exec(trimmed);
   if (colorChannel !== null) {
     const translatedName = translateExpression(colorChannel[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -771,10 +780,14 @@ export function translateExpression(
       const translatedValue = translateExpression(value, nameMap, arrayNames, validatedTypeAliases, mapNames);
       const indent = keywordArgs.get('indent');
       const sortKeys = keywordArgs.get('sort_keys');
+      const defaultArg = keywordArgs.get('default');
       if (sortKeys === 'True') {
         const opts = [`sortKeys: true`];
         if (indent !== undefined) {
           opts.push(`indent: ${translateExpression(indent, nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
+        }
+        if (defaultArg === 'repr') {
+          opts.push('defaultRepr: true');
         }
         return `pythonJsonDumps(${translatedValue}, { ${opts.join(', ')} })`;
       }
@@ -855,6 +868,11 @@ export function translateExpression(
     }
   }
 
+  const setUnion = topLevelSetUnion(trimmed);
+  if (setUnion !== null) {
+    return `new Set([...${translateExpression(setUnion.left, nameMap, arrayNames, validatedTypeAliases, mapNames)}, ...${translateExpression(setUnion.right, nameMap, arrayNames, validatedTypeAliases, mapNames)}])`;
+  }
+
   const maxCall = parseCallPrefix(trimmed, 'max');
   if (maxCall !== null && maxCall.rest === '') {
     const maxExpression = translateMaxCall(maxCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -896,6 +914,20 @@ export function translateExpression(
     return `Object.entries(${mapName})`;
   }
 
+  const mapKeysCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.keys\(\)$/.exec(trimmed);
+  if (mapKeysCall !== null) {
+    const mapName = translateExpression(mapKeysCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (arrayNames.has(pythonMappingNameMarker(mapKeysCall[1])) || arrayNames.has(pythonMappingNameMarker(mapName))) {
+      return `pythonMappingKeys(${mapName})`;
+    }
+    if (mapNames.has(mapName)) {
+      return `${mapName}.keys()`;
+    }
+    if (arrayNames.has(objectNameMarker(mapKeysCall[1])) || arrayNames.has(objectNameMarker(mapName))) {
+      return `Object.keys(${mapName})`;
+    }
+  }
+
   const mappingConstantSubscript = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[(.+)\]$/.exec(trimmed);
   if (mappingConstantSubscript !== null && looksLikeMappingConstantName(mappingConstantSubscript[1])) {
     const mapName = translateExpression(mappingConstantSubscript[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -906,10 +938,21 @@ export function translateExpression(
   const mapSubscript = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[(.+)\]$/.exec(trimmed);
   if (mapSubscript !== null) {
     const mapName = translateExpression(mapSubscript[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (arrayNames.has(pythonMappingNameMarker(mapSubscript[1])) || arrayNames.has(pythonMappingNameMarker(mapName))) {
+      const key = translateExpression(mapSubscript[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      return `pythonMappingGet(${mapName}, ${key})`;
+    }
     if (mapNames.has(mapName)) {
       const key = translateMapKeyExpression(mapName, translateExpression(mapSubscript[2], nameMap, arrayNames, validatedTypeAliases, mapNames), mapNames);
       return `${mapName}.get(${key})!`;
     }
+  }
+
+  const typeIdentityComparison = /^type\((.+)\) is( not)? type\((.+)\)$/.exec(trimmed);
+  if (typeIdentityComparison !== null) {
+    const left = translateExpression(typeIdentityComparison[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const right = translateExpression(typeIdentityComparison[3], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return `pythonTypeObject(${left}) ${typeIdentityComparison[2] === undefined ? '===' : '!=='} pythonTypeObject(${right})`;
   }
 
   const envComparison = /^os\.environ\.get\("([A-Za-z_][A-Za-z0-9_]*)"\) == "([^"]*)"$/.exec(trimmed);
@@ -921,6 +964,11 @@ export function translateExpression(
   if (typeNameAttribute !== null) {
     const value = translateExpression(typeNameAttribute[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
     return `((valueForType: unknown) => valueForType === null ? 'NoneType' : Array.isArray(valueForType) ? 'list' : valueForType instanceof Map ? 'dict' : typeof valueForType === 'boolean' ? 'bool' : typeof valueForType === 'number' ? Number.isInteger(valueForType) ? 'int' : 'float' : typeof valueForType === 'string' ? 'str' : typeof valueForType === 'object' ? ((valueForType as { constructor?: { name?: string } }).constructor?.name && (valueForType as { constructor?: { name?: string } }).constructor?.name !== 'Object' ? (valueForType as { constructor: { name: string } }).constructor.name : 'dict') : typeof valueForType)(${value})`;
+  }
+
+  const typeCall = parseCallPrefix(trimmed, 'type');
+  if (typeCall !== null && typeCall.rest === '') {
+    return `pythonTypeObject(${translateExpression(typeCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
   const structUnpackPackedFloat = /^struct\.unpack\("<f", struct\.pack\("<I", (.+)\)\)\[0\]$/.exec(trimmed);
@@ -990,33 +1038,16 @@ export function translateExpression(
     return `structuredClone(${translateExpression(msgspecToBuiltinsCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
-  const isinstanceSequence = /^isinstance\((.+), \((.+)\)\)$/.exec(trimmed);
-  if (isinstanceSequence !== null) {
-    const types = splitTopLevelComma(isinstanceSequence[2]);
-    if (types.length > 0 && types.every((type) => type === 'list' || type === 'tuple')) {
-      return `Array.isArray(${translateExpression(isinstanceSequence[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  const isinstanceCall = parseCallPrefix(trimmed, 'isinstance');
+  if (isinstanceCall !== null && isinstanceCall.rest === '') {
+    const args = splitTopLevelComma(isinstanceCall.argsText);
+    if (args.length === 2) {
+      const value = translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const predicate = translateIsinstancePredicate(value, args[1].trim());
+      if (predicate !== null) {
+        return predicate;
+      }
     }
-  }
-  const isinstanceSingleSequence = /^isinstance\((.+), (list|tuple)\)$/.exec(trimmed);
-  if (isinstanceSingleSequence !== null) {
-    return `Array.isArray(${translateExpression(isinstanceSingleSequence[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
-  }
-  const isinstancePrimitive = /^isinstance\((.+), (bool|int|float|str|dict)\)$/.exec(trimmed);
-  if (isinstancePrimitive !== null) {
-    const value = translateExpression(isinstancePrimitive[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
-    if (isinstancePrimitive[2] === 'bool') {
-      return `typeof ${value} === 'boolean'`;
-    }
-    if (isinstancePrimitive[2] === 'int') {
-      return `typeof ${value} === 'number' && Number.isInteger(${value})`;
-    }
-    if (isinstancePrimitive[2] === 'float') {
-      return `typeof ${value} === 'number'`;
-    }
-    if (isinstancePrimitive[2] === 'str') {
-      return `typeof ${value} === 'string'`;
-    }
-    return `typeof ${value} === 'object' && ${value} !== null && !Array.isArray(${value})`;
   }
   const isinstancePath = /^isinstance\((.+), Path\)$/.exec(trimmed);
   if (isinstancePath !== null) {
@@ -1089,16 +1120,16 @@ export function translateExpression(
         }
         const property = tsStringLiteral(JSON.stringify(attribute.content));
         return fallback === null
-          ? `Reflect.get(${objectExpression}, ${property})`
-          : `Reflect.get(${objectExpression}, ${property}) ?? ${fallback}`;
+          ? `Reflect.get((${objectExpression}) as object, ${property})`
+          : `Reflect.get((${objectExpression}) as object, ${property}) ?? ${fallback}`;
       }
       const property = translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
       const fallback = args[2] === undefined
         ? null
         : translateExpression(args[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
       return fallback === null
-        ? `Reflect.get(${objectExpression}, ${property})`
-        : `Reflect.get(${objectExpression}, ${property}) ?? ${fallback}`;
+        ? `Reflect.get((${objectExpression}) as object, ${property})`
+        : `Reflect.get((${objectExpression}) as object, ${property}) ?? ${fallback}`;
     }
   }
 
@@ -1117,7 +1148,18 @@ export function translateExpression(
 
   const reprCall = parseCallPrefix(trimmed, 'repr');
   if (reprCall !== null && reprCall.rest === '') {
-    return `String(${translateExpression(reprCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    return `pythonRepr(${translateExpression(reprCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
+  const castCall = parseCallPrefix(trimmed, 'cast');
+  if (castCall !== null && castCall.rest === '') {
+    const args = splitTopLevelComma(castCall.argsText);
+    if (args.length === 2) {
+      const typeText = parsePythonStringExpression(args[0])?.content ?? args[0].trim();
+      const translated = translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const castType = tsCastTypeExpression(typeText);
+      return castType === 'PythonMapping' || castType === 'PythonSequence' ? `(${translated} as ${castType})` : translated;
+    }
   }
 
   const lenCall = parseCallPrefix(trimmed, 'len');
@@ -1138,14 +1180,6 @@ export function translateExpression(
     arrayNames.add(lenCall.argsText.trim());
     arrayNames.add(value);
     return `${value}.length`;
-  }
-
-  const castCall = parseCallPrefix(trimmed, 'cast');
-  if (castCall !== null && castCall.rest === '') {
-    const args = splitTopLevelComma(castCall.argsText);
-    if (args.length === 2) {
-      return translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
-    }
   }
 
   const stringCountCall = /^(.+)\.count\((.*)\)$/.exec(trimmed);
@@ -2643,12 +2677,74 @@ function topLevelSetIntersection(pythonExpression: string): { left: string; righ
   return splitTopLevelSpacedOperator(pythonExpression, '&');
 }
 
+function topLevelSetUnion(pythonExpression: string): { left: string; right: string } | null {
+  const union = splitTopLevelSpacedOperator(pythonExpression, '|');
+  if (union === null) {
+    return null;
+  }
+  const isSetExpression = (part: string): boolean => /^(?:set|frozenset)\(/.test(part.trim());
+  return isSetExpression(union.left) && isSetExpression(union.right) ? union : null;
+}
+
 function topLevelSetDifference(pythonExpression: string): { left: string; right: string } | null {
   const additive = splitTopLevelAdditive(pythonExpression);
   if (additive === null || additive.parts.length !== 2 || additive.operators[0] !== '-') {
     return null;
   }
   return { left: additive.parts[0], right: additive.parts[1] };
+}
+
+function translateIsinstancePredicate(value: string, pythonTypeExpression: string): string | null {
+  const trimmedType = pythonTypeExpression.trim();
+  const tupleType = /^\((.*)\)$/.exec(trimmedType);
+  if (tupleType !== null) {
+    const parts = [...new Set(splitTopLevelComma(tupleType[1])
+      .map((part) => translateIsinstancePredicate(value, part))
+      .filter((part): part is string => part !== null))];
+    return parts.length === 0 ? null : parts.length === 1 ? parts[0] : `(${parts.join(' || ')})`;
+  }
+  if (trimmedType === 'list' || trimmedType === 'tuple') {
+    return `Array.isArray(${value})`;
+  }
+  if (trimmedType === 'Sequence') {
+    return `pythonIsSequence(${value})`;
+  }
+  if (trimmedType === 'Mapping') {
+    return `pythonIsMapping(${value})`;
+  }
+  if (trimmedType === 'dict') {
+    return `typeof ${value} === 'object' && ${value} !== null && !Array.isArray(${value})`;
+  }
+  if (trimmedType === 'bool') {
+    return `typeof ${value} === 'boolean'`;
+  }
+  if (trimmedType === 'int') {
+    return `typeof ${value} === 'number' && Number.isInteger(${value})`;
+  }
+  if (trimmedType === 'float') {
+    return `typeof ${value} === 'number'`;
+  }
+  if (trimmedType === 'str') {
+    return `typeof ${value} === 'string'`;
+  }
+  if (trimmedType === 'bytes' || trimmedType === 'bytearray') {
+    return `${value} instanceof Uint8Array`;
+  }
+  if (trimmedType === 'memoryview') {
+    return `ArrayBuffer.isView(${value}) && !(${value} instanceof Uint8Array)`;
+  }
+  return null;
+}
+
+function tsCastTypeExpression(pythonTypeExpression: string): string | null {
+  const trimmed = pythonTypeExpression.trim();
+  if (/^Mapping\[/.test(trimmed)) {
+    return 'PythonMapping';
+  }
+  if (/^Sequence\[/.test(trimmed)) {
+    return 'PythonSequence';
+  }
+  return tsTypeExpression(trimmed);
 }
 
 function translateBooleanCast(

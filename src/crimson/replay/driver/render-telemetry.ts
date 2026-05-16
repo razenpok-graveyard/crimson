@@ -106,7 +106,7 @@ export class RenderTelemetrySession {
     profileHooks.clearPassStack();
     this._prevSink = profileHooks.setActiveSink(this._sink);
     for (let [fnName, apiName] of this.__INTERCEPT_APIS) {
-      const original = Reflect.get(rl, fnName) ?? null;
+      const original = Reflect.get((rl) as object, fnName) ?? null;
       if (original === null || !(typeof original === 'function')) {
         continue;
       }

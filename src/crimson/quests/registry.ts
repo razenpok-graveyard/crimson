@@ -8,6 +8,34 @@ import { QuestBuilder, QuestDefinition } from '@crimson/quests/types.ts';
 
 const quests: Map<string, QuestDefinition> = new Map();
 
+function pythonRepr(value: unknown): string {
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) {
+      return 'nan';
+    }
+    if (value === Infinity) {
+      return 'inf';
+    }
+    if (value === -Infinity) {
+      return '-inf';
+    }
+    return String(value);
+  }
+  if (typeof value === 'string') {
+    return JSON.stringify(value);
+  }
+  if (value === true) {
+    return 'True';
+  }
+  if (value === false) {
+    return 'False';
+  }
+  if (value === null) {
+    return 'None';
+  }
+  return String(value);
+}
+
 export function registerQuest(opts: { level: string; title: string; timeLimitMs: number; startWeaponId: WeaponId; unlockPerkId?: number | null; unlockWeaponId?: WeaponId | null; terrainSlots?: TerrainSlotTriplet | null }): (arg0: QuestBuilder) => QuestBuilder {
   const level = opts.level;
   const title = opts.title;
@@ -17,7 +45,7 @@ export function registerQuest(opts: { level: string; title: string; timeLimitMs:
   const unlockWeaponId = opts.unlockWeaponId ?? null;
   const terrainSlots = opts.terrainSlots ?? null;
   const _builderName = (builderFn: QuestBuilder): string => {
-    return String(builderFn.name || String(builderFn));
+    return String(builderFn.name || pythonRepr(builderFn));
   };
 
   const decorator = (builder: QuestBuilder): QuestBuilder => {

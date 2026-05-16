@@ -75,6 +75,7 @@ import {
   pythonJsonDumpsHelperStatements,
   pythonRoundHelperStatements,
   pythonReprHelperStatements,
+  pythonRuntimeIntrospectionHelperStatements,
   pythonSplitlinesHelperStatements,
   pythonStringCountHelperStatements,
   pythonTruthyHelperStatements,
@@ -838,6 +839,22 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   }
   if (moduleValueText.includes('pythonJsonDumps(')) {
     const helperStatements = pythonJsonDumpsHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
+  if (
+    moduleValueText.includes('pythonIsIdentifier(')
+    || moduleValueText.includes('pythonIsMapping(')
+    || moduleValueText.includes('pythonMapping')
+    || moduleValueText.includes('pythonIsSequence(')
+    || moduleValueText.includes('pythonTypeObject(')
+    || moduleValueText.includes('pythonTypeName(')
+    || moduleValueText.includes('PythonMapping')
+    || moduleValueText.includes('PythonSequence')
+  ) {
+    const helperStatements = pythonRuntimeIntrospectionHelperStatements();
     if (leadingStatements.length > 0) {
       helperStatements.push('');
     }

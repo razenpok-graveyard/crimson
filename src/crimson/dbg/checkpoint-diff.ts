@@ -38,20 +38,27 @@ function pythonEquals(left: object | string | number | boolean | null | undefine
   return false;
 }
 
-function pythonJsonDumps(value: object | string | number | boolean | null, opts: { sortKeys?: boolean; indent?: number } = {}): string {
-  const normalized = opts.sortKeys === true ? pythonSortJsonKeys(value) : value;
+function pythonJsonDumps(value: unknown, opts: { sortKeys?: boolean; indent?: number; defaultRepr?: boolean } = {}): string {
+  const normalized = pythonJsonValue(value, opts);
   return JSON.stringify(normalized, null, opts.indent ?? 0);
 }
 
-function pythonSortJsonKeys(value: object | string | number | boolean | null): object | string | number | boolean | null {
+function pythonJsonValue(value: unknown, opts: { sortKeys?: boolean; defaultRepr?: boolean }): object | string | number | boolean | null {
+  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return value;
+  }
   if (Array.isArray(value)) {
-    return value.map((item) => pythonSortJsonKeys(item));
+    return value.map((item) => pythonJsonValue(item, opts));
   }
-  if (value !== null && typeof value === 'object') {
-    const entries = Object.entries(value).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);
-    return Object.fromEntries(entries.map(([key, item]) => [key, pythonSortJsonKeys(item)]));
+  if (value instanceof Map) {
+    const entries = Array.from(value.entries(), ([key, item]) => [String(key), pythonJsonValue(item, opts)] as const);
+    return Object.fromEntries(opts.sortKeys === true ? entries.sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0) : entries);
   }
-  return value;
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, pythonJsonValue(item, opts)] as const);
+    return Object.fromEntries(opts.sortKeys === true ? entries.sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0) : entries);
+  }
+  return opts.defaultRepr === true ? String(value) : null;
 }
 
 export class ReplayDiffFailure {
@@ -126,7 +133,7 @@ export function checkpointDeepdiff(expected: ReplayCheckpoint, actual: ReplayChe
   }
 
   const payload = toBuiltinObject({ 'mismatches': mismatches }, { field: 'checkpoint_diff.payload' });
-  return new CheckpointDeepDiff({ payload: payload, pretty: pythonJsonDumps(payload, { sortKeys: true, indent: 2 }), diffCount: int(diffCount) });
+  return new CheckpointDeepDiff({ payload: payload, pretty: pythonJsonDumps(payload, { sortKeys: true, indent: 2, defaultRepr: true }), diffCount: int(diffCount) });
 }
 
 export function compareCheckpoints(expected: readonly ReplayCheckpoint[], actual: readonly ReplayCheckpoint[]): ReplayDiffResult {

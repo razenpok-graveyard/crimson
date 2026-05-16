@@ -33,6 +33,7 @@ import {
   objectNameMarker,
   pathArrayNameMarker,
   pathNameMarker,
+  pythonMappingNameMarker,
   rectangleNameMarker,
   receiverTypeNameMarker,
   setNameMarker,
@@ -3745,6 +3746,10 @@ function recordLocalAssignmentMarkers(
   if (assignedRight === '{}' || assignedRight.startsWith('{ ...')) {
     arrayNames.add(objectNameMarker(pythonName));
     arrayNames.add(objectNameMarker(tsName));
+  }
+  if (/\bas PythonMapping\)?$/.test(assignedRight)) {
+    arrayNames.add(pythonMappingNameMarker(pythonName));
+    arrayNames.add(pythonMappingNameMarker(tsName));
   }
   if (/^(?:[A-Za-z_$][A-Za-z0-9_$]*\.)?makeRectangle\(/.test(assignedRight)) {
     arrayNames.add(rectangleNameMarker(pythonName));

@@ -69,7 +69,7 @@ export function isCollectionsAbcTypeImport(trimmedLine: string): boolean {
   }
   return typeImport[1]
     .split(', ')
-    .every((name) => ['Callable', 'Iterable', 'Iterator', 'Sequence'].includes(name));
+    .every((name) => ['Callable', 'Iterable', 'Iterator', 'Mapping', 'Sequence'].includes(name));
 }
 
 export function isTypingOnlyImport(trimmedLine: string): boolean {
