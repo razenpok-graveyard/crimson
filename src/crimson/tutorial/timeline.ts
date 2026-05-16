@@ -1,23 +1,22 @@
 // Port of crimson/tutorial/timeline.py
 
 import { Vec2 } from '@grim/geom.ts';
-import { BonusId } from '@crimson/bonuses/ids.ts';
+import { BonusId } from '@crimson/bonuses/index.ts';
 import { SpawnId, SpawnTemplateCall, buildTutorialStage3FireSpawns, buildTutorialStage4ClearSpawns, buildTutorialStage5RepeatSpawns, buildTutorialStage6PerksDoneSpawns } from '@crimson/creatures/spawn.ts';
-import { TutorialState } from './state.ts';
+import type { TutorialState } from '@crimson/tutorial/state.ts';
 
-const _TUTORIAL_STAGE_TEXT: readonly string[] = [
-  "In this tutorial you'll learn how to play Crimsonland",
+export const TUTORIAL_STAGE_TEXT: readonly string[] = [
+  'In this tutorial you\'ll learn how to play Crimsonland',
   'First learn to move by pushing the arrow keys.',
   'Now pick up the bonuses by walking over them',
   'Now learn to shoot and move at the same time.\nClick the left Mouse button to shoot.',
   'Now, move the mouse to aim at the monsters',
   'It will help you to move and shoot at the same time. Just keep moving!',
-  "Now let's learn about Perks. You'll receive a perk when you gain enough experience points.",
+  'Now let\'s learn about Perks. You\'ll receive a perk when you gain enough experience points.',
   'Perks can give you extra abilities, or boost your skills. Choose wisely!',
   'Great! Now you are ready to start playing Crimsonland',
 ];
-
-const _TUTORIAL_HINT_TEXT: readonly string[] = [
+export const TUTORIAL_HINT_TEXT: readonly string[] = [
   'This is the speed powerup, it makes you move faster!',
   'This is a weapon powerup. Picking it up gives you a new weapon.',
   'This powerup doubles all experience points you gain while it\'s active.',
@@ -26,8 +25,7 @@ const _TUTORIAL_HINT_TEXT: readonly string[] = [
   '',
   '',
 ];
-
-const _TUTORIAL_HINT_TEXT_BUGS: readonly string[] = [
+export const TUTORIAL_HINT_TEXT_BUGS: readonly string[] = [
   'This is the speed powerup, it makes you move faster!',
   'This is a weapon powerup. Picking it you gets a new weapon.',
   'This powerup doubles all experience points you gain while it\'s active.',
@@ -37,19 +35,21 @@ const _TUTORIAL_HINT_TEXT_BUGS: readonly string[] = [
   '',
 ];
 
-
 export class BonusSpawnCall {
   readonly bonusId: BonusId;
   readonly amount: number;
   readonly pos: Vec2;
 
-  constructor(opts: { bonusId: BonusId; amount: number; pos: Vec2 }) {
+  constructor(opts: {
+    bonusId: BonusId;
+    amount: number;
+    pos: Vec2;
+  }) {
     this.bonusId = opts.bonusId;
     this.amount = opts.amount;
     this.pos = opts.pos;
   }
 }
-
 
 export class TutorialFrameActions {
   readonly promptText: string;
@@ -81,15 +81,12 @@ export class TutorialFrameActions {
     this.hintAlpha = opts.hintAlpha ?? 0.0;
     this.spawnTemplates = Array.from(opts.spawnTemplates ?? []);
     this.spawnBonuses = Array.from(opts.spawnBonuses ?? []);
-    this.stage5BonusCarrierDrop = opts.stage5BonusCarrierDrop === undefined || opts.stage5BonusCarrierDrop === null
-      ? null
-      : [opts.stage5BonusCarrierDrop[0], opts.stage5BonusCarrierDrop[1]];
+    this.stage5BonusCarrierDrop = opts.stage5BonusCarrierDrop ?? null;
     this.playLevelupSfx = opts.playLevelupSfx ?? false;
     this.forcePlayerHealth = opts.forcePlayerHealth ?? 100.0;
     this.forcePlayerExperience = opts.forcePlayerExperience ?? null;
   }
 }
-
 
 export function tutorialStage5BonusCarrierConfig(repeatSpawnCount: number): [BonusId, number] | null {
   // Return the (bonus_id, amount_override) applied to the stage-5 bonus carrier for this repeat count.
@@ -99,27 +96,36 @@ export function tutorialStage5BonusCarrierConfig(repeatSpawnCount: number): [Bon
   // - amount_override == -1 means "use the bonus meta default".
   // - For weapon bonuses, amount_override is the weapon id.
   const n = int(repeatSpawnCount);
-  if (n === 1) return [BonusId.SPEED, -1];
-  if (n === 2) return [BonusId.WEAPON, 5];
-  if (n === 3) return [BonusId.DOUBLE_EXPERIENCE, -1];
-  if (n === 4) return [BonusId.NUKE, -1];
-  if (n === 5) return [BonusId.REFLEX_BOOST, -1];
+  if (n === 1) {
+    return [BonusId.SPEED, -1];
+  }
+  if (n === 2) {
+    return [BonusId.WEAPON, 5];
+  }
+  if (n === 3) {
+    return [BonusId.DOUBLE_EXPERIENCE, -1];
+  }
+  if (n === 4) {
+    return [BonusId.NUKE, -1];
+  }
+  if (n === 5) {
+    return [BonusId.REFLEX_BOOST, -1];
+  }
   return null;
 }
 
-
-function _clamp01(value: number): number {
-  if (value <= 0.0) return 0.0;
-  if (value >= 1.0) return 1.0;
+function clamp01(value: number): number {
+  if (value <= 0.0) {
+    return 0.0;
+  }
+  if (value >= 1.0) {
+    return 1.0;
+  }
   return value;
 }
 
-
-function _tickStageTransition(
-  stageIndex: number,
-  transitionTimerMs: number,
-  frameDtMs: number,
-): [number, number] {
+function tickStageTransition(stageIndex: number, transitionTimerMs: number, opts: { frameDtMs: number }): [number, number] {
+  const frameDtMs = opts.frameDtMs;
   stageIndex = int(stageIndex);
   transitionTimerMs = int(transitionTimerMs);
   const dtMs = int(frameDtMs);
@@ -146,17 +152,21 @@ function _tickStageTransition(
   return [stageIndex, transitionTimerMs];
 }
 
+function promptAlpha(opts: { stageIndex: number; stageTimerMs: number; transitionTimerMs: number }): number {
+  let stageIndex = opts.stageIndex;
+  let stageTimerMs = opts.stageTimerMs;
+  let transitionTimerMs = opts.transitionTimerMs;
+  stageIndex = int(stageIndex);
+  stageTimerMs = int(stageTimerMs);
+  transitionTimerMs = int(transitionTimerMs);
 
-function _promptAlpha(opts: { stageIndex: number; stageTimerMs: number; transitionTimerMs: number }): number {
-  let stageIndex = int(opts.stageIndex);
-  let stageTimerMs = int(opts.stageTimerMs);
-  let transitionTimerMs = int(opts.transitionTimerMs);
-
-  if (stageIndex < 0) return 0.0;
+  if (stageIndex < 0) {
+    return 0.0;
+  }
 
   let alpha: number;
   if (transitionTimerMs < -1) {
-    alpha = (-transitionTimerMs) * 0.001;
+    alpha = -transitionTimerMs * 0.001;
   } else if (transitionTimerMs < 0) {
     alpha = 1.0;
   } else {
@@ -172,28 +182,18 @@ function _promptAlpha(opts: { stageIndex: number; stageTimerMs: number; transiti
     }
   }
 
-  return _clamp01(alpha);
+  return clamp01(alpha);
 }
 
-
-function _tickHint(
-  state: TutorialState,
-  frameDtMs: number,
-  hintBonusDied: boolean,
-): [SpawnTemplateCall[], string, number] {
+function tickHint(state: TutorialState, opts: { frameDtMs: number; hintBonusDied: boolean }): [SpawnTemplateCall[], string, number] {
+  const frameDtMs = opts.frameDtMs;
+  const hintBonusDied = opts.hintBonusDied;
   const hintSpawns: SpawnTemplateCall[] = [];
 
   if (!state.hintFadeIn && hintBonusDied) {
     state.hintFadeIn = true;
     state.hintIndex = int(state.hintIndex) + 1;
-    hintSpawns.push(
-      new SpawnTemplateCall({ templateId: SpawnId.ALIEN_CONST_GREEN_24, pos: new Vec2(128.0, 128.0), heading: 3.1415927 }),
-      new SpawnTemplateCall({
-        templateId: SpawnId.ALIEN_CONST_PALE_GREEN_26,
-        pos: new Vec2(152.0, 160.0),
-        heading: 3.1415927,
-      }),
-    );
+    hintSpawns.push(...[new SpawnTemplateCall({ templateId: SpawnId.ALIEN_CONST_GREEN_24, pos: new Vec2(128.0, 128.0), heading: 3.1415927 }), new SpawnTemplateCall({ templateId: SpawnId.ALIEN_CONST_PALE_GREEN_26, pos: new Vec2(152.0, 160.0), heading: 3.1415927 })]);
   }
 
   const delta = int(frameDtMs) * 3;
@@ -204,36 +204,14 @@ function _tickHint(
     state.hintAlpha = 1000;
   }
 
-  const hintTextTable = state.preserveBugs ? _TUTORIAL_HINT_TEXT_BUGS : _TUTORIAL_HINT_TEXT;
+  const hintTextTable = state.preserveBugs ? TUTORIAL_HINT_TEXT_BUGS : TUTORIAL_HINT_TEXT;
   const idx = int(state.hintIndex);
-  const text = (idx >= 0 && idx < hintTextTable.length) ? hintTextTable[idx] : '';
-  const alpha = text ? int(state.hintAlpha) * 0.001 : 0.0;
-  return [hintSpawns, text, _clamp01(alpha)];
+  const text = idx >= 0 && idx < hintTextTable.length ? hintTextTable[idx] : '';
+  const alpha = text ? state.hintAlpha * 0.001 : 0.0;
+  return [Array.from(hintSpawns), text, clamp01(alpha)];
 }
 
-
-function cloneState(s: TutorialState): TutorialState {
-  return new TutorialState({
-    stageIndex: s.stageIndex,
-    stageTimerMs: s.stageTimerMs,
-    stageTransitionTimerMs: s.stageTransitionTimerMs,
-    hintIndex: s.hintIndex,
-    hintAlpha: s.hintAlpha,
-    hintFadeIn: s.hintFadeIn,
-    repeatSpawnCount: s.repeatSpawnCount,
-    hintBonusCreatureRef: s.hintBonusCreatureRef,
-    preserveBugs: s.preserveBugs,
-    moveActiveThisTick: s.moveActiveThisTick,
-    fireActiveThisTick: s.fireActiveThisTick,
-    hintBonusAliveBeforeTick: s.hintBonusAliveBeforeTick,
-  });
-}
-
-
-export function tickTutorialTimeline(
-  stateIn: TutorialState,
-  opts: { frameDtMs: number; anyMoveActive: boolean; anyFireActive: boolean; creaturesNoneActive: boolean; bonusPoolEmpty: boolean; perkPendingCount: number; hintBonusDied?: boolean },
-): [TutorialState, TutorialFrameActions] {
+export function tickTutorialTimeline(state: TutorialState, opts: { frameDtMs: number; anyMoveActive: boolean; anyFireActive: boolean; creaturesNoneActive: boolean; bonusPoolEmpty: boolean; perkPendingCount: number; hintBonusDied?: boolean }): [TutorialState, TutorialFrameActions] {
   // Pure model of the tutorial director (`tutorial_timeline_update` / 0x00408990).
   //
   // Notes:
@@ -247,35 +225,29 @@ export function tickTutorialTimeline(
   const perkPendingCount = opts.perkPendingCount;
   const hintBonusDied = opts.hintBonusDied ?? false;
   const dtMs = int(frameDtMs);
-  const state = cloneState(stateIn);
+  state = (() => { const value = state; return new (value.constructor as new (opts: typeof value) => typeof value)({ ...value }); })();
   state.stageTimerMs = int(state.stageTimerMs) + dtMs;
 
-  const [stageIndex, transitionTimerMs] = _tickStageTransition(
-    state.stageIndex,
-    state.stageTransitionTimerMs,
-    dtMs,
-  );
+  const [stageIndex, transitionTimerMs] = tickStageTransition(state.stageIndex, state.stageTransitionTimerMs, { frameDtMs: dtMs });
   state.stageIndex = int(stageIndex);
   state.stageTransitionTimerMs = int(transitionTimerMs);
 
-  let basePromptText = (stageIndex >= 0 && stageIndex < _TUTORIAL_STAGE_TEXT.length)
-    ? _TUTORIAL_STAGE_TEXT[stageIndex]
-    : '';
-  let basePromptAlpha = _promptAlpha({ stageIndex, stageTimerMs: state.stageTimerMs, transitionTimerMs });
+  let promptText = stageIndex >= 0 && stageIndex < TUTORIAL_STAGE_TEXT.length ? TUTORIAL_STAGE_TEXT[stageIndex] : '';
+  let promptAlphaValue = promptAlpha({ stageIndex: stageIndex, stageTimerMs: state.stageTimerMs, transitionTimerMs: transitionTimerMs });
   if (stageIndex === 6 && int(perkPendingCount) < 1) {
-    basePromptText = '';
-    basePromptAlpha = 0.0;
+    promptText = '';
+    promptAlphaValue = 0.0;
   }
 
-  const [hintSpawns, hintText, hintAlphaVal] = _tickHint(state, dtMs, hintBonusDied);
+  const [hintSpawns, hintText, hintAlpha] = tickHint(state, { frameDtMs: dtMs, hintBonusDied: hintBonusDied });
 
-  const baseForceExperience = stageIndex !== 6 ? 0 : null;
+  const actions = new TutorialFrameActions({ promptText: promptText, promptAlpha: promptAlphaValue, hintText: hintText, hintAlpha: hintAlpha, spawnTemplates: hintSpawns, spawnBonuses: [], stage5BonusCarrierDrop: null, playLevelupSfx: false, forcePlayerHealth: 100.0, forcePlayerExperience: stageIndex !== 6 ? 0 : null });
 
-  const spawnTemplates: SpawnTemplateCall[] = [...hintSpawns];
+  const spawnTemplates: SpawnTemplateCall[] = Array.from(actions.spawnTemplates);
   const spawnBonuses: BonusSpawnCall[] = [];
   let playLevelupSfx = false;
   let stage5BonusCarrierDrop: [BonusId, number] | null = null;
-  let forceExperience = baseForceExperience;
+  let forceExperience = actions.forcePlayerExperience;
 
   if (stageIndex === 0) {
     if (state.stageTimerMs > 6000 && state.stageTransitionTimerMs === -1) {
@@ -288,11 +260,7 @@ export function tickTutorialTimeline(
     if (anyMoveActive && state.stageTransitionTimerMs === -1) {
       state.stageTransitionTimerMs = -1000;
       playLevelupSfx = true;
-      spawnBonuses.push(
-        new BonusSpawnCall({ bonusId: BonusId.POINTS, amount: 500, pos: new Vec2(260.0, 260.0) }),
-        new BonusSpawnCall({ bonusId: BonusId.POINTS, amount: 1000, pos: new Vec2(600.0, 400.0) }),
-        new BonusSpawnCall({ bonusId: BonusId.POINTS, amount: 500, pos: new Vec2(300.0, 400.0) }),
-      );
+      spawnBonuses.push(...[new BonusSpawnCall({ bonusId: BonusId.POINTS, amount: 500, pos: new Vec2(260.0, 260.0) }), new BonusSpawnCall({ bonusId: BonusId.POINTS, amount: 1000, pos: new Vec2(600.0, 400.0) }), new BonusSpawnCall({ bonusId: BonusId.POINTS, amount: 500, pos: new Vec2(300.0, 400.0) })]);
     }
   } else if (stageIndex === 2) {
     if (bonusPoolEmpty && state.stageTransitionTimerMs === -1) {
@@ -338,18 +306,5 @@ export function tickTutorialTimeline(
     }
   }
 
-  const actions = new TutorialFrameActions({
-    promptText: basePromptText,
-    promptAlpha: basePromptAlpha,
-    hintText,
-    hintAlpha: hintAlphaVal,
-    spawnTemplates,
-    spawnBonuses,
-    stage5BonusCarrierDrop,
-    playLevelupSfx,
-    forcePlayerHealth: 100.0,
-    forcePlayerExperience: forceExperience,
-  });
-
-  return [state, actions];
+  return [state, new TutorialFrameActions({ promptText: actions.promptText, promptAlpha: actions.promptAlpha, hintText: actions.hintText, hintAlpha: actions.hintAlpha, spawnTemplates: Array.from(spawnTemplates), spawnBonuses: Array.from(spawnBonuses), stage5BonusCarrierDrop: stage5BonusCarrierDrop, playLevelupSfx: playLevelupSfx, forcePlayerHealth: actions.forcePlayerHealth, forcePlayerExperience: forceExperience })];
 }

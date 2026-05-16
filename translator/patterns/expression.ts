@@ -2340,8 +2340,11 @@ export function translateExpression(
       if (/^__CRIMSON_STRING_\d+__$/.test(name)) {
         return name;
       }
+      if (fullText[offset - 1] === '.') {
+        return translatedDottedTokenMember(fullText, offset, name, nameMap) ?? tsMemberNameForPythonName(name);
+      }
       if (name.startsWith('_') && shouldPreservePrivateDottedToken(fullText, offset, name)) {
-        return translatedPrivateDottedTokenMember(fullText, offset, name, nameMap) ?? tsMemberNameForPythonName(name);
+        return translatedDottedTokenMember(fullText, offset, name, nameMap) ?? tsMemberNameForPythonName(name);
       }
       return translateIdentifierName(name, nameMap);
     });
@@ -2415,7 +2418,7 @@ function translatedMemberNameForReceiver(
   ) {
     return publicMember;
   }
-  return nameMap.get(pythonMember) ?? tsMemberNameForPythonName(pythonMember);
+  return tsMemberNameForPythonName(pythonMember);
 }
 
 function replaceKnownRectangleDimensions(tsExpression: string, arrayNames: Set<string>): string {
@@ -2451,7 +2454,7 @@ function shouldPreservePrivateDottedToken(fullText: string, offset: number, name
   return shouldPreservePrivateDottedName(`${receiverMatch[0]}.${name}`);
 }
 
-function translatedPrivateDottedTokenMember(
+function translatedDottedTokenMember(
   fullText: string,
   offset: number,
   name: string,
@@ -3887,6 +3890,10 @@ function parenthesizeForLogicalOr(value: string): string {
   return value.includes(' && ') && matchingCloseParen(value, 0) !== value.length - 1 ? `(${value})` : value;
 }
 
+function parenthesizeForAdditive(value: string): string {
+  return value.includes(' ? ') ? `(${value})` : value;
+}
+
 export function splitTopLevelLogicalOperator(value: string, operator: 'and' | 'or'): string[] | null {
   const parts: string[] = [];
   let start = 0;
@@ -3994,9 +4001,9 @@ function joinTranslatedAdditive(
   validatedTypeAliases: ReadonlySet<string>,
   mapNames: ReadonlySet<string>,
 ): string {
-  let output = translateExpression(additive.parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  let output = parenthesizeForAdditive(translateExpression(additive.parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames));
   for (let index = 0; index < additive.operators.length; index += 1) {
-    output += ` ${additive.operators[index]} ${translateExpression(additive.parts[index + 1], nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
+    output += ` ${additive.operators[index]} ${parenthesizeForAdditive(translateExpression(additive.parts[index + 1], nameMap, arrayNames, validatedTypeAliases, mapNames))}`;
   }
   return output;
 }
