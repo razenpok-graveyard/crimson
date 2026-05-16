@@ -592,6 +592,7 @@ export function translateExpression(
     if (mapNames.has(mapName)) {
       return `${mapName}.entries()`;
     }
+    return `Object.entries(${mapName})`;
   }
 
   const mappingConstantSubscript = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[(.+)\]$/.exec(trimmed);
@@ -613,6 +614,12 @@ export function translateExpression(
   const envComparison = /^os\.environ\.get\("([A-Za-z_][A-Za-z0-9_]*)"\) == "([^"]*)"$/.exec(trimmed);
   if (envComparison !== null) {
     return `typeof process !== 'undefined' && process.env?.${envComparison[1]} === '${envComparison[2]}'`;
+  }
+
+  const typeNameAttribute = /^type\((.+)\)\.__name__$/.exec(trimmed);
+  if (typeNameAttribute !== null) {
+    const value = translateExpression(typeNameAttribute[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return `((valueForType: unknown) => valueForType === null ? 'NoneType' : Array.isArray(valueForType) ? 'list' : valueForType instanceof Map ? 'dict' : typeof valueForType === 'boolean' ? 'bool' : typeof valueForType === 'number' ? Number.isInteger(valueForType) ? 'int' : 'float' : typeof valueForType === 'string' ? 'str' : typeof valueForType === 'object' ? 'dict' : typeof valueForType)(${value})`;
   }
 
   const structUnpackPackedFloat = /^struct\.unpack\("<f", struct\.pack\("<I", (.+)\)\)\[0\]$/.exec(trimmed);
@@ -671,6 +678,11 @@ export function translateExpression(
     }
   }
 
+  const msgspecToBuiltinsCall = parseCallPrefix(trimmed, 'msgspec.to_builtins');
+  if (msgspecToBuiltinsCall !== null && msgspecToBuiltinsCall.rest === '') {
+    return `structuredClone(${translateExpression(msgspecToBuiltinsCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
   const isinstanceSequence = /^isinstance\((.+), \((.+)\)\)$/.exec(trimmed);
   if (isinstanceSequence !== null) {
     const types = splitTopLevelComma(isinstanceSequence[2]);
@@ -681,6 +693,23 @@ export function translateExpression(
   const isinstanceSingleSequence = /^isinstance\((.+), (list|tuple)\)$/.exec(trimmed);
   if (isinstanceSingleSequence !== null) {
     return `Array.isArray(${translateExpression(isinstanceSingleSequence[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+  const isinstancePrimitive = /^isinstance\((.+), (bool|int|float|str|dict)\)$/.exec(trimmed);
+  if (isinstancePrimitive !== null) {
+    const value = translateExpression(isinstancePrimitive[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (isinstancePrimitive[2] === 'bool') {
+      return `typeof ${value} === 'boolean'`;
+    }
+    if (isinstancePrimitive[2] === 'int') {
+      return `typeof ${value} === 'number' && Number.isInteger(${value})`;
+    }
+    if (isinstancePrimitive[2] === 'float') {
+      return `typeof ${value} === 'number'`;
+    }
+    if (isinstancePrimitive[2] === 'str') {
+      return `typeof ${value} === 'string'`;
+    }
+    return `typeof ${value} === 'object' && ${value} !== null && !Array.isArray(${value})`;
   }
   const isinstancePath = /^isinstance\((.+), Path\)$/.exec(trimmed);
   if (isinstancePath !== null) {

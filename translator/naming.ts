@@ -53,6 +53,9 @@ export function tsTypeExpression(pythonType: string): string {
     if (dictType[1].trim() === 'str' && dictType[2].trim() === 'object') {
       return 'Record<string, unknown>';
     }
+    if (dictType[1].trim() === 'str' && dictType[2].trim() === 'BuiltinValue') {
+      return '{ [key: string]: BuiltinValue }';
+    }
     return `Map<${tsTypeExpression(dictType[1])}, ${tsTypeExpression(dictType[2])}>`;
   }
   const orderedDictType = /^OrderedDict\[([^,\]]+), (.+)\]$/.exec(trimmed);
