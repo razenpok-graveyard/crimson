@@ -947,6 +947,11 @@ export function translateExpression(
     return `${value} >= ${translateExpression(lowerBoundLengthComparison[1], nameMap, arrayNames, validatedTypeAliases)} && ${value} < ${translateExpression(lowerBoundLengthComparison[3], nameMap, arrayNames, validatedTypeAliases)}.length`;
   }
 
+  const chainedComparison = translateChainedComparison(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (chainedComparison !== null) {
+    return chainedComparison;
+  }
+
   const chainedLessEqualComparison = /^(.+?) <= (.+?) <= (.+)$/.exec(trimmed);
   if (chainedLessEqualComparison !== null) {
     const middle = translateExpression(chainedLessEqualComparison[2], nameMap, arrayNames, validatedTypeAliases);
@@ -1043,16 +1048,7 @@ export function translateExpression(
   if (binaryComparison !== null) {
     const left = translateExpression(binaryComparison[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
     const right = translateExpression(binaryComparison[3], nameMap, arrayNames, validatedTypeAliases, mapNames);
-    if ((binaryComparison[2] === '==' || binaryComparison[2] === '!=') && comparisonNeedsPythonEquality(left, right, arrayNames)) {
-      const equality = `pythonEquals(${left}, ${right})`;
-      return binaryComparison[2] === '==' ? equality : `!${equality}`;
-    }
-    const operator = binaryComparison[2] === '=='
-      ? '==='
-      : binaryComparison[2] === '!='
-        ? '!=='
-        : binaryComparison[2];
-    return `${left} ${operator} ${right}`;
+    return translateComparisonClause(left, binaryComparison[2], right, arrayNames);
   }
 
   const prefixSlice = /^(.+)\[:(.+)\]$/.exec(trimmed);
@@ -1238,6 +1234,42 @@ function translateIdentifierName(name: string, nameMap: Map<string, string>): st
     root,
     ...parts.slice(1).map((part) => nameMap.get(part) ?? tsExportNameForPythonName(part)),
   ].join('.');
+}
+
+function translateChainedComparison(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  const comparison = splitTopLevelComparisonOperators(pythonExpression);
+  if (comparison === null || comparison.operators.length < 2) {
+    return null;
+  }
+
+  const parts = comparison.parts.map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
+  return comparison.operators
+    .map((operator, index) => translateComparisonClause(parts[index], operator, parts[index + 1], arrayNames))
+    .join(' && ');
+}
+
+function translateComparisonClause(left: string, operator: string, right: string, arrayNames: ReadonlySet<string>): string {
+  if ((operator === '==' || operator === '!=') && comparisonNeedsPythonEquality(left, right, arrayNames)) {
+    const equality = `pythonEquals(${left}, ${right})`;
+    return operator === '==' ? equality : `!${equality}`;
+  }
+  return `${left} ${tsComparisonOperator(operator)} ${right}`;
+}
+
+function tsComparisonOperator(operator: string): string {
+  if (operator === '==') {
+    return '===';
+  }
+  if (operator === '!=') {
+    return '!==';
+  }
+  return operator;
 }
 
 function comparisonNeedsPythonEquality(left: string, right: string, arrayNames: ReadonlySet<string>): boolean {
@@ -2025,6 +2057,67 @@ function joinTranslatedAdditive(
     output += ` ${additive.operators[index]} ${translateExpression(additive.parts[index + 1], nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
   }
   return output;
+}
+
+function splitTopLevelComparisonOperators(value: string): { parts: string[]; operators: string[] } | null {
+  const parts: string[] = [];
+  const operators: string[] = [];
+  let start = 0;
+  let depth = 0;
+  let quote: string | null = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      if (char === quote && value[index - 1] !== '\\') {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char === ')' || char === ']' || char === '}') {
+      depth -= 1;
+      continue;
+    }
+    if (depth !== 0 || value[index - 1] !== ' ') {
+      continue;
+    }
+
+    const twoCharOperator = value.slice(index, index + 2);
+    const operator = ['<=', '>=', '==', '!='].includes(twoCharOperator) && value[index + 2] === ' '
+      ? twoCharOperator
+      : (char === '<' || char === '>') && value[index + 1] === ' '
+        ? char
+        : null;
+    if (operator === null) {
+      continue;
+    }
+
+    const part = value.slice(start, index - 1).trim();
+    if (part === '') {
+      return null;
+    }
+    parts.push(part);
+    operators.push(operator);
+    start = index + operator.length + 1;
+    index = start - 1;
+  }
+
+  if (operators.length === 0) {
+    return null;
+  }
+  const finalPart = value.slice(start).trim();
+  if (finalPart === '') {
+    return null;
+  }
+  parts.push(finalPart);
+  return { parts, operators };
 }
 
 function matchingCloseParen(value: string, openIndex: number): number | null {

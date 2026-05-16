@@ -41,19 +41,29 @@ export class OwnerRef {
 
   static fromLegacy(ownerId: number): OwnerRef {
     const legacy = int(ownerId);
-    if (legacy === LOCAL_PLAYER_OWNER_ID) return OwnerRef.fromLocalPlayer(0);
+    if (legacy === int(LOCAL_PLAYER_OWNER_ID)) {
+      return OwnerRef.fromLocalPlayer(0);
+    }
     if (legacy < 0) {
       const idx = -1 - legacy;
-      if (idx >= 0) return OwnerRef.fromPlayer(idx);
+      if (idx >= 0) {
+        return OwnerRef.fromPlayer(idx);
+      }
       return OwnerRef.none();
     }
     return OwnerRef.fromCreature(legacy);
   }
 
   toLegacy(): number {
-    if (this.kind === OwnerKind.NONE) return 0;
-    if (this.kind === OwnerKind.CREATURE) return int(this.index);
-    if (this.localHost && int(this.index) === 0) return int(LOCAL_PLAYER_OWNER_ID);
+    if (this.kind === OwnerKind.NONE) {
+      return 0;
+    }
+    if (this.kind === OwnerKind.CREATURE) {
+      return int(this.index);
+    }
+    if (this.localHost && int(this.index) === 0) {
+      return int(LOCAL_PLAYER_OWNER_ID);
+    }
     return -1 - int(this.index);
   }
 
@@ -62,26 +72,38 @@ export class OwnerRef {
   }
 
   playerIndex(): number | null {
-    if (this.kind !== OwnerKind.PLAYER) return null;
+    if (this.kind !== OwnerKind.PLAYER) {
+      return null;
+    }
     return int(this.index);
   }
 
   playerIndexInBounds(playerCount: number): number | null {
     const idx = this.playerIndex();
-    if (idx === null) return null;
-    if (idx >= 0 && idx < int(playerCount)) return int(idx);
+    if (idx === null) {
+      return null;
+    }
+    if (0 <= idx && idx < int(playerCount)) {
+      return int(idx);
+    }
     return null;
   }
 
   creatureIndex(): number | null {
-    if (this.kind !== OwnerKind.CREATURE) return null;
+    if (this.kind !== OwnerKind.CREATURE) {
+      return null;
+    }
     return int(this.index);
   }
 
   creatureIndexInBounds(creatureCount: number): number | null {
     const idx = this.creatureIndex();
-    if (idx === null) return null;
-    if (idx >= 0 && idx < int(creatureCount)) return int(idx);
+    if (idx === null) {
+      return null;
+    }
+    if (0 <= idx && idx < int(creatureCount)) {
+      return int(idx);
+    }
     return null;
   }
 }

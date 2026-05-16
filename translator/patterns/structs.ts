@@ -321,6 +321,7 @@ export function parseStructClass(
   const options = dataclass?.groups?.options ?? header.groups?.options ?? '';
   const readonlyFields = options.includes('frozen=True');
   const tagged = options.includes('tag=True');
+  const className = tsExportNameForPythonName(header[1]);
   let nextIndex = classIndex + 1;
 
   const docstring = parseIndentedDocstring(lines, nextIndex);
@@ -372,6 +373,16 @@ export function parseStructClass(
       continue;
     }
 
+    if (trimmedField === '@classmethod') {
+      const classMethod = parseStructMethod(lines, nextIndex + 1, true, arrayFieldNames, mapFieldNames, moduleNameMap, className);
+      if (classMethod === null) {
+        return null;
+      }
+      methods.push(classMethod.method);
+      nextIndex = classMethod.nextIndex;
+      continue;
+    }
+
     const method = parseStructMethod(lines, nextIndex, false, arrayFieldNames, mapFieldNames, moduleNameMap);
     if (method !== null) {
       if (method.method.name === '__post_init__') {
@@ -408,7 +419,7 @@ export function parseStructClass(
 
   return {
     structClass: {
-      name: tsExportNameForPythonName(header[1]),
+      name: className,
       docstring: docstring?.value ?? null,
       tagged,
       readonlyFields,
@@ -427,13 +438,19 @@ function parseStructMethod(
   initialArrayNames: ReadonlySet<string> = new Set(),
   initialMapNames: ReadonlySet<string> = new Set(),
   moduleNameMap: ReadonlyMap<string, string> = new Map(),
+  classBindingName: string | null = null,
 ): { method: SimpleModuleFunction; nextIndex: number } | null {
   const header = parseIndentedFunctionHeader(lines, index, '    ');
   if (header === null) {
     return null;
   }
   const parametersText = header.parametersText;
-  if (!staticMethod && parametersText !== 'self' && !parametersText.startsWith('self, ')) {
+  if (classBindingName === null && !staticMethod && parametersText !== 'self' && !parametersText.startsWith('self, ')) {
+    return null;
+  }
+  const parameterParts = parametersText === '' ? [] : splitTopLevelComma(parametersText);
+  const classReceiver = classBindingName === null ? null : parameterParts[0]?.match(/^([A-Za-z_][A-Za-z0-9_]*)(?:: .+)?$/)?.[1] ?? null;
+  if (classBindingName !== null && classReceiver === null) {
     return null;
   }
 
@@ -441,7 +458,9 @@ function parseStructMethod(
   const optsParams: OptionalFunctionParameter[] = [];
   const arrayNames = new Set<string>(initialArrayNames);
   const mapNames = new Set<string>(initialMapNames);
-  const extraParameters = staticMethod
+  const extraParameters = classBindingName !== null
+    ? parameterParts.slice(1).join(', ')
+    : staticMethod
     ? parametersText
     : parametersText === 'self' ? '' : parametersText.slice('self, '.length);
   let keywordOnly = false;
@@ -486,7 +505,15 @@ function parseStructMethod(
   }
 
   const statements: string[] = [];
-  const nameMap = staticMethod ? new Map(moduleNameMap) : new Map<string, string>([...moduleNameMap, ['self', 'this']]);
+  const nameMap = new Map<string, string>(moduleNameMap);
+  if (classBindingName !== null) {
+    if (classReceiver === null) {
+      return null;
+    }
+    nameMap.set(classReceiver, classBindingName);
+  } else if (!staticMethod) {
+    nameMap.set('self', 'this');
+  }
   const declaredNames = new Set<string>(pythonParameterNames(extraParameters));
   const reassignedNames = reassignedLocalNames(lines, header.nextIndex);
   let nextIndex = header.nextIndex;
