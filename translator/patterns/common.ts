@@ -367,6 +367,9 @@ export function inferPythonExpressionType(pythonExpression: string): string {
   if (/^(?:"[^"]*"|'[^']*')$/.test(trimmed)) {
     return 'string';
   }
+  if (/^[fF](?:"[^"]*"|'[^']*')$/.test(trimmed)) {
+    return 'string';
+  }
   if (/^(?:True|False)$/.test(trimmed)) {
     return 'boolean';
   }
@@ -419,6 +422,9 @@ export function inferPythonExpressionType(pythonExpression: string): string {
     return 'Vec2';
   }
   if (/\b(?:camera|focus|screen_size|screenSize)\b/.test(trimmed) && /\s(?:\+|-|\*)\s/.test(trimmed)) {
+    return 'Vec2';
+  }
+  if (/\bVec2\(/.test(trimmed) && /\s(?:\+|-)\s/.test(trimmed)) {
     return 'Vec2';
   }
   if (!/["'`]/.test(trimmed) && /\s(?:%|\*|\/\/|\/|-)\s/.test(trimmed)) {

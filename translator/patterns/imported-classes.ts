@@ -115,11 +115,18 @@ function importedInstanceMethodSignatures(classSource: string): { methodName: st
 }
 
 function importedClassFieldTypes(classSource: string): { name: string; typeExpression: string }[] {
-  return [...classSource.matchAll(/^\s+(?:readonly\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\??:\s*([^;=\n]+);/gm)]
-    .map((match) => ({
-      name: match[1],
-      typeExpression: match[2].trim(),
-    }));
+  return [
+    ...[...classSource.matchAll(/^\s+(?:(?:public|private|protected)\s+)?(?:readonly\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\??:\s*([^;=\n]+);/gm)]
+      .map((match) => ({
+        name: match[1],
+        typeExpression: match[2].trim(),
+      })),
+    ...[...classSource.matchAll(/^\s+get ([A-Za-z_$][A-Za-z0-9_$]*)\(\):\s*([^{\n]+)\s+\{/gm)]
+      .map((match) => ({
+        name: match[1],
+        typeExpression: match[2].trim(),
+      })),
+  ];
 }
 
 function importedStructConstructorFields(

@@ -319,6 +319,9 @@ function translateBoundMethodReference(
 
 function attributeNameLooksLikeCallbackMethod(pythonName: string): boolean {
   const normalized = pythonName.replace(/^_+/, '');
+  if (normalized.endsWith('_button')) {
+    return false;
+  }
   return /^(?:apply|build|consume|create|draw|handle|on|play|process|registry|reset|sync|update)(?:_|$)/.test(normalized);
 }
 
@@ -1993,6 +1996,14 @@ export function translateExpression(
     return `[${topLevelTupleParts.map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')}]`;
   }
 
+  const parenthesizedLeftFloorDivision = splitTopLevelFloorDivision(trimmed);
+  if (
+    parenthesizedLeftFloorDivision !== null
+    && parenthesizedLeftFloorDivision.left.trim().startsWith('(')
+  ) {
+    return `Math.floor(${translateExpression(parenthesizedLeftFloorDivision.left, nameMap, arrayNames, validatedTypeAliases, mapNames)} / ${translateExpression(parenthesizedLeftFloorDivision.right, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
   const additiveWithAggregateGenerator = splitTopLevelAdditive(trimmed);
   if (
     additiveWithAggregateGenerator !== null
@@ -2254,7 +2265,7 @@ export function translateExpression(
         return name;
       }
       if (name.startsWith('_') && shouldPreservePrivateDottedToken(fullText, offset, name)) {
-        return tsMemberNameForPythonName(name);
+        return translatedPrivateDottedTokenMember(fullText, offset, name, nameMap) ?? tsMemberNameForPythonName(name);
       }
       return translateIdentifierName(name, nameMap);
     });
@@ -2281,10 +2292,16 @@ function translateIdentifierName(name: string, nameMap: Map<string, string>): st
   }
   const parts = name.split('.');
   const root = nameMap.get(parts[0]) ?? tsExportNameForPythonName(parts[0]);
-  return [
-    root,
-    ...parts.slice(1).map((part) => nameMap.get(part) ?? tsMemberNameForPythonName(part)),
-  ].join('.');
+  let pythonReceiver = parts[0];
+  let tsReceiver = root;
+  const translated = [root];
+  for (const part of parts.slice(1)) {
+    const member = translatedMemberNameForReceiver(part, pythonReceiver, tsReceiver, nameMap);
+    translated.push(member);
+    pythonReceiver = `${pythonReceiver}.${part}`;
+    tsReceiver = `${tsReceiver}.${member}`;
+  }
+  return translated.join('.');
 }
 
 function translateIdentifierNamePreservingPrivateMembers(name: string, nameMap: Map<string, string>): string {
@@ -2293,10 +2310,36 @@ function translateIdentifierNamePreservingPrivateMembers(name: string, nameMap: 
   }
   const parts = name.split('.');
   const root = nameMap.get(parts[0]) ?? tsExportNameForPythonName(parts[0]);
-  return [
-    root,
-    ...parts.slice(1).map((part) => nameMap.get(part) ?? tsMemberNameForPythonName(part)),
-  ].join('.');
+  let pythonReceiver = parts[0];
+  let tsReceiver = root;
+  const translated = [root];
+  for (const part of parts.slice(1)) {
+    const member = translatedMemberNameForReceiver(part, pythonReceiver, tsReceiver, nameMap);
+    translated.push(member);
+    pythonReceiver = `${pythonReceiver}.${part}`;
+    tsReceiver = `${tsReceiver}.${member}`;
+  }
+  return translated.join('.');
+}
+
+function translatedMemberNameForReceiver(
+  pythonMember: string,
+  pythonReceiver: string,
+  tsReceiver: string,
+  nameMap: Map<string, string>,
+): string {
+  const publicMember = pythonMember.startsWith('_')
+    ? tsExportNameForPythonName(pythonMember.replace(/^_+/, ''))
+    : null;
+  const receiverType = nameMap.get(receiverTypeNameMarker(pythonReceiver)) ?? nameMap.get(receiverTypeNameMarker(tsReceiver));
+  if (
+    publicMember !== null
+    && receiverType !== undefined
+    && nameMap.has(classFieldTypeMarker(receiverType, publicMember))
+  ) {
+    return publicMember;
+  }
+  return nameMap.get(pythonMember) ?? tsMemberNameForPythonName(pythonMember);
 }
 
 function replaceKnownRectangleDimensions(tsExpression: string, arrayNames: Set<string>): string {
@@ -2330,6 +2373,22 @@ function shouldPreservePrivateDottedToken(fullText: string, offset: number, name
     return false;
   }
   return shouldPreservePrivateDottedName(`${receiverMatch[0]}.${name}`);
+}
+
+function translatedPrivateDottedTokenMember(
+  fullText: string,
+  offset: number,
+  name: string,
+  nameMap: Map<string, string>,
+): string | null {
+  const beforeMember = fullText.slice(0, offset - 1);
+  const receiverMatch = /[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/.exec(beforeMember);
+  if (receiverMatch === null) {
+    return null;
+  }
+  const pythonReceiver = receiverMatch[0];
+  const tsReceiver = translateIdentifierNamePreservingPrivateMembers(pythonReceiver, nameMap);
+  return translatedMemberNameForReceiver(name, pythonReceiver, tsReceiver, nameMap);
 }
 
 function tsMemberNameForPythonName(pythonName: string): string {

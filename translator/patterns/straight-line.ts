@@ -220,6 +220,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         return null;
       }
       imports.push(...typeCheckingImports.imports);
+      recordTypeCheckingImportClassFieldTypes(typeCheckingImports.imports, relativePath, moduleNameMap);
       index = typeCheckingImports.nextIndex;
       continue;
     }
@@ -536,6 +537,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         return null;
       }
       imports.push(...typeCheckingImports.imports);
+      recordTypeCheckingImportClassFieldTypes(typeCheckingImports.imports, relativePath, moduleNameMap);
       index = typeCheckingImports.nextIndex;
       continue;
     }
@@ -793,6 +795,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         return null;
       }
       imports.push(...typeCheckingImports.imports);
+      recordTypeCheckingImportClassFieldTypes(typeCheckingImports.imports, relativePath, moduleNameMap);
       index = typeCheckingImports.nextIndex;
       continue;
     }
@@ -1472,6 +1475,21 @@ function recordParameterReceiverTypes(
         arrayNames.add(objectNameMarker(tsExportNameForPythonName(parameter.name)));
       }
     }
+  }
+}
+
+function recordTypeCheckingImportClassFieldTypes(
+  imports: readonly ImportDefinition[],
+  relativePath: string,
+  moduleNameMap: Map<string, string>,
+): void {
+  for (const importDefinition of imports) {
+    recordImportedClassFieldTypes(
+      importDefinition.modulePath,
+      importDefinition.names.map((name) => ({ importedName: name, localName: name })),
+      relativePath,
+      moduleNameMap,
+    );
   }
 }
 

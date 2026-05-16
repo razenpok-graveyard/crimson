@@ -482,6 +482,58 @@ function predeclareLoopBlockAssignments(
   return declarations;
 }
 
+function predeclareMatchCaseAssignments(
+  lines: string[],
+  index: number,
+  indent: string,
+  declaredNames: Set<string>,
+  reassignedNames: Set<string>,
+  nameMap: ReadonlyMap<string, string>,
+): string[] {
+  const caseIndent = `${indent}    `;
+  const bodyIndent = `${caseIndent}    `;
+  const assignedTypes = new Map<string, Set<string>>();
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length) {
+    const line = lines[nextIndex] ?? '';
+    const trimmed = line.trim();
+    if (trimmed === '') {
+      nextIndex += 1;
+      continue;
+    }
+    if (!line.startsWith(caseIndent)) {
+      break;
+    }
+    if (/^case .+:$/.test(line.slice(caseIndent.length))) {
+      nextIndex += 1;
+      continue;
+    }
+    if (line.startsWith(bodyIndent)) {
+      const rest = line.slice(bodyIndent.length);
+      const assignment = rest.startsWith(' ') ? null : /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(rest);
+      if (assignment !== null && reassignedNames.has(assignment[1]) && !declaredNames.has(assignment[1])) {
+        const types = assignedTypes.get(assignment[1]) ?? new Set<string>();
+        types.add(inferPredeclaredAssignmentType(lines, nextIndex, bodyIndent, assignment[2], nameMap));
+        assignedTypes.set(assignment[1], types);
+      }
+      nextIndex += 1;
+      continue;
+    }
+    return [];
+  }
+
+  const declarations: string[] = [];
+  for (const [name, types] of assignedTypes) {
+    const concreteTypes = [...types].filter((type) => type !== 'any');
+    const candidateTypes = concreteTypes.length > 0 ? concreteTypes : [...types];
+    const uniqueTypes = [...new Set(candidateTypes)];
+    const type = uniqueTypes.length === 1 ? uniqueTypes[0] : uniqueTypes.join(' | ');
+    declarations.push(`let ${tsExportNameForPythonName(name)}: ${type};`);
+    declaredNames.add(name);
+  }
+  return declarations;
+}
+
 function nameReferencedAfterBlock(lines: string[], startIndex: number, indent: string, name: string): boolean {
   const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const referencePattern = new RegExp(`\\b${escapedName}\\b`);
@@ -1247,7 +1299,11 @@ export function translateStraightLineStatement(
 
     const caseIndent = `${indent}    `;
     const bodyIndent = `${caseIndent}    `;
-    const statements = [`switch (${translateExpression(matchStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`];
+    const branchDeclarations = predeclareMatchCaseAssignments(lines, index, indent, declaredNames, reassignedNames, nameMap);
+    const statements = [
+      ...branchDeclarations,
+      `switch (${translateExpression(matchStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`,
+    ];
     let nextIndex = index + 1;
     let sawCase = false;
 
@@ -1267,10 +1323,12 @@ export function translateStraightLineStatement(
         return null;
       }
       sawCase = true;
-      const translatedCase = caseStatement[1] === '_'
-        ? 'default'
-        : `case ${translateExpression(caseStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
-      statements.push(`  ${translatedCase}:${parsedCaseLine.comment === null ? '' : ` // ${parsedCaseLine.comment}`}`);
+      const translatedCases = caseStatement[1] === '_'
+        ? ['default']
+        : caseStatement[1].split(' | ').map((casePattern) => `case ${translateExpression(casePattern, nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
+      translatedCases.forEach((translatedCase, caseIndex) => {
+        statements.push(`  ${translatedCase}:${caseIndex === 0 && parsedCaseLine.comment !== null ? ` // ${parsedCaseLine.comment}` : ''}`);
+      });
 
       const caseStatements: string[] = [];
       nextIndex += 1;
