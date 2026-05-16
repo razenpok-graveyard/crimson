@@ -5,7 +5,7 @@ import type {
 } from '../model.js';
 import { tsExportNameForPythonName, tsTypeExpression } from '../naming.js';
 import { splitTopLevelComma } from './common.js';
-import { colorNameMarker, dateNameMarker, stringNameMarker, translateExpression } from './expression.js';
+import { colorNameMarker, dateNameMarker, stringNameMarker, translateExpression, vectorNameMarker } from './expression.js';
 
 export function parseFunctionParametersText(
   parametersText: string,
@@ -57,6 +57,11 @@ export function parseFunctionParameterText(
       const parameterName = tsExportNameForPythonName(typedParameter[1]);
       arrayNames.add(colorNameMarker(typedParameter[1]));
       arrayNames.add(colorNameMarker(parameterName));
+    }
+    if (typeExpression === 'Vec2') {
+      const parameterName = tsExportNameForPythonName(typedParameter[1]);
+      arrayNames.add(vectorNameMarker(typedParameter[1]));
+      arrayNames.add(vectorNameMarker(parameterName));
     }
     if (typeExpression === 'Date') {
       const parameterName = tsExportNameForPythonName(typedParameter[1]);

@@ -739,6 +739,15 @@ export function translateExpression(
     vectorAdditive !== null
     && vectorAdditive.parts.length === 2
     && vectorAdditive.operators[0] === '+'
+    && expressionIsKnownVector(vectorAdditive.parts[0], nameMap, arrayNames)
+    && expressionIsKnownVector(vectorAdditive.parts[1], nameMap, arrayNames)
+  ) {
+    return `${translateExpression(vectorAdditive.parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames)}.add(${translateExpression(vectorAdditive.parts[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+  if (
+    vectorAdditive !== null
+    && vectorAdditive.parts.length === 2
+    && vectorAdditive.operators[0] === '+'
     && expressionIsVectorScale(vectorAdditive.parts[1], nameMap, arrayNames)
   ) {
     return `${translateExpression(vectorAdditive.parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames)}.add(${translateExpression(vectorAdditive.parts[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
@@ -755,6 +764,14 @@ export function translateExpression(
   const vectorScale = splitTopLevelMultiplicative(trimmed);
   if (vectorScale !== null && expressionIsKnownVector(vectorScale.left, nameMap, arrayNames)) {
     return `${translateExpression(vectorScale.left, nameMap, arrayNames, validatedTypeAliases, mapNames)}.mul(${translateExpression(stripBalancedOuterParens(vectorScale.right), nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
+  const parenthesizedVectorMethod = parseParenthesizedVectorMethodCall(trimmed);
+  if (parenthesizedVectorMethod !== null) {
+    const receiver = translateExpression(parenthesizedVectorMethod.receiver, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (expressionIsKnownVector(parenthesizedVectorMethod.receiver, nameMap, arrayNames) || translatedExpressionLooksVector(receiver)) {
+      return `${receiver}.${tsExportNameForPythonName(parenthesizedVectorMethod.method)}(${parenthesizedVectorMethod.args.map((arg) => translateCallArgumentExpression(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;
+    }
   }
 
   const multiplicativeWithFloorDivision = splitTopLevelMultiplicative(trimmed);
@@ -1744,7 +1761,7 @@ function expressionIsKnownVector(
 }
 
 function finalVectorMethodCall(tsExpression: string): boolean {
-  const vectorMethods = new Set(['add', 'sub', 'mul', 'rotated']);
+  const vectorMethods = new Set(['add', 'sub', 'mul', 'rotated', 'mulComponents', 'divComponents', 'mul_components', 'div_components']);
   const methodPattern = /\.([A-Za-z_$][A-Za-z0-9_$]*)\(/g;
   let lastMatch: RegExpExecArray | null = null;
   let match: RegExpExecArray | null;
@@ -1756,6 +1773,25 @@ function finalVectorMethodCall(tsExpression: string): boolean {
   }
   const openIndex = lastMatch.index + lastMatch[0].length - 1;
   return matchingCloseParen(tsExpression, openIndex) === tsExpression.length - 1;
+}
+
+function parseParenthesizedVectorMethodCall(value: string): { receiver: string; method: string; args: string[] } | null {
+  if (!value.startsWith('(')) {
+    return null;
+  }
+  const closeIndex = matchingCloseParen(value, 0);
+  if (closeIndex === null || value[closeIndex + 1] !== '.') {
+    return null;
+  }
+  const methodCall = /^\.([A-Za-z_][A-Za-z0-9_]*)\((.*)\)$/.exec(value.slice(closeIndex + 1));
+  if (methodCall === null) {
+    return null;
+  }
+  return {
+    receiver: value.slice(1, closeIndex),
+    method: methodCall[1],
+    args: splitTopLevelComma(methodCall[2]),
+  };
 }
 
 function splitTopLevelMultiplicative(value: string): { left: string; right: string } | null {
