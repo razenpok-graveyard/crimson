@@ -11,6 +11,8 @@ import {
   dateNameMarker,
   functionReturnTypeMarker,
   instanceMethodSignatureMarker,
+  mapValueMapNameMarker,
+  mapValueTypeMarker,
   nullableNameMarker,
   objectNameMarker,
   pathNameMarker,
@@ -37,6 +39,8 @@ export {
   dateNameMarker,
   functionReturnTypeMarker,
   instanceMethodSignatureMarker,
+  mapValueMapNameMarker,
+  mapValueTypeMarker,
   nullableNameMarker,
   numberArrayNameMarker,
   objectNameMarker,
@@ -266,6 +270,28 @@ function translateCallCalleeExpression(
   return translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases)
     .replace(/\.append$/, '.push')
     .replace(/\.extend$/, '.push');
+}
+
+function translateMapDefaultExpression(
+  pythonExpression: string,
+  pythonMapExpression: string,
+  tsMapExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string {
+  if (
+    pythonExpression.trim() === '{}'
+    && (
+      mapNames.has(mapValueMapNameMarker(pythonMapExpression))
+      || mapNames.has(mapValueMapNameMarker(tsMapExpression))
+    )
+  ) {
+    const valueType = nameMap.get(mapValueTypeMarker(pythonMapExpression)) ?? nameMap.get(mapValueTypeMarker(tsMapExpression));
+    return valueType?.startsWith('Map<') === true ? `new ${valueType}()` : 'new Map()';
+  }
+  return translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
 }
 
 function translateBoundMethodReference(
@@ -1176,7 +1202,8 @@ export function translateExpression(
           : `${iterable}.filter((${itemName}) => ${translateExpression(generator.condition!, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
         return `${filtered}.map((${itemName}) => ${translateExpression(generator.expression, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
       }
-      return `Array.from(${translateExpression(argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+      const source = translateExpression(argsText, nameMap, arrayNames, validatedTypeAliases, mapNames);
+      return mapNames.has(source) ? `Array.from(${source}.keys())` : `Array.from(${source})`;
     }
   }
 
@@ -1494,7 +1521,20 @@ export function translateExpression(
       const value = inlineMap === null && (arrayNames.has(objectNameMarker(earlyDictGet[1])) || arrayNames.has(objectNameMarker(mapName)))
         ? `${mapName}[${key}]`
         : `${mapName}.get(${key})`;
-      return parts.length === 1 ? `${value} ?? null` : `${value} ?? ${translateExpression(parts[1], nameMap, arrayNames, validatedTypeAliases)}`;
+      return parts.length === 1 ? `${value} ?? null` : `${value} ?? ${translateMapDefaultExpression(parts[1], earlyDictGet[1], mapName, nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
+    }
+  }
+
+  const dictSetdefault = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.setdefault\((.*)\)$/.exec(trimmed);
+  if (dictSetdefault !== null) {
+    const parts = splitTopLevelComma(dictSetdefault[2]);
+    if (parts.length === 2) {
+      const mapName = translateExpression(dictSetdefault[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      if (mapNames.has(mapName)) {
+        const key = translateMapKeyExpression(mapName, translateExpression(parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames), mapNames);
+        const value = translateMapDefaultExpression(parts[1], dictSetdefault[1], mapName, nameMap, arrayNames, validatedTypeAliases, mapNames);
+        return `mapGetOrInit(${mapName}, ${key}, () => ${value})`;
+      }
     }
   }
 
@@ -1614,7 +1654,7 @@ export function translateExpression(
       const value = inlineMap === null && (arrayNames.has(objectNameMarker(dictGet[1])) || arrayNames.has(objectNameMarker(mapName)))
         ? `${mapName}[${key}]`
         : `${mapName}.get(${key})`;
-      return parts.length === 1 ? `${value} ?? null` : `${value} ?? ${translateExpression(parts[1], nameMap, arrayNames, validatedTypeAliases)}`;
+      return parts.length === 1 ? `${value} ?? null` : `${value} ?? ${translateMapDefaultExpression(parts[1], dictGet[1], mapName, nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
     }
   }
 

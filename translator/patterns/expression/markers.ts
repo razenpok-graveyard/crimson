@@ -54,6 +54,14 @@ export function arrayValueMapNameMarker(name: string): string {
   return `__array_value_map__:${name}`;
 }
 
+export function mapValueMapNameMarker(name: string): string {
+  return `__map_value_map__:${name}`;
+}
+
+export function mapValueTypeMarker(name: string): string {
+  return `__map_value_type__:${name}`;
+}
+
 export function numberArrayNameMarker(name: string): string {
   return `__number_array__:${name}`;
 }

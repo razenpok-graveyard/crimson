@@ -28,6 +28,8 @@ import {
 import {
   arrayValueMapNameMarker,
   functionReturnTypeMarker,
+  mapValueMapNameMarker,
+  mapValueTypeMarker,
   receiverTypeNameMarker,
   translateExpression,
   tupleElementArrayNameMarker,
@@ -576,6 +578,11 @@ export function parseStructClass(
     if (typeExpression.startsWith('Map<')) {
       mapFieldNames.add(`self.${field[1]}`);
       mapFieldNames.add(`this.${fieldName}`);
+      const mapValueType = pythonMapValueTypeExpression(field[2], tupleTypeAliases);
+      if (mapValueType !== null) {
+        classNameMap.set(mapValueTypeMarker(`self.${field[1]}`), mapValueType);
+        classNameMap.set(mapValueTypeMarker(`this.${fieldName}`), mapValueType);
+      }
       if (pythonMapTypeHasTupleKey(field[2], tupleTypeAliases)) {
         mapFieldNames.add(tupleKeyMapNameMarker(`self.${field[1]}`));
         mapFieldNames.add(tupleKeyMapNameMarker(`this.${fieldName}`));
@@ -583,6 +590,10 @@ export function parseStructClass(
       if (pythonMapValueIsList(field[2])) {
         mapFieldNames.add(arrayValueMapNameMarker(`self.${field[1]}`));
         mapFieldNames.add(arrayValueMapNameMarker(`this.${fieldName}`));
+      }
+      if (pythonMapValueIsMap(field[2])) {
+        mapFieldNames.add(mapValueMapNameMarker(`self.${field[1]}`));
+        mapFieldNames.add(mapValueMapNameMarker(`this.${fieldName}`));
       }
     }
     fields.push({
@@ -847,6 +858,7 @@ function parseStructMethod(
   const optsParams: OptionalFunctionParameter[] = [];
   const arrayNames = new Set<string>(initialArrayNames);
   const mapNames = new Set<string>(initialMapNames);
+  const mapValueTypes: Array<[string, string]> = [];
   const extraParameters = classBindingName !== null
     ? parameterParts.slice(1).join(', ')
     : staticMethod
@@ -882,6 +894,19 @@ function parseStructMethod(
             mapNames.add(arrayValueMapNameMarker(pythonParameterName));
           }
         }
+        if (parameterType !== null && pythonMapValueIsMap(parameterType)) {
+          mapNames.add(mapValueMapNameMarker(parsedParameter.name));
+          if (pythonParameterName !== null) {
+            mapNames.add(mapValueMapNameMarker(pythonParameterName));
+          }
+        }
+        const mapValueType = parameterType === null ? null : pythonMapValueTypeExpression(parameterType);
+        if (mapValueType !== null) {
+          mapValueTypes.push([parsedParameter.name, mapValueType]);
+          if (pythonParameterName !== null) {
+            mapValueTypes.push([pythonParameterName, mapValueType]);
+          }
+        }
       }
       if (keywordOnly) {
         optsParams.push({
@@ -896,6 +921,9 @@ function parseStructMethod(
 
   const statements: string[] = [];
   const nameMap = new Map<string, string>(moduleNameMap);
+  for (const [mapName, valueType] of mapValueTypes) {
+    nameMap.set(mapValueTypeMarker(mapName), valueType);
+  }
   if (classBindingName !== null) {
     if (classReceiver === null) {
       return null;
@@ -991,6 +1019,15 @@ function pythonMapKeyHasTupleIdentity(pythonType: string, tupleTypeAliases: Read
 
 function pythonMapValueIsList(pythonType: string): boolean {
   return pythonMapTypeArgs(pythonType)?.[1]?.trim().startsWith('list[') === true;
+}
+
+function pythonMapValueIsMap(pythonType: string): boolean {
+  return pythonMapTypeArgs(pythonType)?.[1]?.trim().startsWith('dict[') === true;
+}
+
+function pythonMapValueTypeExpression(pythonType: string, tupleTypeAliases: ReadonlySet<string> = new Set()): string | null {
+  const valueType = pythonMapTypeArgs(pythonType)?.[1];
+  return valueType === undefined ? null : tsStructFieldType(valueType, tupleTypeAliases);
 }
 
 function pythonListElementCanBeTuple(pythonType: string): boolean {
