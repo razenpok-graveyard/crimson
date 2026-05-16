@@ -55,6 +55,14 @@ export function tsTypeExpression(pythonType: string): string {
     }
     return `Map<${tsTypeExpression(dictType[1])}, ${tsTypeExpression(dictType[2])}>`;
   }
+  const orderedDictType = /^OrderedDict\[([^,\]]+), (.+)\]$/.exec(trimmed);
+  if (orderedDictType !== null) {
+    return `Map<${tsTypeExpression(orderedDictType[1])}, ${tsTypeExpression(orderedDictType[2])}>`;
+  }
+  const runtimeType = /^type\[(.+)\]$/.exec(trimmed);
+  if (runtimeType !== null) {
+    return `new (...args: any[]) => ${tsTypeExpression(runtimeType[1])}`;
+  }
   const setType = /^set\[(.+)\]$/.exec(trimmed);
   if (setType !== null) {
     return `Set<${tsTypeExpression(setType[1])}>`;
@@ -82,6 +90,10 @@ export function tsTypeExpression(pythonType: string): string {
   const iteratorType = /^Iterator\[(.+)\]$/.exec(trimmed);
   if (iteratorType !== null) {
     return `IterableIterator<${tsTypeExpression(iteratorType[1])}>`;
+  }
+  const genericType = /^([A-Z][A-Za-z0-9_]*)\[(.+)\]$/.exec(trimmed);
+  if (genericType !== null) {
+    return `${tsExportNameForPythonName(genericType[1])}<${genericType[2].split(topLevelCommaPattern()).map(tsTypeExpression).join(', ')}>`;
   }
   if (trimmed === 'None') {
     return 'void';
@@ -112,6 +124,12 @@ export function tsTypeExpression(pythonType: string): string {
   }
   if (trimmed === 'object') {
     return 'unknown';
+  }
+  if (trimmed === 'msgspec.msgpack.Encoder') {
+    return 'MsgpackEncoder';
+  }
+  if (trimmed === 'msgspec.msgpack.Decoder') {
+    return 'MsgpackDecoder<any>';
   }
   if (/^_+[A-Z][A-Z0-9_]*$/.test(trimmed)) {
     return tsPublicNameForPythonName(trimmed);

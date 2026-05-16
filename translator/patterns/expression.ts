@@ -859,6 +859,20 @@ export function translateExpression(
     }
   }
 
+  const earlyDictGet = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*|\{[\s\S]+\})\.get\((.*)\)$/.exec(trimmed);
+  if (earlyDictGet !== null) {
+    const parts = splitTopLevelComma(earlyDictGet[2]);
+    if (parts.length === 1 || parts.length === 2) {
+      const inlineMap = translateInlineDictMapExpression(earlyDictGet[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const mapName = inlineMap ?? translateExpression(earlyDictGet[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const key = translateMapKeyExpression(mapName, translateExpression(parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames));
+      const value = inlineMap === null && (arrayNames.has(objectNameMarker(earlyDictGet[1])) || arrayNames.has(objectNameMarker(mapName)))
+        ? `${mapName}[${key}]`
+        : `${mapName}.get(${key})`;
+      return parts.length === 1 ? `${value} ?? null` : `${value} ?? ${translateExpression(parts[1], nameMap, arrayNames, validatedTypeAliases)}`;
+    }
+  }
+
   const privateDottedPositionalCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\._[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\((.*)\)$/.exec(trimmed);
   if (privateDottedPositionalCall !== null && shouldPreservePrivateDottedName(privateDottedPositionalCall[1])) {
     const args = splitTopLevelComma(privateDottedPositionalCall[2]);
@@ -909,6 +923,27 @@ export function translateExpression(
 
   if (trimmed === 'Lock()') {
     return 'null';
+  }
+
+  if (trimmed === 'OrderedDict()') {
+    return 'new Map()';
+  }
+
+  const msgpackEncoderCall = parseCallPrefix(trimmed, 'msgspec.msgpack.Encoder');
+  if (msgpackEncoderCall !== null && msgpackEncoderCall.rest === '') {
+    return 'new MsgpackEncoder()';
+  }
+
+  const msgpackDecoderCall = parseCallPrefix(trimmed, 'msgspec.msgpack.Decoder');
+  if (msgpackDecoderCall !== null && msgpackDecoderCall.rest === '') {
+    const args = splitTopLevelComma(msgpackDecoderCall.argsText);
+    const typeArg = args
+      .map((arg) => /^type=(.+)$/.exec(arg))
+      .find((match): match is RegExpExecArray => match !== null);
+    const typeExpression = typeArg === undefined
+      ? 'undefined'
+      : translateExpression(typeArg[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return `new MsgpackDecoder({ type: ${typeExpression} })`;
   }
 
   const zeroArgConstructor = /^([A-Z][A-Za-z0-9_]*)\(\)$/.exec(trimmed);

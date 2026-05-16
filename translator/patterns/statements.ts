@@ -1661,10 +1661,30 @@ export function translateStraightLineStatement(
     }
     const dictPopDefaultNone = /^(.+)\.pop\((.+), None\)$/.exec(callStatement[1]);
     if (dictPopDefaultNone !== null) {
+      const mapName = translateExpression(dictPopDefaultNone[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      if (mapNames.has(mapName)) {
+        return {
+          statements: [`${mapName}.delete(${translateMapKeyExpression(mapName, translateExpression(dictPopDefaultNone[2], nameMap, arrayNames, validatedTypeAliases, mapNames))});`],
+          nextIndex: index + 1,
+        };
+      }
       return {
-        statements: [`delete ${translateExpression(dictPopDefaultNone[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}[${translateExpression(dictPopDefaultNone[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}];`],
+        statements: [`delete ${mapName}[${translateExpression(dictPopDefaultNone[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}];`],
         nextIndex: index + 1,
       };
+    }
+    const moveToEndCall = /^(.+)\.move_to_end\((.*)\)$/.exec(callStatement[1]);
+    if (moveToEndCall !== null) {
+      const args = splitTopLevelComma(moveToEndCall[2]);
+      if (args.length >= 1 && args.length <= 2) {
+        const mapName = translateExpression(moveToEndCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+        const key = translateMapKeyExpression(mapName, translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames));
+        const lastArg = args[1] === undefined ? 'true' : /^last=(.+)$/.exec(args[1])?.[1] ?? args[1];
+        return {
+          statements: [`mapMoveToEnd(${mapName}, ${key}, ${translateExpression(lastArg, nameMap, arrayNames, validatedTypeAliases, mapNames)});`],
+          nextIndex: index + 1,
+        };
+      }
     }
     const superMethodCall = /^super\(\)\.([A-Za-z_][A-Za-z0-9_]*)\((.*)\)$/.exec(callStatement[1]);
     if (superMethodCall !== null) {

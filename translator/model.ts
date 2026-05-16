@@ -138,6 +138,7 @@ export interface StructClassDefinition {
   docstring: string | null;
   tagged: boolean;
   readonlyFields: boolean;
+  typeParams?: string[];
   fields: StructFieldDefinition[];
   postInitStatements: string[];
   methods: SimpleModuleFunction[];

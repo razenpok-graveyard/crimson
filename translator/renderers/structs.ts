@@ -69,7 +69,10 @@ export function renderStructClasses(lines: string[], classes: StructModule['clas
         lines.push(line === '' ? '//' : `// ${line}`);
       }
     }
-    lines.push(`export class ${structClass.name} {`);
+    const typeParams = structClass.typeParams === undefined || structClass.typeParams.length === 0
+      ? ''
+      : `<${structClass.typeParams.join(', ')}>`;
+    lines.push(`export class ${structClass.name}${typeParams} {`);
     if (structClass.tagged) {
       lines.push(`  readonly tag = '${structClass.name}';`);
     }

@@ -72,6 +72,7 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
     if (
       isCollectionsAbcTypeImport(trimmed)
       || isTypingOnlyImport(trimmed)
+      || trimmed === 'from collections import OrderedDict'
       || trimmed === 'from pathlib import Path'
       || isDataclassImport(trimmed)
     ) {
@@ -343,6 +344,10 @@ export function parseStructClass(
   const options = dataclass?.groups?.options ?? header.groups?.options ?? '';
   const readonlyFields = options.includes('frozen=True');
   const tagged = options.includes('tag=True');
+  const genericBase = /(?:^|, )Generic\[([^\]]+)\]/.exec(options);
+  const typeParams = genericBase === null
+    ? undefined
+    : genericBase[1].split(', ').map(tsExportNameForPythonName);
   const className = tsExportNameForPythonName(header[1]);
   let nextIndex = classIndex + 1;
 
@@ -445,6 +450,7 @@ export function parseStructClass(
       docstring: docstring?.value ?? null,
       tagged,
       readonlyFields,
+      typeParams,
       fields,
       postInitStatements,
       methods,
@@ -1002,6 +1008,9 @@ function tsStructFieldDefaultValue(pythonValue: string): string | null {
   if (trimmed === 'msgspec.field(default_factory=dict)') {
     return 'new Map()';
   }
+  if (trimmed === 'msgspec.field(default_factory=OrderedDict)') {
+    return 'new Map()';
+  }
 
   const dataclassFactory = /^field\(default_factory=([A-Za-z_][A-Za-z0-9_]*)\)$/.exec(trimmed);
   if (dataclassFactory !== null) {
@@ -1028,7 +1037,7 @@ function tsStructFieldDefaultValue(pythonValue: string): string | null {
     return `new ${tsExportNameForPythonName(zeroArgConstructor[1])}()`;
   }
 
-  if (/^cast\([A-Za-z_][A-Za-z0-9_]*(?:\[[^\]]+\])?, None\)$/.test(trimmed)) {
+  if (/^cast\([^,]+, None\)$/.test(trimmed)) {
     return 'undefined!';
   }
 
