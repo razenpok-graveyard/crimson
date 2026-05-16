@@ -459,7 +459,13 @@ function parseNestedFunctionStatement(
   }
 
   const arrayNames = new Set<string>(outerArrayNames);
-  const parsedParams = parseFunctionParametersText(header.parametersText, arrayNames);
+  const parsedParams = parseNestedFunctionParameters(
+    header.parametersText,
+    arrayNames,
+    outerNameMap,
+    validatedTypeAliases,
+    mapNames,
+  );
   if (parsedParams === null) {
     return null;
   }
@@ -467,25 +473,13 @@ function parseNestedFunctionStatement(
   const functionName = tsLocalFunctionNameForPythonName(header.name);
   outerNameMap.set(header.name, functionName);
 
-  const prologue: string[] = [];
-  const params = parsedParams.parameters.map(renderInlineParameter);
-  if (parsedParams.optsParams.length > 0) {
-    const optsType = parsedParams.optsParams
-      .map((param) => `${param.name}${param.defaultValue === null ? '' : '?'}: ${param.typeExpression}`)
-      .join('; ');
-    const allOptsHaveDefaults = parsedParams.optsParams.every((param) => param.defaultValue !== null);
-    params.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
-    for (const param of parsedParams.optsParams) {
-      prologue.push(param.defaultValue === null
-        ? `const ${param.name} = opts.${param.name};`
-        : `const ${param.name} = opts.${param.name} ?? ${param.defaultValue};`);
-    }
-  }
-
   const nestedNameMap = new Map(outerNameMap);
   nestedNameMap.set(header.name, functionName);
+  for (const [pythonName, tsName] of parsedParams.nameBindings) {
+    nestedNameMap.set(pythonName, tsName);
+  }
   const statements: string[] = [];
-  const declaredNames = new Set<string>(pythonParameterNames(header.parametersText));
+  const declaredNames = parsedParams.declaredNames;
   const reassignedNames = reassignedLocalNames(lines, header.nextIndex);
   const innerIndent = `${indent}    `;
   let nextIndex = header.nextIndex;
@@ -518,12 +512,142 @@ function parseNestedFunctionStatement(
   const returnType = tsFunctionReturnTypeExpression(header.returnType);
   return {
     statements: [
-      `${async ? 'async ' : ''}function ${functionName}(${params.join(', ')}): ${async ? `Promise<${returnType}>` : returnType} {`,
-      ...[...prologue, ...statements].map(indentStatementLine),
-      '}',
+      `const ${functionName} = ${async ? 'async ' : ''}(${parsedParams.params.join(', ')}): ${async ? `Promise<${returnType}>` : returnType} => {`,
+      ...[...parsedParams.prologue, ...statements].map(indentStatementLine),
+      '};',
     ],
     nextIndex,
   };
+}
+
+function parseNestedFunctionParameters(
+  parametersText: string,
+  arrayNames: Set<string>,
+  nameMap: Map<string, string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): {
+  params: string[];
+  prologue: string[];
+  declaredNames: Set<string>;
+  nameBindings: Map<string, string>;
+} | null {
+  const parameterParts = parametersText === '' ? [] : splitTopLevelComma(parametersText);
+  const hasVariadicArgs = parameterParts.some((part) => /^\*[A-Za-z_][A-Za-z0-9_]*/.test(part.trim()));
+  if (!hasVariadicArgs) {
+    const parsedParams = parseFunctionParametersText(parametersText, arrayNames);
+    if (parsedParams === null) {
+      return null;
+    }
+    const prologue: string[] = [];
+    const params = parsedParams.parameters.map(renderInlineParameter);
+    if (parsedParams.optsParams.length > 0) {
+      const optsType = parsedParams.optsParams
+        .map((param) => `${param.name}${param.defaultValue === null ? '' : '?'}: ${param.typeExpression}`)
+        .join('; ');
+      const allOptsHaveDefaults = parsedParams.optsParams.every((param) => param.defaultValue !== null);
+      params.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
+      for (const param of parsedParams.optsParams) {
+        prologue.push(param.defaultValue === null
+          ? `const ${param.name} = opts.${param.name};`
+          : `const ${param.name} = opts.${param.name} ?? ${param.defaultValue};`);
+      }
+    }
+    return {
+      params,
+      prologue,
+      declaredNames: new Set<string>(pythonParameterNames(parametersText)),
+      nameBindings: new Map(),
+    };
+  }
+
+  const params: string[] = [];
+  const prologue: string[] = [];
+  const declaredNames = new Set<string>();
+  const nameBindings = new Map<string, string>();
+  let afterVariadicArgs = false;
+  for (const rawPart of parameterParts) {
+    const part = rawPart.trim();
+    if (part === '*') {
+      afterVariadicArgs = true;
+      continue;
+    }
+
+    const variadicArgs = /^\*([A-Za-z_][A-Za-z0-9_]*): (.+)$/.exec(part);
+    if (variadicArgs !== null) {
+      const name = variadicArgs[1];
+      const tsName = tsLocalNameForPythonParameter(name);
+      const typeExpression = variadicArgs[2].trim() === 'Any' ? 'any' : tsTypeExpression(variadicArgs[2]);
+      params.push(`...${tsName}: ${typeExpression}[]`);
+      declaredNames.add(name);
+      nameBindings.set(name, tsName);
+      afterVariadicArgs = true;
+      continue;
+    }
+
+    const variadicKeywords = /^\*\*([A-Za-z_][A-Za-z0-9_]*): (.+)$/.exec(part);
+    if (variadicKeywords !== null) {
+      const name = variadicKeywords[1];
+      const tsName = tsLocalNameForPythonParameter(name);
+      const typeExpression = variadicKeywords[2].trim() === 'Any' ? 'any' : tsTypeExpression(variadicKeywords[2]);
+      prologue.push(`const ${tsName}: Record<string, ${typeExpression}> = {};`);
+      declaredNames.add(name);
+      nameBindings.set(name, tsName);
+      continue;
+    }
+
+    const parameter = parseNestedFunctionParameterText(part, arrayNames, nameMap, validatedTypeAliases, mapNames);
+    if (parameter === null) {
+      return null;
+    }
+    declaredNames.add(parameter.pythonName);
+    nameBindings.set(parameter.pythonName, parameter.name);
+    if (afterVariadicArgs) {
+      prologue.push(`const ${parameter.name}: ${parameter.typeExpression} = ${parameter.defaultValue ?? 'undefined'};`);
+    } else {
+      params.push(renderInlineParameter(parameter));
+    }
+  }
+
+  return { params, prologue, declaredNames, nameBindings };
+}
+
+function parseNestedFunctionParameterText(
+  parameterText: string,
+  arrayNames: Set<string>,
+  nameMap: Map<string, string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): (FunctionParameter & { pythonName: string }) | null {
+  const typedParameter = /^([A-Za-z_][A-Za-z0-9_]*): ([^=]+?)(?: = (.+))?$/.exec(parameterText);
+  if (typedParameter !== null) {
+    const pythonName = typedParameter[1];
+    return {
+      pythonName,
+      name: tsLocalNameForPythonParameter(pythonName),
+      typeExpression: tsTypeExpression(typedParameter[2]),
+      ...(typedParameter[3] === undefined ? {} : { defaultValue: translateExpression(typedParameter[3], nameMap, arrayNames, validatedTypeAliases, mapNames) }),
+    };
+  }
+
+  const untypedParameter = /^([A-Za-z_][A-Za-z0-9_]*)(?: = (.+))?$/.exec(parameterText);
+  if (untypedParameter !== null) {
+    const pythonName = untypedParameter[1];
+    return {
+      pythonName,
+      name: tsLocalNameForPythonParameter(pythonName),
+      typeExpression: 'any',
+      ...(untypedParameter[2] === undefined ? {} : { defaultValue: translateExpression(untypedParameter[2], nameMap, arrayNames, validatedTypeAliases, mapNames) }),
+    };
+  }
+
+  return null;
+}
+
+function tsLocalNameForPythonParameter(pythonName: string): string {
+  return pythonName.startsWith('_')
+    ? `_${tsExportNameForPythonName(pythonName)}`
+    : tsExportNameForPythonName(pythonName);
 }
 
 function renderInlineParameter(param: FunctionParameter): string {
@@ -2244,6 +2368,13 @@ export function translateStraightLineStatement(
         nextIndex: index + 1,
       };
     }
+    const setattrCall = /^setattr\(.+\)$/.exec(callStatement[1]);
+    if (setattrCall !== null) {
+      return {
+        statements: [`${translateExpression(callStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)};`],
+        nextIndex: index + 1,
+      };
+    }
     const clearCall = /^(.+)\.clear\(\)$/.exec(callStatement[1]);
     if (clearCall !== null && isSimpleReferenceExpression(clearCall[1]) && !['self', 'cls', 'this'].includes(clearCall[1])) {
       const target = translateExpression(clearCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -3479,6 +3610,17 @@ function translateStraightLineAssignment(
       };
     }
   }
+  if (operator !== '=' && mapItemAssignment !== null) {
+    const mapName = translateExpression(mapItemAssignment[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (mapNames.has(mapName)) {
+      const key = translateMapKeyExpression(mapName, translateExpression(mapItemAssignment[2], nameMap, arrayNames, validatedTypeAliases, mapNames), mapNames);
+      const binaryOperator = operator.slice(0, -1);
+      return {
+        statements: [`${mapName}.set(${key}, (${mapName}.get(${key}) ?? 0) ${binaryOperator} ${assignedRight});`],
+        nextIndex,
+      };
+    }
+  }
   const localAssignment = /^([A-Za-z_][A-Za-z0-9_]*)$/.exec(pythonLeft);
   if (operator === '=' && localAssignment !== null) {
     const globalName = nameMap.get(localAssignment[1]);
@@ -3841,7 +3983,7 @@ function pythonListTypeIsNumeric(pythonType: string): boolean {
 }
 
 function pythonMapTypeArgs(pythonType: string): string[] | null {
-  const mapType = /^(?:dict|OrderedDict)\[(.+)\]$/.exec(pythonType.trim());
+  const mapType = /^(?:dict|OrderedDict|defaultdict)\[(.+)\]$/.exec(pythonType.trim());
   return mapType === null ? null : splitTopLevelComma(mapType[1]);
 }
 
@@ -3932,6 +4074,7 @@ function tsTypeForAssignedExpression(expression: string): string | null {
 export function rewriteStructPositionalConstructors(
   statement: string,
   structConstructorFields: ReadonlyMap<string, string[]>,
+  structMapConstructorFields: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
 ): string {
   if (structConstructorFields.size === 0) {
     return statement;
@@ -3965,6 +4108,13 @@ export function rewriteStructPositionalConstructors(
       continue;
     }
     if (args.length === 1 && args[0]?.trim().startsWith('{') === true) {
+      const rewrittenMapConstructor = rewriteObjectConstructorMapFields(match[1], args[0], structMapConstructorFields.get(match[1]));
+      if (rewrittenMapConstructor !== null) {
+        output += statement.slice(index, match.index);
+        output += rewrittenMapConstructor;
+        index = closeIndex + 1;
+        continue;
+      }
       const rewrittenObjectConstructor = rewriteObjectConstructorWithExtraFields(match[1], args[0], fields);
       if (rewrittenObjectConstructor !== null) {
         output += statement.slice(index, match.index);
@@ -4000,6 +4150,45 @@ export function rewriteStructPositionalConstructors(
     index = closeIndex + 1;
   }
   return output;
+}
+
+function rewriteObjectConstructorMapFields(
+  className: string,
+  objectArg: string,
+  mapFields: ReadonlySet<string> | undefined,
+): string | null {
+  if (mapFields === undefined || mapFields.size === 0) {
+    return null;
+  }
+  const objectLiteral = /^\{ (.*) \}$/.exec(objectArg.trim());
+  if (objectLiteral === null) {
+    return null;
+  }
+  const properties = splitTopLevelComma(objectLiteral[1])
+    .map((part) => parseObjectConstructorProperty(part.trim()));
+  if (properties.some((property) => property === null)) {
+    return null;
+  }
+  let changed = false;
+  const propertyText = properties
+    .filter((property): property is { name: string; value: string } => property !== null)
+    .map((property) => {
+      const value = mapFields.has(property.name)
+        ? mapFromObjectFromEntriesExpression(property.value) ?? property.value
+        : property.value;
+      if (value !== property.value) {
+        changed = true;
+      }
+      return property.name === value ? property.name : `${property.name}: ${value}`;
+    });
+  return changed ? `new ${className}({ ${propertyText.join(', ')} })` : null;
+}
+
+function mapFromObjectFromEntriesExpression(value: string): string | null {
+  const prefix = 'Object.fromEntries(';
+  return value.startsWith(prefix) && value.endsWith(')')
+    ? `new Map(${value.slice(prefix.length, -1)})`
+    : null;
 }
 
 function rewriteObjectConstructorWithExtraFields(

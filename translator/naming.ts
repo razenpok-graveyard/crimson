@@ -71,6 +71,10 @@ export function tsTypeExpression(pythonType: string): string {
     }
     return `Map<${tsMapKeyTypeExpression(dictType[0])}, ${tsTypeExpression(dictType[1])}>`;
   }
+  const defaultDictType = parseGenericTypeArgs(trimmed, 'defaultdict');
+  if (defaultDictType !== null && defaultDictType.length === 2) {
+    return `Map<${tsMapKeyTypeExpression(defaultDictType[0])}, ${tsTypeExpression(defaultDictType[1])}>`;
+  }
   const orderedDictType = parseGenericTypeArgs(trimmed, 'OrderedDict');
   if (orderedDictType !== null && orderedDictType.length === 2) {
     return `Map<${tsMapKeyTypeExpression(orderedDictType[0])}, ${tsTypeExpression(orderedDictType[1])}>`;

@@ -1,6 +1,6 @@
 // Port of crimson/debug_views/registry.py
 
-import type { View } from '@grim/view.ts';
+import { View } from '@grim/view.ts';
 
 const _VIEW_REGISTRY: Map<string, ViewDefinition> = new Map();
 
@@ -21,13 +21,13 @@ export class ViewDefinition {
 }
 
 export function registerView(name: string, title: string): (arg0: (...args: any[]) => View) => (...args: any[]) => View {
-  function decorator(factory: (...args: any[]) => View): (...args: any[]) => View {
+  const decorator = (factory: (...args: any[]) => View): (...args: any[]) => View => {
     if (_VIEW_REGISTRY.has(name)) {
       throw new Error(`view already registered: ${name}`);
     }
     _VIEW_REGISTRY.set(name, new ViewDefinition({ name: name, title: title, factory: factory }));
     return factory;
-  }
+  };
 
   return decorator;
 }

@@ -1,7 +1,23 @@
 // Port of crimson/render/sink.py
 
 import type { RenderPresent } from '@grim/render-pipeline.ts';
+import { mkdirSync } from 'node:fs';
 export { type RenderPresent, type RenderSink, WindowSink } from '@grim/render-pipeline.ts';
+
+function _dirname(path: string): string {
+  const idx = path.lastIndexOf('/');
+  if (idx < 0) {
+    return '.';
+  }
+  if (idx === 0) {
+    return '/';
+  }
+  return path.slice(0, idx);
+}
+
+function _mkdirParents(path: string): void {
+  mkdirSync(path, { recursive: true });
+}
 
 // Headless sink used for determinism-only verification paths.
 export class NullSink {
@@ -45,6 +61,7 @@ export class VideoSink {
   }
 
   open(): void {
+    _mkdirParents(_dirname(String(this.outputPath)));
     if (this._openTransport !== null) {
       this._openTransport();
     }

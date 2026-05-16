@@ -212,6 +212,7 @@ export interface PlainClassFieldDefinition {
   typeExpression: string;
   readonly: boolean;
   private: boolean;
+  defaultValueLines?: string[];
 }
 
 export interface PlainClassConstructorDefinition {

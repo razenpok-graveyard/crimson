@@ -1,5 +1,7 @@
 import type {
+  ImportDefinition,
   PlainClassDefinition,
+  PlainClassFieldDefinition,
   SimpleModuleFunction,
 } from '../model.js';
 import { tsExportNameForPythonName, tsTypeExpression } from '../naming.js';
@@ -10,14 +12,23 @@ import {
   parseIndentedFunctionHeader,
   splitTopLevelComma,
 } from './common.js';
-import { translateExpression } from './expression.js';
+import {
+  arrayValueMapNameMarker,
+  objectNameMarker,
+  translateExpression,
+  tupleElementArrayNameMarker,
+} from './expression.js';
 import { parseFunctionParametersText, pythonParameterNames } from './parameters.js';
 import {
+  parseTopLevelAssignment,
   reassignedLocalNames,
   translateStraightLineStatement,
 } from './statements.js';
 
 function tsAttributeNameForPythonName(pythonName: string): string {
+  if (/^__[^_].*__$/.test(pythonName)) {
+    return pythonName;
+  }
   return pythonName.startsWith('_')
     ? `_${tsExportNameForPythonName(pythonName)}`
     : tsExportNameForPythonName(pythonName);
@@ -45,10 +56,77 @@ function skipSlotsAssignment(lines: string[], index: number): number {
   return index + 1;
 }
 
+function parsePlainClassFieldAssignment(
+  lines: string[],
+  index: number,
+  moduleNameMap: ReadonlyMap<string, string>,
+): { field: PlainClassFieldDefinition; pythonName: string; nextIndex: number } | null {
+  const firstLine = lines[index] ?? '';
+  if (!firstLine.startsWith('    ') || firstLine.startsWith('        ')) {
+    return null;
+  }
+  const unindentedLines = lines.slice(index).map((line) => (
+    line.startsWith('    ') ? line.slice('    '.length) : line
+  ));
+  const assignment = parseTopLevelAssignment(unindentedLines, 0, new Map(moduleNameMap));
+  if (assignment === null || assignment.assignment.pythonName === undefined) {
+    return null;
+  }
+  const pythonName = assignment.assignment.pythonName;
+  const fieldName = tsAttributeNameForPythonName(pythonName);
+  const typeExpression = assignment.assignment.typeExpression
+    ?? inferPlainClassFieldType(assignment.assignment.valueLines.join(' '), new Map());
+  if (typeExpression === null) {
+    return null;
+  }
+  return {
+    field: {
+      name: fieldName,
+      typeExpression,
+      readonly: true,
+      private: pythonName.startsWith('_'),
+      defaultValueLines: assignment.assignment.valueLines,
+    },
+    pythonName,
+    nextIndex: index + assignment.nextIndex,
+  };
+}
+
+function recordPlainClassFieldMarkers(
+  pythonFieldName: string,
+  fieldName: string,
+  typeExpression: string,
+  arrayNames: Set<string>,
+  mapNames: Set<string>,
+): void {
+  if (typeExpression.trim().endsWith('[]')) {
+    arrayNames.add(`self.${pythonFieldName}`);
+    arrayNames.add(`this.${fieldName}`);
+    if (typeExpression.includes('[') && typeExpression.includes(']')) {
+      arrayNames.add(tupleElementArrayNameMarker(`self.${pythonFieldName}`));
+      arrayNames.add(tupleElementArrayNameMarker(`this.${fieldName}`));
+    }
+  }
+  if (typeExpression.startsWith('Map<') || typeExpression.startsWith('ReadonlyMap<')) {
+    mapNames.add(`self.${pythonFieldName}`);
+    mapNames.add(`this.${fieldName}`);
+    if (/Map<[^,]+, [^>]*\[]>/.test(typeExpression) || /ReadonlyMap<[^,]+, readonly [^>]*\[]>/.test(typeExpression)) {
+      mapNames.add(arrayValueMapNameMarker(`self.${pythonFieldName}`));
+      mapNames.add(arrayValueMapNameMarker(`this.${fieldName}`));
+    }
+  }
+  if (typeExpression.startsWith('Record<')) {
+    arrayNames.add(objectNameMarker(`self.${pythonFieldName}`));
+    arrayNames.add(objectNameMarker(`this.${fieldName}`));
+  }
+}
+
 export function parsePlainClass(
   lines: string[],
   index: number,
   moduleNameMap: ReadonlyMap<string, string> = new Map(),
+  relativePath: string | null = null,
+  imports: ImportDefinition[] | null = null,
 ): { plainClass: PlainClassDefinition; nextIndex: number } | null {
   const header = /^class ([A-Za-z_][A-Za-z0-9_]*)(?:\(([A-Za-z_][A-Za-z0-9_]*)\))?:$/.exec(lines[index] ?? '');
   if (header === null) {
@@ -72,6 +150,24 @@ export function parsePlainClass(
     nextIndex += 1;
   }
 
+  const fieldMap = new Map<string, PlainClassDefinition['fields'][number]>();
+  const fieldNameMap = new Map<string, string>();
+  const fieldArrayNames = new Set<string>();
+  const fieldMapNames = new Set<string>();
+  while (nextIndex < lines.length) {
+    const classField = parsePlainClassFieldAssignment(lines, nextIndex, moduleNameMap);
+    if (classField === null) {
+      break;
+    }
+    fieldNameMap.set(classField.pythonName, classField.field.name);
+    recordPlainClassFieldMarkers(classField.pythonName, classField.field.name, classField.field.typeExpression, fieldArrayNames, fieldMapNames);
+    fieldMap.set(classField.field.name, classField.field);
+    nextIndex = classField.nextIndex;
+    while (nextIndex < lines.length && lines[nextIndex].trim() === '') {
+      nextIndex += 1;
+    }
+  }
+
   const parsedConstructorHeader = parseIndentedFunctionHeader(lines, nextIndex, '    ');
   const constructorHeader = parsedConstructorHeader?.name === '__init__' ? parsedConstructorHeader : null;
   const constructorParametersText = constructorHeader?.parametersText ?? 'self';
@@ -92,11 +188,9 @@ export function parsePlainClass(
   for (const parameter of [...constructorParams.parameters, ...constructorParams.optsParams]) {
     fieldTypes.set(parameter.name, parameter.typeExpression);
   }
-  const fieldMap = new Map<string, PlainClassDefinition['fields'][number]>();
-  const fieldNameMap = new Map<string, string>();
-  const fieldArrayNames = new Set<string>();
   const constructorStatements: string[] = [];
   const constructorNameMap = new Map<string, string>([...moduleNameMap, ['self', 'this']]);
+  const constructorMapNames = new Set<string>(fieldMapNames);
   for (const parameter of constructorParams.parameters) {
     constructorNameMap.set(parameter.name, parameter.name);
   }
@@ -128,17 +222,17 @@ export function parsePlainClass(
         const fieldName = tsAttributeNameForPythonName(pythonFieldName);
         fieldNameMap.set(pythonFieldName, fieldName);
         const valueText = annotatedFieldAssignment === null ? assignment[2] : assignment[3];
-        const value = translateExpression(valueText, constructorNameMap, constructorArrayNames);
         const typeExpression = annotatedFieldAssignment === null
           ? inferPlainClassFieldType(valueText, fieldTypes)
           : tsTypeExpression(assignment[2]);
         if (typeExpression === null) {
           return null;
         }
-        if (typeExpression.trim().endsWith('[]')) {
-          fieldArrayNames.add(`self.${pythonFieldName}`);
-          fieldArrayNames.add(`this.${fieldName}`);
-        }
+        const value = valueText.trim() === '{}' && (typeExpression.startsWith('Map<') || typeExpression.startsWith('ReadonlyMap<'))
+          ? 'new Map()'
+          : translateExpression(valueText, constructorNameMap, constructorArrayNames, new Set(), constructorMapNames);
+        recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, fieldArrayNames, fieldMapNames);
+        recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, constructorArrayNames, constructorMapNames);
         fieldMap.set(fieldName, {
           name: fieldName,
           typeExpression,
@@ -158,6 +252,10 @@ export function parsePlainClass(
         constructorDeclaredNames,
         constructorReassignedNames,
         constructorArrayNames,
+        new Set(),
+        relativePath,
+        constructorMapNames,
+        imports,
       );
       if (translated === null) {
         return null;
@@ -180,7 +278,7 @@ export function parsePlainClass(
       break;
     }
     if (trimmed === '@property') {
-      const propertyMethod = parsePlainClassMethod(lines, nextIndex + 1, fieldNameMap, moduleNameMap, false, fieldArrayNames);
+      const propertyMethod = parsePlainClassMethod(lines, nextIndex + 1, fieldNameMap, moduleNameMap, false, fieldArrayNames, fieldMapNames, null, relativePath, imports);
       if (propertyMethod === null || propertyMethod.method.parameters.length > 0 || propertyMethod.method.optsParams.length > 0) {
         return null;
       }
@@ -193,7 +291,7 @@ export function parsePlainClass(
     }
     const propertySetter = /^@([A-Za-z_][A-Za-z0-9_]*)\.setter$/.exec(trimmed);
     if (propertySetter !== null) {
-      const setterMethod = parsePlainClassMethod(lines, nextIndex + 1, fieldNameMap, moduleNameMap, false, fieldArrayNames);
+      const setterMethod = parsePlainClassMethod(lines, nextIndex + 1, fieldNameMap, moduleNameMap, false, fieldArrayNames, fieldMapNames, null, relativePath, imports);
       if (
         setterMethod === null
         || setterMethod.method.name !== tsExportNameForPythonName(propertySetter[1])
@@ -210,7 +308,7 @@ export function parsePlainClass(
       continue;
     }
     if (trimmed === '@staticmethod') {
-      const staticMethod = parsePlainClassMethod(lines, nextIndex + 1, fieldNameMap, moduleNameMap, true, fieldArrayNames);
+      const staticMethod = parsePlainClassMethod(lines, nextIndex + 1, fieldNameMap, moduleNameMap, true, fieldArrayNames, fieldMapNames, null, relativePath, imports);
       if (staticMethod === null) {
         return null;
       }
@@ -220,7 +318,7 @@ export function parsePlainClass(
       continue;
     }
     if (trimmed === '@classmethod') {
-      const classMethod = parsePlainClassMethod(lines, nextIndex + 1, fieldNameMap, moduleNameMap, true, fieldArrayNames, className);
+      const classMethod = parsePlainClassMethod(lines, nextIndex + 1, fieldNameMap, moduleNameMap, true, fieldArrayNames, fieldMapNames, className, relativePath, imports);
       if (classMethod === null) {
         return null;
       }
@@ -229,7 +327,7 @@ export function parsePlainClass(
       nextIndex = classMethod.nextIndex;
       continue;
     }
-    const method = parsePlainClassMethod(lines, nextIndex, fieldNameMap, moduleNameMap, false, fieldArrayNames);
+    const method = parsePlainClassMethod(lines, nextIndex, fieldNameMap, moduleNameMap, false, fieldArrayNames, fieldMapNames, null, relativePath, imports);
     if (method === null) {
       return null;
     }
@@ -338,6 +436,10 @@ function inferPlainClassFieldType(valueText: string, fieldTypes: ReadonlyMap<str
   if (/^(?:max|min)\(/.test(valueText.trim())) {
     return 'number';
   }
+  const constructorCall = /^_?([A-Z][A-Za-z0-9_]*)\(.*\)$/.exec(valueText.trim());
+  if (constructorCall !== null) {
+    return tsExportNameForPythonName(valueText.trim().slice(0, valueText.trim().indexOf('(')));
+  }
   const directParameterType = fieldTypes.get(tsExportNameForPythonName(valueText));
   if (directParameterType !== undefined) {
     return directParameterType;
@@ -353,7 +455,10 @@ function parsePlainClassMethod(
   moduleNameMap: ReadonlyMap<string, string>,
   staticMethod = false,
   initialArrayNames: ReadonlySet<string> = new Set(),
+  initialMapNames: ReadonlySet<string> = new Set(),
   classBindingName: string | null = null,
+  relativePath: string | null = null,
+  imports: ImportDefinition[] | null = null,
 ): { method: SimpleModuleFunction; nextIndex: number } | null {
   const header = parseIndentedFunctionHeader(lines, index, '    ');
   if (header === null || header.name === '__init__') {
@@ -381,6 +486,12 @@ function parsePlainClassMethod(
   }
 
   const statements: string[] = [];
+  const mapNames = new Set<string>(initialMapNames);
+  for (const parameter of [...parsedParams.parameters, ...parsedParams.optsParams]) {
+    if (parameter.typeExpression.startsWith('Map<') || parameter.typeExpression.startsWith('ReadonlyMap<')) {
+      mapNames.add(parameter.name);
+    }
+  }
   const nameMap = new Map<string, string>(moduleNameMap);
   if (classBindingName !== null) {
     if (classReceiver === null) {
@@ -419,6 +530,10 @@ function parsePlainClassMethod(
       declaredNames,
       reassignedNames,
       arrayNames,
+      new Set(),
+      relativePath,
+      mapNames,
+      imports,
     );
     if (statement === null) {
       return null;

@@ -759,6 +759,9 @@ function parseStructMethod(
 }
 
 function tsAttributeNameForPythonName(pythonName: string): string {
+  if (/^__[^_].*__$/.test(pythonName)) {
+    return pythonName;
+  }
   return pythonName.startsWith('_')
     ? `_${tsExportNameForPythonName(pythonName)}`
     : tsExportNameForPythonName(pythonName);
@@ -770,7 +773,7 @@ function pythonParameterType(parameterText: string): string | null {
 }
 
 function pythonMapTypeArgs(pythonType: string): string[] | null {
-  const mapType = /^(?:dict|OrderedDict)\[(.+)\]$/.exec(pythonType.trim());
+  const mapType = /^(?:dict|OrderedDict|defaultdict)\[(.+)\]$/.exec(pythonType.trim());
   return mapType === null ? null : splitTopLevelComma(mapType[1]);
 }
 

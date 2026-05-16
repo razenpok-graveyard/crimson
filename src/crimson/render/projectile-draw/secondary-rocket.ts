@@ -103,7 +103,7 @@ function drawSecondaryRocketGlow(ctx: SecondaryProjectileDrawCtx, opts: { style:
   const scale = ctx.scale;
   const alpha = ctx.alpha;
 
-  function drawRocketFx(opts: { size: number; offset: number; rgba: RGBA }): void {
+  const drawRocketFx = (opts: { size: number; offset: number; rgba: RGBA }): void => {
     const size = opts.size;
     const offset = opts.offset;
     const rgba = opts.rgba;
@@ -117,7 +117,7 @@ function drawSecondaryRocketGlow(ctx: SecondaryProjectileDrawCtx, opts: { style:
     const dst = wgl.makeRectangle(fxPos.x, fxPos.y, dstSize, dstSize);
     const origin = wgl.makeVector2(dstSize * 0.5, dstSize * 0.5);
     wgl.drawTexturePro(particlesTexture, src, dst, origin, 0.0, tint);
-  }
+  };
 
   wgl.beginBlendMode(wgl.BlendMode.ADDITIVE);
   // Large bloom around the rocket (effect_id=0x0D).

@@ -18,7 +18,18 @@ export function renderPlainClasses(lines: string[], classes: StraightLineModule[
     }
     lines.push(`export class ${plainClass.name}${plainClass.extendsName === undefined ? '' : ` extends ${plainClass.extendsName}`} {`);
     for (const field of plainClass.fields) {
-      lines.push(`  ${field.private ? 'private ' : ''}${field.readonly ? 'readonly ' : ''}${field.name}: ${field.typeExpression};`);
+      const prefix = `  ${field.private ? 'private ' : ''}${field.readonly ? 'readonly ' : ''}${field.name}: ${field.typeExpression}`;
+      if (field.defaultValueLines === undefined) {
+        lines.push(`${prefix};`);
+      } else if (field.defaultValueLines.length === 1) {
+        lines.push(`${prefix} = ${field.defaultValueLines[0]};`);
+      } else {
+        lines.push(`${prefix} = ${field.defaultValueLines[0]}`);
+        for (const valueLine of field.defaultValueLines.slice(1, -1)) {
+          lines.push(`  ${valueLine}`);
+        }
+        lines.push(`  ${field.defaultValueLines.at(-1)};`);
+      }
     }
     const shouldRenderConstructor = (
       plainClass.fields.length > 0

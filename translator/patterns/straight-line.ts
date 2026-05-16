@@ -21,7 +21,7 @@ import {
   tsPublicNameForPythonName,
   tsTypeExpression,
 } from '../naming.js';
-import { tsImportPathForPythonImport, tsTargetRoot } from '../paths.js';
+import { tsImportPathForPythonImport, tsPathForPython, tsTargetRoot } from '../paths.js';
 import {
   flattenFromImportBlocks,
   isOneLineAllAssignment,
@@ -111,6 +111,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   const moduleNameMap = new Map<string, string>();
   const mapNames = new Set<string>();
   const structConstructorFields = new Map<string, string[]>();
+  const structMapConstructorFields = new Map<string, Set<string>>();
   const typeVarNames = new Set<string>();
   const setReturnFunctionNames = new Set<string>();
   const objectReturnFunctionNames = new Set<string>();
@@ -246,6 +247,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     if (structClass !== null) {
       classes.push(structClass.structClass);
       structConstructorFields.set(structClass.structClass.name, structClass.structClass.fields.map((field) => field.name));
+      recordStructMapConstructorFields(structMapConstructorFields, structClass.structClass);
       index = structClass.nextIndex;
       continue;
     }
@@ -258,7 +260,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
 
-    const plainClass = parsePlainClass(lines, index, moduleNameMap);
+    const plainClass = parsePlainClass(lines, index, moduleNameMap, relativePath, imports);
     if (plainClass !== null) {
       plainClasses.push(plainClass.plainClass);
       index = plainClass.nextIndex;
@@ -317,8 +319,22 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
 
     const fromImport = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
     if (fromImport !== null) {
+      const importedNames = fromImport[2].split(', ');
+      if (importedNames.length === 1) {
+        const submodulePath = tsImportPathForPythonImport(`${fromImport[1]}.${importedNames[0]}`, relativePath);
+        if (tsImportPathExists(submodulePath, relativePath)) {
+          const alias = tsLocalNameForPythonAlias(importedNames[0]);
+          pushUniqueNamespaceImport(namespaceImports, {
+            alias,
+            modulePath: submodulePath,
+          });
+          moduleNameMap.set(importedNames[0], alias);
+          index += 1;
+          continue;
+        }
+      }
       const modulePath = tsImportPathForPythonImport(fromImport[1], relativePath);
-      const importBindings = fromImport[2].split(', ').map((name) => ({
+      const importBindings = importedNames.map((name) => ({
         pythonName: name,
         importedName: tsImportNameForPythonName(modulePath, name, relativePath),
         defaultName: tsExportNameForPythonName(name),
@@ -507,6 +523,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       if (structClass !== null) {
         classes.push(structClass.structClass);
         structConstructorFields.set(structClass.structClass.name, structClass.structClass.fields.map((field) => field.name));
+        recordStructMapConstructorFields(structMapConstructorFields, structClass.structClass);
         index = structClass.nextIndex;
         continue;
       }
@@ -519,7 +536,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         continue;
       }
 
-      const plainClass = parsePlainClass(lines, index, moduleNameMap);
+      const plainClass = parsePlainClass(lines, index, moduleNameMap, relativePath, imports);
       if (plainClass !== null) {
         plainClasses.push(plainClass.plainClass);
         index = plainClass.nextIndex;
@@ -760,6 +777,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
 
   rewriteStructConstructorCalls(
     structConstructorFields,
+    structMapConstructorFields,
     leadingStatements,
     trailingStatements,
     functions,
@@ -1284,8 +1302,21 @@ function importedClassNameMarker(className: string): string {
   return `__imported_class__:${className}`;
 }
 
+function recordStructMapConstructorFields(
+  structMapConstructorFields: Map<string, Set<string>>,
+  structClass: StructModule['classes'][number],
+): void {
+  const mapFields = structClass.fields
+    .filter((field) => field.typeExpression.startsWith('Map<') || field.typeExpression.startsWith('ReadonlyMap<'))
+    .map((field) => field.name);
+  if (mapFields.length > 0) {
+    structMapConstructorFields.set(structClass.name, new Set(mapFields));
+  }
+}
+
 function rewriteStructConstructorCalls(
   structConstructorFields: ReadonlyMap<string, string[]>,
+  structMapConstructorFields: ReadonlyMap<string, ReadonlySet<string>>,
   leadingStatements: string[],
   trailingStatements: string[],
   functions: SimpleModuleFunction[],
@@ -1296,31 +1327,35 @@ function rewriteStructConstructorCalls(
   if (structConstructorFields.size === 0) {
     return;
   }
-  rewriteStatementArray(leadingStatements, structConstructorFields);
-  rewriteStatementArray(trailingStatements, structConstructorFields);
+  rewriteStatementArray(leadingStatements, structConstructorFields, structMapConstructorFields);
+  rewriteStatementArray(trailingStatements, structConstructorFields, structMapConstructorFields);
   for (const fn of functions) {
-    rewriteStatementArray(fn.statements, structConstructorFields);
+    rewriteStatementArray(fn.statements, structConstructorFields, structMapConstructorFields);
   }
   for (const assignment of assignments) {
-    rewriteStatementArray(assignment.valueLines, structConstructorFields);
+    rewriteStatementArray(assignment.valueLines, structConstructorFields, structMapConstructorFields);
   }
   for (const structClass of classes) {
-    rewriteStatementArray(structClass.postInitStatements, structConstructorFields);
+    rewriteStatementArray(structClass.postInitStatements, structConstructorFields, structMapConstructorFields);
     for (const method of structClass.methods) {
-      rewriteStatementArray(method.statements, structConstructorFields);
+      rewriteStatementArray(method.statements, structConstructorFields, structMapConstructorFields);
     }
   }
   for (const plainClass of plainClasses) {
-    rewriteStatementArray(plainClass.constructorDefinition.statements, structConstructorFields);
+    rewriteStatementArray(plainClass.constructorDefinition.statements, structConstructorFields, structMapConstructorFields);
     for (const method of plainClass.methods) {
-      rewriteStatementArray(method.statements, structConstructorFields);
+      rewriteStatementArray(method.statements, structConstructorFields, structMapConstructorFields);
     }
   }
 }
 
-function rewriteStatementArray(statements: string[], structConstructorFields: ReadonlyMap<string, string[]>): void {
+function rewriteStatementArray(
+  statements: string[],
+  structConstructorFields: ReadonlyMap<string, string[]>,
+  structMapConstructorFields: ReadonlyMap<string, ReadonlySet<string>>,
+): void {
   for (let index = 0; index < statements.length; index += 1) {
-    statements[index] = rewriteStructPositionalConstructors(statements[index], structConstructorFields);
+    statements[index] = rewriteStructPositionalConstructors(statements[index], structConstructorFields, structMapConstructorFields);
   }
 }
 
@@ -1734,6 +1769,24 @@ function pushUniqueNamespaceImport(
     return;
   }
   namespaceImports.push(namespaceImport);
+}
+
+function tsImportPathExists(importPath: string, importerRelativePath: string): boolean {
+  const localPath = localPathForTsImport(importPath, importerRelativePath);
+  return localPath !== null && fs.existsSync(localPath);
+}
+
+function localPathForTsImport(importPath: string, importerRelativePath: string): string | null {
+  if (importPath.startsWith('@crimson/')) {
+    return path.join(tsTargetRoot, 'crimson', importPath.slice('@crimson/'.length));
+  }
+  if (importPath.startsWith('@grim/')) {
+    return path.join(tsTargetRoot, 'grim', importPath.slice('@grim/'.length));
+  }
+  if (importPath.startsWith('./') || importPath.startsWith('../')) {
+    return path.resolve(path.dirname(path.join(tsTargetRoot, tsPathForPython(importerRelativePath))), importPath);
+  }
+  return null;
 }
 
 function avoidImportedPrivateNameCollision(assignment: SimpleModuleAssignment, imports: ImportDefinition[]): void {

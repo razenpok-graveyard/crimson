@@ -1,6 +1,7 @@
 // Port of crimson/bonuses/hud.py
 
-import type { GameplayState, PlayerState } from '@crimson/sim/state-types.ts';
+import type { GameplayState } from '@crimson/sim/state-types.ts';
+import { PlayerState } from '@crimson/sim/state-types.ts';
 import { BonusId } from '@crimson/bonuses/ids.ts';
 
 export const BONUS_HUD_SLOT_COUNT = 16;
@@ -102,22 +103,22 @@ export function bonusHudUpdate(state: GameplayState, players: PlayerState[], opt
   let dt = opts.dt ?? 0.0;
   const globalTimers = { "weapon_power_up": state.bonuses.weaponPowerUp, "reflex_boost": state.bonuses.reflexBoost, "energizer": state.bonuses.energizer, "double_experience": state.bonuses.doubleExperience, "freeze": state.bonuses.freeze };
 
-  function _globalTimerValue(key: string): number {
+  const _globalTimerValue = (key: string): number => {
     if (!Object.prototype.hasOwnProperty.call(globalTimers, key)) {
       throw new Error(`Unexpected bonus HUD global timer key: ${key}`);
     }
     return (globalTimers as Record<string, number>)[key];
-  }
+  };
 
-  function _playerTimerValue(player: PlayerState, key: string): number {
+  const _playerTimerValue = (player: PlayerState, key: string): number => {
     const playerTimers = { "fire_bullets_timer": player.fireBulletsTimer, "shield_timer": player.shieldTimer, "speed_bonus_timer": player.speedBonusTimer };
     if (!Object.prototype.hasOwnProperty.call(playerTimers, key)) {
       throw new Error(`Unexpected bonus HUD player timer key: ${key}`);
     }
     return (playerTimers as Record<string, number>)[key];
-  }
+  };
 
-  function _timerValue(ref: TimerRef | null): number {
+  const _timerValue = (ref: TimerRef | null): number => {
     if (ref === null) {
       return 0.0;
     }
@@ -132,7 +133,7 @@ export function bonusHudUpdate(state: GameplayState, players: PlayerState[], opt
       return Math.max(0.0, _playerTimerValue(players[idx], ref.key));
     }
     return 0.0;
-  }
+  };
 
   const playerCount = players.length;
   dt = Math.max(0.0, dt);

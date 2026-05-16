@@ -4,8 +4,7 @@ import type { TerrainSlotTriplet } from '@crimson/terrain-slots.ts';
 import { terrainSlotsForQuest } from '@crimson/terrain-slots.ts';
 import type { WeaponId } from '@crimson/weapons.ts';
 import { QuestLevel } from '@crimson/quests/level.ts';
-import type { QuestBuilder } from '@crimson/quests/types.ts';
-import { QuestDefinition } from '@crimson/quests/types.ts';
+import { QuestBuilder, QuestDefinition } from '@crimson/quests/types.ts';
 
 const quests: Map<string, QuestDefinition> = new Map();
 
@@ -17,11 +16,11 @@ export function registerQuest(opts: { level: string; title: string; timeLimitMs:
   const unlockPerkId = opts.unlockPerkId ?? null;
   const unlockWeaponId = opts.unlockWeaponId ?? null;
   const terrainSlots = opts.terrainSlots ?? null;
-  function _builderName(builderFn: QuestBuilder): string {
+  const _builderName = (builderFn: QuestBuilder): string => {
     return String(builderFn.name || String(builderFn));
-  }
+  };
 
-  function decorator(builder: QuestBuilder): QuestBuilder {
+  const decorator = (builder: QuestBuilder): QuestBuilder => {
     const questLevel = QuestLevel.parse(level);
     const resolvedTerrainSlots = terrainSlots !== null ? terrainSlots : terrainSlotsForQuest(questLevel);
     const normalizedUnlockWeaponId = unlockWeaponId !== null ? unlockWeaponId : null;
@@ -32,7 +31,7 @@ export function registerQuest(opts: { level: string; title: string; timeLimitMs:
     }
     quests.set(quest.level.text, quest);
     return builder;
-  }
+  };
 
   return decorator;
 }

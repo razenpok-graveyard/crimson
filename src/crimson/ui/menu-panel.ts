@@ -50,7 +50,7 @@ export function drawClassicMenuPanel(texture: rl.Texture, opts: { dst: rl.Rectan
 
   const origin = wgl.makeVector2(0.0, 0.0);
 
-  function _src(rect: rl.Rectangle): rl.Rectangle {
+  const _src = (rect: rl.Rectangle): rl.Rectangle => {
     if (!flipX) {
       return rect;
     }
@@ -60,7 +60,7 @@ export function drawClassicMenuPanel(texture: rl.Texture, opts: { dst: rl.Rectan
     // src.x=rect.x+rect.width (u near 1.0) and negative widths; it can clamp
     // the UVs to the edge texel and collapse the panel to a transparent strip.
     return wgl.makeRectangle(rect.x, rect.y, -rect.w, rect.h);
-  }
+  };
 
   if (midH <= 0.0) {
     const src = _src(wgl.makeRectangle(srcX, srcY, srcW, srcH));

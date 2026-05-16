@@ -150,6 +150,13 @@ export function translateCallArgumentExpression(
   if (pythonExpression.includes('=>')) {
     return pythonExpression;
   }
+  const trimmed = pythonExpression.trim();
+  if (trimmed.startsWith('**')) {
+    return `...Object.values(${translateExpression(trimmed.slice(2), nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+  if (trimmed.startsWith('*')) {
+    return `...${translateExpression(trimmed.slice(1), nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
+  }
   return translateBoundMethodReference(pythonExpression, nameMap, arrayNames, validatedTypeAliases)
     ?? translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
 }
@@ -455,7 +462,7 @@ export function translateExpression(
     return `secretsTokenHex(${translateExpression(secretsTokenHexCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
-  if (/^(?:collections\.)?defaultdict\((?:list|dict|set)?\)$/.test(trimmed)) {
+  if (/^(?:collections\.)?defaultdict\((?:list|dict|set|int|float)?\)$/.test(trimmed)) {
     return 'new Map()';
   }
 
@@ -1085,7 +1092,27 @@ export function translateExpression(
           ? `Reflect.get(${objectExpression}, ${property})`
           : `Reflect.get(${objectExpression}, ${property}) ?? ${fallback}`;
       }
+      const property = translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const fallback = args[2] === undefined
+        ? null
+        : translateExpression(args[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      return fallback === null
+        ? `Reflect.get(${objectExpression}, ${property})`
+        : `Reflect.get(${objectExpression}, ${property}) ?? ${fallback}`;
     }
+  }
+
+  const setattrCall = parseCallPrefix(trimmed, 'setattr');
+  if (setattrCall !== null && setattrCall.rest === '') {
+    const args = splitTopLevelComma(setattrCall.argsText);
+    if (args.length === 3) {
+      return `Reflect.set(${translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(args[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
+  }
+
+  const callableCall = parseCallPrefix(trimmed, 'callable');
+  if (callableCall !== null && callableCall.rest === '') {
+    return `typeof ${translateExpression(callableCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)} === 'function'`;
   }
 
   const reprCall = parseCallPrefix(trimmed, 'repr');

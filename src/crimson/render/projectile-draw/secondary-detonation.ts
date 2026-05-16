@@ -46,7 +46,7 @@ export function drawSecondaryDetonation(ctx: SecondaryProjectileDrawCtx): boolea
   const cellH = particlesTexture.height / grid;
   const src = wgl.makeRectangle(cellW * col, cellH * row, Math.max(0.0, cellW - 2.0), Math.max(0.0, cellH - 2.0));
 
-  function drawDetonationQuad(opts: { size: number; alphaMul: number }): void {
+  const drawDetonationQuad = (opts: { size: number; alphaMul: number }): void => {
     const size = opts.size;
     const alphaMul = opts.alphaMul;
     const a = fade * alphaMul;
@@ -61,7 +61,7 @@ export function drawSecondaryDetonation(ctx: SecondaryProjectileDrawCtx): boolea
     const dst = wgl.makeRectangle(ctx.screenPos.x, ctx.screenPos.y, dstSize, dstSize);
     const origin = wgl.makeVector2(dstSize * 0.5, dstSize * 0.5);
     wgl.drawTexturePro(particlesTexture, src, dst, origin, 0.0, tint);
-  }
+  };
 
   wgl.beginBlendMode(wgl.BlendMode.ADDITIVE);
   drawDetonationQuad({ size: detScale * t * 64.0, alphaMul: 1.0 });
