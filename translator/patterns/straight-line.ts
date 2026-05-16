@@ -45,6 +45,7 @@ import { parseStringEnumClass } from './enums.js';
 import {
   classFieldTypeMarker,
   functionReturnTypeMarker,
+  nullableNameMarker,
   objectNameMarker,
   receiverTypeNameMarker,
   setNameMarker,
@@ -97,6 +98,7 @@ import {
   tupleKeyHelperStatements,
 } from './runtime-helpers.js';
 import {
+  nullableLocalNames,
   reassignedLocalNames,
   rewriteStructPositionalConstructors,
   translateStraightLineStatement,
@@ -710,6 +712,10 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       index = docstring.nextIndex;
     }
     markIteratedLocalNames(lines, index, '    ', arrayNames);
+    for (const name of nullableLocalNames(lines, index)) {
+      arrayNames.add(nullableNameMarker(name));
+      arrayNames.add(nullableNameMarker(tsExportNameForPythonName(name)));
+    }
     const reassignedNames = reassignedLocalNames(lines, index);
     while (index < lines.length) {
       const line = lines[index];

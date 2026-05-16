@@ -97,7 +97,7 @@ export {
   parseStraightLineFunctionHeader,
 } from './function-headers.js';
 
-export { reassignedLocalNames } from './statements/reassigned-locals.js';
+export { nullableLocalNames, reassignedLocalNames } from './statements/reassigned-locals.js';
 export { rewriteStructPositionalConstructors } from './statements/struct-rewrites.js';
 
 type WithItem = {
@@ -1954,6 +1954,7 @@ export function translateStraightLineStatement(
       arrayNames,
       validatedTypeAliases,
       mapNames,
+      assignment[3],
     ), trailingComment);
   }
 
@@ -3709,6 +3710,7 @@ function translateStraightLineAssignment(
   arrayNames: Set<string>,
   validatedTypeAliases: ReadonlySet<string> = new Set(),
   mapNames: ReadonlySet<string> = new Set(),
+  pythonRight: string | null = null,
 ): { statements: string[]; nextIndex: number } {
   const fullSliceAssignment = /^(.+)\[:\]$/.exec(pythonLeft);
   if (operator === '=' && fullSliceAssignment !== null) {
@@ -3770,9 +3772,12 @@ function translateStraightLineAssignment(
     }
     const localAssignedRight = assignedRightAsKnownVector(localAssignment[1], localTsName, assignedRight, arrayNames);
     recordLocalAssignmentMarkers(localAssignment[1], localTsName, localAssignedRight, nameMap, arrayNames, mapNames);
+    const nullableType = nullableLocalDeclarationType(localAssignment[1], localTsName, localAssignedRight, arrayNames);
+    const tupleType = localTupleDeclarationType(localAssignedRight, pythonRight);
+    const declarationType = nullableType ?? tupleType;
     return {
       statements: [
-        `${reassignedNames.has(localAssignment[1]) ? 'let' : 'const'} ${localTsName} = ${localAssignedRight};`,
+        `${reassignedNames.has(localAssignment[1]) ? 'let' : 'const'} ${localTsName}${declarationType === null ? '' : `: ${declarationType}`} = ${localAssignedRight};`,
       ],
       nextIndex,
     };
@@ -3844,6 +3849,140 @@ function translateStraightLineAssignment(
     statements: [`${translateExpression(pythonLeft, nameMap, arrayNames, validatedTypeAliases, mapNames)} ${operator} ${assignedRight};`],
     nextIndex,
   };
+}
+
+function nullableLocalDeclarationType(
+  pythonName: string,
+  tsName: string,
+  assignedRight: string,
+  arrayNames: ReadonlySet<string>,
+): string | null {
+  if (!arrayNames.has(nullableNameMarker(pythonName)) && !arrayNames.has(nullableNameMarker(tsName))) {
+    return null;
+  }
+  if (translatedExpressionLooksNumber(assignedRight)) {
+    return 'number | null';
+  }
+  return null;
+}
+
+function localTupleDeclarationType(assignedRight: string, pythonRight: string | null): string | null {
+  if (!pythonExpressionCouldBeTupleLiteral(pythonRight)) {
+    return null;
+  }
+  const length = numericTupleExpressionLength(assignedRight);
+  if (length === null) {
+    return null;
+  }
+  return `[${Array.from({ length }, () => 'number').join(', ')}]`;
+}
+
+function pythonExpressionCouldBeTupleLiteral(pythonExpression: string | null): boolean {
+  if (pythonExpression === null) {
+    return false;
+  }
+  const trimmed = pythonExpression.trim();
+  if (trimmed === '' || trimmed.startsWith('[') || trimmed.startsWith('{')) {
+    return false;
+  }
+  if (trimmed.startsWith('(') && matchingCloseParen(trimmed, 0) === trimmed.length - 1) {
+    return splitTopLevelComma(trimmed.slice(1, -1)).length > 1;
+  }
+  return splitTopLevelComma(trimmed).length > 1 || /\([^)]*,[^)]*\)/.test(trimmed);
+}
+
+function numericTupleExpressionLength(tsExpression: string): number | null {
+  const trimmed = tsExpression.trim();
+  const ternary = splitTopLevelTernaryExpression(trimmed);
+  if (ternary !== null) {
+    const trueLength = numericTupleExpressionLength(ternary.trueExpression);
+    const falseLength = numericTupleExpressionLength(ternary.falseExpression);
+    return trueLength !== null && trueLength === falseLength ? trueLength : null;
+  }
+  const arrayLiteral = /^\[([\s\S]*)\]$/.exec(trimmed);
+  if (arrayLiteral === null || matchingCloseBracket(trimmed, 0) !== trimmed.length - 1) {
+    return null;
+  }
+  const parts = splitTopLevelComma(arrayLiteral[1]);
+  if (parts.length < 2 || parts.some((part) => !translatedExpressionLooksNumber(part))) {
+    return null;
+  }
+  return parts.length;
+}
+
+function splitTopLevelTernaryExpression(value: string): { trueExpression: string; falseExpression: string } | null {
+  let depth = 0;
+  let quote: string | null = null;
+  let questionIndex: number | null = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      if (char === quote && !charIsEscaped(value, index)) {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'" || char === '`') {
+      quote = char;
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char === ')' || char === ']' || char === '}') {
+      depth -= 1;
+      continue;
+    }
+    if (char === '?' && depth === 0 && questionIndex === null) {
+      questionIndex = index;
+      continue;
+    }
+    if (char === ':' && depth === 0 && questionIndex !== null) {
+      return {
+        trueExpression: value.slice(questionIndex + 1, index).trim(),
+        falseExpression: value.slice(index + 1).trim(),
+      };
+    }
+  }
+  return null;
+}
+
+function matchingCloseBracket(value: string, openIndex: number): number | null {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let index = openIndex; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      if (char === quote && !charIsEscaped(value, index)) {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'" || char === '`') {
+      quote = char;
+      continue;
+    }
+    if (char === '[') {
+      depth += 1;
+      continue;
+    }
+    if (char === ']') {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+  return null;
+}
+
+function charIsEscaped(value: string, index: number): boolean {
+  let slashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && value[cursor] === '\\'; cursor -= 1) {
+    slashCount += 1;
+  }
+  return slashCount % 2 === 1;
 }
 
 function assignedRightAsKnownVector(

@@ -1,38 +1,37 @@
 // Port of crimson/render/projectile_draw/primary_beam.py
 
-import { TextureId, getTexture } from '@grim/assets.ts';
+import { TextureId } from '@grim/assets.ts';
 import { RGBA } from '@grim/color.ts';
 import { Vec2 } from '@grim/geom.ts';
 import { clamp } from '@grim/math.ts';
-import * as wgl from '@wgl';
+import type { rl } from '@grim/raylib-api.ts';
 import { creatureLifecycleIsCollidable } from '@crimson/creatures/lifecycle.ts';
 import { EFFECT_ID_ATLAS_TABLE_BY_ID, SIZE_CODE_GRID, EffectId } from '@crimson/effects-atlas.ts';
-import { PerkId } from '@crimson/perks/ids.ts';
+import { PerkId } from '@crimson/perks/index.ts';
 import { perkActive } from '@crimson/perks/helpers.ts';
 import { ProjectileTemplateId } from '@crimson/projectiles/types.ts';
 import { drawBeamFastStampedBody, drawBeamFastStampedHead } from '@crimson/render/rtx/beam.ts';
 import { RtxRenderMode } from '@crimson/render/rtx/mode.ts';
 import { BEAM_TYPES, ION_TYPES } from '@crimson/sim/world-defs.ts';
 import { beamEffectScale } from '@crimson/render/projectile-render-registry.ts';
-import { RAD_TO_DEG, projOrigin } from './common.ts';
-import type { ProjectileDrawCtx } from './types.ts';
+import { RAD_TO_DEG, projOrigin } from '@crimson/render/projectile-draw/common.ts';
+import type { ProjectileDrawCtx } from '@crimson/render/projectile-draw/types.ts';
+import * as wgl from '@wgl';
 
-function drawBeamBodySprites(opts: {
-  ctx: ProjectileDrawCtx;
-  origin: Vec2;
-  direction: Vec2;
-  dist: number;
-  start: number;
-  span: number;
-  step: number;
-  baseAlpha: number;
-  streakRgb: [number, number, number];
-  texture: wgl.Texture;
-  grid: number;
-  frame: number;
-  spriteScale: number;
-}): void {
-  const { ctx, origin, direction, dist, start, span, step, baseAlpha, streakRgb, texture, grid, frame, spriteScale } = opts;
+function drawBeamBodySprites(opts: { ctx: ProjectileDrawCtx; origin: Vec2; direction: Vec2; dist: number; start: number; span: number; step: number; baseAlpha: number; streakRgb: [number, number, number]; texture: rl.Texture; grid: number; frame: number; spriteScale: number }): void {
+  const ctx = opts.ctx;
+  const origin = opts.origin;
+  const direction = opts.direction;
+  const dist = opts.dist;
+  const start = opts.start;
+  const span = opts.span;
+  const step = opts.step;
+  const baseAlpha = opts.baseAlpha;
+  const streakRgb = opts.streakRgb;
+  const texture = opts.texture;
+  const grid = opts.grid;
+  const frame = opts.frame;
+  const spriteScale = opts.spriteScale;
   const renderer = ctx.renderer;
   let s = start;
   while (s < dist) {
@@ -41,15 +40,11 @@ function drawBeamBodySprites(opts: {
     if (segAlpha > 1e-3) {
       const pos = origin.add(direction.mul(s));
       const posScreen = renderer.worldToScreen(pos);
-      const tint = new RGBA(streakRgb[0], streakRgb[1], streakRgb[2], segAlpha).toWgl();
-      renderer.drawAtlasSprite(texture, {
-        grid,
-        frame,
-        pos: posScreen,
-        scale: spriteScale,
-        rotationRad: 0.0,
-        tint,
-      });
+      const tint = new RGBA(streakRgb[0], streakRgb[1], streakRgb[2], segAlpha).toRl();
+      renderer._drawAtlasSprite(
+        texture,
+        { grid: grid, frame: frame, pos: posScreen, scale: spriteScale, rotationRad: 0.0, tint: tint },
+      );
     }
     s += step;
   }
@@ -61,28 +56,31 @@ export function drawBeamEffect(ctx: ProjectileDrawCtx): boolean {
   const resources = renderFrame.resources;
   const typeId = int(ctx.typeId);
   const texture = ctx.texture;
-  if (!BEAM_TYPES.has(typeId)) return false;
-  if (texture === null) return false;
+  if (!((container: unknown, value: unknown) => container instanceof Set || container instanceof Map ? container.has(value) : Array.isArray(container) ? container.includes(value) : typeof container === 'string' ? container.includes(String(value)) : container !== null && typeof container === 'object' ? Object.prototype.hasOwnProperty.call(container, String(value)) : false)(BEAM_TYPES, typeId)) {
+    return false;
+  }
+  if (texture === null) {
+    return false;
+  }
 
   // Ion weapons and Fire Bullets use the projs.png streak effect (and Ion adds chain arcs on impact).
-  let grid = 4;
+  let grid: number | null = 4;
   let atlasFrame = 2;
 
   const isFireBullets = typeId === ProjectileTemplateId.FIRE_BULLETS;
-  const isIon = ION_TYPES.has(typeId);
+  const isIon = ((container: unknown, value: unknown) => container instanceof Set || container instanceof Map ? container.has(value) : Array.isArray(container) ? container.includes(value) : typeof container === 'string' ? container.includes(String(value)) : container !== null && typeof container === 'object' ? Object.prototype.hasOwnProperty.call(container, String(value)) : false)(ION_TYPES, typeId);
 
-  const origin = projOrigin(ctx.proj, ctx.pos);
+  let origin = projOrigin(ctx.proj, ctx.pos);
   const beam = ctx.pos.sub(origin);
   const [direction, dist] = beam.normalizedWithLength();
-  if (dist <= 1e-6) return true;
+  if (dist <= 1e-6) {
+    return true;
+  }
 
   // In the native renderer, Ion Gun Master increases the chain effect thickness and reach.
   let perkScale = 1.0;
-  for (const player of renderFrame.players) {
-    if (perkActive(player, PerkId.ION_GUN_MASTER)) {
-      perkScale = 1.2;
-      break;
-    }
+  if (renderFrame.players.some((player) => perkActive(player, PerkId.ION_GUN_MASTER))) {
+    perkScale = 1.2;
   }
 
   const effectScale = beamEffectScale(typeId);
@@ -97,7 +95,9 @@ export function drawBeamEffect(ctx: ProjectileDrawCtx): boolean {
     baseAlpha = fade * alpha;
   }
 
-  if (baseAlpha <= 1e-3) return true;
+  if (baseAlpha <= 1e-3) {
+    return true;
+  }
 
   const streakRgb: [number, number, number] = isFireBullets ? [1.0, 0.6, 0.1] : [0.5, 0.6, 1.0];
   const headRgb: [number, number, number] = [1.0, 1.0, 0.7];
@@ -122,15 +122,26 @@ export function drawBeamEffect(ctx: ProjectileDrawCtx): boolean {
       startDistUnits: start,
       spanDistUnits: span,
       stepUnits: step,
-      effectScale,
+      effectScale: effectScale,
       scale: ctx.scale,
-      baseAlpha,
-      streakRgb,
+      baseAlpha: baseAlpha,
+      streakRgb: streakRgb,
     });
   } else {
     drawBeamBodySprites({
-      ctx, origin, direction, dist, start, span, step,
-      baseAlpha, streakRgb, texture, grid, frame: atlasFrame, spriteScale,
+      ctx: ctx,
+      origin: origin,
+      direction: direction,
+      dist: dist,
+      start: start,
+      span: span,
+      step: step,
+      baseAlpha: baseAlpha,
+      streakRgb: streakRgb,
+      texture: texture,
+      grid: grid,
+      frame: atlasFrame,
+      spriteScale: spriteScale,
     });
   }
 
@@ -139,54 +150,38 @@ export function drawBeamEffect(ctx: ProjectileDrawCtx): boolean {
       drawBeamFastStampedHead({
         centerScreen: ctx.screenPos,
         rotationRad: ctx.angle,
-        effectScale,
+        effectScale: effectScale,
         scale: ctx.scale,
-        baseAlpha,
-        headRgb,
+        baseAlpha: baseAlpha,
+        headRgb: headRgb,
         isFire: isFireBullets,
       });
     } else {
-      const headTint = new RGBA(headRgb[0], headRgb[1], headRgb[2], baseAlpha).toWgl();
-      renderer.drawAtlasSprite(texture, {
-        grid,
-        frame: atlasFrame,
-        pos: ctx.screenPos,
-        scale: spriteScale,
-        rotationRad: ctx.angle,
-        tint: headTint,
-      });
+      const headTint = new RGBA(headRgb[0], headRgb[1], headRgb[2], baseAlpha).toRl();
+      renderer._drawAtlasSprite(
+        texture,
+        { grid: grid, frame: atlasFrame, pos: ctx.screenPos, scale: spriteScale, rotationRad: ctx.angle, tint: headTint },
+      );
     }
 
     // Fire Bullets renders an extra particles.png overlay in a later pass.
-    if (isFireBullets) {
-      let particlesTexture;
-      try {
-        particlesTexture = getTexture(resources, TextureId.PARTICLES);
-      } catch {
-        particlesTexture = null;
-      }
-      if (particlesTexture !== null) {
-        const glowAtlas = EFFECT_ID_ATLAS_TABLE_BY_ID.get(EffectId.GLOW);
-        if (glowAtlas !== undefined) {
-          const glowGrid = SIZE_CODE_GRID.get(glowAtlas.sizeCode);
-          if (glowGrid) {
-            const cellW = particlesTexture.width / glowGrid;
-            const cellH = particlesTexture.height / glowGrid;
-            const glowFrame = glowAtlas.frame;
-            const col = glowFrame % glowGrid;
-            const row = Math.floor(glowFrame / glowGrid);
-            const src = wgl.makeRectangle(
-              cellW * col,
-              cellH * row,
-              Math.max(0.0, cellW - 2.0),
-              Math.max(0.0, cellH - 2.0),
-            );
-            const tint = new RGBA(1.0, 1.0, 1.0, alpha).toWgl();
-            const size = 64.0 * ctx.scale;
-            const dst = wgl.makeRectangle(ctx.screenPos.x, ctx.screenPos.y, size, size);
-            const texOrigin = wgl.makeVector2(size * 0.5, size * 0.5);
-            wgl.drawTexturePro(particlesTexture, src, dst, texOrigin, ctx.angle * RAD_TO_DEG, tint);
-          }
+    const particlesTexture = resources.texture(TextureId.PARTICLES);
+    if (isFireBullets && particlesTexture !== null) {
+      const atlas = EFFECT_ID_ATLAS_TABLE_BY_ID.get(int(EffectId.GLOW)) ?? null;
+      if (atlas !== null) {
+        grid = SIZE_CODE_GRID.get(int(atlas.sizeCode)) ?? null;
+        if (grid) {
+          const cellW = particlesTexture.width / grid;
+          const cellH = particlesTexture.height / grid;
+          atlasFrame = int(atlas.frame);
+          const col = atlasFrame % grid;
+          const row = Math.floor(atlasFrame / grid);
+          const src = wgl.makeRectangle(cellW * col, cellH * row, Math.max(0.0, cellW - 2.0), Math.max(0.0, cellH - 2.0));
+          const tint = new RGBA(1.0, 1.0, 1.0, alpha).toRl();
+          const size = 64.0 * ctx.scale;
+          const dst = wgl.makeRectangle(ctx.screenPos.x, ctx.screenPos.y, size, size);
+          origin = new Vec2(size * 0.5, size * 0.5);
+          wgl.drawTexturePro(particlesTexture, src, dst, origin, ctx.angle * RAD_TO_DEG, tint);
         }
       }
     }
@@ -197,22 +192,18 @@ export function drawBeamEffect(ctx: ProjectileDrawCtx): boolean {
       drawBeamFastStampedHead({
         centerScreen: ctx.screenPos,
         rotationRad: ctx.angle,
-        effectScale,
+        effectScale: effectScale,
         scale: ctx.scale,
-        baseAlpha,
+        baseAlpha: baseAlpha,
         headRgb: coreRgb,
         isFire: isFireBullets,
       });
     } else {
-      const coreTint = new RGBA(coreRgb[0], coreRgb[1], coreRgb[2], baseAlpha).toWgl();
-      renderer.drawAtlasSprite(texture, {
-        grid,
-        frame: atlasFrame,
-        pos: ctx.screenPos,
-        scale: ctx.scale,
-        rotationRad: ctx.angle,
-        tint: coreTint,
-      });
+      const coreTint = new RGBA(coreRgb[0], coreRgb[1], coreRgb[2], baseAlpha).toRl();
+      renderer._drawAtlasSprite(
+        texture,
+        { grid: grid, frame: atlasFrame, pos: ctx.screenPos, scale: ctx.scale, rotationRad: ctx.angle, tint: coreTint },
+      );
     }
 
     if (isIon) {
@@ -220,12 +211,14 @@ export function drawBeamEffect(ctx: ProjectileDrawCtx): boolean {
       const radius = effectScale * perkScale * 40.0;
 
       // Native iterates via creature_find_in_radius(pos, radius, start_index) in pool order.
-      const targets: Array<{ pos: Vec2; size: number }> = [];
-      const entries = renderFrame.creatures.entries;
-      for (let i = 1; i < entries.length; i++) {
-        const creature = entries[i];
-        if (!creature.active) continue;
-        if (!creatureLifecycleIsCollidable(creature.lifecycleStage)) continue;
+      const targets = [];
+      for (const creature of renderFrame.creatures.entries.slice(1)) {
+        if (!creature.active) {
+          continue;
+        }
+        if (!creatureLifecycleIsCollidable(creature.lifecycleStage)) {
+          continue;
+        }
         const d = ctx.pos.distanceTo(creature.pos);
         const threshold = creature.size * 0.14285715 + 3.0;
         if (d - radius < threshold) {
@@ -241,27 +234,28 @@ export function drawBeamEffect(ctx: ProjectileDrawCtx): boolean {
       const v0 = 0.0;
       const v1 = 0.25;
 
-      const glowTargets: Array<{ pos: Vec2 }> = [];
+      const glowTargets = [];
       wgl.beginQuads(texture);
 
       for (const creature of targets) {
-        const targetScreen = renderer.worldToScreen(creature.pos);
+        let targetScreen = renderer.worldToScreen(creature.pos);
         const segment = targetScreen.sub(ctx.screenPos);
         const [directionScreen, dlen] = segment.normalizedWithLength();
-        if (dlen <= 1e-3) continue;
+        if (dlen <= 1e-3) {
+          continue;
+        }
         glowTargets.push(creature);
         const side = directionScreen.perpLeft();
 
         // Outer strip (softer).
-        const outerTint = new RGBA(0.5, 0.6, 1.0, baseAlpha);
-        const { r: oR, g: oG, b: oB, a: oA } = outerTint.toWgl();
         let sideOffset = side.mul(outerHalf);
         let p0 = ctx.screenPos.sub(sideOffset);
         let p1 = ctx.screenPos.add(sideOffset);
         let p2 = targetScreen.add(sideOffset);
         let p3 = targetScreen.sub(sideOffset);
 
-        wgl.rlColor4f(oR, oG, oB, oA);
+        const outerTint = new RGBA(0.5, 0.6, 1.0, baseAlpha).toRl();
+        wgl.rlColor4f(outerTint.r, outerTint.g, outerTint.b, outerTint.a);
         wgl.rlTexCoord2f(u, v0);
         wgl.rlVertex2f(p0.x, p0.y);
         wgl.rlTexCoord2f(u, v1);
@@ -272,15 +266,14 @@ export function drawBeamEffect(ctx: ProjectileDrawCtx): boolean {
         wgl.rlVertex2f(p3.x, p3.y);
 
         // Inner strip (brighter).
-        const innerTint = new RGBA(0.5, 0.6, 1.0, baseAlpha);
-        const { r: iR, g: iG, b: iB, a: iA } = innerTint.toWgl();
         sideOffset = side.mul(innerHalf);
         p0 = ctx.screenPos.sub(sideOffset);
         p1 = ctx.screenPos.add(sideOffset);
         p2 = targetScreen.add(sideOffset);
         p3 = targetScreen.sub(sideOffset);
 
-        wgl.rlColor4f(iR, iG, iB, iA);
+        const innerTint = new RGBA(0.5, 0.6, 1.0, baseAlpha).toRl();
+        wgl.rlColor4f(innerTint.r, innerTint.g, innerTint.b, innerTint.a);
         wgl.rlTexCoord2f(u, v0);
         wgl.rlVertex2f(p0.x, p0.y);
         wgl.rlTexCoord2f(u, v1);
@@ -294,16 +287,12 @@ export function drawBeamEffect(ctx: ProjectileDrawCtx): boolean {
       wgl.endQuads();
 
       for (const creature of glowTargets) {
-        const targetScreen = renderer.worldToScreen(creature.pos);
-        const targetTint = new RGBA(0.5, 0.6, 1.0, baseAlpha).toWgl();
-        renderer.drawAtlasSprite(texture, {
-          grid,
-          frame: atlasFrame,
-          pos: targetScreen,
-          scale: spriteScale,
-          rotationRad: 0.0,
-          tint: targetTint,
-        });
+        let targetScreen = renderer.worldToScreen(creature.pos);
+        const targetTint = new RGBA(0.5, 0.6, 1.0, baseAlpha).toRl();
+        renderer._drawAtlasSprite(
+          texture,
+          { grid: grid, frame: atlasFrame, pos: targetScreen, scale: spriteScale, rotationRad: 0.0, tint: targetTint },
+        );
       }
     }
   }

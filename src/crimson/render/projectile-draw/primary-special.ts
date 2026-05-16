@@ -117,7 +117,7 @@ export function drawSplitterOrBlade(ctx: ProjectileDrawCtx): boolean {
   }
 
   let rotationRad = ctx.angle;
-  let rgb = [1.0, 1.0, 1.0];
+  let rgb: [number, number, number] = [1.0, 1.0, 1.0];
   if (typeId === ProjectileTemplateId.BLADE_GUN) {
     rotationRad = int(ctx.projIndex) * 0.1 - renderer.frame.elapsedMs * 0.1;
     rgb = [0.8, 0.8, 0.8];

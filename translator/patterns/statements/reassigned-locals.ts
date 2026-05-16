@@ -1,3 +1,5 @@
+import { splitTopLevelComma } from '../common.js';
+
 export function reassignedLocalNames(lines: string[], startIndex: number): Set<string> {
   const counts = new Map<string, number>();
   let firstStatementIndex = startIndex;
@@ -37,4 +39,46 @@ export function reassignedLocalNames(lines: string[], startIndex: number): Set<s
       .filter((entry) => entry[1] > 1)
       .map((entry) => entry[0]),
   );
+}
+
+export function nullableLocalNames(lines: string[], startIndex: number): Set<string> {
+  const names = new Set<string>();
+  let firstStatementIndex = startIndex;
+  while (firstStatementIndex < lines.length && lines[firstStatementIndex].trim() === '') {
+    firstStatementIndex += 1;
+  }
+  const baseIndent = /^(\s+)/.exec(lines[firstStatementIndex] ?? '')?.[1] ?? null;
+  if (baseIndent === null) {
+    return names;
+  }
+
+  let index = firstStatementIndex;
+  while (index < lines.length) {
+    const line = lines[index] ?? '';
+    if (line.trim() !== '' && !line.startsWith(baseIndent)) {
+      break;
+    }
+    const assignment = /^\s+([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(line);
+    if (assignment !== null && assignmentMayBeNull(assignment[2])) {
+      names.add(assignment[1]);
+    }
+    const annotatedAssignment = /^\s+([A-Za-z_][A-Za-z0-9_]*): .+ = (.+)$/.exec(line);
+    if (annotatedAssignment !== null && assignmentMayBeNull(annotatedAssignment[2])) {
+      names.add(annotatedAssignment[1]);
+    }
+    index += 1;
+  }
+  return names;
+}
+
+function assignmentMayBeNull(pythonExpression: string): boolean {
+  const trimmed = pythonExpression.trim();
+  if (trimmed === 'None') {
+    return true;
+  }
+  const dictGet = /^.+\.get\((.*)\)$/.exec(trimmed);
+  if (dictGet === null) {
+    return false;
+  }
+  return splitTopLevelComma(dictGet[1]).length === 1;
 }

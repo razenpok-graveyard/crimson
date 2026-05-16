@@ -635,6 +635,11 @@ export function translateExpression(
     return 'this.constructor.name';
   }
 
+  const enumMemberValue = /^([A-Z][A-Za-z0-9_]*\.[A-Z][A-Z0-9_]*)\.value$/.exec(trimmed);
+  if (enumMemberValue !== null) {
+    return translateExpression(enumMemberValue[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  }
+
   const superMethodCall = /^super\(\)\.([A-Za-z_][A-Za-z0-9_]*)\((.*)\)$/.exec(trimmed);
   if (superMethodCall !== null) {
     const args = translateCallArgsWithKeywordObject(

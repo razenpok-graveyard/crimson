@@ -77,7 +77,7 @@ function drawBulletTrail(renderCtx: WorldRenderCtx, start: Vec2, end: Vec2, opts
     headRgb = [128, 128, 128]; // (0.5, 0.5, 0.5)
   }
 
-  const tailRgb = [128, 128, 128];
+  const tailRgb: [number, number, number] = [128, 128, 128];
   const head = wgl.makeColor(headRgb[0] / 255, headRgb[1] / 255, headRgb[2] / 255, alpha / 255);
   const tail = wgl.makeColor(tailRgb[0] / 255, tailRgb[1] / 255, tailRgb[2] / 255, 0 / 255);
 
