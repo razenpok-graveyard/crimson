@@ -2014,6 +2014,31 @@ function parseTypeAliasStatement(
     return null;
   }
 
+  const parenthesizedAlias = /^([A-Za-z_][A-Za-z0-9_]*): TypeAlias = \($/.exec(lines[index]?.trim() ?? '');
+  if (parenthesizedAlias !== null) {
+    const parts: string[] = [];
+    let nextIndex = index + 1;
+    while (nextIndex < lines.length) {
+      const trimmed = lines[nextIndex].trim();
+      if (trimmed === ')') {
+        const expression = parts.join(' ');
+        if (!isBareTypeAliasExpression(expression)) {
+          return null;
+        }
+        return {
+          alias: { name: tsExportNameForPythonName(parenthesizedAlias[1]), typeExpression: tsTypeExpression(expression) },
+          nextIndex: nextIndex + 1,
+        };
+      }
+      if (trimmed === '' || !lines[nextIndex].startsWith('    ')) {
+        return null;
+      }
+      parts.push(trimmed);
+      nextIndex += 1;
+    }
+    return null;
+  }
+
   const plainAlias = /^([A-Za-z_][A-Za-z0-9_]*): TypeAlias = (.+)$/.exec(lines[index]?.trim() ?? '');
   if (plainAlias !== null) {
     return {

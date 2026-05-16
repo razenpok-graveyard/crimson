@@ -107,6 +107,10 @@ function tsLocalFunctionNameForPythonName(pythonName: string): string {
     : tsExportNameForPythonName(pythonName);
 }
 
+function isSimpleReferenceExpression(value: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(value);
+}
+
 function translateConditionExpression(
   pythonExpression: string,
   nameMap: Map<string, string>,
@@ -127,8 +131,7 @@ function translateConditionExpression(
       .map((part) => parenthesizeAndConditionOperand(translateConditionExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)))
       .join(' && ');
   }
-  const bareIdentifier = /^[A-Za-z_][A-Za-z0-9_]*$/.exec(trimmed);
-  if (bareIdentifier !== null) {
+  if (isSimpleReferenceExpression(trimmed)) {
     const translated = translateExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (mapNames.has(translated)) {
       return `${translated}.size > 0`;
@@ -1811,7 +1814,7 @@ export function translateStraightLineStatement(
       };
     }
     const clearCall = /^(.+)\.clear\(\)$/.exec(callStatement[1]);
-    if (clearCall !== null && /^[A-Za-z_][A-Za-z0-9_]*$/.test(clearCall[1]) && !['self', 'cls', 'this'].includes(clearCall[1])) {
+    if (clearCall !== null && isSimpleReferenceExpression(clearCall[1]) && !['self', 'cls', 'this'].includes(clearCall[1])) {
       const target = translateExpression(clearCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
       if (arrayNames.has(clearCall[1]) || arrayNames.has(target)) {
         return {
@@ -1825,6 +1828,12 @@ export function translateStraightLineStatement(
         || arrayNames.has(setNameMarker(clearCall[1]))
         || arrayNames.has(setNameMarker(target))
       ) {
+        return {
+          statements: [`${target}.clear();`],
+          nextIndex: index + 1,
+        };
+      }
+      if (clearCall[1].includes('.')) {
         return {
           statements: [`${target}.clear();`],
           nextIndex: index + 1,

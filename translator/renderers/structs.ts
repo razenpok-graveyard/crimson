@@ -75,7 +75,7 @@ export function renderStructClasses(lines: string[], classes: StructModule['clas
       : `<${structClass.typeParams.join(', ')}>`;
     lines.push(`export class ${structClass.name}${typeParams} {`);
     if (structClass.tagged) {
-      lines.push(`  readonly tag = '${structClass.name}';`);
+      lines.push(`  readonly tag = '${structClass.tagValue ?? structClass.name}';`);
     }
     const postInitAssignedFields = fieldsAssignedByPostInit(structClass.postInitStatements);
     for (const field of structClass.fields) {

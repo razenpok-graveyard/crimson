@@ -345,7 +345,8 @@ export function parseStructClass(
   }
   const options = dataclass?.groups?.options ?? header.groups?.options ?? '';
   const readonlyFields = options.includes('frozen=True');
-  const tagged = options.includes('tag=True');
+  const tagString = /(?:^|, )tag=(["'])(.*?)\1/.exec(options);
+  const tagged = options.includes('tag=True') || tagString !== null;
   const genericBase = /(?:^|, )Generic\[([^\]]+)\]/.exec(options);
   const typeParams = genericBase === null
     ? undefined
@@ -453,6 +454,7 @@ export function parseStructClass(
       name: className,
       docstring: docstring?.value ?? null,
       tagged,
+      ...(tagString === null ? {} : { tagValue: tagString[2] }),
       readonlyFields,
       typeParams,
       fields,

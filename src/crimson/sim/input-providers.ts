@@ -1,65 +1,92 @@
 // Port of crimson/sim/input_providers.py
 
 import { clearInputEdges } from '@crimson/local-input.ts';
-import { PlayerInput } from './input.ts';
+import type { PlayerInput } from '@crimson/sim/input.ts';
 
-type TypoChar = string;
+export type TypoChar = string;
+export type GameCommand = PerkMenuOpenCommand | PerkPickCommand | TypoCharCommand | TypoBackspaceCommand | TypoSubmitCommand;
+export type LocalInputBuilder = (arg0: FrameContext) => readonly PlayerInput[];
+
+function validateTypoChar(value: string): TypoChar {
+  if (value.length < 1 || value.length > 1) {
+    throw new Error('invalid TypoChar');
+  }
+  return value;
+}
+
+export interface InputProvider {
+  beginFrame(frameCtx: FrameContext): void;
+  pullTick(tickIndex: number, defaultDtSeconds: number): TickSupply;
+  supportsCommandSubmission(): boolean;
+  submitCommand(command: GameCommand): void;
+}
+
+export enum InputStatus {
+  READY = 'ready',
+  STALLED = 'stalled',
+  EOS = 'eos',
+}
 
 export class PerkMenuOpenCommand {
-  readonly tag = 'perk_menu_open' as const;
+  readonly tag = 'perk_menu_open';
   readonly playerIndex: number;
 
-  constructor(opts: { playerIndex: number }) {
+  constructor(opts: {
+    playerIndex: number;
+  }) {
     this.playerIndex = opts.playerIndex;
   }
 }
 
 export class PerkPickCommand {
-  readonly tag = 'perk_pick' as const;
+  readonly tag = 'perk_pick';
   readonly playerIndex: number;
   readonly choiceIndex: number;
 
-  constructor(opts: { playerIndex: number; choiceIndex: number }) {
+  constructor(opts: {
+    playerIndex: number;
+    choiceIndex: number;
+  }) {
     this.playerIndex = opts.playerIndex;
     this.choiceIndex = opts.choiceIndex;
   }
 }
 
 export class TypoCharCommand {
-  readonly tag = 'typo_char' as const;
+  readonly tag = 'typo_char';
   readonly playerIndex: number;
   readonly ch: TypoChar;
 
-  constructor(opts: { playerIndex: number; ch: TypoChar }) {
+  constructor(opts: {
+    playerIndex: number;
+    ch: TypoChar;
+  }) {
     this.playerIndex = opts.playerIndex;
     this.ch = opts.ch;
   }
 }
 
 export class TypoBackspaceCommand {
-  readonly tag = 'typo_backspace' as const;
+  readonly tag = 'typo_backspace';
   readonly playerIndex: number;
 
-  constructor(opts: { playerIndex: number }) {
+  constructor(opts: {
+    playerIndex: number;
+  }) {
     this.playerIndex = opts.playerIndex;
   }
 }
 
 export class TypoSubmitCommand {
-  readonly tag = 'typo_submit' as const;
+  readonly tag = 'typo_submit';
   readonly playerIndex: number;
 
-  constructor(opts: { playerIndex: number }) {
+  constructor(opts: {
+    playerIndex: number;
+  }) {
     this.playerIndex = opts.playerIndex;
   }
 }
-
-export type GameCommand =
-  | PerkMenuOpenCommand
-  | PerkPickCommand
-  | TypoCharCommand
-  | TypoBackspaceCommand
-  | TypoSubmitCommand;
 
 export class FrameContext {
   readonly dtSeconds: number;
@@ -86,12 +113,6 @@ export class FrameContext {
   }
 }
 
-export enum InputStatus {
-  READY = 'ready',
-  STALLED = 'stalled',
-  EOS = 'eos',
-}
-
 export class ResolvedTick {
   readonly tickIndex: number;
   readonly dtSeconds: number;
@@ -101,13 +122,13 @@ export class ResolvedTick {
   constructor(opts: {
     tickIndex: number;
     dtSeconds: number;
-    inputs?: readonly PlayerInput[];
-    commands?: readonly GameCommand[];
+    inputs?: PlayerInput[];
+    commands?: GameCommand[];
   }) {
     this.tickIndex = opts.tickIndex;
     this.dtSeconds = opts.dtSeconds;
-    this.inputs = Array.from(opts.inputs ?? []);
-    this.commands = Array.from(opts.commands ?? []);
+    this.inputs = opts.inputs ?? [];
+    this.commands = opts.commands ?? [];
   }
 }
 
@@ -115,34 +136,35 @@ export class TickSupply {
   readonly status: InputStatus;
   readonly tick: ResolvedTick | null;
 
-  constructor(opts: { status: InputStatus; tick?: ResolvedTick | null }) {
+  constructor(opts: {
+    status: InputStatus;
+    tick?: ResolvedTick | null;
+  }) {
     this.status = opts.status;
     this.tick = opts.tick ?? null;
   }
 }
 
-export interface InputProvider {
-  beginFrame(frameCtx: FrameContext): void;
-  pullTick(tickIndex: number, defaultDtSeconds: number): TickSupply;
-  supportsCommandSubmission(): boolean;
-  submitCommand(command: GameCommand): void;
-}
-
-export type LocalInputBuilder = (ctx: FrameContext) => readonly PlayerInput[];
-
 // Adapter over local input polling.
-export class LocalInputProvider implements InputProvider {
+export class LocalInputProvider {
   private readonly _playerCount: number;
   private readonly _buildInputs: LocalInputBuilder;
-  private _pendingCommands: GameCommand[] = [];
-  private _commandsForNextTick: GameCommand[] = [];
-  private _frameInputs: PlayerInput[] = [];
-  private _edgeInputs: PlayerInput[] = [];
-  private _firstTickPending = false;
+  private readonly _pendingCommands: GameCommand[];
+  private readonly _commandsForNextTick: GameCommand[];
+  private _frameInputs: PlayerInput[];
+  private _edgeInputs: PlayerInput[];
+  private _firstTickPending: boolean;
 
   constructor(opts: { playerCount: number; buildInputs: LocalInputBuilder }) {
-    this._playerCount = Math.max(0, opts.playerCount);
-    this._buildInputs = opts.buildInputs;
+    const playerCount = opts.playerCount;
+    const buildInputs = opts.buildInputs;
+    this._playerCount = Math.max(0, playerCount);
+    this._buildInputs = buildInputs;
+    this._pendingCommands = [];
+    this._commandsForNextTick = [];
+    this._frameInputs = [];
+    this._edgeInputs = [];
+    this._firstTickPending = false;
   }
 
   beginFrame(frameCtx: FrameContext): void {
@@ -152,30 +174,23 @@ export class LocalInputProvider implements InputProvider {
     this._firstTickPending = true;
     if (this._pendingCommands.length > 0) {
       this._commandsForNextTick.push(...this._pendingCommands);
-      this._pendingCommands = [];
+      this._pendingCommands.length = 0;
     }
   }
 
   pullTick(tickIndex: number, defaultDtSeconds: number): TickSupply {
-    const ti = int(tickIndex);
-    const dt = Number(defaultDtSeconds);
+    tickIndex = int(tickIndex);
+    const dtSeconds = defaultDtSeconds;
+    let inputs: any;
     if (this._firstTickPending) {
       this._firstTickPending = false;
-      const inputs =
-        this._playerCount <= 0 ? [] : Array.from(this._frameInputs);
+      inputs = this._playerCount <= 0 ? [] : Array.from(this._frameInputs);
       const commands = Array.from(this._commandsForNextTick);
-      this._commandsForNextTick = [];
-      return new TickSupply({
-        status: InputStatus.READY,
-        tick: new ResolvedTick({ tickIndex: ti, dtSeconds: dt, inputs, commands }),
-      });
+      this._commandsForNextTick.length = 0;
+      return new TickSupply({ status: InputStatus.READY, tick: new ResolvedTick({ tickIndex: tickIndex, dtSeconds: dtSeconds, inputs: inputs, commands: commands }) });
     }
-    const inputs =
-      this._playerCount <= 0 ? [] : Array.from(this._edgeInputs);
-    return new TickSupply({
-      status: InputStatus.READY,
-      tick: new ResolvedTick({ tickIndex: ti, dtSeconds: dt, inputs, commands: [] }),
-    });
+    inputs = this._playerCount <= 0 ? [] : Array.from(this._edgeInputs);
+    return new TickSupply({ status: InputStatus.READY, tick: new ResolvedTick({ tickIndex: tickIndex, dtSeconds: dtSeconds, inputs: inputs, commands: [] }) });
   }
 
   supportsCommandSubmission(): boolean {
