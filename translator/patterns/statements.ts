@@ -30,6 +30,7 @@ import {
   pathArrayNameMarker,
   pathNameMarker,
   setNameMarker,
+  stringNameMarker,
   translatedExpressionLooksVector,
   vectorNameMarker,
 } from './expression.js';
@@ -761,6 +762,7 @@ export function translateStraightLineStatement(
   if (whileStatement !== null) {
     const innerIndent = `${indent}    `;
     const innerStatements: string[] = [];
+    let sawBodyLine = false;
     let nextIndex = index + 1;
     while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, innerIndent)) {
       if (lines[nextIndex].trim() === '') {
@@ -768,6 +770,7 @@ export function translateStraightLineStatement(
         nextIndex += 1;
         continue;
       }
+      sawBodyLine = true;
       const innerStatement = translateStraightLineStatement(
         lines,
         nextIndex,
@@ -787,7 +790,7 @@ export function translateStraightLineStatement(
       innerStatements.push(...innerStatement.statements.map(indentStatementLine));
       nextIndex = innerStatement.nextIndex;
     }
-    if (innerStatements.length === 0) {
+    if (!sawBodyLine) {
       return null;
     }
     return {
@@ -911,6 +914,81 @@ export function translateStraightLineStatement(
         `for (const [${targets.join(', ')}] of [`,
         ...iterableItems.map((item) => `  ${item},`),
         ']) {',
+        ...innerStatements,
+        '}',
+      ],
+      nextIndex,
+    };
+  }
+
+  const multilineValueForOfStatement = /^for ([A-Za-z_][A-Za-z0-9_]*) in \($/.exec(statement);
+  if (multilineValueForOfStatement !== null) {
+    const iterableItems: string[] = [];
+    let iterableIndex = index + 1;
+    let sliceLimit: string | null = null;
+    while (iterableIndex < lines.length) {
+      const iterableLine = lines[iterableIndex] ?? '';
+      const trimmed = iterableLine.trim();
+      const close = /^\)(?:\[:(.+)\])?:$/.exec(trimmed);
+      if (iterableLine.startsWith(indent) && close !== null) {
+        sliceLimit = close[1] ?? null;
+        break;
+      }
+      if (!iterableLine.startsWith(`${indent}    `) || trimmed === '') {
+        return null;
+      }
+      const tupleItem = /^(.+),$/.exec(trimmed);
+      if (tupleItem === null) {
+        return null;
+      }
+      iterableItems.push(translateExpression(tupleItem[1], nameMap, arrayNames, validatedTypeAliases, mapNames));
+      iterableIndex += 1;
+    }
+    if (!/^\)(?:\[:(.+)\])?:$/.test((lines[iterableIndex] ?? '').trim())) {
+      return null;
+    }
+
+    const innerIndent = `${indent}    `;
+    const innerStatements: string[] = [];
+    const branchDeclaredNames = new Set(declaredNames);
+    branchDeclaredNames.add(multilineValueForOfStatement[1]);
+    let nextIndex = iterableIndex + 1;
+    while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, innerIndent)) {
+      if (lines[nextIndex].trim() === '') {
+        innerStatements.push('');
+        nextIndex += 1;
+        continue;
+      }
+      const innerStatement = translateStraightLineStatement(
+        lines,
+        nextIndex,
+        innerIndent,
+        nameMap,
+        branchDeclaredNames,
+        reassignedNames,
+        arrayNames,
+        validatedTypeAliases,
+        relativePath,
+        mapNames,
+        imports,
+      );
+      if (innerStatement === null) {
+        return null;
+      }
+      innerStatements.push(...innerStatement.statements.map(indentStatementLine));
+      nextIndex = innerStatement.nextIndex;
+    }
+    if (innerStatements.length === 0) {
+      return null;
+    }
+
+    return {
+      statements: [
+        `for (const ${tsExportNameForPythonName(multilineValueForOfStatement[1])} of [`,
+        ...iterableItems.map((item) => `  ${item},`),
+        sliceLimit === null
+          ? ']) {'
+          : `].slice(0, ${translateExpression(sliceLimit, nameMap, arrayNames, validatedTypeAliases, mapNames)})) {`,
         ...innerStatements,
         '}',
       ],
@@ -1498,6 +1576,22 @@ export function translateStraightLineStatement(
         nextIndex = dictLiteral.nextIndex;
         continue;
       }
+      const conditionalArg = parseMultilineConditionalArgument(
+        lines,
+        nextIndex,
+        nameMap,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+      );
+      if (conditionalArg !== null) {
+        if (sawKeyword) {
+          return null;
+        }
+        positionalParts.push(conditionalArg.expression);
+        nextIndex = conditionalArg.nextIndex;
+        continue;
+      }
       const keywordArg = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(arg);
       if (keywordArg === null) {
         if (sawKeyword) {
@@ -2037,6 +2131,36 @@ function parseLocalFunctionCallSignature(
   }
 }
 
+function parseMultilineConditionalArgument(
+  lines: string[],
+  startIndex: number,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): { expression: string; nextIndex: number } | null {
+  const trueExpression = (lines[startIndex] ?? '').trim();
+  if (trueExpression === '' || trueExpression.endsWith(',')) {
+    return null;
+  }
+  const condition = /^if (.+)$/.exec((lines[startIndex + 1] ?? '').trim());
+  if (condition === null) {
+    return null;
+  }
+  const elseLine = (lines[startIndex + 2] ?? '').trim();
+  if (!elseLine.startsWith('else ')) {
+    return null;
+  }
+  const falseExpression = elseLine.slice('else '.length).replace(/,$/, '');
+  if (falseExpression === '') {
+    return null;
+  }
+  return {
+    expression: `${translateExpression(condition[1], nameMap, arrayNames, validatedTypeAliases, mapNames)} ? ${translateExpression(trueExpression, nameMap, arrayNames, validatedTypeAliases, mapNames)} : ${translateExpression(falseExpression, nameMap, arrayNames, validatedTypeAliases, mapNames)}`,
+    nextIndex: startIndex + 3,
+  };
+}
+
 function parseMultilineCallExpressionWithOuterClose(
   lines: string[],
   startIndex: number,
@@ -2259,6 +2383,22 @@ function parseMultilineCallParts(
       positionalParts.push(combinePythonStringExpressions(adjacentStrings));
       continue;
     }
+    const conditionalArg = parseMultilineConditionalArgument(
+      lines,
+      nextIndex,
+      nameMap,
+      arrayNames,
+      validatedTypeAliases,
+      mapNames,
+    );
+    if (conditionalArg !== null) {
+      if (sawKeyword) {
+        return null;
+      }
+      positionalParts.push(conditionalArg.expression);
+      nextIndex = conditionalArg.nextIndex;
+      continue;
+    }
 
     const argParts = splitTopLevelComma(arg);
     let consumedNestedCall = false;
@@ -2390,6 +2530,10 @@ function translateStraightLineAssignment(
       arrayNames.add(objectNameMarker(localAssignment[1]));
       arrayNames.add(objectNameMarker(tsName));
     }
+    if (/^(?:'[^']*'|"[^"]*"|`[^`]*`)$/.test(assignedRight)) {
+      arrayNames.add(stringNameMarker(localAssignment[1]));
+      arrayNames.add(stringNameMarker(tsName));
+    }
     if (assignedRight.startsWith('new Map(')) {
       addMutableName(mapNames, localAssignment[1]);
       addMutableName(mapNames, tsName);
@@ -2402,6 +2546,10 @@ function translateStraightLineAssignment(
     if (callAssignment !== null && arrayNames.has(objectNameMarker(callAssignment[1]))) {
       arrayNames.add(objectNameMarker(localAssignment[1]));
       arrayNames.add(objectNameMarker(tsName));
+    }
+    if (callAssignment !== null && arrayNames.has(stringNameMarker(callAssignment[1]))) {
+      arrayNames.add(stringNameMarker(localAssignment[1]));
+      arrayNames.add(stringNameMarker(tsName));
     }
     if (translatedExpressionLooksVector(assignedRight)) {
       arrayNames.add(vectorNameMarker(localAssignment[1]));

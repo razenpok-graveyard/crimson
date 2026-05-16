@@ -42,7 +42,7 @@ import {
   stripTypeOnlyStatementSyntax,
 } from './common.js';
 import { parseStringEnumClass } from './enums.js';
-import { objectNameMarker, setNameMarker, translateExpression } from './expression.js';
+import { objectNameMarker, setNameMarker, stringNameMarker, translateExpression } from './expression.js';
 import { parseFunctionParameterText, pythonParameterNames } from './parameters.js';
 import { bytesFromHelperStatements, constructBinaryHelperStatements } from './runtime-helpers.js';
 import {
@@ -78,6 +78,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   const typeVarNames = new Set<string>();
   const setReturnFunctionNames = new Set<string>();
   const objectReturnFunctionNames = new Set<string>();
+  const stringReturnFunctionNames = new Set<string>();
   const pendingAssignmentComments: string[] = [];
   let index = 0;
 
@@ -255,6 +256,12 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         alias: 'wgl',
         modulePath: '@wgl',
       });
+      if (moduleUsesRaylibInput(lines)) {
+        pushUniqueImportDefinition(imports, {
+          modulePath: tsImportPathForPythonImport('grim.input', relativePath),
+          names: ['InputState'],
+        });
+      }
       for (const name of names) {
         moduleNameMap.set(name, 'wgl');
       }
@@ -466,6 +473,9 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     for (const name of objectReturnFunctionNames) {
       arrayNames.add(objectNameMarker(name));
     }
+    for (const name of stringReturnFunctionNames) {
+      arrayNames.add(stringNameMarker(name));
+    }
     let keywordOnly = false;
     if (header.parametersText !== '') {
       for (const parameterText of splitTopLevelComma(header.parametersText)) {
@@ -565,6 +575,9 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     if (returnType === 'BuiltinObject' || returnType.startsWith('Record<')) {
       objectReturnFunctionNames.add(tsExportNameForPythonName(header.name));
+    }
+    if (returnType === 'string') {
+      stringReturnFunctionNames.add(tsExportNameForPythonName(header.name));
     }
   }
 
@@ -1746,6 +1759,10 @@ function markNamespaceImports(namespaceImports: NamespaceImportDefinition[], val
       index -= 1;
     }
   }
+}
+
+function moduleUsesRaylibInput(lines: string[]): boolean {
+  return lines.some((line) => /\br[dl]\.(?:get_char_pressed|get_key_pressed|is_key_pressed|is_key_pressed_repeat|is_key_down)\b/.test(line));
 }
 
 function importedBindingName(importName: string): string {

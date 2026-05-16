@@ -147,7 +147,7 @@ export function lanDebugLog(event: string, fields: Record<string, unknown> = {})
   }
 
   if (forwarder !== null) {
-    forwarder(String(line));
+    forwarder(line);
   }
 }
 
