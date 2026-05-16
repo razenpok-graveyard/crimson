@@ -403,7 +403,10 @@ export function inferPythonExpressionType(pythonExpression: string): string {
   if (/^(?:(?:r[dl]|wgl)\.)?(?:Color|makeColor)\(/.test(trimmed)) {
     return 'wgl.Color';
   }
-  if (/^(?:proj_origin|Vec2|rl\.Vector2)\(/.test(trimmed) || /^Vec2\./.test(trimmed)) {
+  if (/^(?:(?:r[dl]|wgl)\.)?(?:Vector2|makeVector2)\(/.test(trimmed)) {
+    return 'wgl.Vector2';
+  }
+  if (/^(?:proj_origin|Vec2)\(/.test(trimmed) || /^Vec2\./.test(trimmed)) {
     return 'Vec2';
   }
   if (!/["'`]/.test(trimmed) && /\s(?:%|\*|\/\/|\/|-)\s/.test(trimmed)) {

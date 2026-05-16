@@ -1418,7 +1418,7 @@ export function translateStraightLineStatement(
     };
   }
 
-  const assignment = /^(.+?) (\+=|-=|\*=|\/=|\|=|&=|\^=|=) (.+)$/.exec(statement);
+  const assignment = /^(.+?) (\/\/=|\+=|-=|\*=|\/=|\|=|&=|\^=|=) (.+)$/.exec(statement);
   if (assignment !== null) {
     const mapPopAssignment = /^(.+)\.pop\((.+)\)$/.exec(assignment[3]);
     if (operatorIsAssignment(assignment[2]) && mapPopAssignment !== null) {
@@ -3032,6 +3032,13 @@ function translateStraightLineAssignment(
     if (assignedRight === tsLeft) {
       return { statements: [], nextIndex };
     }
+  }
+  if (operator === '//=') {
+    const tsLeft = translateExpression(pythonLeft, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return {
+      statements: [`${tsLeft} = Math.floor(${tsLeft} / ${assignedRight});`],
+      nextIndex,
+    };
   }
   return {
     statements: [`${translateExpression(pythonLeft, nameMap, arrayNames, validatedTypeAliases, mapNames)} ${operator} ${assignedRight};`],
