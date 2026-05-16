@@ -149,6 +149,7 @@ export interface StructFieldDefinition {
   name: string;
   typeExpression: string;
   defaultValue: string | null;
+  leadingComments?: string[];
   trailingComment?: string;
 }
 

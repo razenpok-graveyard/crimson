@@ -79,6 +79,9 @@ export function renderStructClasses(lines: string[], classes: StructModule['clas
     }
     const postInitAssignedFields = fieldsAssignedByPostInit(structClass.postInitStatements);
     for (const field of structClass.fields) {
+      for (const comment of field.leadingComments ?? []) {
+        lines.push(`  // ${comment}`);
+      }
       const trailingComment = field.trailingComment === undefined ? '' : ` // ${field.trailingComment}`;
       lines.push(`  ${structClass.readonlyFields ? 'readonly ' : ''}${field.name}: ${field.typeExpression};${trailingComment}`);
     }

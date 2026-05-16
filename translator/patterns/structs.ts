@@ -364,6 +364,7 @@ export function parseStructClass(
   const arrayFieldNames = new Set<string>();
   const mapFieldNames = new Set<string>(initialMapNames);
   let postInitStatements: string[] = [];
+  const pendingFieldComments: string[] = [];
   while (nextIndex < lines.length) {
     const line = lines[nextIndex];
     const trimmedField = line.trim();
@@ -379,8 +380,14 @@ export function parseStructClass(
       nextIndex += 1;
       continue;
     }
+    if (trimmedField.startsWith('#')) {
+      pendingFieldComments.push(trimmedField.replace(/^# ?/, ''));
+      nextIndex += 1;
+      continue;
+    }
 
     if (trimmedField === '@property') {
+      pendingFieldComments.length = 0;
       const propertyMethod = parseStructMethod(lines, nextIndex + 1, false, arrayFieldNames, mapFieldNames, moduleNameMap);
       if (propertyMethod === null || propertyMethod.method.parameters.length > 0 || propertyMethod.method.optsParams.length > 0) {
         return null;
@@ -394,6 +401,7 @@ export function parseStructClass(
     }
 
     if (trimmedField === '@staticmethod') {
+      pendingFieldComments.length = 0;
       const staticMethod = parseStructMethod(lines, nextIndex + 1, true, arrayFieldNames, mapFieldNames, moduleNameMap);
       if (staticMethod === null) {
         return null;
@@ -404,6 +412,7 @@ export function parseStructClass(
     }
 
     if (trimmedField === '@classmethod') {
+      pendingFieldComments.length = 0;
       const classMethod = parseStructMethod(lines, nextIndex + 1, true, arrayFieldNames, mapFieldNames, moduleNameMap, className);
       if (classMethod === null) {
         return null;
@@ -415,6 +424,7 @@ export function parseStructClass(
 
     const method = parseStructMethod(lines, nextIndex, false, arrayFieldNames, mapFieldNames, moduleNameMap);
     if (method !== null) {
+      pendingFieldComments.length = 0;
       if (method.method.name === '__post_init__') {
         postInitStatements = method.method.statements;
       } else {
@@ -450,8 +460,10 @@ export function parseStructClass(
       name: fieldName,
       typeExpression,
       defaultValue,
+      ...(pendingFieldComments.length === 0 ? {} : { leadingComments: [...pendingFieldComments] }),
       ...(parsedFieldLine.comment === null ? {} : { trailingComment: parsedFieldLine.comment }),
     });
+    pendingFieldComments.length = 0;
     nextIndex = defaultValueText?.nextIndex ?? nextIndex + 1;
   }
 
@@ -620,6 +632,13 @@ function parseStructMethod(
   const declaredNames = new Set<string>(pythonParameterNames(extraParameters));
   const reassignedNames = reassignedLocalNames(lines, header.nextIndex);
   let nextIndex = header.nextIndex;
+  const docstring = parseIndentedDocstring(lines, nextIndex, '        ');
+  if (docstring !== null) {
+    for (const line of docstring.value.split('\n')) {
+      statements.push(line === '' ? '//' : `// ${line}`);
+    }
+    nextIndex = docstring.nextIndex;
+  }
   while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, '        ')) {
     if (lines[nextIndex].trim() === '') {
       statements.push('');
