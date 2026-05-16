@@ -376,6 +376,9 @@ export function inferPythonExpressionType(pythonExpression: string): string {
   if (/^(?:int|float)\(/.test(trimmed)) {
     return 'number';
   }
+  if (/^bool\(/.test(trimmed)) {
+    return 'boolean';
+  }
   const listComprehension = /^\[(.+?) for [A-Za-z_][A-Za-z0-9_]* in .+\]$/.exec(trimmed);
   if (listComprehension !== null) {
     return `${inferPythonExpressionType(listComprehension[1])}[]`;
