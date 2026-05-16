@@ -2604,6 +2604,12 @@ function translateIsinstancePredicate(value: string, pythonTypeExpression: strin
   if (trimmedType === 'memoryview') {
     return `ArrayBuffer.isView(${value}) && !(${value} instanceof Uint8Array)`;
   }
+  if (trimmedType === 'Path') {
+    return `typeof ${value} !== 'string'`;
+  }
+  if (/^_?[A-Z][A-Za-z0-9_]*(?:\.[A-Z][A-Za-z0-9_]*)?$/.test(trimmedType)) {
+    return `${value} instanceof ${tsTypeExpression(trimmedType)}`;
+  }
   return null;
 }
 

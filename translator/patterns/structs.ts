@@ -9,9 +9,9 @@ import type {
   StructModule,
   TypeAlias,
 } from '../model.js';
-import { tsExportNameForPythonName, tsTypeExpression } from '../naming.js';
+import { tsExportNameForPythonName, tsPublicNameForPythonName, tsTypeExpression } from '../naming.js';
 import { tsImportPathForPythonImport } from '../paths.js';
-import { flattenFromImportBlocks, isOneLineAllAssignment } from '../python-utils.js';
+import { flattenFromImportBlocks } from '../python-utils.js';
 import {
   identifierPattern,
   isCollectionsAbcTypeImport,
@@ -19,6 +19,7 @@ import {
   isTypingOnlyImport,
   isTypeAliasExpression,
   parseIndentedFunctionHeader,
+  parseOneLineAllNames,
   parseTypeCheckingImports,
   parseTypeCheckingTypeAliasFallback,
   splitTopLevelComma,
@@ -55,6 +56,7 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
   const protocols: StructModule['protocols'] = [];
   const structConstructorFields = new Map<string, string[]>();
   const moduleNameMap = new Map<string, string>();
+  let allNames: string[] = [];
   let sawMsgspecImport = false;
   let index = 0;
 
@@ -178,13 +180,10 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       index += 1;
       continue;
     }
-    if (trimmed.startsWith('__all__ = ')) {
-      if (!isOneLineAllAssignment(trimmed)) {
-        while (index < lines.length && lines[index].trim() !== ']') {
-          index += 1;
-        }
-      }
-      index += 1;
+    const allAssignment = parseStructAllAssignment(lines, index);
+    if (allAssignment !== null) {
+      allNames = allAssignment.names;
+      index = allAssignment.nextIndex;
       continue;
     }
     if (trimmed === 'if TYPE_CHECKING:') {
@@ -201,6 +200,19 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       }
       imports.push(...typeCheckingImports.imports);
       index = typeCheckingImports.nextIndex;
+      continue;
+    }
+
+    const annotatedTypeAlias = /^([A-Za-z_][A-Za-z0-9_]*): TypeAlias = (.+)$/.exec(trimmed);
+    if (annotatedTypeAlias !== null) {
+      if (!isTypeAliasExpression(annotatedTypeAlias[2])) {
+        return null;
+      }
+      typeAliases.push({
+        name: tsExportNameForPythonName(annotatedTypeAlias[1]),
+        typeExpression: tsTypeExpression(annotatedTypeAlias[2]),
+      });
+      index += 1;
       continue;
     }
 
@@ -247,8 +259,9 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
 
   markStructTypeOnlyImports(imports, typeAliases, functions, classes, protocols);
   markStructNamespaceImports(namespaceImports, typeAliases, functions, classes, protocols);
-  return typeAliases.length + functions.length + classes.length + protocols.length > 0
-    ? { imports, namespaceImports, typeAliases, functions, classes, protocols }
+  const reexports = structReexportsForAllNames(imports, allNames);
+  return typeAliases.length + functions.length + classes.length + protocols.length + reexports.length > 0
+    ? { imports, namespaceImports, reexports, typeAliases, functions, classes, protocols }
     : null;
 }
 
@@ -806,13 +819,25 @@ function parseSimpleProtocolClass(
   lines: string[],
   index: number,
 ): { protocol: ProtocolDefinition; nextIndex: number } | null {
-  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\(Protocol\):$/.exec(lines[index] ?? '');
+  const classIndex = lines[index]?.trim() === '@runtime_checkable' ? index + 1 : index;
+  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\((.+)\):$/.exec(lines[classIndex] ?? '');
   if (header === null) {
     return null;
   }
+  const bases = splitTopLevelComma(header[2]);
+  if (!bases.includes('Protocol')) {
+    return null;
+  }
+  const extendsNames = bases
+    .filter((base) => base !== 'Protocol')
+    .map((base) => tsTypeExpression(base));
 
   const methods: ProtocolMethod[] = [];
-  let nextIndex = index + 1;
+  let nextIndex = classIndex + 1;
+  const docstring = parseIndentedDocstring(lines, nextIndex);
+  if (docstring !== null) {
+    nextIndex = docstring.nextIndex;
+  }
   while (nextIndex < lines.length) {
     const trimmed = lines[nextIndex].trim();
     if (trimmed === '') {
@@ -821,6 +846,21 @@ function parseSimpleProtocolClass(
     }
     if (!lines[nextIndex].startsWith('    ')) {
       break;
+    }
+
+    const property = /^    ([A-Za-z_][A-Za-z0-9_]*): (.+)$/.exec(lines[nextIndex] ?? '');
+    if (property !== null) {
+      methods.push({
+        name: tsExportNameForPythonName(property[1]),
+        property: true,
+        readonly: false,
+        parameters: [],
+        optsParams: [],
+        optsOptional: false,
+        returnType: tsTypeExpression(property[2]),
+      });
+      nextIndex += 1;
+      continue;
     }
 
     const method = parseProtocolMethodHeader(lines, nextIndex);
@@ -842,7 +882,14 @@ function parseSimpleProtocolClass(
   }
 
   return methods.length > 0
-    ? { protocol: { name: header[1], methods }, nextIndex }
+    ? {
+      protocol: {
+        name: header[1],
+        ...(extendsNames.length === 0 ? {} : { extendsNames }),
+        methods,
+      },
+      nextIndex,
+    }
     : null;
 }
 
@@ -943,10 +990,7 @@ function parseIndentedDocstring(
 }
 
 function tsStructFieldType(pythonType: string): string {
-  if (pythonType.trim() === 'Path') {
-    return 'string';
-  }
-  return tsTypeExpression(pythonType);
+  return tsTypeExpression(pythonType.replace(/\bPath\b/g, 'str'));
 }
 
 function tsStructFieldDefaultValue(pythonValue: string): string | null {
@@ -1039,11 +1083,14 @@ function markStructTypeOnlyImports(
       ...method.parameters.map((parameter) => parameter.typeExpression),
       ...method.optsParams.map((parameter) => parameter.typeExpression),
     ])),
-    ...protocols.flatMap((protocol) => protocol.methods.flatMap((method) => [
-      method.returnType,
-      ...method.parameters.map((parameter) => parameter.typeExpression),
-      ...method.optsParams.map((parameter) => parameter.typeExpression),
-    ])),
+    ...protocols.flatMap((protocol) => [
+      ...(protocol.extendsNames ?? []),
+      ...protocol.methods.flatMap((method) => [
+        method.returnType,
+        ...method.parameters.map((parameter) => parameter.typeExpression),
+        ...method.optsParams.map((parameter) => parameter.typeExpression),
+      ]),
+    ]),
   ].join('\n');
 
   for (let index = 0; index < imports.length; index += 1) {
@@ -1103,11 +1150,14 @@ function markStructNamespaceImports(
       ...fn.optsParams.map((parameter) => parameter.typeExpression),
       ...fn.statements,
     ]),
-    ...protocols.flatMap((protocol) => protocol.methods.flatMap((method) => [
-      method.returnType,
-      ...method.parameters.map((parameter) => parameter.typeExpression),
-      ...method.optsParams.map((parameter) => parameter.typeExpression),
-    ])),
+    ...protocols.flatMap((protocol) => [
+      ...(protocol.extendsNames ?? []),
+      ...protocol.methods.flatMap((method) => [
+        method.returnType,
+        ...method.parameters.map((parameter) => parameter.typeExpression),
+        ...method.optsParams.map((parameter) => parameter.typeExpression),
+      ]),
+    ]),
   ].join('\n');
 
   for (let index = 0; index < namespaceImports.length; index += 1) {
@@ -1116,6 +1166,59 @@ function markStructNamespaceImports(
       index -= 1;
     }
   }
+}
+
+function parseStructAllAssignment(lines: string[], index: number): { names: string[]; nextIndex: number } | null {
+  const trimmed = lines[index]?.trim() ?? '';
+  const oneLineNames = parseOneLineAllNames(trimmed);
+  if (oneLineNames !== null) {
+    return { names: oneLineNames, nextIndex: index + 1 };
+  }
+  if (trimmed !== '__all__ = [') {
+    return null;
+  }
+
+  const names: string[] = [];
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length) {
+    const inner = lines[nextIndex].trim();
+    if (inner === ']') {
+      return { names, nextIndex: nextIndex + 1 };
+    }
+    const name = /^"([A-Za-z_][A-Za-z0-9_]*)",?$/.exec(inner);
+    if (name === null) {
+      return null;
+    }
+    names.push(name[1]);
+    nextIndex += 1;
+  }
+  return null;
+}
+
+function structReexportsForAllNames(imports: ImportDefinition[], allNames: readonly string[]): StructModule['reexports'] {
+  if (allNames.length === 0) {
+    return [];
+  }
+
+  const exportedNames = new Set(allNames.map(tsPublicNameForPythonName));
+  const byModule = new Map<string, string[]>();
+  for (const importDefinition of imports) {
+    const names = importDefinition.names
+      .filter((name) => exportedNames.has(importedBindingName(name)))
+      .map((name) => `${importDefinition.typeOnly ? 'type ' : ''}${name}`);
+    if (names.length === 0) {
+      continue;
+    }
+    const existing = byModule.get(importDefinition.modulePath) ?? [];
+    for (const name of names) {
+      if (!existing.includes(name)) {
+        existing.push(name);
+      }
+    }
+    byModule.set(importDefinition.modulePath, existing);
+  }
+
+  return [...byModule.entries()].map(([modulePath, names]) => ({ modulePath, names }));
 }
 
 function importedBindingName(importName: string): string {

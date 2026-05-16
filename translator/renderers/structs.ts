@@ -28,7 +28,10 @@ export function renderMsgspecStructModule(relativePath: string, module: StructMo
   for (const namespaceImport of module.namespaceImports) {
     lines.push(`import * as ${namespaceImport.alias} from '${namespaceImport.modulePath}';`);
   }
-  if (module.imports.length + module.namespaceImports.length > 0) {
+  for (const reexport of module.reexports) {
+    lines.push(`export { ${reexport.names.join(', ')} } from '${reexport.modulePath}';`);
+  }
+  if (module.imports.length + module.namespaceImports.length + module.reexports.length > 0) {
     lines.push('');
   }
 

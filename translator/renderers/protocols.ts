@@ -33,10 +33,14 @@ export function renderProtocolDefinition(lines: string[], protocol: ProtocolDefi
     return;
   }
 
-  lines.push(`export interface ${protocol.name} {`);
+  const extendsText = protocol.extendsNames === undefined || protocol.extendsNames.length === 0
+    ? ''
+    : ` extends ${protocol.extendsNames.join(', ')}`;
+  lines.push(`export interface ${protocol.name}${extendsText} {`);
   for (const method of protocol.methods) {
     if (method.property === true) {
-      lines.push(`  readonly ${method.name}: ${method.returnType};`);
+      const readonlyPrefix = method.readonly === false ? '' : 'readonly ';
+      lines.push(`  ${readonlyPrefix}${method.name}: ${method.returnType};`);
       continue;
     }
     const params = method.parameters.map(renderParameter);
@@ -52,7 +56,9 @@ export function renderProtocolDefinition(lines: string[], protocol: ProtocolDefi
 }
 
 export function isCallableProtocol(protocol: ProtocolDefinition): boolean {
-  return protocol.methods.length === 1 && protocol.methods[0].name === '__call__';
+  return (protocol.extendsNames === undefined || protocol.extendsNames.length === 0)
+    && protocol.methods.length === 1
+    && protocol.methods[0].name === '__call__';
 }
 
 function renderProtocolOptsParam(param: { name: string; typeExpression: string; defaultValue?: string | null }, optional = false): string {

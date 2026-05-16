@@ -127,6 +127,7 @@ export interface SimpleExportModule {
 export interface StructModule {
   imports: ImportDefinition[];
   namespaceImports: NamespaceImportDefinition[];
+  reexports: Reexport[];
   typeAliases: TypeAlias[];
   functions: SimpleModuleFunction[];
   classes: StructClassDefinition[];
@@ -178,6 +179,7 @@ export interface LazyWrapperModule {
 export interface ProtocolMethod {
   name: string;
   property?: boolean;
+  readonly?: boolean;
   parameters: FunctionParameter[];
   optsParams: FunctionParameter[];
   optsOptional: boolean;
@@ -186,6 +188,7 @@ export interface ProtocolMethod {
 
 export interface ProtocolDefinition {
   name: string;
+  extendsNames?: string[];
   methods: ProtocolMethod[];
 }
 

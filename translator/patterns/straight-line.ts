@@ -1929,11 +1929,14 @@ function straightLineModuleTypeUsageText(
 ): string {
   return [
     ...typeAliases.map((alias) => alias.typeExpression),
-    ...protocols.flatMap((protocol) => protocol.methods.flatMap((method) => [
-      method.returnType,
-      ...method.parameters.map((parameter) => parameter.typeExpression),
-      ...method.optsParams.map((parameter) => parameter.typeExpression),
-    ])),
+    ...protocols.flatMap((protocol) => [
+      ...(protocol.extendsNames ?? []),
+      ...protocol.methods.flatMap((method) => [
+        method.returnType,
+        ...method.parameters.map((parameter) => parameter.typeExpression),
+        ...method.optsParams.map((parameter) => parameter.typeExpression),
+      ]),
+    ]),
     ...classes.flatMap((structClass) => structClass.fields.map((field) => field.typeExpression)),
     ...classes.flatMap((structClass) => structClass.methods.flatMap((method) => [
       method.returnType,
