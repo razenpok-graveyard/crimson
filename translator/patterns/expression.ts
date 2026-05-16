@@ -277,6 +277,22 @@ export function nullableNameMarker(name: string): string {
   return `__nullable__:${name}`;
 }
 
+export function tupleKeyMapNameMarker(name: string): string {
+  return `__tuple_key_map__:${name}`;
+}
+
+export function arrayValueMapNameMarker(name: string): string {
+  return `__array_value_map__:${name}`;
+}
+
+export function numberArrayNameMarker(name: string): string {
+  return `__number_array__:${name}`;
+}
+
+export function tupleElementArrayNameMarker(name: string): string {
+  return `__tuple_element_array__:${name}`;
+}
+
 export function translatedExpressionLooksVector(tsExpression: string): boolean {
   const trimmed = tsExpression.trim();
   if (/^(?:Vec2\.|new Vec2\b|projOrigin\()/.test(trimmed) && !/\.(?:length|toHeading)\(\)$/.test(trimmed)) {
@@ -342,6 +358,17 @@ export function translateExpression(
   }
   if (trimmed === 'os.getpid()') {
     return 'globalThis.process?.pid ?? 0';
+  }
+
+  if (/^(?:collections\.)?defaultdict\((?:list|dict|set)?\)$/.test(trimmed)) {
+    return 'new Map()';
+  }
+
+  for (const method of ['floor', 'ceil', 'trunc', 'sqrt', 'pow', 'cos', 'sin', 'atan2'] as const) {
+    const mathCall = parseCallPrefix(trimmed, `math.${method}`);
+    if (mathCall !== null && mathCall.rest === '') {
+      return `Math.${method}(${splitTopLevelComma(mathCall.argsText).map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')})`;
+    }
   }
 
   const chrCall = parseCallPrefix(trimmed, 'chr');
@@ -704,7 +731,7 @@ export function translateExpression(
     const mapName = translateExpression(mapNotMembership[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
     const value = translateExpression(mapNotMembership[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (mapNames.has(mapName)) {
-      const key = translateMapKeyExpression(mapName, value);
+      const key = translateMapKeyExpression(mapName, value, mapNames);
       return `!${mapName}.has(${key})`;
     }
     return `!${pythonContainsExpression(mapName, value)}`;
@@ -715,7 +742,7 @@ export function translateExpression(
     const mapName = translateExpression(mapMembership[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
     const value = translateExpression(mapMembership[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (mapNames.has(mapName)) {
-      const key = translateMapKeyExpression(mapName, value);
+      const key = translateMapKeyExpression(mapName, value, mapNames);
       return `${mapName}.has(${key})`;
     }
     return pythonContainsExpression(mapName, value);
@@ -733,7 +760,7 @@ export function translateExpression(
   const mappingConstantSubscript = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[(.+)\]$/.exec(trimmed);
   if (mappingConstantSubscript !== null && looksLikeMappingConstantName(mappingConstantSubscript[1])) {
     const mapName = translateExpression(mappingConstantSubscript[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
-    const key = translateMapKeyExpression(mapName, translateExpression(mappingConstantSubscript[2], nameMap, arrayNames, validatedTypeAliases, mapNames));
+    const key = translateMapKeyExpression(mapName, translateExpression(mappingConstantSubscript[2], nameMap, arrayNames, validatedTypeAliases, mapNames), mapNames);
     return `${mapName}.get(${key})!`;
   }
 
@@ -741,7 +768,7 @@ export function translateExpression(
   if (mapSubscript !== null) {
     const mapName = translateExpression(mapSubscript[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (mapNames.has(mapName)) {
-      const key = translateMapKeyExpression(mapName, translateExpression(mapSubscript[2], nameMap, arrayNames, validatedTypeAliases, mapNames));
+      const key = translateMapKeyExpression(mapName, translateExpression(mapSubscript[2], nameMap, arrayNames, validatedTypeAliases, mapNames), mapNames);
       return `${mapName}.get(${key})!`;
     }
   }
@@ -1058,7 +1085,7 @@ export function translateExpression(
     if (parts.length === 1 || parts.length === 2) {
       const inlineMap = translateInlineDictMapExpression(earlyDictGet[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
       const mapName = inlineMap ?? translateExpression(earlyDictGet[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
-      const key = translateMapKeyExpression(mapName, translateExpression(parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames));
+      const key = translateMapKeyExpression(mapName, translateExpression(parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames), mapNames);
       const value = inlineMap === null && (arrayNames.has(objectNameMarker(earlyDictGet[1])) || arrayNames.has(objectNameMarker(mapName)))
         ? `${mapName}[${key}]`
         : `${mapName}.get(${key})`;
@@ -1157,7 +1184,7 @@ export function translateExpression(
     if (parts.length === 1 || parts.length === 2) {
       const inlineMap = translateInlineDictMapExpression(dictGet[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
       const mapName = inlineMap ?? translateExpression(dictGet[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
-      const key = translateMapKeyExpression(mapName, translateExpression(parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames));
+      const key = translateMapKeyExpression(mapName, translateExpression(parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames), mapNames);
       const value = inlineMap === null && (arrayNames.has(objectNameMarker(dictGet[1])) || arrayNames.has(objectNameMarker(mapName)))
         ? `${mapName}[${key}]`
         : `${mapName}.get(${key})`;
@@ -1259,8 +1286,17 @@ export function translateExpression(
       || parseTopLevelConditionalExpression(stripBalancedOuterParens(divisionWithConditional.right)) !== null
     )
   ) {
-    const left = translateExpression(stripBalancedOuterParens(divisionWithConditional.left), nameMap, arrayNames, validatedTypeAliases, mapNames);
-    const right = translateExpression(stripBalancedOuterParens(divisionWithConditional.right), nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const left = translateExpression(divisionWithConditional.left, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const right = translateExpression(divisionWithConditional.right, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return `${parenthesizeForMultiplicative(left)} / ${parenthesizeForMultiplicative(right)}`;
+  }
+  if (
+    divisionWithConditional !== null
+    && !expressionLooksPathJoinPart(divisionWithConditional.left)
+    && !expressionLooksPathJoinPart(divisionWithConditional.right)
+  ) {
+    const left = translateExpression(divisionWithConditional.left, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const right = translateExpression(divisionWithConditional.right, nameMap, arrayNames, validatedTypeAliases, mapNames);
     return `${parenthesizeForMultiplicative(left)} / ${parenthesizeForMultiplicative(right)}`;
   }
 
@@ -1359,6 +1395,11 @@ export function translateExpression(
   if (notExpression !== null) {
     const operand = stripBalancedOuterParens(notExpression[1]);
     const value = translateExpression(operand, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (mapNames.has(value)) {
+      return arrayNames.has(nullableNameMarker(operand)) || arrayNames.has(nullableNameMarker(value))
+        ? `${value} === null || ${value}.size === 0`
+        : `${value}.size === 0`;
+    }
     if (arrayNames.has(operand) || arrayNames.has(value)) {
       return arrayNames.has(nullableNameMarker(operand)) || arrayNames.has(nullableNameMarker(value))
         ? `${value} === null || ${value}.length === 0`
@@ -1524,6 +1565,11 @@ export function translateExpression(
     return `${translateExpression(openEndedSlice[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.slice(${translateExpression(openEndedSlice[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
+  const simpleSubscript = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[(.+)\]$/.exec(trimmed);
+  if (simpleSubscript !== null) {
+    return `${translateExpression(simpleSubscript[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}[${translateExpression(simpleSubscript[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}]`;
+  }
+
   const enumIdCast = /^([A-Z][A-Za-z0-9_]*(?:Id|Type|Flags))\((.+)\)$/.exec(trimmed);
   if (enumIdCast !== null) {
     return translateExpression(enumIdCast[2], nameMap, arrayNames, validatedTypeAliases);
@@ -1685,7 +1731,7 @@ function translateIdentifierName(name: string, nameMap: Map<string, string>): st
   const root = nameMap.get(parts[0]) ?? tsExportNameForPythonName(parts[0]);
   return [
     root,
-    ...parts.slice(1).map((part) => nameMap.get(part) ?? tsExportNameForPythonName(part)),
+    ...parts.slice(1).map((part) => nameMap.get(part) ?? tsMemberNameForPythonName(part)),
   ].join('.');
 }
 
@@ -1965,11 +2011,20 @@ function tsComparisonOperator(operator: string): string {
 function comparisonNeedsPythonEquality(left: string, right: string, arrayNames: ReadonlySet<string>): boolean {
   return /\bnew [A-Z][A-Za-z0-9_$]*\(/.test(left)
     || /\bnew [A-Z][A-Za-z0-9_$]*\(/.test(right)
+    || arrayNames.has(left)
+    || arrayNames.has(right)
     || arrayNames.has(objectNameMarker(left))
     || arrayNames.has(objectNameMarker(right));
 }
 
-export function translateMapKeyExpression(mapName: string, keyExpression: string): string {
+export function translateMapKeyExpression(
+  mapName: string,
+  keyExpression: string,
+  mapNames: ReadonlySet<string> = new Set(),
+): string {
+  if (mapNames.has(tupleKeyMapNameMarker(mapName)) && !keyExpression.startsWith('tupleKey(')) {
+    return `tupleKey(${keyExpression})`;
+  }
   if (mapName === 'quests' && !keyExpression.endsWith('.text')) {
     return `${keyExpression}.text`;
   }
@@ -2792,6 +2847,13 @@ function splitTopLevelSpacedOperator(value: string, operator: string): { left: s
     }
   }
   return null;
+}
+
+function expressionLooksPathJoinPart(value: string): boolean {
+  const trimmed = value.trim();
+  return parsePythonStringExpression(trimmed) !== null
+    || /^f["']/.test(trimmed)
+    || parseCallPrefix(trimmed, 'Path') !== null;
 }
 
 function splitTopLevelPathJoin(value: string): { parts: string[] } | null {

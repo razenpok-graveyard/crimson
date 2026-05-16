@@ -48,19 +48,19 @@ export function tsTypeExpression(pythonType: string): string {
       });
     return [...new Set(parts)].join(' | ');
   }
-  const dictType = /^dict\[([^,\]]+), (.+)\]$/.exec(trimmed);
-  if (dictType !== null) {
-    if (dictType[1].trim() === 'str' && dictType[2].trim() === 'object') {
+  const dictType = parseGenericTypeArgs(trimmed, 'dict');
+  if (dictType !== null && dictType.length === 2) {
+    if (dictType[0].trim() === 'str' && dictType[1].trim() === 'object') {
       return 'Record<string, unknown>';
     }
-    if (dictType[1].trim() === 'str' && dictType[2].trim() === 'BuiltinValue') {
+    if (dictType[0].trim() === 'str' && dictType[1].trim() === 'BuiltinValue') {
       return '{ [key: string]: BuiltinValue }';
     }
-    return `Map<${tsTypeExpression(dictType[1])}, ${tsTypeExpression(dictType[2])}>`;
+    return `Map<${tsMapKeyTypeExpression(dictType[0])}, ${tsTypeExpression(dictType[1])}>`;
   }
-  const orderedDictType = /^OrderedDict\[([^,\]]+), (.+)\]$/.exec(trimmed);
-  if (orderedDictType !== null) {
-    return `Map<${tsTypeExpression(orderedDictType[1])}, ${tsTypeExpression(orderedDictType[2])}>`;
+  const orderedDictType = parseGenericTypeArgs(trimmed, 'OrderedDict');
+  if (orderedDictType !== null && orderedDictType.length === 2) {
+    return `Map<${tsMapKeyTypeExpression(orderedDictType[0])}, ${tsTypeExpression(orderedDictType[1])}>`;
   }
   const runtimeType = /^type\[(.+)\]$/.exec(trimmed);
   if (runtimeType !== null) {
@@ -76,7 +76,7 @@ export function tsTypeExpression(pythonType: string): string {
   }
   const fixedTupleType = /^tuple\[(.+)\]$/.exec(trimmed);
   if (fixedTupleType !== null && !fixedTupleType[1].endsWith(', ...')) {
-    return `[${fixedTupleType[1].split(topLevelCommaPattern()).map(tsTypeExpression).join(', ')}]`;
+    return `[${splitTopLevelComma(fixedTupleType[1]).map(tsTypeExpression).join(', ')}]`;
   }
   const variadicTupleType = /^tuple\[(.+), \.\.\.\]$/.exec(trimmed);
   if (variadicTupleType !== null) {
@@ -84,11 +84,11 @@ export function tsTypeExpression(pythonType: string): string {
   }
   const listType = /^list\[(.+)\]$/.exec(trimmed);
   if (listType !== null) {
-    return `${tsTypeExpression(listType[1])}[]`;
+    return `${tsArrayElementTypeExpression(listType[1])}[]`;
   }
   const sequenceType = /^Sequence\[(.+)\]$/.exec(trimmed);
   if (sequenceType !== null) {
-    return `readonly ${tsTypeExpression(sequenceType[1])}[]`;
+    return `readonly ${tsArrayElementTypeExpression(sequenceType[1])}[]`;
   }
   const iterableType = /^Iterable\[(.+)\]$/.exec(trimmed);
   if (iterableType !== null) {
@@ -100,7 +100,7 @@ export function tsTypeExpression(pythonType: string): string {
   }
   const genericType = /^([A-Z][A-Za-z0-9_]*)\[(.+)\]$/.exec(trimmed);
   if (genericType !== null) {
-    return `${tsExportNameForPythonName(genericType[1])}<${genericType[2].split(topLevelCommaPattern()).map(tsTypeExpression).join(', ')}>`;
+    return `${tsExportNameForPythonName(genericType[1])}<${splitTopLevelComma(genericType[2]).map(tsTypeExpression).join(', ')}>`;
   }
   if (trimmed === 'None') {
     return 'void';
@@ -147,6 +147,25 @@ export function tsTypeExpression(pythonType: string): string {
   return tsExportNameForPythonName(trimmed);
 }
 
+function tsMapKeyTypeExpression(pythonType: string): string {
+  return pythonType.trim().startsWith('tuple[')
+    ? 'string'
+    : tsTypeExpression(pythonType);
+}
+
+function tsArrayElementTypeExpression(pythonType: string): string {
+  const elementType = tsTypeExpression(pythonType);
+  return elementType.includes(' | ') ? `(${elementType})` : elementType;
+}
+
+function parseGenericTypeArgs(typeText: string, typeName: string): string[] | null {
+  const prefix = `${typeName}[`;
+  if (!typeText.startsWith(prefix) || !typeText.endsWith(']')) {
+    return null;
+  }
+  return splitTopLevelComma(typeText.slice(prefix.length, -1));
+}
+
 export function tsCallableType(argsText: string, returnText: string): string {
   const args = argsText.trim();
   const params = args === ''
@@ -160,6 +179,29 @@ export function tsCallableType(argsText: string, returnText: string): string {
 
 function topLevelCommaPattern(): RegExp {
   return /, (?![^\[]*\])/;
+}
+
+function splitTopLevelComma(text: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === '[' || char === '(' || char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char === ']' || char === ')' || char === '}') {
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
+    if (depth === 0 && char === ',') {
+      parts.push(text.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  parts.push(text.slice(start).trim());
+  return parts.filter((part) => part !== '');
 }
 
 function splitTopLevelUnion(text: string): string[] {

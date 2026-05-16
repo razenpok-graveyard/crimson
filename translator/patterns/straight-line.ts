@@ -51,9 +51,11 @@ import {
 import { parseFunctionParameterText, pythonParameterNames } from './parameters.js';
 import {
   bytesFromHelperStatements,
+  arrayRemoveHelperStatements,
   constructBinaryHelperStatements,
   globPathHelperStatements,
   latin1EncodeReplaceHelperStatements,
+  mapGetOrInitHelperStatements,
   mapMoveToEndHelperStatements,
   msgpackCodecHelperStatements,
   openTextFileHelperStatements,
@@ -69,6 +71,7 @@ import {
   pythonTruthyHelperStatements,
   strftimeUtcNowHelperStatements,
   structFloatBufferStatements,
+  tupleKeyHelperStatements,
 } from './runtime-helpers.js';
 import {
   parseTopLevelAssignment,
@@ -163,6 +166,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       || isEnumOnlyImport(trimmed)
       || isDataclassOnlyImport(trimmed)
       || trimmed === 'from collections import OrderedDict'
+      || trimmed === 'from collections import defaultdict'
       || trimmed === 'from pathlib import Path'
       || trimmed === 'from threading import Lock'
       || trimmed.startsWith('from construct import ')
@@ -812,6 +816,27 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   }
   if (moduleValueText.includes('mapMoveToEnd(')) {
     const helperStatements = mapMoveToEndHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
+  if (moduleValueText.includes('arrayRemove(')) {
+    const helperStatements = arrayRemoveHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
+  if (moduleValueText.includes('mapGetOrInit(')) {
+    const helperStatements = mapGetOrInitHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
+  if (moduleValueText.includes('tupleKey(')) {
+    const helperStatements = tupleKeyHelperStatements();
     if (leadingStatements.length > 0) {
       helperStatements.push('');
     }

@@ -282,6 +282,39 @@ export function pythonRoundHelperStatements(): string[] {
   ];
 }
 
+export function tupleKeyHelperStatements(): string[] {
+  return [
+    'function tupleKey(value: readonly unknown[] | string): string {',
+    "  return typeof value === 'string' ? value : value.join(',');",
+    '}',
+  ];
+}
+
+export function mapGetOrInitHelperStatements(): string[] {
+  return [
+    'function mapGetOrInit<K, V>(map: Map<K, V>, key: K, create: () => V): V {',
+    '  const existing = map.get(key);',
+    '  if (existing !== undefined) {',
+    '    return existing;',
+    '  }',
+    '  const value = create();',
+    '  map.set(key, value);',
+    '  return value;',
+    '}',
+  ];
+}
+
+export function arrayRemoveHelperStatements(): string[] {
+  return [
+    'function arrayRemove<T>(items: T[], value: T): void {',
+    '  const index = items.indexOf(value);',
+    '  if (index !== -1) {',
+    '    items.splice(index, 1);',
+    '  }',
+    '}',
+  ];
+}
+
 export function pythonSplitlinesHelperStatements(): string[] {
   return [
     'function pythonSplitlines(text: string): string[] {',

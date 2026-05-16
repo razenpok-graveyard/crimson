@@ -3,7 +3,13 @@ import type {
   SimpleModuleFunction,
   StructModule,
 } from '../model.js';
-import { pythonRoundHelperStatements } from '../patterns/runtime-helpers.js';
+import {
+  arrayRemoveHelperStatements,
+  mapGetOrInitHelperStatements,
+  pythonEqualsHelperStatements,
+  pythonRoundHelperStatements,
+  tupleKeyHelperStatements,
+} from '../patterns/runtime-helpers.js';
 import { isCallableProtocol, renderProtocolDefinition } from './protocols.js';
 
 export { renderPlainClasses } from './plain-classes.js';
@@ -47,8 +53,9 @@ export function renderMsgspecStructModule(relativePath: string, module: StructMo
     lines.push('');
   }
 
-  if (structModuleUsesPyRound(module)) {
-    lines.push(...pythonRoundHelperStatements());
+  const helperStatements = structModuleHelperStatements(module);
+  if (helperStatements.length > 0) {
+    lines.push(...helperStatements);
     if (module.functions.length + module.classes.length + interfaceProtocols.length > 0) {
       lines.push('');
     }
@@ -71,11 +78,34 @@ export function renderMsgspecStructModule(relativePath: string, module: StructMo
   return lines.join('\n');
 }
 
-function structModuleUsesPyRound(module: StructModule): boolean {
-  return JSON.stringify({
+function structModuleHelperStatements(module: StructModule): string[] {
+  const moduleText = JSON.stringify({
     functions: module.functions,
     classes: module.classes,
-  }).includes('pyRound(');
+  });
+  const helpers: string[] = [];
+  const pushHelper = (statements: string[]): void => {
+    if (helpers.length > 0) {
+      helpers.push('');
+    }
+    helpers.push(...statements);
+  };
+  if (moduleText.includes('tupleKey(')) {
+    pushHelper(tupleKeyHelperStatements());
+  }
+  if (moduleText.includes('mapGetOrInit(')) {
+    pushHelper(mapGetOrInitHelperStatements());
+  }
+  if (moduleText.includes('arrayRemove(')) {
+    pushHelper(arrayRemoveHelperStatements());
+  }
+  if (moduleText.includes('pythonEquals(')) {
+    pushHelper(pythonEqualsHelperStatements());
+  }
+  if (moduleText.includes('pyRound(')) {
+    pushHelper(pythonRoundHelperStatements());
+  }
+  return helpers;
 }
 
 export function renderStructClasses(lines: string[], classes: StructModule['classes']): void {

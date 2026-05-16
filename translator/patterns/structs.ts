@@ -24,7 +24,12 @@ import {
   splitTopLevelComma,
   stripTypeOnlyStatementSyntax,
 } from './common.js';
-import { translateExpression } from './expression.js';
+import {
+  arrayValueMapNameMarker,
+  translateExpression,
+  tupleElementArrayNameMarker,
+  tupleKeyMapNameMarker,
+} from './expression.js';
 import {
   functionSignatureMarker,
   parseStraightLineFunctionHeader,
@@ -75,6 +80,7 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       isCollectionsAbcTypeImport(trimmed)
       || isTypingOnlyImport(trimmed)
       || trimmed === 'from collections import OrderedDict'
+      || trimmed === 'from collections import defaultdict'
       || trimmed === 'from pathlib import Path'
       || isDataclassImport(trimmed)
     ) {
@@ -451,10 +457,22 @@ export function parseStructClass(
     if (typeExpression.endsWith('[]')) {
       arrayFieldNames.add(`self.${field[1]}`);
       arrayFieldNames.add(`this.${fieldName}`);
+      if (pythonListElementCanBeTuple(field[2])) {
+        arrayFieldNames.add(tupleElementArrayNameMarker(`self.${field[1]}`));
+        arrayFieldNames.add(tupleElementArrayNameMarker(`this.${fieldName}`));
+      }
     }
     if (typeExpression.startsWith('Map<')) {
       mapFieldNames.add(`self.${field[1]}`);
       mapFieldNames.add(`this.${fieldName}`);
+      if (pythonMapTypeHasTupleKey(field[2])) {
+        mapFieldNames.add(tupleKeyMapNameMarker(`self.${field[1]}`));
+        mapFieldNames.add(tupleKeyMapNameMarker(`this.${fieldName}`));
+      }
+      if (pythonMapValueIsList(field[2])) {
+        mapFieldNames.add(arrayValueMapNameMarker(`self.${field[1]}`));
+        mapFieldNames.add(arrayValueMapNameMarker(`this.${fieldName}`));
+      }
     }
     fields.push({
       name: fieldName,
@@ -607,6 +625,19 @@ function parseStructMethod(
         if (pythonParameterName !== null) {
           mapNames.add(pythonParameterName);
         }
+        const parameterType = pythonParameterType(parameterText);
+        if (parameterType !== null && pythonMapTypeHasTupleKey(parameterType)) {
+          mapNames.add(tupleKeyMapNameMarker(parsedParameter.name));
+          if (pythonParameterName !== null) {
+            mapNames.add(tupleKeyMapNameMarker(pythonParameterName));
+          }
+        }
+        if (parameterType !== null && pythonMapValueIsList(parameterType)) {
+          mapNames.add(arrayValueMapNameMarker(parsedParameter.name));
+          if (pythonParameterName !== null) {
+            mapNames.add(arrayValueMapNameMarker(pythonParameterName));
+          }
+        }
       }
       if (keywordOnly) {
         optsParams.push({
@@ -684,6 +715,30 @@ function tsAttributeNameForPythonName(pythonName: string): string {
     ? `_${tsExportNameForPythonName(pythonName)}`
     : tsExportNameForPythonName(pythonName);
 }
+
+function pythonParameterType(parameterText: string): string | null {
+  const parameter = /^[*]*[A-Za-z_][A-Za-z0-9_]*: (.+?)(?: = .+)?$/.exec(parameterText.trim());
+  return parameter?.[1] ?? null;
+}
+
+function pythonMapTypeArgs(pythonType: string): string[] | null {
+  const mapType = /^(?:dict|OrderedDict)\[(.+)\]$/.exec(pythonType.trim());
+  return mapType === null ? null : splitTopLevelComma(mapType[1]);
+}
+
+function pythonMapTypeHasTupleKey(pythonType: string): boolean {
+  return pythonMapTypeArgs(pythonType)?.[0]?.trim().startsWith('tuple[') === true;
+}
+
+function pythonMapValueIsList(pythonType: string): boolean {
+  return pythonMapTypeArgs(pythonType)?.[1]?.trim().startsWith('list[') === true;
+}
+
+function pythonListElementCanBeTuple(pythonType: string): boolean {
+  const listType = /^list\[(.+)\]$/.exec(pythonType.trim());
+  return listType !== null && listType[1].includes('tuple[');
+}
+
 function parseSimpleProtocolClass(
   lines: string[],
   index: number,
@@ -827,10 +882,6 @@ function parseIndentedDocstring(
 function tsStructFieldType(pythonType: string): string {
   if (pythonType.trim() === 'Path') {
     return 'string';
-  }
-  const listType = /^list\[(.+)\]$/.exec(pythonType.trim());
-  if (listType !== null) {
-    return `${tsTypeExpression(listType[1])}[]`;
   }
   return tsTypeExpression(pythonType);
 }

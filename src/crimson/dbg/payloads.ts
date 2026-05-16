@@ -34,7 +34,7 @@ export function coerceBuiltinValue(value: unknown, opts: { field: string }): Bui
       if (!(typeof key === 'string')) {
         throw new TypeError(`${field} must use string keys, got ${((valueForType: unknown) => valueForType === null ? 'NoneType' : Array.isArray(valueForType) ? 'list' : valueForType instanceof Map ? 'dict' : typeof valueForType === 'boolean' ? 'bool' : typeof valueForType === 'number' ? Number.isInteger(valueForType) ? 'int' : 'float' : typeof valueForType === 'string' ? 'str' : typeof valueForType === 'object' ? 'dict' : typeof valueForType)(key)}`);
       }
-      out[key] = coerceBuiltinValue(item, { field: `${field}.${key}` });
+      out[String(key)] = coerceBuiltinValue(item, { field: `${field}.${key}` });
     }
     return out;
   }
