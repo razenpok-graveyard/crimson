@@ -1344,6 +1344,29 @@ export function translateStraightLineStatement(
     );
   }
 
+  const multilineNestedCallStatement = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(statement);
+  if (multilineNestedCallStatement !== null) {
+    const nestedCallExpression = parseMultilineCallExpressionWithOuterClose(
+      lines,
+      index + 1,
+      multilineNestedCallStatement[2],
+      nameMap,
+      arrayNames,
+      validatedTypeAliases,
+      mapNames,
+    );
+    if (nestedCallExpression === null) {
+      return null;
+    }
+    const outerCallee = translateExpression(multilineNestedCallStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)
+      .replace(/\.append$/, '.push')
+      .replace(/\.extend$/, '.push');
+    return {
+      statements: [`${outerCallee}(${nestedCallExpression.expression});`],
+      nextIndex: nestedCallExpression.nextIndex,
+    };
+  }
+
   const multilineKeywordCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(statement);
   if (multilineKeywordCall !== null) {
     if (multilineKeywordCall[1] === 'warnings.warn') {
@@ -1901,6 +1924,59 @@ function parseMultilineCallExpression(
     ].join(', ')})`,
     nextIndex: callParts.nextIndex,
   };
+}
+
+function parseMultilineCallExpressionWithOuterClose(
+  lines: string[],
+  startIndex: number,
+  pythonCallee: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string> = new Set(),
+  mapNames: ReadonlySet<string> = new Set(),
+): { expression: string; nextIndex: number } | null {
+  const closeIndex = findNestedCallOuterClose(lines, startIndex);
+  if (closeIndex === null) {
+    return null;
+  }
+
+  const patchedLines = [...lines];
+  const line = patchedLines[closeIndex] ?? '';
+  patchedLines[closeIndex] = `${line.slice(0, line.indexOf(')'))})`;
+  const expression = parseMultilineCallExpression(
+    patchedLines,
+    startIndex,
+    pythonCallee,
+    nameMap,
+    arrayNames,
+    validatedTypeAliases,
+    mapNames,
+  );
+  if (expression === null || expression.nextIndex !== closeIndex + 1) {
+    return null;
+  }
+  return expression;
+}
+
+function findNestedCallOuterClose(lines: string[], startIndex: number): number | null {
+  let depth = 1;
+  for (let nextIndex = startIndex; nextIndex < lines.length; nextIndex += 1) {
+    const trimmed = lines[nextIndex].trim();
+    if (trimmed === '') {
+      continue;
+    }
+    for (const char of trimmed) {
+      if (char === '(') {
+        depth += 1;
+      } else if (char === ')') {
+        depth -= 1;
+        if (depth < 0) {
+          return nextIndex;
+        }
+      }
+    }
+  }
+  return null;
 }
 
 function translateMultilineSequenceGenerator(
