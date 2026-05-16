@@ -263,6 +263,16 @@ export function translateExpression(
     return callWithInlineRecord;
   }
 
+  const oneItemTuple = /^\((.+),\)$/.exec(trimmed);
+  if (oneItemTuple !== null && splitTopLevelComma(oneItemTuple[1]).length === 1) {
+    return `[${translateExpression(oneItemTuple[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}]`;
+  }
+
+  const parenthesizedConditional = /^\((.+ if .+ else .+)\)$/.exec(trimmed);
+  if (parenthesizedConditional !== null && matchingCloseParen(trimmed, 0) === trimmed.length - 1) {
+    return translateExpression(parenthesizedConditional[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  }
+
   const dictComprehension = /^\{(.+): (.+) for ([A-Za-z_][A-Za-z0-9_]*) in (.+)\}$/.exec(trimmed);
   if (dictComprehension !== null) {
     const itemName = tsExportNameForPythonName(dictComprehension[3]);
@@ -296,6 +306,34 @@ export function translateExpression(
   const mathIsFinite = /^math\.isfinite\((.+)\)$/.exec(trimmed);
   if (mathIsFinite !== null) {
     return `Number.isFinite(${translateExpression(mathIsFinite[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
+  const jsonDumps = parseCallPrefix(trimmed, 'json.dumps');
+  if (jsonDumps !== null && jsonDumps.rest === '') {
+    const args = splitTopLevelComma(jsonDumps.argsText);
+    const keywordArgs = new Map<string, string>();
+    let value: string | null = null;
+    for (const arg of args) {
+      const keyword = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(arg);
+      if (keyword === null && value === null) {
+        value = arg;
+      } else if (keyword !== null) {
+        keywordArgs.set(keyword[1], keyword[2]);
+      }
+    }
+    if (value !== null) {
+      const translatedValue = translateExpression(value, nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const indent = keywordArgs.get('indent');
+      const sortKeys = keywordArgs.get('sort_keys');
+      if (sortKeys === 'True') {
+        const opts = [`sortKeys: true`];
+        if (indent !== undefined) {
+          opts.push(`indent: ${translateExpression(indent, nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
+        }
+        return `pythonJsonDumps(${translatedValue}, { ${opts.join(', ')} })`;
+      }
+      return `JSON.stringify(${translatedValue}, null, ${indent === undefined ? '0' : translateExpression(indent, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
   }
 
   const listComprehension = /^\[(.+) for ([A-Za-z_][A-Za-z0-9_]*) in (.+)\]$/.exec(trimmed);
@@ -709,11 +747,11 @@ export function translateExpression(
   const conditionalExpression = /^(.+) if (.+) else (.+)$/.exec(trimmed);
   if (conditionalExpression !== null) {
     return [
-      translateExpression(conditionalExpression[2], nameMap, arrayNames, validatedTypeAliases),
+      translateExpression(conditionalExpression[2], nameMap, arrayNames, validatedTypeAliases, mapNames),
       '?',
-      translateExpression(conditionalExpression[1], nameMap, arrayNames, validatedTypeAliases),
+      translateExpression(conditionalExpression[1], nameMap, arrayNames, validatedTypeAliases, mapNames),
       ':',
-      translateExpression(conditionalExpression[3], nameMap, arrayNames, validatedTypeAliases),
+      translateExpression(conditionalExpression[3], nameMap, arrayNames, validatedTypeAliases, mapNames),
     ].join(' ');
   }
 
@@ -852,14 +890,14 @@ export function translateExpression(
 
   const identityComparison = /^(.+?) is( not)? (.+)$/.exec(trimmed);
   if (identityComparison !== null) {
-    return `${translateExpression(identityComparison[1], nameMap, arrayNames, validatedTypeAliases)} ${identityComparison[2] === undefined ? '===' : '!=='} ${translateExpression(identityComparison[3], nameMap, arrayNames, validatedTypeAliases)}`;
+    return `${translateExpression(identityComparison[1], nameMap, arrayNames, validatedTypeAliases, mapNames)} ${identityComparison[2] === undefined ? '===' : '!=='} ${translateExpression(identityComparison[3], nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
   }
 
   const binaryComparison = /^(.+?) (<=|>=|<|>|==|!=) (.+)$/.exec(trimmed);
   if (binaryComparison !== null) {
-    const left = translateExpression(binaryComparison[1], nameMap, arrayNames, validatedTypeAliases);
-    const right = translateExpression(binaryComparison[3], nameMap, arrayNames, validatedTypeAliases);
-    if ((binaryComparison[2] === '==' || binaryComparison[2] === '!=') && comparisonNeedsPythonEquality(left, right)) {
+    const left = translateExpression(binaryComparison[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const right = translateExpression(binaryComparison[3], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if ((binaryComparison[2] === '==' || binaryComparison[2] === '!=') && comparisonNeedsPythonEquality(left, right, arrayNames)) {
       const equality = `pythonEquals(${left}, ${right})`;
       return binaryComparison[2] === '==' ? equality : `!${equality}`;
     }
@@ -1037,8 +1075,11 @@ function translateIdentifierName(name: string, nameMap: Map<string, string>): st
   ].join('.');
 }
 
-function comparisonNeedsPythonEquality(left: string, right: string): boolean {
-  return /\bnew [A-Z][A-Za-z0-9_$]*\(/.test(left) || /\bnew [A-Z][A-Za-z0-9_$]*\(/.test(right);
+function comparisonNeedsPythonEquality(left: string, right: string, arrayNames: ReadonlySet<string>): boolean {
+  return /\bnew [A-Z][A-Za-z0-9_$]*\(/.test(left)
+    || /\bnew [A-Z][A-Za-z0-9_$]*\(/.test(right)
+    || arrayNames.has(objectNameMarker(left))
+    || arrayNames.has(objectNameMarker(right));
 }
 
 export function translateMapKeyExpression(mapName: string, keyExpression: string): string {
@@ -1402,19 +1443,33 @@ function translateCallWithInlineRecordArgs(
     return null;
   }
   const args = splitTopLevelComma(call[2]);
+  const positionalParts: string[] = [];
+  const keywordParts: string[] = [];
   let sawRecord = false;
-  const translatedArgs = args.map((arg) => {
+  let sawKeyword = false;
+  for (const arg of args) {
+    const keyword = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(arg);
+    if (keyword !== null) {
+      sawKeyword = true;
+      keywordParts.push(`${tsExportNameForPythonName(keyword[1])}: ${translateExpression(keyword[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
+      continue;
+    }
+    if (sawKeyword) {
+      return null;
+    }
     const record = translateInlineRecordLiteral(arg, nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (record !== null) {
       sawRecord = true;
-      return record;
+      positionalParts.push(record);
+      continue;
     }
-    return translateExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames);
-  });
+    positionalParts.push(translateExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames));
+  }
   if (!sawRecord) {
     return null;
   }
-  return `${translateExpression(call[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}(${translatedArgs.join(', ')})`;
+  const optsArg = keywordParts.length === 0 ? [] : [`{ ${keywordParts.join(', ')} }`];
+  return `${translateExpression(call[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}(${[...positionalParts, ...optsArg].join(', ')})`;
 }
 
 function topLevelColonIndex(value: string): number | null {

@@ -42,7 +42,7 @@ import {
   stripTypeOnlyStatementSyntax,
 } from './common.js';
 import { parseStringEnumClass } from './enums.js';
-import { setNameMarker, translateExpression } from './expression.js';
+import { objectNameMarker, setNameMarker, translateExpression } from './expression.js';
 import { parseFunctionParameterText, pythonParameterNames } from './parameters.js';
 import { bytesFromHelperStatements, constructBinaryHelperStatements } from './runtime-helpers.js';
 import {
@@ -76,6 +76,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   const structConstructorFields = new Map<string, string[]>();
   const typeVarNames = new Set<string>();
   const setReturnFunctionNames = new Set<string>();
+  const objectReturnFunctionNames = new Set<string>();
   const pendingAssignmentComments: string[] = [];
   let index = 0;
 
@@ -111,6 +112,10 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
     if (trimmed === 'import struct') {
+      index += 1;
+      continue;
+    }
+    if (trimmed === 'import json') {
       index += 1;
       continue;
     }
@@ -428,6 +433,9 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     for (const name of setReturnFunctionNames) {
       arrayNames.add(setNameMarker(name));
     }
+    for (const name of objectReturnFunctionNames) {
+      arrayNames.add(objectNameMarker(name));
+    }
     let keywordOnly = false;
     if (header.parametersText !== '') {
       for (const parameterText of splitTopLevelComma(header.parametersText)) {
@@ -512,6 +520,9 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     moduleNameMap.set(header.name, tsExportNameForPythonName(header.name));
     if (returnType.startsWith('Set<') || returnType.startsWith('ReadonlySet<')) {
       setReturnFunctionNames.add(tsExportNameForPythonName(header.name));
+    }
+    if (returnType === 'BuiltinObject' || returnType.startsWith('Record<')) {
+      objectReturnFunctionNames.add(tsExportNameForPythonName(header.name));
     }
   }
 
@@ -636,6 +647,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   }
   if (moduleValueText.includes('pythonStringCount(')) {
     const helperStatements = pythonStringCountHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
+  if (moduleValueText.includes('pythonJsonDumps(')) {
+    const helperStatements = pythonJsonDumpsHelperStatements();
     if (leadingStatements.length > 0) {
       helperStatements.push('');
     }
@@ -966,9 +984,32 @@ function pythonStringCountHelperStatements(): string[] {
   ];
 }
 
+function pythonJsonDumpsHelperStatements(): string[] {
+  return [
+    'function pythonJsonDumps(value: object | string | number | boolean | null, opts: { sortKeys?: boolean; indent?: number } = {}): string {',
+    '  const normalized = opts.sortKeys === true ? pythonSortJsonKeys(value) : value;',
+    '  return JSON.stringify(normalized, null, opts.indent ?? 0);',
+    '}',
+    '',
+    'function pythonSortJsonKeys(value: object | string | number | boolean | null): object | string | number | boolean | null {',
+    '  if (Array.isArray(value)) {',
+    '    return value.map((item) => pythonSortJsonKeys(item));',
+    '  }',
+    "  if (value !== null && typeof value === 'object') {",
+    '    const entries = Object.entries(value).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);',
+    '    return Object.fromEntries(entries.map(([key, item]) => [key, pythonSortJsonKeys(item)]));',
+    '  }',
+    '  return value;',
+    '}',
+  ];
+}
+
 function pythonEqualsHelperStatements(): string[] {
   return [
     'function pythonEquals(left: object | string | number | boolean | null | undefined, right: object | string | number | boolean | null | undefined): boolean {',
+    '  if (left === right) {',
+    '    return true;',
+    '  }',
     "  if (left !== null && left !== undefined && typeof left === 'object') {",
     "    const equal = Reflect.get(left, 'equal');",
     "    if (typeof equal === 'function') {",
@@ -981,7 +1022,21 @@ function pythonEqualsHelperStatements(): string[] {
     '      return Boolean(equal.call(right, left));',
     '    }',
     '  }',
-    '  return left === right;',
+    '  if (Array.isArray(left) || Array.isArray(right)) {',
+    '    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {',
+    '      return false;',
+    '    }',
+    '    return left.every((value, index) => pythonEquals(value, right[index]));',
+    '  }',
+    "  if (left !== null && right !== null && typeof left === 'object' && typeof right === 'object') {",
+    '    const leftKeys = Object.keys(left);',
+    '    const rightKeys = Object.keys(right);',
+    '    if (leftKeys.length !== rightKeys.length) {',
+    '      return false;',
+    '    }',
+    '    return leftKeys.every((key) => Object.prototype.hasOwnProperty.call(right, key) && pythonEquals(Reflect.get(left, key), Reflect.get(right, key)));',
+    '  }',
+    '  return false;',
     '}',
   ];
 }

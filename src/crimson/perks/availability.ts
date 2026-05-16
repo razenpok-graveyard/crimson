@@ -18,6 +18,9 @@ const _PERK_ALWAYS_AVAILABLE: readonly PerkId[] = [
 ];
 
 function pythonEquals(left: object | string | number | boolean | null | undefined, right: object | string | number | boolean | null | undefined): boolean {
+  if (left === right) {
+    return true;
+  }
   if (left !== null && left !== undefined && typeof left === 'object') {
     const equal = Reflect.get(left, 'equal');
     if (typeof equal === 'function') {
@@ -30,7 +33,21 @@ function pythonEquals(left: object | string | number | boolean | null | undefine
       return Boolean(equal.call(right, left));
     }
   }
-  return left === right;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+      return false;
+    }
+    return left.every((value, index) => pythonEquals(value, right[index]));
+  }
+  if (left !== null && right !== null && typeof left === 'object' && typeof right === 'object') {
+    const leftKeys = Object.keys(left);
+    const rightKeys = Object.keys(right);
+    if (leftKeys.length !== rightKeys.length) {
+      return false;
+    }
+    return leftKeys.every((key) => Object.prototype.hasOwnProperty.call(right, key) && pythonEquals(Reflect.get(left, key), Reflect.get(right, key)));
+  }
+  return false;
 }
 
 export function buildPerkAvailability(opts: { status: GameStatus | null }): boolean[] {

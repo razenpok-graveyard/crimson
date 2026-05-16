@@ -1347,6 +1347,13 @@ export function translateStraightLineStatement(
         nextIndex: index + 1,
       };
     }
+    const dictPopDefaultNone = /^(.+)\.pop\((.+), None\)$/.exec(callStatement[1]);
+    if (dictPopDefaultNone !== null) {
+      return {
+        statements: [`delete ${translateExpression(dictPopDefaultNone[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}[${translateExpression(dictPopDefaultNone[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}];`],
+        nextIndex: index + 1,
+      };
+    }
     const simpleCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\((.*)\)$/.exec(callStatement[1]);
     if (simpleCall !== null) {
       const args = splitTopLevelComma(simpleCall[2]);
@@ -1917,10 +1924,18 @@ function translateStraightLineAssignment(
       arrayNames.add(objectNameMarker(localAssignment[1]));
       arrayNames.add(objectNameMarker(tsName));
     }
+    if (assignedRight.startsWith('new Map(')) {
+      addMutableName(mapNames, localAssignment[1]);
+      addMutableName(mapNames, tsName);
+    }
     const callAssignment = /^(?:await )?([A-Za-z_$][A-Za-z0-9_$]*)\(/.exec(assignedRight);
     if (assignedRight.startsWith('new Set(') || (callAssignment !== null && arrayNames.has(setNameMarker(callAssignment[1])))) {
       arrayNames.add(setNameMarker(localAssignment[1]));
       arrayNames.add(setNameMarker(tsName));
+    }
+    if (callAssignment !== null && arrayNames.has(objectNameMarker(callAssignment[1]))) {
+      arrayNames.add(objectNameMarker(localAssignment[1]));
+      arrayNames.add(objectNameMarker(tsName));
     }
     if (translatedExpressionLooksVector(assignedRight)) {
       arrayNames.add(vectorNameMarker(localAssignment[1]));
@@ -2023,6 +2038,12 @@ function exceptBlocksHaveSameBody(blocks: Array<{ statements: string[] }>): bool
   const [first, ...rest] = blocks;
   const firstText = first.statements.join('\n');
   return rest.every((block) => block.statements.join('\n') === firstText);
+}
+
+function addMutableName(names: ReadonlySet<string>, name: string): void {
+  if (names instanceof Set) {
+    names.add(name);
+  }
 }
 
 function hoistTryBlockDeclarations(statements: string[]): { declarations: string[]; statements: string[] } {
@@ -2171,6 +2192,10 @@ export function reassignedLocalNames(lines: string[], startIndex: number): Set<s
     const assignment = /^\s+([A-Za-z_][A-Za-z0-9_]*) (?:\+=|-=|\*=|\/=|=) /.exec(lines[index]);
     if (assignment !== null) {
       counts.set(assignment[1], (counts.get(assignment[1]) ?? 0) + 1);
+    }
+    const annotatedAssignment = /^\s+([A-Za-z_][A-Za-z0-9_]*): .+ = /.exec(lines[index]);
+    if (annotatedAssignment !== null) {
+      counts.set(annotatedAssignment[1], (counts.get(annotatedAssignment[1]) ?? 0) + 1);
     }
     const tupleAssignment = /^\s+([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+) = /.exec(lines[index]);
     if (tupleAssignment !== null) {
