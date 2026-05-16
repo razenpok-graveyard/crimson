@@ -39,9 +39,9 @@ export function tsTypeExpression(pythonType: string): string {
       .map(tsLiteralExpression)
       .join(' | ');
   }
-  if (trimmed.includes(' | ')) {
-    const parts = trimmed
-      .split(' | ')
+  const unionParts = splitTopLevelUnion(trimmed);
+  if (unionParts.length > 1) {
+    const parts = unionParts
       .map((part) => {
         const typeExpression = part === 'None' ? 'null' : tsTypeExpression(part);
         return typeExpression.includes('=>') ? `(${typeExpression})` : typeExpression;
@@ -120,6 +120,33 @@ export function tsCallableType(argsText: string, returnText: string): string {
 
 function topLevelCommaPattern(): RegExp {
   return /, (?![^\[]*\])/;
+}
+
+function splitTopLevelUnion(text: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === '[' || char === '(' || char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char === ']' || char === ')' || char === '}') {
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
+    if (depth === 0 && text.slice(index, index + 3) === ' | ') {
+      parts.push(text.slice(start, index));
+      start = index + 3;
+      index += 2;
+    }
+  }
+  if (parts.length === 0) {
+    return [text];
+  }
+  parts.push(text.slice(start));
+  return parts;
 }
 
 export function tsLiteralExpression(pythonValue: string): string {

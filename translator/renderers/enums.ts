@@ -42,7 +42,7 @@ export function renderEnumDefinition(lines: string[], enumDefinition: EnumDefini
 
   lines.push(`export enum ${enumDefinition.name} {`);
   for (const member of enumDefinition.members) {
-    lines.push(`  ${member.name} = ${member.value},`);
+    lines.push(`  ${member.name} = ${member.value},${member.trailingComment === undefined ? '' : ` // ${member.trailingComment}`}`);
   }
   lines.push('}');
 }

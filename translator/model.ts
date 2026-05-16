@@ -39,6 +39,7 @@ export interface TypeAliasValidation {
 export interface EnumMember {
   name: string;
   value: string;
+  trailingComment?: string;
 }
 
 export interface EnumDefinition {

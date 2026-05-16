@@ -58,6 +58,7 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
     lines.push('');
   }
 
+  const leadingAssignments = partitionLeadingAssignmentsByEnumReference(module);
   const renderClassesBeforeLeadingAssignments = leadingAssignmentsReferenceClass(module);
   if (renderClassesBeforeLeadingAssignments) {
     renderStructClasses(lines, module.classes);
@@ -66,15 +67,15 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
     }
   }
 
-  renderStraightLineAssignments(lines, module.leadingAssignments);
-  if (module.leadingAssignments.length > 0 && module.leadingStatements.length + module.enums.length + (renderClassesBeforeLeadingAssignments ? 0 : module.classes.length) + module.plainClasses.length + module.functions.length + module.assignments.length > 0) {
+  renderStraightLineAssignments(lines, leadingAssignments.beforeEnums);
+  if (leadingAssignments.beforeEnums.length > 0 && module.leadingStatements.length + module.enums.length + leadingAssignments.afterEnums.length + (renderClassesBeforeLeadingAssignments ? 0 : module.classes.length) + module.plainClasses.length + module.functions.length + module.assignments.length > 0) {
     lines.push('');
   }
 
   for (const statement of module.leadingStatements) {
     lines.push(statement);
   }
-  if (module.leadingStatements.length > 0 && module.enums.length + module.classes.length + module.plainClasses.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
+  if (module.leadingStatements.length > 0 && module.enums.length + leadingAssignments.afterEnums.length + module.classes.length + module.plainClasses.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
     lines.push('');
   }
 
@@ -84,7 +85,12 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
       lines.push('');
     }
   }
-  if (module.enums.length > 0 && module.classes.length + module.plainClasses.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
+  if (module.enums.length > 0 && leadingAssignments.afterEnums.length + module.classes.length + module.plainClasses.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
+    lines.push('');
+  }
+
+  renderStraightLineAssignments(lines, leadingAssignments.afterEnums);
+  if (leadingAssignments.afterEnums.length > 0 && module.classes.length + module.plainClasses.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
     lines.push('');
   }
 
@@ -114,6 +120,24 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
     lines.push('');
   }
   return lines.join('\n');
+}
+
+function partitionLeadingAssignmentsByEnumReference(module: StraightLineModule): {
+  beforeEnums: StraightLineModule['leadingAssignments'];
+  afterEnums: StraightLineModule['leadingAssignments'];
+} {
+  if (module.enums.length === 0 || module.leadingAssignments.length === 0) {
+    return { beforeEnums: module.leadingAssignments, afterEnums: [] };
+  }
+
+  const enumPatterns = module.enums.map((enumDefinition) => identifierPattern(enumDefinition.name));
+  const beforeEnums: StraightLineModule['leadingAssignments'] = [];
+  const afterEnums: StraightLineModule['leadingAssignments'] = [];
+  for (const assignment of module.leadingAssignments) {
+    const valueText = assignment.valueLines.join('\n');
+    (enumPatterns.some((pattern) => pattern.test(valueText)) ? afterEnums : beforeEnums).push(assignment);
+  }
+  return { beforeEnums, afterEnums };
 }
 
 function leadingAssignmentsReferenceClass(module: StraightLineModule): boolean {

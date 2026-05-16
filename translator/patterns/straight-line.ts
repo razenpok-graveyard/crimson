@@ -116,8 +116,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     if (
       isCollectionsAbcTypeImport(trimmed)
       || isTypingOnlyImport(trimmed)
-      || trimmed === 'from enum import Enum'
-      || trimmed === 'from enum import IntEnum'
+      || isEnumOnlyImport(trimmed)
       || trimmed === 'from dataclasses import dataclass'
       || trimmed === 'from pathlib import Path'
       || trimmed.startsWith('from construct import ')
@@ -683,6 +682,14 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
 function isStructFloatHelperAssignment(trimmedLine: string): boolean {
   return /^_[A-Z0-9_]+ = struct\.Struct\("[^"]+"\)$/.test(trimmedLine)
     || /^_[A-Z0-9_]+ = _[A-Z0-9_]+\.(?:pack|unpack)$/.test(trimmedLine);
+}
+
+function isEnumOnlyImport(trimmedLine: string): boolean {
+  const enumImport = /^from enum import (.+)$/.exec(trimmedLine);
+  if (enumImport === null) {
+    return false;
+  }
+  return enumImport[1].split(', ').every((name) => ['Enum', 'IntEnum', 'IntFlag'].includes(name));
 }
 
 function parseTypeVarAssignment(trimmedLine: string): string | null {

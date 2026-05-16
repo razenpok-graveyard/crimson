@@ -27,7 +27,7 @@ export function parseIntEnumModule(trimmedPython: string): EnumDefinition | null
   index += 1;
 
   let docstring: string | null = null;
-  const members: { name: string; value: string }[] = [];
+  const members: EnumDefinition['members'] = [];
   let valueFunction: EnumDefinition['valueFunction'] | undefined;
   while (index < lines.length) {
     const line = lines[index];
@@ -44,11 +44,13 @@ export function parseIntEnumModule(trimmedPython: string): EnumDefinition | null
       continue;
     }
 
-    const member = /^    ([A-Z][A-Z0-9_]*) = (-?(?:0x[0-9A-Fa-f]+|\d+))$/.exec(line);
+    const parsedLine = splitInlineComment(line);
+    const member = /^    ([A-Z][A-Z0-9_]*) = (-?(?:0x[0-9A-Fa-f]+|\d+))$/.exec(parsedLine.code);
     if (member !== null) {
       members.push({
         name: member[1],
         value: member[2],
+        trailingComment: parsedLine.comment ?? undefined,
       });
       index += 1;
       continue;
@@ -126,7 +128,7 @@ export function parseStringEnumClass(
   lines: string[],
   index: number,
 ): { enumDefinition: EnumDefinition; nextIndex: number } | null {
-  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\((str, Enum|IntEnum)\):$/.exec(lines[index] ?? '');
+  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\((str, Enum|IntEnum|IntFlag)\):$/.exec(lines[index] ?? '');
   if (header === null) {
     return null;
   }
@@ -153,15 +155,17 @@ export function parseStringEnumClass(
       continue;
     }
 
+    const parsedLine = splitInlineComment(line);
     const member = stringValued
-      ? /^    ([A-Z][A-Z0-9_]*) = (["'][^"']*["'])$/.exec(line)
-      : /^    ([A-Z][A-Z0-9_]*) = (-?(?:0x[0-9A-Fa-f]+|\d+))$/.exec(line);
+      ? /^    ([A-Z][A-Z0-9_]*) = (["'][^"']*["'])$/.exec(parsedLine.code)
+      : /^    ([A-Z][A-Z0-9_]*) = (-?(?:0x[0-9A-Fa-f]+|\d+))$/.exec(parsedLine.code);
     if (member === null) {
       return null;
     }
     members.push({
       name: member[1],
       value: stringValued ? translateExpression(member[2]) : member[2],
+      trailingComment: parsedLine.comment ?? undefined,
     });
     nextIndex += 1;
   }
@@ -176,4 +180,28 @@ export function parseStringEnumClass(
       nextIndex,
     }
     : null;
+}
+
+function splitInlineComment(line: string): { code: string; comment: string | null } {
+  let quote: string | null = null;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (quote !== null) {
+      if (char === quote && line[index - 1] !== '\\') {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '#' && /\s/.test(line[index - 1] ?? '')) {
+      return {
+        code: line.slice(0, index).trimEnd(),
+        comment: line.slice(index + 1).trim(),
+      };
+    }
+  }
+  return { code: line, comment: null };
 }
