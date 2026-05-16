@@ -121,6 +121,10 @@ function tsLocalFunctionNameForPythonName(pythonName: string): string {
     : tsExportNameForPythonName(pythonName);
 }
 
+function tsLocalImportNameForPythonName(pythonName: string): string {
+  return pythonName === '__version__' ? 'VERSION' : tsExportNameForPythonName(pythonName);
+}
+
 function isSimpleReferenceExpression(value: string): boolean {
   return /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(value);
 }
@@ -846,15 +850,16 @@ export function translateStraightLineStatement(
     };
   }
 
-  const localFromImport = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)(?:\s+#.*)?$/.exec(statement);
+  const localFromImport = /^from (\.+(?:[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)?|[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)(?:\s+#.*)?$/.exec(statement);
   if (localFromImport !== null && relativePath !== null && imports !== null) {
     const names = localFromImport[2].split(', ');
+    const importedNames = names.map(tsLocalImportNameForPythonName);
     pushImportDefinition(imports, {
       modulePath: tsImportPathForPythonImport(localFromImport[1], relativePath),
-      names: names.map(tsExportNameForPythonName),
+      names: importedNames,
     });
-    for (const name of names) {
-      nameMap.set(name, tsExportNameForPythonName(name));
+    for (let nameIndex = 0; nameIndex < names.length; nameIndex += 1) {
+      nameMap.set(names[nameIndex], importedNames[nameIndex]);
     }
     return { statements: [], nextIndex: index + 1 };
   }

@@ -169,7 +169,7 @@ async function readExistingExcludedRuntimePort(trimmedPython: string, targetPath
 
 function usesUnsupportedRuntimeIo(trimmedPython: string): boolean {
   return [
-    /^import shutil$/m,
+    /\bshutil\.(?:copy|copy2|copyfileobj|copytree|move|rmtree)\(/m,
     /^import tempfile$/m,
     /^import structlog$/m,
     /^import urllib\.(?:error|request)$/m,

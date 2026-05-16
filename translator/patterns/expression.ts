@@ -640,6 +640,15 @@ export function translateExpression(
     }
   }
 
+  const bytesDecodeSplitlinesCall = /^(.+)\.decode\((.*)\)\.splitlines\(\)$/.exec(trimmed);
+  if (bytesDecodeSplitlinesCall !== null) {
+    const args = splitTopLevelComma(bytesDecodeSplitlinesCall[2]);
+    const encoding = args[0] === undefined ? 'utf-8' : parsePythonStringExpression(args[0])?.content ?? null;
+    if (encoding !== null) {
+      return `pythonSplitlines(new TextDecoder(${tsStringLiteral(JSON.stringify(encoding))}).decode(${translateExpression(bytesDecodeSplitlinesCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}))`;
+    }
+  }
+
   const bytesDecodeCall = /^(.+)\.decode\((.*)\)$/.exec(trimmed);
   if (bytesDecodeCall !== null) {
     const args = splitTopLevelComma(bytesDecodeCall[2]);
@@ -804,6 +813,11 @@ export function translateExpression(
     const keyExpression = translateExpression(tupleDictComprehension[1], itemNameMap, arrayNames, validatedTypeAliases, mapNames);
     const valueExpression = translateExpression(tupleDictComprehension[2], itemNameMap, arrayNames, validatedTypeAliases, mapNames);
     return `Object.fromEntries(Array.from(${iterable}, ([${keyName}, ${valueName}]) => [${keyExpression}, ${valueExpression}] as const))`;
+  }
+
+  const setComprehension = translateSetComprehensionExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (setComprehension !== null) {
+    return setComprehension;
   }
 
   const setLiteral = translateSetLiteralExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -2925,10 +2939,19 @@ function translatePythonTruthy(
   if (arrayNames.has(trimmed) || arrayNames.has(translated)) {
     return `${translated}.length > 0`;
   }
+  if (expressionLooksBitwiseNumeric(translated)) {
+    return `(${translated}) !== 0`;
+  }
   if (expressionLooksBoolean(translated) || expressionLooksSimpleValueReference(translated)) {
     return translated;
   }
   return expressionLooksCallResult(translated) ? `pythonTruthy(${translated})` : translated;
+}
+
+function expressionLooksBitwiseNumeric(tsExpression: string): boolean {
+  return / (?:&|\||\^) /.test(tsExpression)
+    || /(?:<<|>>>)/.test(tsExpression)
+    || /^Math\.floor\(.+ \/ \(2 \*\* .+\)\)$/.test(tsExpression.trim());
 }
 
 function expressionLooksBoolean(tsExpression: string): boolean {
@@ -3036,6 +3059,31 @@ function translateSetLiteralExpression(
     return null;
   }
   return `new Set([${items.map((item) => translateExpression(item, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')}])`;
+}
+
+function translateSetComprehensionExpression(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  const trimmed = pythonExpression.trim();
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) {
+    return null;
+  }
+  const generator = parseSimpleGeneratorExpression(trimmed.slice(1, -1));
+  if (generator === null) {
+    return null;
+  }
+  const itemName = tsExportNameForPythonName(generator.itemName);
+  const itemNameMap = new Map(nameMap);
+  itemNameMap.set(generator.itemName, itemName);
+  const iterable = iterableExpressionForIteration(generator.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const filtered = generator.condition === null
+    ? iterable
+    : `${iterable}.filter((${itemName}) => ${translateExpression(generator.condition, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  return `new Set(${filtered}.map((${itemName}) => ${translateExpression(generator.expression, itemNameMap, arrayNames, validatedTypeAliases, mapNames)}))`;
 }
 
 function translateNextCall(
