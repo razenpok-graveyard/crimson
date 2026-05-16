@@ -45,7 +45,7 @@ export function updateNameEntryText(text: string, caret: number, opts: { maxLen:
   const rng = opts.rng;
   const playSfx = opts.playSfx ?? null;
   const typed = pollTextInput(maxLen - Array.from(text).length, { allowSpace: true });
-  if (typed) {
+  if (typed.length > 0) {
     text = (text.slice(0, caret) + typed + text.slice(caret)).slice(0, maxLen);
     caret = Math.min(Array.from(text).length, caret + Array.from(typed).length);
     if (playSfx !== null) {

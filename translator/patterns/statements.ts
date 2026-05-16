@@ -154,6 +154,9 @@ function translateConditionExpression(
   const bareIdentifier = /^[A-Za-z_][A-Za-z0-9_]*$/.exec(trimmed);
   if (bareIdentifier !== null) {
     const translated = translateExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (mapNames.has(translated)) {
+      return `${translated}.size > 0`;
+    }
     if (arrayNames.has(setNameMarker(trimmed)) || arrayNames.has(setNameMarker(translated))) {
       return `${translated}.size > 0`;
     }

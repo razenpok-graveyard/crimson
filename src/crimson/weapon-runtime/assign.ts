@@ -1,30 +1,30 @@
 // Port of crimson/weapon_runtime/assign.py
 
-import { PerkId } from '@crimson/perks/ids.ts';
+import { PerkId } from '@crimson/perks/index.ts';
 import { perkActive } from '@crimson/perks/helpers.ts';
 import type { GameplayState, PlayerState } from '@crimson/sim/state-types.ts';
 import { WeaponSlot } from '@crimson/sim/state-types.ts';
 import { weaponUsageSlotForWeaponId } from '@crimson/weapon-usage.ts';
-import { WEAPON_BY_ID, WeaponId } from '@crimson/weapons.ts';
-import type { Weapon } from '@crimson/weapons.ts';
+import { WEAPON_BY_ID, Weapon, WeaponId } from '@crimson/weapons.ts';
 
-export function weaponEntry(weaponId: WeaponId): Weapon {
-  const entry = WEAPON_BY_ID.get(weaponId);
-  if (!entry) throw new Error(`No weapon entry for id: ${weaponId}`);
-  return entry;
-}
+export type WeaponAssignClipModifier = (arg0: WeaponAssignCtx) => void;
 
-class WeaponAssignCtx {
+export class WeaponAssignCtx {
   player: PlayerState;
   clipSize: number;
 
-  constructor(opts: { player: PlayerState; clipSize: number }) {
+  constructor(opts: {
+    player: PlayerState;
+    clipSize: number;
+  }) {
     this.player = opts.player;
     this.clipSize = opts.clipSize;
   }
 }
 
-type WeaponAssignClipModifier = (ctx: WeaponAssignCtx) => void;
+export function weaponEntry(weaponId: WeaponId): Weapon {
+  return WEAPON_BY_ID.get(weaponId)!;
+}
 
 function weaponAssignClipAmmoManiac(ctx: WeaponAssignCtx): void {
   if (perkActive(ctx.player, PerkId.AMMO_MANIAC)) {
@@ -38,45 +38,29 @@ function weaponAssignClipMyFavouriteWeapon(ctx: WeaponAssignCtx): void {
   }
 }
 
-const WEAPON_ASSIGN_CLIP_MODIFIERS: readonly WeaponAssignClipModifier[] = [
-  weaponAssignClipAmmoManiac,
-  weaponAssignClipMyFavouriteWeapon,
-];
-
 export function initDefaultAltWeapon(player: PlayerState): void {
   // Initialize native reset-time alternate weapon slot state.
-  player.altWeapon = new WeaponSlot({
-    weaponId: WeaponId.PISTOL,
-    clipSize: 12,
-    ammo: 12.0,
-    reloadActive: false,
-    reloadTimer: 0.0,
-    reloadTimerMax: 1.2,
-    shotCooldown: 0.0,
-  });
+
+  player.altWeapon = new WeaponSlot({ weaponId: WeaponId.PISTOL, clipSize: 12, ammo: 12.0, reloadActive: false, reloadTimer: 0.0, reloadTimerMax: 1.2, shotCooldown: 0.0 });
 }
 
-export function weaponAssignPlayer(
-  player: PlayerState,
-  weaponId: WeaponId,
-  opts: { state: GameplayState },
-): void {
+export function weaponAssignPlayer(player: PlayerState, weaponId: WeaponId, opts: { state: GameplayState }): void {
   // Assign weapon and reset per-weapon runtime state (ammo/cooldowns).
+
   const state = opts.state;
-  const status = state.status;
-  if (status !== null && !state.demoModeActive) {
-    const usageSlot = weaponUsageSlotForWeaponId(weaponId);
+  if (state.status !== null && !state.demoModeActive) {
+    const usageSlot = weaponUsageSlotForWeaponId(int(weaponId));
     if (usageSlot !== null) {
-      status.incrementWeaponUsageSlot(usageSlot);
+      state.status.incrementWeaponUsageSlot(usageSlot);
     }
   }
 
   const weapon = weaponEntry(weaponId);
   player.weapon.weaponId = weaponId;
 
-  let clipSize = int(weapon.clipSize);
-  const clipCtx = new WeaponAssignCtx({ player, clipSize: Math.max(0, clipSize) });
-  for (const modifier of WEAPON_ASSIGN_CLIP_MODIFIERS) {
+  const clipSize = int(weapon.clipSize);
+  const clipCtx = new WeaponAssignCtx({ player: player, clipSize: Math.max(0, clipSize) });
+  for (const modifier of _WEAPON_ASSIGN_CLIP_MODIFIERS) {
     modifier(clipCtx);
   }
   player.weapon.clipSize = Math.max(0, int(clipCtx.clipSize));
@@ -88,51 +72,44 @@ export function weaponAssignPlayer(
   player.weapon.shotCooldown = 0.0;
   player.auxTimer = 2.0;
 
-  state.sfxQueue.push(weapon.reloadSound);
+  if (state !== null) {
+    state.sfxQueue.push(weapon.reloadSound);
+  }
 }
 
-export function mostUsedWeaponIdForPlayer(
-  state: GameplayState,
-  opts: { playerIndex: number; fallbackWeaponId: WeaponId },
-): WeaponId {
+export function mostUsedWeaponIdForPlayer(state: GameplayState, opts: { playerIndex: number; fallbackWeaponId: WeaponId }): WeaponId {
   // Return a weapon id for the player's most-used weapon.
-  const idx = int(opts.playerIndex);
-  const weaponShotsFired = state.weaponShotsFired;
-  if (idx >= 0 && idx < weaponShotsFired.length) {
-    const counts = weaponShotsFired[idx];
-    if (counts && counts.length > 0) {
+
+  const playerIndex = opts.playerIndex;
+  const fallbackWeaponId = opts.fallbackWeaponId;
+  const idx = int(playerIndex);
+  if (idx >= 0 && idx < state.weaponShotsFired.length) {
+    const counts = state.weaponShotsFired[idx];
+    if (counts.length > 0) {
       const start = counts.length > 1 ? 1 : 0;
-      let best = start;
-      for (let i = start + 1; i < counts.length; i++) {
-        if (int(counts[i]) > int(counts[best])) {
-          best = i;
-        }
-      }
+      const best = Array.from({ length: Math.max(0, counts.length - start) }, (_, i) => start + i).reduce((best, candidate) => int(counts[candidate]) > int(counts[best]) ? candidate : best);
       if (int(counts[best]) > 0) {
         return best;
       }
     }
   }
-  return opts.fallbackWeaponId;
+  return fallbackWeaponId;
 }
 
 export function playerSwapAltWeapon(player: PlayerState): boolean {
   // Swap primary and alternate weapon runtime blocks (Alternate Weapon perk).
+
   if (player.altWeapon === null) {
     return false;
   }
-  const tmp = player.weapon;
-  player.weapon = player.altWeapon;
-  player.altWeapon = tmp;
+  [player.weapon, player.altWeapon] = [player.altWeapon, player.weapon];
   return true;
 }
 
 export function playerStartReload(player: PlayerState, state: GameplayState): void {
   // Start or refresh a reload timer (`player_start_reload` @ 0x00413430).
-  if (
-    player.weapon.reloadActive &&
-    (perkActive(player, PerkId.AMMUNITION_WITHIN) || perkActive(player, PerkId.REGRESSION_BULLETS))
-  ) {
+
+  if (player.weapon.reloadActive && (perkActive(player, PerkId.AMMUNITION_WITHIN) || perkActive(player, PerkId.REGRESSION_BULLETS))) {
     return;
   }
 
@@ -153,3 +130,8 @@ export function playerStartReload(player: PlayerState, state: GameplayState): vo
   player.weapon.reloadTimer = Math.max(0.0, reloadTime);
   player.weapon.reloadTimerMax = player.weapon.reloadTimer;
 }
+
+const _WEAPON_ASSIGN_CLIP_MODIFIERS: readonly WeaponAssignClipModifier[] = [
+  weaponAssignClipAmmoManiac,
+  weaponAssignClipMyFavouriteWeapon,
+];

@@ -446,6 +446,18 @@ export function translateExpression(
     return translateExpression(parenthesizedConditional[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
   }
 
+  const earlyConditionalExpression = parseTopLevelConditionalExpression(trimmed);
+  const enumModeConditionalForLater = /^(.+) if isinstance\((.+), ([A-Z][A-Za-z0-9_]*Mode)\) else ([A-Z][A-Za-z0-9_]*Mode)\((.+)\)$/.exec(trimmed);
+  if (earlyConditionalExpression !== null && enumModeConditionalForLater === null) {
+    return [
+      translateExpression(earlyConditionalExpression.condition, nameMap, arrayNames, validatedTypeAliases, mapNames),
+      '?',
+      translateExpression(earlyConditionalExpression.trueExpression, nameMap, arrayNames, validatedTypeAliases, mapNames),
+      ':',
+      translateExpression(earlyConditionalExpression.falseExpression, nameMap, arrayNames, validatedTypeAliases, mapNames),
+    ].join(' ');
+  }
+
   const dictComprehension = /^\{(.+): (.+) for ([A-Za-z_][A-Za-z0-9_]*) in (.+)\}$/.exec(trimmed);
   if (dictComprehension !== null) {
     const itemName = tsExportNameForPythonName(dictComprehension[3]);
@@ -574,6 +586,14 @@ export function translateExpression(
     const sortedExpression = translateSortedCall(sortedCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (sortedExpression !== null) {
       return sortedExpression;
+    }
+  }
+
+  const maxCall = parseCallPrefix(trimmed, 'max');
+  if (maxCall !== null && maxCall.rest === '') {
+    const maxExpression = translateMaxCall(maxCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (maxExpression !== null) {
+      return maxExpression;
     }
   }
 
@@ -1260,8 +1280,12 @@ export function translateExpression(
   }
 
   const tupleLiteral = /^\((.*)\)$/.exec(trimmed);
-  if (tupleLiteral !== null && tupleLiteral[1].includes(',')) {
-    const values = splitTopLevelComma(tupleLiteral[1])
+  if (tupleLiteral !== null && matchingCloseParen(trimmed, 0) === trimmed.length - 1) {
+    const tupleParts = splitTopLevelComma(tupleLiteral[1]);
+    if (tupleParts.length === 1) {
+      return `(${translateExpression(tupleLiteral[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
+    const values = tupleParts
       .map((part) => part.trim())
       .filter((part) => part !== '')
       .map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
@@ -1930,6 +1954,39 @@ function translateSortedCall(
   const less = reverse ? 1 : -1;
   const greater = reverse ? -1 : 1;
   return `${iterable}.sort((left, right) => ${leftKey} < ${rightKey} ? ${less} : ${leftKey} > ${rightKey} ? ${greater} : 0)`;
+}
+
+function translateMaxCall(
+  argsText: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  const parts = splitTopLevelComma(argsText);
+  const keyPart = parts.find((part) => part.startsWith('key='));
+  if (keyPart === undefined) {
+    return null;
+  }
+  const iterableParts = parts.filter((part) => !part.startsWith('key='));
+  if (iterableParts.length !== 1) {
+    return null;
+  }
+  const lambda = /^key=lambda ([A-Za-z_][A-Za-z0-9_]*): (.+)$/.exec(keyPart);
+  if (lambda === null) {
+    return null;
+  }
+  const iterable = translateExpression(iterableParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const bestNameMap = new Map(nameMap);
+  bestNameMap.set(lambda[1], 'best');
+  const candidateNameMap = new Map(nameMap);
+  candidateNameMap.set(lambda[1], 'candidate');
+  const bestKey = translateExpression(lambda[2], bestNameMap, arrayNames, validatedTypeAliases, mapNames);
+  const candidateKey = translateExpression(lambda[2], candidateNameMap, arrayNames, validatedTypeAliases, mapNames);
+  const iterableArray = iterable.startsWith('Array.from(') || iterable.startsWith('[')
+    ? iterable
+    : `Array.from(${iterable})`;
+  return `${iterableArray}.reduce((best, candidate) => ${candidateKey} > ${bestKey} ? candidate : best)`;
 }
 
 function sortedIterableExpression(

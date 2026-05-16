@@ -331,6 +331,17 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
 
+    const leadingTypeAlias = parseTypeAliasStatement(lines, index);
+    if (leadingTypeAlias !== null) {
+      typeAliases.push(leadingTypeAlias.alias);
+      if (leadingTypeAlias.alias.validation !== undefined) {
+        validatedTypeAliases.add(leadingTypeAlias.alias.name);
+      }
+      pendingAssignmentComments.length = 0;
+      index = leadingTypeAlias.nextIndex;
+      continue;
+    }
+
     const assignment = parseTopLevelAssignment(lines, index, moduleNameMap);
     if (assignment === null) {
       const topLevelStatement = translateStraightLineStatement(
@@ -404,6 +415,16 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       typeVarNames.add(typeVar);
       pendingAssignmentComments.length = 0;
       index += 1;
+      continue;
+    }
+    const interleavedTypeAlias = parseTypeAliasStatement(lines, index);
+    if (interleavedTypeAlias !== null) {
+      typeAliases.push(interleavedTypeAlias.alias);
+      if (interleavedTypeAlias.alias.validation !== undefined) {
+        validatedTypeAliases.add(interleavedTypeAlias.alias.name);
+      }
+      pendingAssignmentComments.length = 0;
+      index = interleavedTypeAlias.nextIndex;
       continue;
     }
 
@@ -636,6 +657,16 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       typeVarNames.add(typeVar);
       pendingAssignmentComments.length = 0;
       index += 1;
+      continue;
+    }
+    const typeAlias = parseTypeAliasStatement(lines, index);
+    if (typeAlias !== null) {
+      typeAliases.push(typeAlias.alias);
+      if (typeAlias.alias.validation !== undefined) {
+        validatedTypeAliases.add(typeAlias.alias.name);
+      }
+      pendingAssignmentComments.length = 0;
+      index = typeAlias.nextIndex;
       continue;
     }
 
@@ -901,6 +932,10 @@ function markIteratedLocalNames(
     if (iterableName !== null) {
       arrayNames.add(iterableName);
       arrayNames.add(tsExportNameForPythonName(iterableName));
+    }
+    for (const lenCall of trimmed.matchAll(/\blen\(([A-Za-z_][A-Za-z0-9_]*)\)/g)) {
+      arrayNames.add(lenCall[1]);
+      arrayNames.add(tsExportNameForPythonName(lenCall[1]));
     }
     index += 1;
   }
