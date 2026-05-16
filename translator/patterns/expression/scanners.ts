@@ -318,3 +318,87 @@ export function delimitersBalanced(value: string): boolean {
   }
   return quote === null && stack.length === 0;
 }
+
+export function hasTopLevelColon(value: string): boolean {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      if (char === quote && expressionCharIsNotEscaped(value, index)) {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'" || char === '`') {
+      quote = char;
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char === ')' || char === ']' || char === '}') {
+      depth -= 1;
+      continue;
+    }
+    if (char === ':' && depth === 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function parseCallPrefix(expression: string, callee: string): { argsText: string; rest: string } | null {
+  const prefix = `${callee}(`;
+  if (!expression.startsWith(prefix)) {
+    return null;
+  }
+
+  let depth = 0;
+  let quote: string | null = null;
+  for (let index = callee.length; index < expression.length; index += 1) {
+    const char = expression[index];
+    if (quote !== null) {
+      if (char === quote && expression[index - 1] !== '\\') {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '(') {
+      depth += 1;
+      continue;
+    }
+    if (char === ')') {
+      depth -= 1;
+      if (depth === 0) {
+        return {
+          argsText: expression.slice(prefix.length, index),
+          rest: expression.slice(index + 1),
+        };
+      }
+      if (depth < 0) {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
+export function tsPropertyAccessBase(expression: string): string {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*|\[[^\]]+\])*$/.test(expression)
+    ? expression
+    : `(${expression})`;
+}
+
+function expressionCharIsNotEscaped(value: string, index: number): boolean {
+  let slashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && value[cursor] === '\\'; cursor -= 1) {
+    slashCount += 1;
+  }
+  return slashCount % 2 === 0;
+}

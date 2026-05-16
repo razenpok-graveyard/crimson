@@ -39,6 +39,8 @@ import {
   parenthesizeForLogicalAnd,
   parenthesizeForLogicalOr,
   parenthesizeForMultiplicative,
+  hasTopLevelColon,
+  parseCallPrefix,
   splitTopLevelAdditive,
   splitTopLevelComparisonOperators,
   splitTopLevelDivision,
@@ -48,7 +50,17 @@ import {
   splitTopLevelMultiplicative,
   splitTopLevelSpacedOperator,
   stripBalancedOuterParens,
+  tsPropertyAccessBase,
 } from './expression/scanners.js';
+import {
+  expressionLooksPathJoinPart,
+  splitTopLevelPathJoin,
+} from './expression/paths.js';
+import { stripPrimitiveCallWrappers } from './expression/primitives.js';
+import {
+  nullableTypeExpressionBase,
+  typeExpressionLooksMap,
+} from './expression/types.js';
 
 export {
   arrayValueMapNameMarker,
@@ -3701,47 +3713,6 @@ function topLevelColonIndex(value: string): number | null {
   return null;
 }
 
-function stripPrimitiveCallWrappers(value: string): string {
-  let output = value;
-  let changed = true;
-  while (changed) {
-    changed = false;
-    let nextOutput = '';
-    let index = 0;
-    while (index < output.length) {
-      const match = /^(float|str|bool)\(/.exec(output.slice(index));
-      const previous = index === 0 ? '' : output[index - 1];
-      if (match === null || /[A-Za-z0-9_]/.test(previous)) {
-        nextOutput += output[index];
-        index += 1;
-        continue;
-      }
-      const openIndex = index + match[1].length;
-      const closeIndex = matchingCloseParen(output, openIndex);
-      if (closeIndex === null || output[closeIndex + 1] === '.') {
-        nextOutput += output[index];
-        index += 1;
-        continue;
-      }
-      const inner = normalizedPrimitiveWrapperInner(output.slice(openIndex + 1, closeIndex));
-      nextOutput += primitiveWrapperNeedsParens(inner) ? `(${inner})` : inner;
-      index = closeIndex + 1;
-      changed = true;
-    }
-    output = nextOutput;
-  }
-  return output;
-}
-
-function normalizedPrimitiveWrapperInner(inner: string): string {
-  const parts = splitTopLevelComma(inner);
-  return parts.length === 1 && inner.trim().endsWith(',') ? parts[0] : inner;
-}
-
-function primitiveWrapperNeedsParens(inner: string): boolean {
-  return splitTopLevelAdditive(inner) !== null || / [|&^] | << | >> /.test(inner);
-}
-
 function expressionIsVectorScale(
   pythonExpression: string,
   nameMap: Map<string, string>,
@@ -3797,44 +3768,6 @@ function knownClassFieldType(tsExpression: string, nameMap: Map<string, string>)
   const receiverType = nameMap.get(receiverTypeNameMarker(dottedField[1]))
     ?? nullableTypeExpressionBase(knownClassFieldType(dottedField[1], nameMap));
   return receiverType === undefined ? null : nameMap.get(classFieldTypeMarker(receiverType, dottedField[2])) ?? null;
-}
-
-function nullableTypeExpressionBase(typeExpression: string | null): string | undefined {
-  if (typeExpression === null) {
-    return undefined;
-  }
-  const parts = splitTopLevelTypeUnion(typeExpression)
-    .map((part) => part.trim().replace(/^readonly\s+/, ''))
-    .filter((part) => part !== 'null' && part !== 'undefined');
-  return parts.length === 1 ? parts[0] : undefined;
-}
-
-function splitTopLevelTypeUnion(typeExpression: string): string[] {
-  const parts: string[] = [];
-  let start = 0;
-  let depth = 0;
-  for (let index = 0; index < typeExpression.length; index += 1) {
-    const char = typeExpression[index];
-    if (char === '<' || char === '(' || char === '[' || char === '{') {
-      depth += 1;
-      continue;
-    }
-    if (char === '>' || char === ')' || char === ']' || char === '}') {
-      depth -= 1;
-      continue;
-    }
-    if (char === '|' && depth === 0) {
-      parts.push(typeExpression.slice(start, index));
-      start = index + 1;
-    }
-  }
-  parts.push(typeExpression.slice(start));
-  return parts;
-}
-
-function typeExpressionLooksMap(typeExpression: string): boolean {
-  const normalized = nullableTypeExpressionBase(typeExpression) ?? typeExpression.trim();
-  return /^(?:ReadonlyMap|Map)<|^Map\b|^ReadonlyMap\b/.test(normalized);
 }
 
 function finalVectorMethodCall(tsExpression: string): boolean {
@@ -3899,55 +3832,6 @@ function parseParenthesizedVectorMethodCall(value: string): { receiver: string; 
     method: methodCall[1],
     args: splitTopLevelComma(methodCall[2]),
   };
-}
-
-function expressionLooksPathJoinPart(value: string): boolean {
-  const trimmed = value.trim();
-  return parsePythonStringExpression(trimmed) !== null
-    || /^f["']/.test(trimmed)
-    || parseCallPrefix(trimmed, 'Path') !== null;
-}
-
-function splitTopLevelPathJoin(value: string): { parts: string[] } | null {
-  const parts: string[] = [];
-  let start = 0;
-  let depth = 0;
-  let quote: string | null = null;
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index];
-    if (quote !== null) {
-      if (char === quote && value[index - 1] !== '\\') {
-        quote = null;
-      }
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      continue;
-    }
-    if (char === '(' || char === '[' || char === '{') {
-      depth += 1;
-      continue;
-    }
-    if (char === ')' || char === ']' || char === '}') {
-      depth -= 1;
-      continue;
-    }
-    if (
-      depth === 0
-      && char === '/'
-      && value[index - 1] === ' '
-      && value[index + 1] === ' '
-    ) {
-      parts.push(value.slice(start, index - 1).trim());
-      start = index + 2;
-    }
-  }
-  if (parts.length === 0) {
-    return null;
-  }
-  parts.push(value.slice(start).trim());
-  return { parts };
 }
 
 function joinTranslatedAdditive(
@@ -4131,88 +4015,4 @@ function pythonContainsExpression(containerExpression: string, valueExpression: 
 
 function expressionCanBeTypeArgument(expression: string): boolean {
   return /^[A-Z][A-Za-z0-9_$]*$/.test(expression);
-}
-
-function hasTopLevelColon(value: string): boolean {
-  let depth = 0;
-  let quote: string | null = null;
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index];
-    if (quote !== null) {
-      if (char === quote && expressionCharIsNotEscaped(value, index)) {
-        quote = null;
-      }
-      continue;
-    }
-    if (char === '"' || char === "'" || char === '`') {
-      quote = char;
-      continue;
-    }
-    if (char === '(' || char === '[' || char === '{') {
-      depth += 1;
-      continue;
-    }
-    if (char === ')' || char === ']' || char === '}') {
-      depth -= 1;
-      continue;
-    }
-    if (char === ':' && depth === 0) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function expressionCharIsNotEscaped(value: string, index: number): boolean {
-  let slashCount = 0;
-  for (let cursor = index - 1; cursor >= 0 && value[cursor] === '\\'; cursor -= 1) {
-    slashCount += 1;
-  }
-  return slashCount % 2 === 0;
-}
-
-function parseCallPrefix(expression: string, callee: string): { argsText: string; rest: string } | null {
-  const prefix = `${callee}(`;
-  if (!expression.startsWith(prefix)) {
-    return null;
-  }
-
-  let depth = 0;
-  let quote: string | null = null;
-  for (let index = callee.length; index < expression.length; index += 1) {
-    const char = expression[index];
-    if (quote !== null) {
-      if (char === quote && expression[index - 1] !== '\\') {
-        quote = null;
-      }
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      continue;
-    }
-    if (char === '(') {
-      depth += 1;
-      continue;
-    }
-    if (char === ')') {
-      depth -= 1;
-      if (depth === 0) {
-        return {
-          argsText: expression.slice(prefix.length, index),
-          rest: expression.slice(index + 1),
-        };
-      }
-      if (depth < 0) {
-        return null;
-      }
-    }
-  }
-  return null;
-}
-
-function tsPropertyAccessBase(expression: string): string {
-  return /^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*|\[[^\]]+\])*$/.test(expression)
-    ? expression
-    : `(${expression})`;
 }
