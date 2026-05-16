@@ -393,7 +393,7 @@ export function parseStructClass(
 
   return {
     structClass: {
-      name: header[1],
+      name: tsExportNameForPythonName(header[1]),
       docstring: docstring?.value ?? null,
       tagged,
       readonlyFields,
@@ -656,7 +656,7 @@ export function parsePlainClass(
 
   return {
     plainClass: {
-      name: header[1],
+      name: tsExportNameForPythonName(header[1]),
       docstring: docstring?.value ?? null,
       fields,
       constructorDefinition: {
