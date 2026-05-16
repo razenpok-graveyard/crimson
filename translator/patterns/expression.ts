@@ -612,6 +612,10 @@ export function translateExpression(
     return String(buttons.get(raylibMouseButton[1]) ?? 0);
   }
 
+  if (trimmed === 'self.__class__.__name__' || trimmed === 'this.__class__.__name__') {
+    return 'this.constructor.name';
+  }
+
   const superMethodCall = /^super\(\)\.([A-Za-z_][A-Za-z0-9_]*)\((.*)\)$/.exec(trimmed);
   if (superMethodCall !== null) {
     const args = translateCallArgsWithKeywordObject(
@@ -2491,6 +2495,8 @@ function menuViewHelperName(pythonExpression: string): string | null {
       return 'labelAlpha';
     case '_sign_layout_scale':
       return 'signLayoutScale';
+    case '_draw_ui_quad_shadow':
+      return 'drawUiQuadShadow';
     case '_menu_slot_pos_x':
       return 'menuSlotPosX';
     case '_menu_slot_start_ms':

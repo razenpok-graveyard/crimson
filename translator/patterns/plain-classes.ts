@@ -1,5 +1,6 @@
 import type {
   ImportDefinition,
+  OptionalFunctionParameter,
   PlainClassDefinition,
   PlainClassFieldDefinition,
   SimpleModuleFunction,
@@ -14,8 +15,11 @@ import {
 } from './common.js';
 import {
   arrayValueMapNameMarker,
+  classFieldTypeMarker,
   functionReturnTypeMarker,
+  instanceMethodSignatureMarker,
   objectNameMarker,
+  receiverTypeNameMarker,
   translateExpression,
   tupleElementArrayNameMarker,
 } from './expression.js';
@@ -85,7 +89,7 @@ function parsePlainClassFieldAssignment(
       name: fieldName,
       typeExpression,
       readonly: false,
-      private: pythonName.startsWith('_'),
+      private: plainClassFieldIsPrivate(pythonName),
       defaultValueLines: assignment.assignment.valueLines,
     },
     pythonName,
@@ -246,7 +250,7 @@ export function parsePlainClass(
             name: fieldName,
             typeExpression,
             readonly: false,
-            private: pythonFieldName.startsWith('_'),
+            private: plainClassFieldIsPrivate(pythonFieldName),
           });
           constructorNameMap.set(pythonFieldName, fieldName);
           const translated = translateStraightLineStatement(
@@ -278,7 +282,7 @@ export function parsePlainClass(
           name: fieldName,
           typeExpression,
           readonly: false,
-          private: pythonFieldName.startsWith('_'),
+          private: plainClassFieldIsPrivate(pythonFieldName),
         });
         constructorStatements.push(`this.${fieldName} = ${value};`);
         constructorNameMap.set(pythonFieldName, fieldName);
@@ -309,6 +313,10 @@ export function parsePlainClass(
   const methods: SimpleModuleFunction[] = [];
   const staticMethodNames = new Set<string>();
   const classNameMap = new Map(moduleNameMap);
+  classNameMap.set(receiverTypeNameMarker('self'), className);
+  classNameMap.set(receiverTypeNameMarker('this'), className);
+  recordPlainClassFieldTypes(classNameMap, className, fieldMap);
+  recordPlainClassMethodHeaders(lines, bodyIndex, className, classNameMap);
   const pendingMethodComments: string[] = [];
   const takePendingMethodComments = (): string[] | undefined => {
     if (pendingMethodComments.length === 0) {
@@ -426,12 +434,19 @@ export function parsePlainClass(
     ...field,
     readonly: field.readonly && !mutableFields.has(field.name),
   }));
+  const abstractHookMethods = methods
+    .filter(isNotImplementedHookMethod)
+    .map(abstractHookMethodDefinition);
+  const abstractHookMethodByName = new Map(abstractHookMethods.map((method) => [method.name, method]));
   const rewrittenMethods = methods.map((method) => (
     method.static === true
-      ? method
+      ? abstractHookMethodByName.get(method.name) ?? method
       : {
-        ...method,
-        statements: rewritePlainClassStaticMethodCalls(method.statements, className, staticMethodNames),
+        ...(abstractHookMethodByName.get(method.name) ?? method),
+        statements: rewritePlainClassAbstractHookCalls(
+          rewritePlainClassStaticMethodCalls(method.statements, className, staticMethodNames),
+          abstractHookMethods,
+        ),
       }
   ));
 
@@ -450,6 +465,143 @@ export function parsePlainClass(
     },
     nextIndex,
   };
+}
+
+function plainClassFieldIsPrivate(pythonName: string): boolean {
+  return pythonName.startsWith('_') && pythonName !== '_timeline_ms';
+}
+
+function recordPlainClassFieldTypes(
+  nameMap: Map<string, string>,
+  className: string,
+  fieldMap: ReadonlyMap<string, PlainClassDefinition['fields'][number]>,
+): void {
+  for (const field of fieldMap.values()) {
+    nameMap.set(classFieldTypeMarker(className, field.name), field.typeExpression);
+  }
+}
+
+function recordPlainClassMethodHeaders(
+  lines: string[],
+  startIndex: number,
+  className: string,
+  nameMap: Map<string, string>,
+): void {
+  let nextIndex = startIndex;
+  while (nextIndex < lines.length) {
+    const trimmed = lines[nextIndex].trim();
+    if (trimmed === '' || trimmed.startsWith('#')) {
+      nextIndex += 1;
+      continue;
+    }
+    if (!lines[nextIndex].startsWith('    ')) {
+      break;
+    }
+    const decorator = trimmed === '@property' || trimmed === '@staticmethod' || trimmed === '@classmethod'
+      ? trimmed
+      : /^@[A-Za-z_][A-Za-z0-9_]*\.setter$/.test(trimmed) ? trimmed : null;
+    const headerIndex = decorator === null ? nextIndex : nextIndex + 1;
+    const header = parseIndentedFunctionHeader(lines, headerIndex, '    ');
+    if (header === null) {
+      nextIndex += 1;
+      continue;
+    }
+    if (header.name !== '__init__') {
+      const methodName = tsAttributeNameForPythonName(header.name);
+      const returnType = tsTypeExpression(header.returnType);
+      nameMap.set(functionReturnTypeMarker(`this.${methodName}`), returnType);
+      nameMap.set(functionReturnTypeMarker(`${className}.${methodName}`), returnType);
+      const positionalNames = plainClassMethodSignaturePositionalNames(
+        header.parametersText,
+        decorator === '@staticmethod' || decorator === '@classmethod',
+      );
+      nameMap.set(instanceMethodSignatureMarker(className, methodName), JSON.stringify({ positional: positionalNames }));
+    }
+    nextIndex = header.nextIndex;
+    while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, '        ')) {
+      nextIndex += 1;
+    }
+  }
+}
+
+function plainClassMethodSignaturePositionalNames(parametersText: string, staticMethod: boolean): string[] {
+  const parts = parametersText === '' ? [] : splitTopLevelComma(parametersText);
+  const names: string[] = [];
+  const startIndex = staticMethod ? 0 : 1;
+  for (const part of parts.slice(startIndex)) {
+    if (part === '*') {
+      break;
+    }
+    const name = /^([A-Za-z_][A-Za-z0-9_]*)/.exec(part.trim())?.[1] ?? null;
+    if (name !== null) {
+      names.push(name);
+    }
+  }
+  return names;
+}
+
+function isNotImplementedHookMethod(method: SimpleModuleFunction): boolean {
+  return (
+    method.static !== true
+    && method.name.startsWith('_')
+    && method.statements.length === 1
+    && method.statements[0] === "throw new Error('NotImplementedError');"
+  );
+}
+
+function abstractHookMethodDefinition(method: SimpleModuleFunction): SimpleModuleFunction {
+  if (method.parameters.length === 0 || method.optsParams.length === 0) {
+    return { ...method, abstract: true, statements: [] };
+  }
+  const combinedOpts: OptionalFunctionParameter[] = [
+    ...method.parameters.map((parameter) => ({ ...parameter, defaultValue: null })),
+    ...method.optsParams,
+  ];
+  return {
+    ...method,
+    abstract: true,
+    parameters: [],
+    optsParams: combinedOpts,
+    statements: [],
+  };
+}
+
+function rewritePlainClassAbstractHookCalls(
+  statements: string[],
+  hookMethods: SimpleModuleFunction[],
+): string[] {
+  if (hookMethods.length === 0) {
+    return statements;
+  }
+  const hooksByName = new Map(hookMethods.map((method) => [method.name, method]));
+  return statements.map((statement) => {
+    const call = /^this\.([A-Za-z_$][A-Za-z0-9_$]*)\((.*)\);$/.exec(statement.trim());
+    if (call === null) {
+      return statement;
+    }
+    const method = hooksByName.get(call[1]);
+    if (method === undefined || method.parameters.length > 0 || method.optsParams.length === 0) {
+      return statement;
+    }
+    const args = splitTopLevelComma(call[2]);
+    const optsArg = args.at(-1)?.trim() ?? '';
+    if (!optsArg.startsWith('{') || !optsArg.endsWith('}')) {
+      return statement;
+    }
+    const positionalArgCount = args.length - 1;
+    const positionalOpts = method.optsParams.slice(0, positionalArgCount);
+    if (positionalOpts.length !== positionalArgCount) {
+      return statement;
+    }
+    const optsParts = optsArg.slice(1, -1).trim() === ''
+      ? []
+      : splitTopLevelComma(optsArg.slice(1, -1)).map((part) => part.trim());
+    const combinedOpts = [
+      ...positionalOpts.map((param, index) => `${param.name}: ${args[index]}`),
+      ...optsParts,
+    ];
+    return `this.${method.name}({ ${combinedOpts.join(', ')} });`;
+  });
 }
 
 function refineAnyFieldsFromConstructorAssignments(
@@ -568,6 +720,9 @@ function inferPlainClassFieldType(
   const directParameterType = fieldTypes.get(tsExportNameForPythonName(valueText));
   if (directParameterType !== undefined) {
     return directParameterType;
+  }
+  if (/^[A-Z][A-Z0-9_]*$/.test(valueText.trim())) {
+    return 'number';
   }
   const literalType = inferPythonExpressionType(valueText);
   return literalType === 'any' ? null : literalType;

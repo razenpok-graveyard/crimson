@@ -1142,6 +1142,12 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       ],
     });
   }
+  if (moduleValueText.includes('drawUiQuadShadow(')) {
+    pushUniqueImportDefinition(imports, {
+      modulePath: '@crimson/ui/shadow.ts',
+      names: ['drawUiQuadShadow'],
+    });
+  }
   if (moduleValueText.includes('new Vec2(') || moduleValueText.includes('Vec2.')) {
     pushUniqueImportDefinition(imports, {
       modulePath: '@grim/geom.ts',
@@ -1978,6 +1984,9 @@ function tsReexportName(modulePath: string, name: string, relativePath: string):
 }
 
 function tsImportModulePathForPythonName(modulePath: string, pythonName: string, relativePath: string): string {
+  if (modulePath === '@crimson/screens/menu.ts' && pythonName === '_draw_menu_cursor') {
+    return modulePath;
+  }
   const candidateNames = pythonName === '__version__'
     ? ['VERSION']
     : [...new Set([tsExportNameForPythonName(pythonName), tsPublicNameForPythonName(pythonName)])];
@@ -1994,6 +2003,9 @@ function tsImportModulePathForPythonName(modulePath: string, pythonName: string,
 }
 
 function tsImportNameForPythonName(modulePath: string, pythonName: string, relativePath: string): string {
+  if (modulePath === '@crimson/screens/menu.ts' && pythonName === '_draw_menu_cursor') {
+    return 'drawMenuCursorHelper';
+  }
   if (pythonName === '__version__' && tsModuleExportsName(modulePath, 'VERSION', relativePath)) {
     return 'VERSION';
   }

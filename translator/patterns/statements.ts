@@ -25,6 +25,7 @@ import {
   translateMapKeyExpression,
   translatePositionalCallExpression,
   arrayValueMapNameMarker,
+  classFieldTypeMarker,
   dateNameMarker,
   functionReturnTypeMarker,
   instanceMethodSignatureMarker,
@@ -636,6 +637,15 @@ function inferPredeclaredAssignmentType(
       ?? nameMap.get(functionReturnTypeMarker(callExpression[1]));
     if (returnType !== undefined) {
       return returnType;
+    }
+  }
+  const dottedField = /^(.+)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(assignedExpression.trim());
+  if (dottedField !== null) {
+    const receiver = nameMap.get(dottedField[1]) ?? tsExportNameForPythonName(dottedField[1]);
+    const receiverType = nameMap.get(receiverTypeNameMarker(dottedField[1])) ?? nameMap.get(receiverTypeNameMarker(receiver));
+    const fieldType = receiverType === undefined ? undefined : nameMap.get(classFieldTypeMarker(receiverType, tsAttributeNameForPythonName(dottedField[2])));
+    if (fieldType !== undefined) {
+      return fieldType;
     }
   }
   if (assignedExpression !== '(') {
@@ -1976,6 +1986,14 @@ export function translateStraightLineStatement(
       nextIndex: index + 1,
     };
   }
+  const bareRaiseStatement = /^raise ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)$/.exec(statement);
+  if (bareRaiseStatement !== null) {
+    return {
+      statements: [`throw ${translateRaiseExpression(bareRaiseStatement[1], '', nameMap, arrayNames, validatedTypeAliases, mapNames, true)};`],
+      nextIndex: index + 1,
+    };
+  }
+
   const multilineRaiseCall = /^raise ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(statement);
   if (multilineRaiseCall !== null) {
     const callParts = parseMultilineCallParts(
@@ -2341,6 +2359,28 @@ export function translateStraightLineStatement(
 
   const multilineKeywordCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(statement);
   if (multilineKeywordCall !== null) {
+    if (multilineKeywordCall[1] === 'MenuView._draw_ui_quad') {
+      const callParts = parseMultilineCallParts(
+        lines,
+        index + 1,
+        nameMap,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+      );
+      if (callParts === null) {
+        return null;
+      }
+      const argByName = new Map(callParts.keywordArgParts.map((part) => [part.pythonName, part.expression]));
+      const args = ['texture', 'src', 'dst', 'origin', 'rotation_deg', 'tint'].map((name) => argByName.get(name));
+      if (args.some((arg) => arg === undefined)) {
+        return null;
+      }
+      return {
+        statements: [`wgl.drawTexturePro(${args.join(', ')});`],
+        nextIndex: callParts.nextIndex,
+      };
+    }
     if (multilineKeywordCall[1] === 'warnings.warn') {
       const callParts = parseMultilineCallParts(
         lines,
@@ -4444,7 +4484,7 @@ function translateRaiseExpression(
   }
   if (
     translatedCallee.includes('.')
-    || ['Exception', 'RuntimeError', 'UserWarning', 'ValueError', 'KeyError', 'OSError', 'FileNotFoundError', 'AttributeError'].includes(translatedCallee)
+    || ['Exception', 'RuntimeError', 'UserWarning', 'ValueError', 'KeyError', 'OSError', 'FileNotFoundError', 'AttributeError', 'NotImplementedError'].includes(translatedCallee)
   ) {
     return `new Error(${message})`;
   }

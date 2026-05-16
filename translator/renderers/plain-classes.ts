@@ -16,7 +16,9 @@ export function renderPlainClasses(lines: string[], classes: StraightLineModule[
         lines.push(line === '' ? '//' : `// ${line}`);
       }
     }
-    lines.push(`export class ${plainClass.name}${plainClass.extendsName === undefined ? '' : ` extends ${plainClass.extendsName}`} {`);
+    const classIsAbstract = plainClass.methods.some((method) => method.abstract === true);
+    const abstractPrefix = classIsAbstract ? 'abstract ' : '';
+    lines.push(`export ${abstractPrefix}class ${plainClass.name}${plainClass.extendsName === undefined ? '' : ` extends ${plainClass.extendsName}`} {`);
     for (const field of plainClass.fields) {
       const prefix = `  ${field.private ? 'private ' : ''}${field.readonly ? 'readonly ' : ''}${field.name}: ${field.typeExpression}`;
       if (field.defaultValueLines === undefined) {
@@ -77,7 +79,12 @@ export function renderPlainClasses(lines: string[], classes: StraightLineModule[
         params.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
       }
       const returnType = method.name.startsWith('set ') ? '' : `: ${renderFunctionReturnType(method)}`;
-      lines.push(`  ${method.static === true ? 'static ' : ''}${method.async === true ? 'async ' : ''}${method.name}(${params.join(', ')})${returnType} {`);
+      const accessModifier = classIsAbstract && method.name.startsWith('_') ? 'protected ' : '';
+      if (method.abstract === true) {
+        lines.push(`  ${accessModifier}abstract ${method.name}(${params.join(', ')})${returnType};`);
+        continue;
+      }
+      lines.push(`  ${accessModifier}${method.static === true ? 'static ' : ''}${method.async === true ? 'async ' : ''}${method.name}(${params.join(', ')})${returnType} {`);
       for (const param of method.optsParams) {
         const declaration = functionBodyAssignsName(method.statements, param.name) ? 'let' : 'const';
         if (param.defaultValue === null) {

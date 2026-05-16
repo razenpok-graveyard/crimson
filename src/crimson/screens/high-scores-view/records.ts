@@ -14,7 +14,7 @@ export function resolveRequest(state: GameState): HighScoresRequest {
     request = new HighScoresRequest({ gameModeId: (() => { const value = state.config.gameplay.mode; if (!Object.values(GameMode).includes(value as GameMode)) { throw new Error('invalid GameMode'); } return value as GameMode; })() });
   }
 
-  let level: typeof state.pendingQuestLevel;
+  let level: QuestLevel | null;
   if (request.gameModeId === GameMode.QUESTS && request.questLevel === null) {
     level = state.pendingQuestLevel;
     if (level === null) {
