@@ -353,6 +353,11 @@ export function translateExpression(
     return `${translateExpression(listComprehension[3], nameMap, arrayNames, validatedTypeAliases, mapNames)}.map((${itemName}) => ${translateExpression(listComprehension[1], itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
+  const aggregateGenerator = translateAggregateGeneratorCall(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (aggregateGenerator !== null) {
+    return aggregateGenerator;
+  }
+
   for (const [pythonName, tsMethod] of [['any', 'some'], ['all', 'every']] as const) {
     const generatorCall = parseCallPrefix(trimmed, pythonName);
     if (generatorCall !== null && generatorCall.rest === '') {
@@ -875,6 +880,16 @@ export function translateExpression(
       .join(' || ');
   }
 
+  const additiveWithAggregateGenerator = splitTopLevelAdditive(trimmed);
+  if (
+    additiveWithAggregateGenerator !== null
+    && additiveWithAggregateGenerator.parts.some((part) => (
+      translateAggregateGeneratorCall(part, nameMap, arrayNames, validatedTypeAliases, mapNames) !== null
+    ))
+  ) {
+    return joinTranslatedAdditive(additiveWithAggregateGenerator, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  }
+
   const additiveWithHighPrecedenceOperator = splitTopLevelAdditive(trimmed);
   if (
     additiveWithHighPrecedenceOperator !== null
@@ -1107,6 +1122,56 @@ export function translateMapKeyExpression(mapName: string, keyExpression: string
     return `${keyExpression}.text`;
   }
   return keyExpression;
+}
+
+function translateAggregateGeneratorCall(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  for (const [pythonName, tsName] of [['max', 'Math.max'], ['min', 'Math.min']] as const) {
+    const call = parseCallPrefix(pythonExpression, pythonName);
+    if (call === null || call.rest !== '') {
+      continue;
+    }
+    const args = splitTopLevelComma(call.argsText);
+    const generatorArg = args.find((arg) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(arg));
+    if (generatorArg === undefined) {
+      continue;
+    }
+    const generator = parseSimpleGeneratorExpression(generatorArg);
+    if (generator === null) {
+      continue;
+    }
+    const itemName = tsExportNameForPythonName(generator.itemName);
+    const itemNameMap = new Map(nameMap);
+    itemNameMap.set(generator.itemName, itemName);
+    const values = `Array.from(${translateExpression(generator.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames)}, (${itemName}) => ${translateExpression(generator.expression, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    const defaultArg = args
+      .map((arg) => /^default=(.+)$/.exec(arg))
+      .find((match): match is RegExpExecArray => match !== null);
+    if (defaultArg === undefined) {
+      return `${tsName}(...${values})`;
+    }
+    const defaultValue = translateExpression(defaultArg[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return `(() => { const values = ${values}; return values.length === 0 ? ${defaultValue} : ${tsName}(...values); })()`;
+  }
+  return null;
+}
+
+function parseSimpleGeneratorExpression(pythonExpression: string): { expression: string; itemName: string; iterable: string } | null {
+  const trimmed = stripBalancedOuterParens(pythonExpression.trim());
+  const generator = /^(.+?)(?:,)? for ([A-Za-z_][A-Za-z0-9_]*) in (.+)$/.exec(trimmed);
+  if (generator === null) {
+    return null;
+  }
+  return {
+    expression: generator[1],
+    itemName: generator[2],
+    iterable: generator[3],
+  };
 }
 
 function translateSortedCall(
