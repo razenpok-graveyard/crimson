@@ -1900,11 +1900,26 @@ export function translateExpression(
     return `${translateExpression(vectorScale.left, nameMap, arrayNames, validatedTypeAliases, mapNames)}.mul(${translateExpression(stripBalancedOuterParens(vectorScale.right), nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
+  const vectorDivision = splitTopLevelDivision(trimmed);
+  if (
+    vectorDivision !== null
+    && splitTopLevelComma(vectorDivision.left).length === 1
+    && splitTopLevelComma(vectorDivision.right).length === 1
+    && !expressionLooksPathJoinPart(vectorDivision.left)
+    && !expressionLooksPathJoinPart(vectorDivision.right)
+    && expressionIsKnownVector(vectorDivision.left, nameMap, arrayNames)
+  ) {
+    return `${translateExpression(vectorDivision.left, nameMap, arrayNames, validatedTypeAliases, mapNames)}.div(${translateExpression(stripBalancedOuterParens(vectorDivision.right), nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
   const parenthesizedVectorMethod = parseParenthesizedVectorMethodCall(trimmed);
   if (parenthesizedVectorMethod !== null) {
     const receiver = translateExpression(parenthesizedVectorMethod.receiver, nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (expressionIsKnownVector(parenthesizedVectorMethod.receiver, nameMap, arrayNames) || translatedExpressionLooksVector(receiver)) {
-      return `${receiver}.${tsExportNameForPythonName(parenthesizedVectorMethod.method)}(${parenthesizedVectorMethod.args.map((arg) => translateCallArgumentExpression(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;
+      const args = parenthesizedVectorMethod.args.some((arg) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(arg.trim()))
+        ? translateCallArgsWithKeywordObject(parenthesizedVectorMethod.args.join(', '), nameMap, arrayNames, validatedTypeAliases, mapNames)
+        : parenthesizedVectorMethod.args.map((arg) => translateCallArgumentExpression(arg, nameMap, arrayNames, validatedTypeAliases));
+      return `${receiver}.${tsExportNameForPythonName(parenthesizedVectorMethod.method)}(${args.join(', ')})`;
     }
   }
 
@@ -1929,6 +1944,8 @@ export function translateExpression(
   const divisionWithConditional = splitTopLevelDivision(trimmed);
   if (
     divisionWithConditional !== null
+    && splitTopLevelComma(divisionWithConditional.left).length === 1
+    && splitTopLevelComma(divisionWithConditional.right).length === 1
     && (
       parseTopLevelConditionalExpression(stripBalancedOuterParens(divisionWithConditional.left)) !== null
       || parseTopLevelConditionalExpression(stripBalancedOuterParens(divisionWithConditional.right)) !== null
@@ -1940,6 +1957,8 @@ export function translateExpression(
   }
   if (
     divisionWithConditional !== null
+    && splitTopLevelComma(divisionWithConditional.left).length === 1
+    && splitTopLevelComma(divisionWithConditional.right).length === 1
     && !expressionLooksPathJoinPart(divisionWithConditional.left)
     && !expressionLooksPathJoinPart(divisionWithConditional.right)
   ) {
@@ -2504,7 +2523,14 @@ function translatedMemberNameForReceiver(
   const publicMember = pythonMember.startsWith('_')
     ? tsExportNameForPythonName(pythonMember.replace(/^_+/, ''))
     : null;
+  const directMember = tsMemberNameForPythonName(pythonMember);
   const receiverType = nameMap.get(receiverTypeNameMarker(pythonReceiver)) ?? nameMap.get(receiverTypeNameMarker(tsReceiver));
+  if (
+    receiverType !== undefined
+    && nameMap.has(classFieldTypeMarker(receiverType, directMember))
+  ) {
+    return directMember;
+  }
   if (
     publicMember !== null
     && receiverType !== undefined
@@ -2512,7 +2538,7 @@ function translatedMemberNameForReceiver(
   ) {
     return publicMember;
   }
-  return tsMemberNameForPythonName(pythonMember);
+  return directMember;
 }
 
 function replaceKnownRectangleDimensions(tsExpression: string, arrayNames: Set<string>): string {
@@ -3737,6 +3763,14 @@ function expressionIsKnownVector(
 ): boolean {
   const trimmed = stripBalancedOuterParens(pythonExpression);
   const translated = translateIdentifierName(trimmed, nameMap);
+  const receiverType = nameMap.get(receiverTypeNameMarker(trimmed)) ?? nameMap.get(receiverTypeNameMarker(translated));
+  if (receiverType === 'Vec2' || receiverType === 'wgl.Vector2') {
+    return true;
+  }
+  const callReturnType = knownCallReturnType(trimmed, nameMap);
+  if (callReturnType === 'Vec2' || callReturnType === 'wgl.Vector2') {
+    return true;
+  }
   if (arrayNames.has(numberNameMarker(trimmed)) || arrayNames.has(numberNameMarker(translated))) {
     return false;
   }
@@ -3766,6 +3800,18 @@ function expressionIsKnownVector(
     return arrayNames.has(vectorArrayNameMarker(indexedIdentifier[1])) || arrayNames.has(vectorArrayNameMarker(translatedBase));
   }
   return translatedExpressionLooksVector(trimmed);
+}
+
+function knownCallReturnType(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+): string | null {
+  const call = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\(/.exec(pythonExpression);
+  if (call === null) {
+    return null;
+  }
+  const callee = translateIdentifierName(call[1], nameMap);
+  return nameMap.get(functionReturnTypeMarker(call[1])) ?? nameMap.get(functionReturnTypeMarker(callee)) ?? null;
 }
 
 function knownClassFieldType(tsExpression: string, nameMap: Map<string, string>): string | null {

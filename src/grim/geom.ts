@@ -1,29 +1,25 @@
 // Port of grim/geom.py
 
-import { clamp } from './math.ts';
-import * as wgl from '@wgl';
+import { clamp } from '@grim/math.ts';
+import { rl } from '@grim/raylib-api.ts';
 
 export interface SupportsXY {
   x: number;
   y: number;
 }
 
-function roundToDigits(value: number, ndigits: number): number {
-  const factor = Math.pow(10, ndigits);
+function pyRound(value: number, ndigits = 0): number {
+  const factor = 10 ** ndigits;
   const scaled = value * factor;
-  const sign = scaled < 0 ? -1 : 1;
-  const absScaled = Math.abs(scaled);
-  const floorValue = Math.floor(absScaled);
-  const fraction = absScaled - floorValue;
-  let rounded: number;
-  if (Math.abs(fraction - 0.5) <= Number.EPSILON) {
-    rounded = floorValue % 2 === 0 ? floorValue : floorValue + 1;
-  } else if (fraction > 0.5) {
-    rounded = floorValue + 1;
-  } else {
-    rounded = floorValue;
+  const floorValue = Math.floor(scaled);
+  const frac = scaled - floorValue;
+  if (frac < 0.5) {
+    return floorValue / factor;
   }
-  return sign * rounded / factor;
+  if (frac > 0.5) {
+    return (floorValue + 1) / factor;
+  }
+  return (floorValue % 2 === 0 ? floorValue : floorValue + 1) / factor;
 }
 
 export class Vec2 {
@@ -33,95 +29,104 @@ export class Vec2 {
   constructor(opts?: { x?: number; y?: number });
   constructor(x?: number, y?: number);
   constructor(optsOrX: { x?: number; y?: number } | number = {}, y: number = 0.0) {
-    if (typeof optsOrX === 'number') {
-      this.x = optsOrX;
-      this.y = y;
+    if (typeof optsOrX === 'object' && optsOrX !== null) {
+      this.x = optsOrX.x ?? 0.0;
+      this.y = optsOrX.y ?? 0.0;
       return;
     }
-    this.x = optsOrX.x ?? 0.0;
-    this.y = optsOrX.y ?? 0.0;
+    this.x = optsOrX ?? 0.0;
+    this.y = y;
   }
 
-  lengthSq() {
+  lengthSq(): number {
     return this.x * this.x + this.y * this.y;
   }
 
-  length() {
+  length(): number {
     return Math.sqrt(this.lengthSq());
   }
 
-  add(other: Vec2) {
-    return new Vec2(this.x + other.x, this.y + other.y);
+  add(other: Vec2): Vec2 {
+    return new Vec2({ x: this.x + other.x, y: this.y + other.y });
   }
 
-  sub(other: Vec2) {
-    return new Vec2(this.x - other.x, this.y - other.y);
+  sub(other: Vec2): Vec2 {
+    return new Vec2({ x: this.x - other.x, y: this.y - other.y });
   }
 
-  mul(scalar: number) {
-    return new Vec2(this.x * scalar, this.y * scalar);
+  mul(scalar: number): Vec2 {
+    return new Vec2({ x: this.x * scalar, y: this.y * scalar });
   }
 
-  div(scalar: number) {
-    return new Vec2(this.x / scalar, this.y / scalar);
+  __rmul__(scalar: number): Vec2 {
+    return this.mul(scalar);
   }
 
-  mulComponents(other: Vec2) {
-    return new Vec2(this.x * other.x, this.y * other.y);
+  div(scalar: number): Vec2 {
+    return new Vec2({ x: this.x / scalar, y: this.y / scalar });
   }
 
-  divComponents(other: Vec2) {
-    return new Vec2(this.x / other.x, this.y / other.y);
+  mulComponents(other: Vec2): Vec2 {
+    return new Vec2({ x: this.x * other.x, y: this.y * other.y });
   }
 
-  avgComponent() {
+  divComponents(other: Vec2): Vec2 {
+    return new Vec2({ x: this.x / other.x, y: this.y / other.y });
+  }
+
+  avgComponent(): number {
     return (this.x + this.y) * 0.5;
   }
 
-  normalized() {
+  normalized(): Vec2 {
     const magnitudeSq = this.lengthSq();
-    if (magnitudeSq <= 0.0) return new Vec2();
+    if (magnitudeSq <= 0.0) {
+      return new Vec2();
+    }
     const invMagnitude = 1.0 / Math.sqrt(magnitudeSq);
-    return new Vec2(this.x * invMagnitude, this.y * invMagnitude);
+    return new Vec2({ x: this.x * invMagnitude, y: this.y * invMagnitude });
   }
 
   normalizedWithLength(opts: { epsilon?: number } = {}): [Vec2, number] {
     const epsilon = opts.epsilon ?? 1e-6;
     const magnitude = this.length();
-    if (magnitude <= epsilon) return [new Vec2(), 0.0];
+    if (magnitude <= epsilon) {
+      return [new Vec2(), 0.0];
+    }
     return [this.div(magnitude), magnitude];
   }
 
-  distanceTo(other: Vec2) {
+  distanceTo(other: Vec2): number {
     return other.sub(this).length();
   }
 
-  directionTo(other: Vec2, opts: { epsilon?: number } = {}) {
-    const [direction] = other.sub(this).normalizedWithLength({ epsilon: opts.epsilon ?? 1e-6 });
+  directionTo(other: Vec2, opts: { epsilon?: number } = {}): Vec2 {
+    const epsilon = opts.epsilon ?? 1e-6;
+    const [direction, ] = other.sub(this).normalizedWithLength({ epsilon: epsilon });
     return direction;
   }
 
-  static fromAngle(theta: number) {
-    return new Vec2(Math.cos(theta), Math.sin(theta));
+  static fromAngle(theta: number): Vec2 {
+    return new Vec2({ x: Math.cos(theta), y: Math.sin(theta) });
   }
 
-  static fromPolar(theta: number, radius: number = 1.0) {
+  static fromPolar(theta: number, radius: number = 1.0): Vec2 {
     return Vec2.fromAngle(theta).mul(radius);
   }
 
-  static fromXY(value: SupportsXY) {
-    return new Vec2(value.x, value.y);
+  static fromXY(value: SupportsXY): Vec2 {
+    return new Vec2({ x: value.x, y: value.y });
   }
 
-  static fromHeading(heading: number) {
+  static fromHeading(heading: number): Vec2 {
     return Vec2.fromAngle(heading - Math.PI / 2.0);
   }
 
-  toAngle() {
+  toAngle(): number {
     return Math.atan2(this.y, this.x);
   }
 
-  toHeading() {
+  toHeading(): number {
     return this.toAngle() + Math.PI / 2.0;
   }
 
@@ -129,66 +134,51 @@ export class Vec2 {
     return [this.toAngle(), this.length()];
   }
 
-  offset(opts: { dx?: number; dy?: number } = {}) {
+  offset(opts: { dx?: number; dy?: number } = {}): Vec2 {
     const dx = opts.dx ?? 0.0;
     const dy = opts.dy ?? 0.0;
-    return new Vec2(this.x + dx, this.y + dy);
+    return new Vec2({ x: this.x + dx, y: this.y + dy });
   }
 
-  perpLeft() {
-    return new Vec2(-this.y, this.x);
+  perpLeft(): Vec2 {
+    return new Vec2({ x: -this.y, y: this.x });
   }
 
-  perpRight() {
-    return new Vec2(this.y, -this.x);
+  perpRight(): Vec2 {
+    return new Vec2({ x: this.y, y: -this.x });
   }
 
-  toWgl() {
-    return wgl.makeVector2(this.x, this.y);
+  toRl(): rl.Vector2 {
+
+    return rl.makeVector2(this.x, this.y);
   }
 
-  toRl() {
-    return this.toWgl();
-  }
-
-  toDict(opts: { ndigits?: number } = {}) {
-    const ndigits = opts.ndigits;
-    if (ndigits === undefined) {
-      return { x: this.x, y: this.y };
+  toDict(opts: { ndigits?: number | null } = {}): Map<string, number> {
+    const ndigits = opts.ndigits ?? null;
+    if (ndigits === null) {
+      return new Map(Object.entries({ 'x': this.x, 'y': this.y }));
     }
-    return {
-      x: roundToDigits(this.x, ndigits),
-      y: roundToDigits(this.y, ndigits),
-    };
+    return new Map(Object.entries({ 'x': pyRound(this.x, ndigits), 'y': pyRound(this.y, ndigits) }));
   }
 
-  rotated(theta: number) {
+  rotated(theta: number): Vec2 {
     const cosTheta = Math.cos(theta);
     const sinTheta = Math.sin(theta);
-    return new Vec2(
-      this.x * cosTheta - this.y * sinTheta,
-      this.x * sinTheta + this.y * cosTheta,
-    );
+    return new Vec2({ x: this.x * cosTheta - this.y * sinTheta, y: this.x * sinTheta + this.y * cosTheta });
   }
 
-  clampRect(minX: number, minY: number, maxX: number, maxY: number) {
-    return new Vec2(
-      clamp(this.x, minX, maxX),
-      clamp(this.y, minY, maxY),
-    );
+  clampRect(minX: number, minY: number, maxX: number, maxY: number): Vec2 {
+    return new Vec2({ x: clamp(this.x, minX, maxX), y: clamp(this.y, minY, maxY) });
   }
 
-  static distanceSq(a: Vec2, b: Vec2) {
+  static distanceSq(a: Vec2, b: Vec2): number {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     return dx * dx + dy * dy;
   }
 
-  static lerp(a: Vec2, b: Vec2, t: number) {
-    return new Vec2(
-      a.x + (b.x - a.x) * t,
-      a.y + (b.y - a.y) * t,
-    );
+  static lerp(a: Vec2, b: Vec2, t: number): Vec2 {
+    return new Vec2({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
   }
 }
 
@@ -198,82 +188,92 @@ export class Rect {
   readonly w: number;
   readonly h: number;
 
-  constructor(opts?: { x?: number; y?: number; w?: number; h?: number });
-  constructor(x?: number, y?: number, w?: number, h?: number);
-  constructor(
-    optsOrX: { x?: number; y?: number; w?: number; h?: number } | number = {},
-    y: number = 0.0,
-    w: number = 0.0,
-    h: number = 0.0,
-  ) {
-    if (typeof optsOrX === 'number') {
-      this.x = optsOrX;
-      this.y = y;
-      this.w = w;
-      this.h = h;
-      return;
-    }
-    this.x = optsOrX.x ?? 0.0;
-    this.y = optsOrX.y ?? 0.0;
-    this.w = optsOrX.w ?? 0.0;
-    this.h = optsOrX.h ?? 0.0;
+  constructor(opts: {
+    x?: number;
+    y?: number;
+    w?: number;
+    h?: number;
+  } = {}) {
+    this.x = opts.x ?? 0.0;
+    this.y = opts.y ?? 0.0;
+    this.w = opts.w ?? 0.0;
+    this.h = opts.h ?? 0.0;
   }
 
-  static fromXywh(value: Rect | { x: number; y: number; width: number; height: number }) {
-    return new Rect(value.x, value.y, value.width, value.height);
+  static fromXywh(value: Rect | rl.Rectangle): Rect {
+    return new Rect({ x: value.x, y: value.y, w: value.w, h: value.h });
   }
 
-  static fromTopLeft(topLeft: SupportsXY, width: number, height: number) {
-    return new Rect(topLeft.x, topLeft.y, width, height);
+  static fromTopLeft(topLeft: SupportsXY, width: number, height: number): Rect {
+    return new Rect({ x: topLeft.x, y: topLeft.y, w: width, h: height });
   }
 
-  static fromPosSize(pos: Vec2, size: Vec2) {
-    return new Rect(pos.x, pos.y, size.x, size.y);
+  static fromPosSize(pos: Vec2, size: Vec2): Rect {
+    return new Rect({ x: pos.x, y: pos.y, w: size.x, h: size.y });
   }
 
-  get left() { return this.x; }
-  get top() { return this.y; }
-
-  get topLeft() { return new Vec2(this.x, this.y); }
-  get topRight() { return new Vec2(this.right, this.y); }
-  get bottomLeft() { return new Vec2(this.x, this.bottom); }
-  get bottomRight() { return new Vec2(this.right, this.bottom); }
-
-  get size() { return new Vec2(this.w, this.h); }
-  get width() { return this.w; }
-  get height() { return this.h; }
-
-  get right() { return this.x + this.w; }
-  get bottom() { return this.y + this.h; }
-
-  get center() {
-    return new Vec2(this.x + this.w * 0.5, this.y + this.h * 0.5);
+  get left(): number {
+    return this.x;
   }
 
-  static fromCenter(center: SupportsXY, width: number, height: number) {
-    return new Rect(
-      center.x - width * 0.5,
-      center.y - height * 0.5,
-      width,
-      height,
-    );
+  get top(): number {
+    return this.y;
   }
 
-  offset(opts: { dx?: number; dy?: number } = {}) {
+  get topLeft(): Vec2 {
+    return new Vec2({ x: this.x, y: this.y });
+  }
+
+  get topRight(): Vec2 {
+    return new Vec2({ x: this.right, y: this.y });
+  }
+
+  get bottomLeft(): Vec2 {
+    return new Vec2({ x: this.x, y: this.bottom });
+  }
+
+  get bottomRight(): Vec2 {
+    return new Vec2({ x: this.right, y: this.bottom });
+  }
+
+  get size(): Vec2 {
+    return new Vec2({ x: this.w, y: this.h });
+  }
+
+  get width(): number {
+    return this.w;
+  }
+
+  get height(): number {
+    return this.h;
+  }
+
+  get right(): number {
+    return this.x + this.w;
+  }
+
+  get bottom(): number {
+    return this.y + this.h;
+  }
+
+  get center(): Vec2 {
+    return new Vec2({ x: this.x + this.w * 0.5, y: this.y + this.h * 0.5 });
+  }
+
+  static fromCenter(center: SupportsXY, width: number, height: number): Rect {
+    return new Rect({ x: center.x - width * 0.5, y: center.y - height * 0.5, w: width, h: height });
+  }
+
+  offset(opts: { dx?: number; dy?: number } = {}): Rect {
     const dx = opts.dx ?? 0.0;
     const dy = opts.dy ?? 0.0;
-    return new Rect(this.x + dx, this.y + dy, this.w, this.h);
+    return new Rect({ x: this.x + dx, y: this.y + dy, w: this.w, h: this.h });
   }
 
-  inset(opts: { dx?: number; dy?: number } = {}) {
+  inset(opts: { dx?: number; dy?: number } = {}): Rect {
     const dx = opts.dx ?? 0.0;
     const dy = opts.dy ?? 0.0;
-    return new Rect(
-      this.x + dx,
-      this.y + dy,
-      Math.max(0.0, this.w - 2.0 * dx),
-      Math.max(0.0, this.h - 2.0 * dy),
-    );
+    return new Rect({ x: this.x + dx, y: this.y + dy, w: Math.max(0.0, this.w - 2.0 * dx), h: Math.max(0.0, this.h - 2.0 * dy) });
   }
 
   contains(point: SupportsXY): boolean {
@@ -282,11 +282,8 @@ export class Rect {
     return this.x <= px && px <= this.right && this.y <= py && py <= this.bottom;
   }
 
-  toWgl() {
-    return wgl.makeRectangle(this.x, this.y, this.w, this.h);
-  }
+  toRl(): rl.Rectangle {
 
-  toRl() {
-    return this.toWgl();
+    return rl.makeRectangle(this.x, this.y, this.w, this.h);
   }
 }

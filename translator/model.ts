@@ -141,6 +141,7 @@ export interface StructClassDefinition {
   tagged: boolean;
   tagValue?: string;
   readonlyFields: boolean;
+  positionalConstructor?: boolean;
   typeParams?: string[];
   fields: StructFieldDefinition[];
   postInitStatements: string[];

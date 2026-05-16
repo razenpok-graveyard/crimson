@@ -16,16 +16,18 @@ import { buildWeaponAvailability } from '@crimson/weapon-runtime/availability.ts
 import { weaponUsageSlotForWeaponId } from '@crimson/weapon-usage.ts';
 import * as wgl from '@wgl';
 
-function pyRound(value: number): number {
-  const floorValue = Math.floor(value);
-  const frac = value - floorValue;
+function pyRound(value: number, ndigits = 0): number {
+  const factor = 10 ** ndigits;
+  const scaled = value * factor;
+  const floorValue = Math.floor(scaled);
+  const frac = scaled - floorValue;
   if (frac < 0.5) {
-    return floorValue;
+    return floorValue / factor;
   }
   if (frac > 0.5) {
-    return floorValue + 1;
+    return (floorValue + 1) / factor;
   }
-  return floorValue % 2 === 0 ? floorValue : floorValue + 1;
+  return (floorValue % 2 === 0 ? floorValue : floorValue + 1) / factor;
 }
 
 export class UnlockedWeaponsDatabaseView extends DatabaseBaseView {

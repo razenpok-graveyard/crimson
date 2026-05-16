@@ -140,7 +140,9 @@ export function renderStructClasses(lines: string[], classes: StructModule['clas
       if (structClass.tagged || structClass.fields.length > 0) {
         lines.push('');
       }
-      if (structClass.fields.length > 0) {
+      if (shouldRenderPositionalConstructor(structClass)) {
+        renderPositionalStructConstructor(lines, structClass);
+      } else if (structClass.fields.length > 0) {
         lines.push(`  constructor(opts: ${structConstructorOptsType(structClass)}${allStructFieldsHaveDefaults(structClass) ? ' = {}' : ''}) {`);
         if (structClass.extendsName !== undefined) {
           lines.push('    super(opts);');
@@ -163,7 +165,9 @@ export function renderStructClasses(lines: string[], classes: StructModule['clas
       for (const statement of structClass.postInitStatements) {
         lines.push(statement === '' ? '' : `    ${statement}`);
       }
-      lines.push('  }');
+      if (!shouldRenderPositionalConstructor(structClass)) {
+        lines.push('  }');
+      }
     }
     for (const method of structClass.methods) {
       lines.push('');
@@ -196,6 +200,46 @@ export function renderStructClasses(lines: string[], classes: StructModule['clas
       lines.push('');
     }
   }
+}
+
+function shouldRenderPositionalConstructor(structClass: StructModule['classes'][number]): boolean {
+  return structClass.positionalConstructor === true
+    && structClass.extendsName === undefined
+    && structClass.fields.length > 0
+    && structClass.postInitStatements.length === 0
+    && allStructFieldsHaveDefaults(structClass)
+    && ['number', 'string', 'boolean'].includes(structClass.fields[0].typeExpression);
+}
+
+function renderPositionalStructConstructor(lines: string[], structClass: StructModule['classes'][number]): void {
+  const optsType = inlineStructConstructorOptsType(structClass);
+  const firstField = structClass.fields[0];
+  const firstParamName = `optsOr${firstField.name[0].toUpperCase()}${firstField.name.slice(1)}`;
+  const positionalParams = structClass.fields
+    .map((field) => `${field.name}?: ${field.typeExpression}`)
+    .join(', ');
+  const implementationParams = [
+    `${firstParamName}: ${optsType} | ${firstField.typeExpression} = {}`,
+    ...structClass.fields.slice(1).map((field) => `${field.name}: ${field.typeExpression} = ${field.defaultValue}`),
+  ];
+  lines.push(`  constructor(opts?: ${optsType});`);
+  lines.push(`  constructor(${positionalParams});`);
+  lines.push(`  constructor(${implementationParams.join(', ')}) {`);
+  lines.push(`    if (typeof ${firstParamName} === 'object' && ${firstParamName} !== null) {`);
+  for (const field of structClass.fields) {
+    lines.push(`      this.${field.name} = ${defaultedOptionExpression(`${firstParamName}.${field.name}`, field.typeExpression, field.defaultValue!)};`);
+  }
+  lines.push('      return;');
+  lines.push('    }');
+  lines.push(`    this.${firstField.name} = ${firstParamName} ?? ${firstField.defaultValue};`);
+  for (const field of structClass.fields.slice(1)) {
+    lines.push(`    this.${field.name} = ${field.name};`);
+  }
+  lines.push('  }');
+}
+
+function inlineStructConstructorOptsType(structClass: StructModule['classes'][number]): string {
+  return `{ ${structClass.fields.map((field) => `${field.name}${field.defaultValue === null ? '' : '?'}: ${field.typeExpression}`).join('; ')} }`;
 }
 
 function fieldsAssignedByPostInit(statements: readonly string[]): Set<string> {

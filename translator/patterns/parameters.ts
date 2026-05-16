@@ -93,7 +93,7 @@ export function parseFunctionParameterText(
       arrayNames.add(colorNameMarker(typedParameter[1]));
       arrayNames.add(colorNameMarker(parameterName));
     }
-    if (/^(?:r[dl]|wgl)\.Rectangle$/.test(typeExpression)) {
+    if (typeExpression.split('|').some((part) => /^(?:r[dl]|wgl)\.Rectangle$/.test(part.trim()))) {
       arrayNames.add(rectangleNameMarker(typedParameter[1]));
       arrayNames.add(rectangleNameMarker(parameterName));
     }

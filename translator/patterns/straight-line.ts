@@ -266,7 +266,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
 
-    const structClass = parseStructClass(lines, index, moduleNameMap, mapNames);
+    const structClass = parseStructClass(lines, index, moduleNameMap, mapNames, new Set(), relativePath, imports);
     if (structClass !== null) {
       classes.push(structClass.structClass);
       structConstructorFields.set(
@@ -610,7 +610,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         continue;
       }
 
-      const structClass = parseStructClass(lines, index, moduleNameMap, mapNames);
+      const structClass = parseStructClass(lines, index, moduleNameMap, mapNames, new Set(), relativePath, imports);
       if (structClass !== null) {
         classes.push(structClass.structClass);
         structConstructorFields.set(
@@ -1162,7 +1162,9 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       names: ['drawUiQuadShadow'],
     });
   }
-  if (moduleValueText.includes('new Vec2(') || moduleValueText.includes('Vec2.')) {
+  const moduleDefinesVec2 = classes.some((structClass) => structClass.name === 'Vec2')
+    || plainClasses.some((plainClass) => plainClass.name === 'Vec2');
+  if (!moduleDefinesVec2 && (moduleValueText.includes('new Vec2(') || moduleValueText.includes('Vec2.'))) {
     pushUniqueImportDefinition(imports, {
       modulePath: '@grim/geom.ts',
       names: ['Vec2'],
@@ -2290,7 +2292,17 @@ function ensureInferredTypeImports(
   assignments: SimpleModuleAssignment[],
 ): void {
   const typeText = straightLineModuleTypeUsageText(typeAliases, protocols, classes, plainClasses, leadingStatements, functions, assignments);
-  if (identifierPattern('Vec2').test(typeText) && !imports.some((importDefinition) => importDefinition.names.some((name) => importedBindingName(name) === 'Vec2'))) {
+  const localTypeNames = new Set([
+    ...typeAliases.map((alias) => alias.name),
+    ...protocols.map((protocol) => protocol.name),
+    ...classes.map((structClass) => structClass.name),
+    ...plainClasses.map((plainClass) => plainClass.name),
+  ]);
+  if (
+    identifierPattern('Vec2').test(typeText)
+    && !localTypeNames.has('Vec2')
+    && !imports.some((importDefinition) => importDefinition.names.some((name) => importedBindingName(name) === 'Vec2'))
+  ) {
     pushUniqueImportDefinition(imports, {
       modulePath: '@grim/geom.ts',
       names: ['Vec2'],

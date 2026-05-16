@@ -16,16 +16,18 @@ import { modeLabel } from '@crimson/screens/high-scores-view/shared.ts';
 import type { HighScoresView } from '@crimson/screens/high-scores-view/view.ts';
 import * as wgl from '@wgl';
 
-function pyRound(value: number): number {
-  const floorValue = Math.floor(value);
-  const frac = value - floorValue;
+function pyRound(value: number, ndigits = 0): number {
+  const factor = 10 ** ndigits;
+  const scaled = value * factor;
+  const floorValue = Math.floor(scaled);
+  const frac = scaled - floorValue;
   if (frac < 0.5) {
-    return floorValue;
+    return floorValue / factor;
   }
   if (frac > 0.5) {
-    return floorValue + 1;
+    return (floorValue + 1) / factor;
   }
-  return floorValue % 2 === 0 ? floorValue : floorValue + 1;
+  return (floorValue % 2 === 0 ? floorValue : floorValue + 1) / factor;
 }
 
 export function drawMainPanel(view: HighScoresView, opts: { resources: RuntimeResources; font: SmallFontData; leftPanelTopLeft: Vec2; scale: number; modeId: GameMode; questMajor: number; questMinor: number; request: HighScoresRequest | null }): number | null {

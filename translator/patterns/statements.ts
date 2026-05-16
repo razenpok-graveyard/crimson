@@ -1533,7 +1533,29 @@ export function translateStraightLineStatement(
       const trimmed = lines[nextIndex].trim();
       if (lineStartsAtIndent(lines[nextIndex] ?? '', indent) && trimmed === ')') {
         return {
-          statements: [`return ${translateExpression(expressionLines.join(' '), nameMap, arrayNames, validatedTypeAliases, mapNames)};`],
+          statements: [`return ${translateReturnExpression(expressionLines.join(' '), nameMap, arrayNames, validatedTypeAliases, mapNames)};`],
+          nextIndex: nextIndex + 1,
+        };
+      }
+      if (trimmed === '') {
+        nextIndex += 1;
+        continue;
+      }
+      expressionLines.push(trimmed);
+      nextIndex += 1;
+    }
+    return null;
+  }
+
+  if (statement === 'return {') {
+    const expressionLines = ['{'];
+    let nextIndex = index + 1;
+    while (nextIndex < lines.length) {
+      const trimmed = lines[nextIndex].trim();
+      if (lineStartsAtIndent(lines[nextIndex] ?? '', indent) && trimmed === '}') {
+        expressionLines.push('}');
+        return {
+          statements: [`return ${translateReturnExpression(expressionLines.join(' '), nameMap, arrayNames, validatedTypeAliases, mapNames)};`],
           nextIndex: nextIndex + 1,
         };
       }
@@ -1605,7 +1627,7 @@ export function translateStraightLineStatement(
 
   const returnStatement = /^return (.+)$/.exec(statement);
   if (returnStatement !== null) {
-    return { statements: [`return ${translateExpression(returnStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)};`], nextIndex: index + 1 };
+    return { statements: [`return ${translateReturnExpression(returnStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)};`], nextIndex: index + 1 };
   }
 
   const raiseFromStatement = /^raise ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\((.*)\) from .+$/.exec(statement);
@@ -2431,6 +2453,23 @@ export function translateStraightLineStatement(
 
   return null;
 }
+
+function translateReturnExpression(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string {
+  const translated = translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const returnType = nameMap.get(functionReturnTypeMarker('__current__'));
+  const trimmed = translated.trim();
+  if (returnType?.startsWith('Map<') === true && trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    return `new Map(Object.entries(${translated}))`;
+  }
+  return translated;
+}
+
 function parseWrappedMultilineExpression(
   lines: string[],
   startIndex: number,

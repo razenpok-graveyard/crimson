@@ -272,7 +272,7 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       continue;
     }
 
-    const structClass = parseStructClass(lines, index, moduleNameMap, new Set(), tupleTypeAliases);
+    const structClass = parseStructClass(lines, index, moduleNameMap, new Set(), tupleTypeAliases, relativePath, imports);
     if (structClass === null) {
       return null;
     }
@@ -423,6 +423,8 @@ export function parseStructClass(
   moduleNameMap: ReadonlyMap<string, string> = new Map(),
   initialMapNames: ReadonlySet<string> = new Set(),
   tupleTypeAliases: ReadonlySet<string> = new Set(),
+  relativePath: string | null = null,
+  imports: ImportDefinition[] | null = null,
 ): { structClass: StructModule['classes'][number]; nextIndex: number } | null {
   const dataclass = /^@dataclass\((?<options>[^)]*)\)$/.exec(lines[index] ?? '');
   const classIndex = dataclass === null ? index : index + 1;
@@ -456,7 +458,10 @@ export function parseStructClass(
   const arrayFieldNames = new Set<string>();
   const mapFieldNames = new Set<string>(initialMapNames);
   const classNameMap = new Map(moduleNameMap);
+  classNameMap.set(receiverTypeNameMarker('self'), className);
+  classNameMap.set(receiverTypeNameMarker('this'), className);
   let postInitStatements: string[] = [];
+  let positionalConstructor = false;
   const pendingFieldComments: string[] = [];
   while (nextIndex < lines.length) {
     const line = lines[nextIndex];
@@ -481,7 +486,7 @@ export function parseStructClass(
 
     if (trimmedField === '@property') {
       pendingFieldComments.length = 0;
-      const propertyMethod = parseStructMethod(lines, nextIndex + 1, false, arrayFieldNames, mapFieldNames, classNameMap);
+      const propertyMethod = parseStructMethod(lines, nextIndex + 1, false, arrayFieldNames, mapFieldNames, classNameMap, null, relativePath, imports);
       if (propertyMethod === null || propertyMethod.method.parameters.length > 0 || propertyMethod.method.optsParams.length > 0) {
         return null;
       }
@@ -496,7 +501,7 @@ export function parseStructClass(
     const propertySetter = /^@([A-Za-z_][A-Za-z0-9_]*)\.setter$/.exec(trimmedField);
     if (propertySetter !== null) {
       pendingFieldComments.length = 0;
-      const setterMethod = parseStructMethod(lines, nextIndex + 1, false, arrayFieldNames, mapFieldNames, classNameMap);
+      const setterMethod = parseStructMethod(lines, nextIndex + 1, false, arrayFieldNames, mapFieldNames, classNameMap, null, relativePath, imports);
       if (
         setterMethod === null
         || setterMethod.method.name !== tsAttributeNameForPythonName(propertySetter[1])
@@ -515,11 +520,12 @@ export function parseStructClass(
 
     if (trimmedField === '@staticmethod') {
       pendingFieldComments.length = 0;
-      const staticMethod = parseStructMethod(lines, nextIndex + 1, true, arrayFieldNames, mapFieldNames, classNameMap);
+      const staticMethod = parseStructMethod(lines, nextIndex + 1, true, arrayFieldNames, mapFieldNames, classNameMap, null, relativePath, imports);
       if (staticMethod === null) {
         return null;
       }
       staticMethodNames.add(staticMethod.method.name);
+      recordStructMethodReturnType(classNameMap, className, staticMethod.method);
       methods.push(staticMethod.method);
       nextIndex = staticMethod.nextIndex;
       continue;
@@ -527,22 +533,25 @@ export function parseStructClass(
 
     if (trimmedField === '@classmethod') {
       pendingFieldComments.length = 0;
-      const classMethod = parseStructMethod(lines, nextIndex + 1, true, arrayFieldNames, mapFieldNames, classNameMap, className);
+      const classMethod = parseStructMethod(lines, nextIndex + 1, true, arrayFieldNames, mapFieldNames, classNameMap, className, relativePath, imports);
       if (classMethod === null) {
         return null;
       }
       staticMethodNames.add(classMethod.method.name);
+      recordStructMethodReturnType(classNameMap, className, classMethod.method);
       methods.push(classMethod.method);
       nextIndex = classMethod.nextIndex;
       continue;
     }
 
-    const method = parseStructMethod(lines, nextIndex, false, arrayFieldNames, mapFieldNames, classNameMap);
+    const method = parseStructMethod(lines, nextIndex, false, arrayFieldNames, mapFieldNames, classNameMap, null, relativePath, imports);
     if (method !== null) {
       pendingFieldComments.length = 0;
+      positionalConstructor ||= pythonOperatorMethodUsesPositionalConstructor(method.pythonName);
       if (method.method.name === '__post_init__') {
         postInitStatements = method.method.statements;
       } else {
+        recordStructMethodReturnType(classNameMap, className, method.method);
         methods.push(method.method);
       }
       nextIndex = method.nextIndex;
@@ -627,6 +636,7 @@ export function parseStructClass(
       tagged,
       ...(tagString === null ? {} : { tagValue: tagString[2] }),
       readonlyFields,
+      ...(positionalConstructor ? { positionalConstructor: true } : {}),
       typeParams,
       fields,
       postInitStatements: rewriteStructStaticMethodCalls(postInitStatements, className, staticMethodNames),
@@ -634,6 +644,19 @@ export function parseStructClass(
     },
     nextIndex,
   };
+}
+
+function recordStructMethodReturnType(
+  nameMap: Map<string, string>,
+  className: string,
+  method: SimpleModuleFunction,
+): void {
+  const methodName = method.name.replace(/^(?:get|set) /, '');
+  nameMap.set(functionReturnTypeMarker(`${className}.${methodName}`), method.returnType);
+}
+
+function pythonOperatorMethodUsesPositionalConstructor(pythonName: string): boolean {
+  return ['__add__', '__sub__', '__mul__', '__truediv__'].includes(pythonName);
 }
 
 function tsStructImportNameForPythonName(pythonName: string): string {
@@ -680,6 +703,9 @@ function methodKey(name: string, staticMethod: boolean): string {
 }
 
 function privateMethodPublicAlias(methodName: string): string | null {
+  if (/^__[^_].*__$/.test(methodName)) {
+    return null;
+  }
   if (!/^_[A-Za-z_$][A-Za-z0-9_$]*$/.test(methodName)) {
     return null;
   }
@@ -841,7 +867,9 @@ function parseStructMethod(
   initialMapNames: ReadonlySet<string> = new Set(),
   moduleNameMap: ReadonlyMap<string, string> = new Map(),
   classBindingName: string | null = null,
-): { method: SimpleModuleFunction; nextIndex: number } | null {
+  relativePath: string | null = null,
+  imports: ImportDefinition[] | null = null,
+): { method: SimpleModuleFunction; nextIndex: number; pythonName: string } | null {
   const header = parseIndentedFunctionHeader(lines, index, '    ');
   if (header === null) {
     return null;
@@ -923,6 +951,7 @@ function parseStructMethod(
 
   const statements: string[] = [];
   const nameMap = new Map<string, string>(moduleNameMap);
+  nameMap.set(functionReturnTypeMarker('__current__'), tsTypeExpression(header.returnType));
   for (const [mapName, valueType] of mapValueTypes) {
     nameMap.set(mapValueTypeMarker(mapName), valueType);
   }
@@ -965,8 +994,9 @@ function parseStructMethod(
       reassignedNames,
       arrayNames,
       new Set(),
-      null,
+      relativePath,
       mapNames,
+      imports,
     );
     if (statement === null) {
       return null;
@@ -977,7 +1007,7 @@ function parseStructMethod(
 
   return {
     method: {
-      name: header.name === '__post_init__' ? '__post_init__' : tsAttributeNameForPythonName(header.name),
+      name: header.name === '__post_init__' ? '__post_init__' : tsStructMethodNameForPythonName(header.name),
       exported: false,
       static: staticMethod,
       async: statements.some((statement) => statement.includes('await ')),
@@ -987,7 +1017,19 @@ function parseStructMethod(
       statements,
     },
     nextIndex,
+    pythonName: header.name,
   };
+}
+
+function tsStructMethodNameForPythonName(pythonName: string): string {
+  const operatorName = new Map([
+    ['__add__', 'add'],
+    ['__sub__', 'sub'],
+    ['__mul__', 'mul'],
+    ['__truediv__', 'div'],
+    ['from_xy', 'fromXY'],
+  ]).get(pythonName);
+  return operatorName ?? tsAttributeNameForPythonName(pythonName);
 }
 
 function tsAttributeNameForPythonName(pythonName: string): string {
