@@ -26,7 +26,7 @@ export function drawClassicMenuPanel(texture: rl.Texture, opts: { dst: rl.Rectan
   // - Uses 3-slice only when dst is taller than (top + bottom); otherwise draws a single quad.
 
   const dst = opts.dst;
-  const tint = opts.tint ?? rl.makeColor(1, 1, 1, 1);
+  const tint = opts.tint ?? wgl.makeColor(1, 1, 1, 1);
   const shadow = opts.shadow ?? false;
   const flipX = opts.flipX ?? false;
   const texW = texture.width;

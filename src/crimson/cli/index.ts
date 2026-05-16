@@ -21,7 +21,7 @@ app.addTyper(relayApp, { name: 'relay' });
 function replayRenderProgressCallback(opts: { totalTicks: number; renderAudio: boolean }): any {
   const totalTicks = opts.totalTicks;
   const renderAudio = opts.renderAudio;
-  return _replay.replayRenderProgressCallback({ totalTicks: totalTicks, renderAudio: renderAudio, tqdmFactory: tqdm });
+  return _replay._replayRenderProgressCallback({ totalTicks: totalTicks, renderAudio: renderAudio, tqdmFactory: tqdm });
 }
 
 export function main(argv: string[] | null = null): void {

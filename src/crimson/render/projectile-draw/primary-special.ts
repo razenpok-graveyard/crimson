@@ -52,7 +52,7 @@ export function drawPulseGun(ctx: ProjectileDrawCtx): boolean {
 
     tint = new RGBA(0.1, 0.6, 0.2, alpha * 0.7).toRl();
     wgl.beginBlendMode(wgl.BlendMode.ADDITIVE);
-    renderer.drawAtlasSprite(
+    renderer._drawAtlasSprite(
       ctx.texture,
       { grid: grid, frame: frame, pos: ctx.screenPos, scale: spriteScale, rotationRad: ctx.angle, tint: tint },
     );
@@ -74,7 +74,7 @@ export function drawPulseGun(ctx: ProjectileDrawCtx): boolean {
 
   tint = new RGBA(1.0, 1.0, 1.0, fadeAlpha).toRl();
   wgl.beginBlendMode(wgl.BlendMode.ADDITIVE);
-  renderer.drawAtlasSprite(
+  renderer._drawAtlasSprite(
     ctx.texture,
     { grid: grid, frame: frame, pos: ctx.screenPos, scale: spriteScale, rotationRad: ctx.angle, tint: tint },
   );
@@ -124,7 +124,7 @@ export function drawSplitterOrBlade(ctx: ProjectileDrawCtx): boolean {
   }
 
   const tint = new RGBA(rgb[0], rgb[1], rgb[2], ctx.alpha).toRl();
-  renderer.drawAtlasSprite(
+  renderer._drawAtlasSprite(
     ctx.texture,
     { grid: grid, frame: frame, pos: ctx.screenPos, scale: spriteScale, rotationRad: rotationRad, tint: tint },
   );
@@ -163,7 +163,7 @@ export function drawPlagueSpreader(ctx: ProjectileDrawCtx): boolean {
         return;
       }
       const posScreen = renderer.worldToScreen(pos);
-      renderer.drawAtlasSprite(
+      renderer._drawAtlasSprite(
         texture,
         { grid: grid, frame: frame, pos: posScreen, scale: spriteScale, rotationRad: 0.0, tint: tint },
       );
@@ -220,7 +220,7 @@ export function drawPlagueSpreader(ctx: ProjectileDrawCtx): boolean {
   tint = new RGBA(1.0, 1.0, 1.0, fadeAlpha).toRl();
   beginDarkenSrcZeroBlend();
   try {
-    renderer.drawAtlasSprite(
+    renderer._drawAtlasSprite(
       texture,
       { grid: grid, frame: frame, pos: ctx.screenPos, scale: spriteScale, rotationRad: 0.0, tint: tint },
     );

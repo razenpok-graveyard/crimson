@@ -180,6 +180,10 @@ export class HostLobby {
     this.started = true;
     return matchStartFromSessionSettings(this.sessionSettings(), { sessionId: String(this.sessionId), seed: int(seed), startTick: int(startTick), status: status });
   }
+
+  nextFreeSlot(): number | null {
+    return this._nextFreeSlot();
+  }
 }
 
 export class ClientLobby {

@@ -121,4 +121,10 @@ export class PerkPromptState {
     const fireCodes = Array.from({ length: Math.max(0, 4) }, (_, i) => i).map((idx) => int(config.controls.player(idx).fireCode));
     return this.hover && inputPrimaryJustPressed({ fireCodes: fireCodes, playerCount: playerCount });
   }
+
+  promptOpenRequested(opts: { config: CrimsonConfig; playerCount: number }): boolean {
+    const config = opts.config;
+    const playerCount = opts.playerCount;
+    return this._promptOpenRequested({ config: config, playerCount: playerCount });
+  }
 }

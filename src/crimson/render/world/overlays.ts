@@ -128,7 +128,7 @@ export function drawDirectionArrows(renderCtx: WorldRenderCtx, opts: { camera: V
 
     const heading = player.heading;
     const markerPos = player.pos.add(Vec2.fromHeading(heading).mul(60.0));
-    const screen = WorldRenderCtx.worldToScreenWith(markerPos, { camera: camera, viewScale: viewScale });
+    const screen = WorldRenderCtx._worldToScreenWith(markerPos, { camera: camera, viewScale: viewScale });
     const dst = wgl.makeRectangle(screen.x, screen.y, width, height);
     const tint = directionArrowTint(renderCtx, index, { alpha: alpha });
     wgl.drawTexturePro(arrow, src, dst, origin, heading * RAD_TO_DEG, tint);

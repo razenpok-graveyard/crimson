@@ -70,7 +70,7 @@ export function drawBonusPickups(renderCtx: WorldRenderCtx, opts: { camera: Vec2
     const fade = bonusFade(bonus.timeLeft, bonus.timeMax);
     const bubbleAlpha = clamp(fade * 0.9, 0.0, 1.0) * alpha;
 
-    const screen = WorldRenderCtx.worldToScreenWith(bonus.pos, { camera: camera, viewScale: viewScale });
+    const screen = WorldRenderCtx._worldToScreenWith(bonus.pos, { camera: camera, viewScale: viewScale });
     const bubbleDst = wgl.makeRectangle(screen.x, screen.y, bubbleSize, bubbleSize);
     const bubbleOrigin = wgl.makeVector2(bubbleSize * 0.5, bubbleSize * 0.5);
     const tint = wgl.makeColor(255 / 255, 255 / 255, 255 / 255, int(bubbleAlpha * 255.0 + 0.5) / 255);
@@ -163,7 +163,7 @@ export function drawBonusHoverLabels(renderCtx: WorldRenderCtx, opts: { camera: 
     }
 
     const aim = player.aim;
-    const aimScreen = WorldRenderCtx.worldToScreenWith(aim, { camera: camera, viewScale: viewScale });
+    const aimScreen = WorldRenderCtx._worldToScreenWith(aim, { camera: camera, viewScale: viewScale });
     let x = aimScreen.x + 16.0;
     const y = aimScreen.y - 7.0;
 

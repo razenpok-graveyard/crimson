@@ -359,7 +359,7 @@ function translateStaticMethodCalleeIfKnown(pythonCallee: string, nameMap: Map<s
   if (receiverType === undefined) {
     return null;
   }
-  const methodName = tsExportNameForPythonName(dotted[2]);
+  const methodName = tsMemberNameForPythonName(dotted[2]);
   const staticMethod = nameMap.get(staticClassMethodNameMarker(receiverType, methodName));
   return staticMethod === undefined ? null : `${receiverType}.${staticMethod}`;
 }
@@ -502,7 +502,7 @@ export function translateExpression(
   if (raylibColorConstant !== null) {
     const color = raylibNamedColor(raylibColorConstant[2]);
     if (color !== null) {
-      return `${translateExpression(raylibColorConstant[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.makeColor(${color.join(', ')})`;
+      return `wgl.makeColor(${color.join(', ')})`;
     }
   }
 
@@ -2113,7 +2113,7 @@ function looksLikeMappingConstantName(pythonName: string): boolean {
 }
 
 function shouldPreservePrivateDottedName(pythonName: string): boolean {
-  return pythonName.startsWith('self.');
+  return pythonName.includes('._');
 }
 
 function shouldPreservePrivateDottedToken(fullText: string, offset: number, name: string): boolean {
@@ -3265,10 +3265,18 @@ function finalVectorMethodCall(tsExpression: string): boolean {
     'worldToScreenWith',
     'world_to_screen',
     'world_to_screen_with',
+    '_worldToScreen',
+    '_worldToScreenWith',
+    '_world_to_screen',
+    '_world_to_screen_with',
     'screenToWorld',
     'screenToWorldWith',
     'screen_to_world',
     'screen_to_world_with',
+    '_screenToWorld',
+    '_screenToWorldWith',
+    '_screen_to_world',
+    '_screen_to_world_with',
     'mulComponents',
     'divComponents',
     'mul_components',

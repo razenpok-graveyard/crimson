@@ -196,4 +196,9 @@ export class RenderResources {
     const rtxMode = opts.rtxMode;
     return new RenderFrame({ worldSize: this.worldSize, demoModeActive: demoModeActive, config: this.config, camera: camera, ground: this.ground, state: state, players: players, creatures: creatures, resources: this.resources, elapsedMs: elapsedMs, bonusAnimPhase: bonusAnimPhase, lanPlayerRingsEnabled: lanPlayerRingsEnabled, lanLocalAimIndicatorsOnly: lanLocalAimIndicatorsOnly, lanLocalPlayerSlotIndex: int(lanLocalPlayerSlotIndex), rtxMode: rtxMode });
   }
+
+  bakeTerrainFxBatch(batch: TerrainFxBatch, opts: { corpseFrameForType?: (arg0: number) => number } = {}): void {
+    const corpseFrameForType = opts.corpseFrameForType ?? creatureCorpseFrameForType;
+    this._bakeTerrainFxBatch(batch, { corpseFrameForType: corpseFrameForType });
+  }
 }

@@ -75,4 +75,18 @@ export class WorldRenderer {
     const [camera, viewScale] = this._worldParams();
     return viewport.screenToWorldWith(pos, { camera: camera, viewScale: viewScale });
   }
+
+  cameraScreenSize(opts: { runtimeW?: number | null; runtimeH?: number | null } = {}): Vec2 {
+    const runtimeW = opts.runtimeW ?? null;
+    const runtimeH = opts.runtimeH ?? null;
+    return this._cameraScreenSize({ runtimeW: runtimeW, runtimeH: runtimeH });
+  }
+
+  clampCamera(camera: Vec2, screenSize: Vec2): Vec2 {
+    return this._clampCamera(camera, screenSize);
+  }
+
+  worldParams(): [Vec2, Vec2] {
+    return this._worldParams();
+  }
 }

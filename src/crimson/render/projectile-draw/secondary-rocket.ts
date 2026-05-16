@@ -58,7 +58,7 @@ export function drawSecondaryRocket(ctx: SecondaryProjectileDrawCtx): boolean {
 
   drawSecondaryRocketGlow(ctx, { style: style });
 
-  renderer.drawAtlasSprite(
+  renderer._drawAtlasSprite(
     texture,
     { grid: 4, frame: 3, pos: ctx.screenPos, scale: spriteScale, rotationRad: ctx.angle, tint: baseTint },
   );

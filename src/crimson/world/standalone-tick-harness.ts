@@ -123,4 +123,14 @@ export class StandaloneTickHarness {
     this.nextTickIndex = int(advance.nextTickIndex);
     return this._applyTickBatch(runtime, { batch: advance.batch, session: session });
   }
+
+  ensureRunner(runtime: WorldRuntime): [TickRunner, DeterministicSession] {
+    return this._ensureRunner(runtime);
+  }
+
+  applyTickBatch(runtime: WorldRuntime, opts: { batch: TickBatchResult; session: DeterministicSession }): number {
+    const batch = opts.batch;
+    const session = opts.session;
+    return this._applyTickBatch(runtime, { batch: batch, session: session });
+  }
 }

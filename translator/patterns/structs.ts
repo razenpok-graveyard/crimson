@@ -148,7 +148,12 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       break;
     }
     const modulePath = tsImportPathForPythonImport(fromImport[1], relativePath);
-    const names = fromImport[2].split(', ').map(tsExportNameForPythonName);
+    const importBindings = fromImport[2].split(', ').map((name) => ({
+      pythonName: name,
+      importedName: tsStructImportNameForPythonName(name),
+      defaultName: tsExportNameForPythonName(name),
+    }));
+    const names = importBindings.map((binding) => binding.importedName);
     imports.push({
       modulePath,
       names,
@@ -171,6 +176,11 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       relativePath,
       tupleTypeAliases,
     );
+    for (const binding of importBindings) {
+      if (binding.importedName !== binding.defaultName) {
+        moduleNameMap.set(binding.pythonName, binding.importedName);
+      }
+    }
     if (modulePath === '@crimson/bonuses/hud.ts') {
       for (const name of fromImport[2].split(', ')) {
         if (name === '_TimerRef') {
@@ -432,6 +442,7 @@ export function parseStructClass(
 
   const fields: StructModule['classes'][number]['fields'] = [];
   const methods: SimpleModuleFunction[] = [];
+  const staticMethodNames = new Set<string>();
   const arrayFieldNames = new Set<string>();
   const mapFieldNames = new Set<string>(initialMapNames);
   const classNameMap = new Map(moduleNameMap);
@@ -498,6 +509,7 @@ export function parseStructClass(
       if (staticMethod === null) {
         return null;
       }
+      staticMethodNames.add(staticMethod.method.name);
       methods.push(staticMethod.method);
       nextIndex = staticMethod.nextIndex;
       continue;
@@ -509,6 +521,7 @@ export function parseStructClass(
       if (classMethod === null) {
         return null;
       }
+      staticMethodNames.add(classMethod.method.name);
       methods.push(classMethod.method);
       nextIndex = classMethod.nextIndex;
       continue;
@@ -576,6 +589,16 @@ export function parseStructClass(
     nextIndex = defaultValueText?.nextIndex ?? nextIndex + 1;
   }
 
+  const rewrittenMethods = methods.map((method) => (
+    method.static === true
+      ? method
+      : {
+        ...method,
+        statements: rewriteStructStaticMethodCalls(method.statements, className, staticMethodNames),
+      }
+  ));
+  const aliasMethods = structPrivateMethodAliases(rewrittenMethods, className);
+
   return {
     structClass: {
       name: className,
@@ -586,11 +609,109 @@ export function parseStructClass(
       readonlyFields,
       typeParams,
       fields,
-      postInitStatements,
-      methods,
+      postInitStatements: rewriteStructStaticMethodCalls(postInitStatements, className, staticMethodNames),
+      methods: [...rewrittenMethods, ...aliasMethods],
     },
     nextIndex,
   };
+}
+
+function tsStructImportNameForPythonName(pythonName: string): string {
+  return /^_+[A-Z][A-Z0-9_]*$/.test(pythonName)
+    ? tsPublicNameForPythonName(pythonName)
+    : tsExportNameForPythonName(pythonName);
+}
+
+function structPrivateMethodAliases(
+  methods: readonly SimpleModuleFunction[],
+  className: string,
+): SimpleModuleFunction[] {
+  const existingMethodKeys = new Set(methods.map((method) => methodKey(method.name, method.static === true)));
+  const aliasMethods: SimpleModuleFunction[] = [];
+  const pushAlias = (method: SimpleModuleFunction, name: string, staticMethod: boolean, target: string): void => {
+    const key = methodKey(name, staticMethod);
+    if (existingMethodKeys.has(key)) {
+      return;
+    }
+    existingMethodKeys.add(key);
+    aliasMethods.push(methodAlias(method, name, staticMethod, target));
+  };
+
+  for (const method of methods) {
+    const publicName = privateMethodPublicAlias(method.name);
+    if (publicName === null) {
+      continue;
+    }
+
+    if (method.static === true) {
+      pushAlias(method, publicName, true, `${className}.${method.name}`);
+      pushAlias(method, method.name, false, `${className}.${method.name}`);
+      pushAlias(method, publicName, false, `${className}.${method.name}`);
+    } else {
+      pushAlias(method, publicName, false, `this.${method.name}`);
+    }
+  }
+
+  return aliasMethods;
+}
+
+function methodKey(name: string, staticMethod: boolean): string {
+  return `${staticMethod ? 'static' : 'instance'}:${name}`;
+}
+
+function privateMethodPublicAlias(methodName: string): string | null {
+  if (!/^_[A-Za-z_$][A-Za-z0-9_$]*$/.test(methodName)) {
+    return null;
+  }
+  const publicName = tsPublicNameForPythonName(methodName);
+  return publicName === methodName ? null : publicName;
+}
+
+function methodAlias(
+  sourceMethod: SimpleModuleFunction,
+  name: string,
+  staticMethod: boolean,
+  target: string,
+): SimpleModuleFunction {
+  const call = `${sourceMethod.async === true ? 'await ' : ''}${target}(${methodAliasArguments(sourceMethod).join(', ')})`;
+  return {
+    name,
+    exported: false,
+    static: staticMethod,
+    async: sourceMethod.async,
+    typeParams: sourceMethod.typeParams,
+    parameters: sourceMethod.parameters,
+    optsParams: sourceMethod.optsParams,
+    returnType: sourceMethod.returnType,
+    statements: [sourceMethod.returnType === 'void' ? `${call};` : `return ${call};`],
+  };
+}
+
+function methodAliasArguments(method: SimpleModuleFunction): string[] {
+  const args = method.parameters.map((parameter) => parameter.name);
+  if (method.optsParams.length > 0) {
+    args.push(`{ ${method.optsParams.map((parameter) => `${parameter.name}: ${parameter.name}`).join(', ')} }`);
+  }
+  return args;
+}
+
+function rewriteStructStaticMethodCalls(
+  statements: string[],
+  className: string,
+  staticMethodNames: ReadonlySet<string>,
+): string[] {
+  if (staticMethodNames.size === 0) {
+    return statements;
+  }
+  return statements.map((statement) => {
+    let rewritten = statement;
+    for (const methodName of staticMethodNames) {
+      const escapedMethodName = methodName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const pattern = new RegExp(`\\bthis\\.${escapedMethodName}\\(`, 'g');
+      rewritten = rewritten.replace(pattern, `${className}.${methodName}(`);
+    }
+    return rewritten;
+  });
 }
 
 function parseStructClassBases(

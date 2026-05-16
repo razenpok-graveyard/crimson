@@ -474,4 +474,9 @@ export class RollbackSnapshotRing<SnapshotT> {
       this._byTick.delete(int(tick));
     }
   }
+
+  prune(opts: { maxTick: number }): void {
+    const maxTick = opts.maxTick;
+    this._prune({ maxTick: maxTick });
+  }
 }

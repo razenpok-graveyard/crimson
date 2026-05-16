@@ -164,4 +164,9 @@ export class RelayReliableLink {
     }
     return out;
   }
+
+  applyAck(ack: number, opts: { nowMs: number }): void {
+    const nowMs = opts.nowMs;
+    this._applyAck(ack, { nowMs: nowMs });
+  }
 }

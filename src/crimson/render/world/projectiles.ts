@@ -44,19 +44,19 @@ export function drawProjectile(renderCtx: WorldRenderCtx, proj: Projectile, opts
   const alphaByte = int(clamp(clamp(life / 0.4, 0.0, 1.0) * 255.0 * alpha, 0.0, 255.0) + 0.5);
   const [red, green, blue] = knownProjRgb(typeId);
   const tint = wgl.makeColor(int(red) / 255, int(green) / 255, int(blue) / 255, alphaByte / 255);
-  renderCtx.drawAtlasSprite(
+  renderCtx._drawAtlasSprite(
     texture,
     { grid: grid, frame: frame, pos: screen, scale: 0.6 * scale, rotationRad: angle, tint: tint },
   );
 }
 
 export function isBulletTrailType(typeId: number): boolean {
-  return WorldRenderCtx.isBulletTrailType(typeId);
+  return WorldRenderCtx._isBulletTrailType(typeId);
 }
 
 export function bulletSpriteSize(typeId: number, opts: { scale: number }): number {
   const scale = opts.scale;
-  return WorldRenderCtx.bulletSpriteSize(typeId, { scale: scale });
+  return WorldRenderCtx._bulletSpriteSize(typeId, { scale: scale });
 }
 
 export function drawBulletTrail(renderCtx: WorldRenderCtx, start: Vec2, end: Vec2, opts: { typeId: number; alpha: number; scale: number; angle: number }): boolean {
@@ -64,7 +64,7 @@ export function drawBulletTrail(renderCtx: WorldRenderCtx, start: Vec2, end: Vec
   const alpha = opts.alpha;
   const scale = opts.scale;
   const angle = opts.angle;
-  return renderCtx.drawBulletTrail(start, end, { typeId: typeId, alpha: alpha, scale: scale, angle: angle });
+  return renderCtx._drawBulletTrail(start, end, { typeId: typeId, alpha: alpha, scale: scale, angle: angle });
 }
 
 export function drawSharpshooterLaserSight(renderCtx: WorldRenderCtx, opts: { camera: Vec2; viewScale: Vec2; scale: number; alpha: number }): void {
@@ -107,8 +107,8 @@ export function drawSharpshooterLaserSight(renderCtx: WorldRenderCtx, opts: { ca
     const start = playerPos.add(aimDir.mul(15.0));
     const end = playerPos.add(aimDir.mul(512.0));
 
-    const startScreen = WorldRenderCtx.worldToScreenWith(start, { camera: camera, viewScale: viewScale });
-    const endScreen = WorldRenderCtx.worldToScreenWith(end, { camera: camera, viewScale: viewScale });
+    const startScreen = WorldRenderCtx._worldToScreenWith(start, { camera: camera, viewScale: viewScale });
+    const endScreen = WorldRenderCtx._worldToScreenWith(end, { camera: camera, viewScale: viewScale });
     const segment = endScreen.sub(startScreen);
     const [direction, dist] = segment.normalizedWithLength();
     if (dist <= 1e-3) {

@@ -127,4 +127,14 @@ export class AudioRouter {
       this.playSfx(this._hitSfxForType(typeId, { beamTypes: beamTypes, rng: rng }));
     }
   }
+
+  reflexBoostTimer(): number {
+    return this._reflexBoostTimer();
+  }
+
+  hitSfxForType(typeId: number, opts: { beamTypes: ReadonlySet<number>; rng: CrandLike }): SfxId {
+    const beamTypes = opts.beamTypes;
+    const rng = opts.rng;
+    return this._hitSfxForType(typeId, { beamTypes: beamTypes, rng: rng });
+  }
 }

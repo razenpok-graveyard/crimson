@@ -194,6 +194,14 @@ export class CreatureSpatialHash {
       this._cells.delete(tupleKey(cell));
     }
   }
+
+  cellForPos(pos: Vec2): [number, number] {
+    return this._cellForPos(pos);
+  }
+
+  removeFromCell(index: number, cell: [number, number]): void {
+    this._removeFromCell(index, cell);
+  }
 }
 
 export function nativeFindMarginForSize(size: number): number {
