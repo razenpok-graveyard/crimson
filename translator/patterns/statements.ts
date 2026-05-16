@@ -1582,6 +1582,23 @@ export function translateStraightLineStatement(
     return { statements: [`return ${callExpression.expression};`], nextIndex: callExpression.nextIndex };
   }
 
+  const multilineReturnStringJoinCall = /^return (((?:[fF])?(["'])(?:\\.|(?!\3)[\s\S])*\3)\.join)\($/.exec(statement);
+  if (multilineReturnStringJoinCall !== null) {
+    const callExpression = parseMultilineCallExpression(
+      lines,
+      index + 1,
+      multilineReturnStringJoinCall[1],
+      nameMap,
+      arrayNames,
+      validatedTypeAliases,
+      mapNames,
+    );
+    if (callExpression === null) {
+      return null;
+    }
+    return { statements: [`return ${callExpression.expression};`], nextIndex: callExpression.nextIndex };
+  }
+
   const returnStatement = /^return (.+)$/.exec(statement);
   if (returnStatement !== null) {
     return { statements: [`return ${translateExpression(returnStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)};`], nextIndex: index + 1 };
@@ -3050,6 +3067,22 @@ export function parseMultilineCallExpression(
       nextIndex: callParts.nextIndex,
     };
   }
+  if (pythonCallee === 'str' && callParts.positionalParts.length === 1 && callParts.keywordParts.length === 0) {
+    return {
+      expression: `String(${callParts.positionalParts[0]})`,
+      nextIndex: callParts.nextIndex,
+    };
+  }
+  const stringJoinCallee = /^((?:[fF])?(["'])(?:\\.|(?!\2)[\s\S])*\2)\.join$/.exec(pythonCallee);
+  if (stringJoinCallee !== null && callParts.positionalParts.length === 1 && callParts.keywordParts.length === 0) {
+    const separator = parsePythonStringExpression(stringJoinCallee[1]);
+    if (separator !== null) {
+      return {
+        expression: `${translateExpression(callParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames)}.join(${JSON.stringify(separator.content)})`,
+        nextIndex: callParts.nextIndex,
+      };
+    }
+  }
 
   const callee = translateExpression(pythonCallee, nameMap, arrayNames, validatedTypeAliases);
   const callPrefix = /^[A-Z][A-Za-z0-9_]*$/.test(callee) ? `new ${callee}` : callee;
@@ -3603,6 +3636,25 @@ function parseMultilineCallParts(
         if (sawKeyword) {
           return null;
         }
+        const multilineSubscript = argParts.length === 1 ? /^(.+)\[$/.exec(argPart) : null;
+        if (multilineSubscript !== null) {
+          const subscriptExpression = collectMultilineSubscriptExpression(
+            lines,
+            nextIndex + 1,
+            multilineSubscript[1],
+            nameMap,
+            arrayNames,
+            validatedTypeAliases,
+            mapNames,
+          );
+          if (subscriptExpression === null) {
+            return null;
+          }
+          positionalParts.push(subscriptExpression.expression);
+          nextIndex = subscriptExpression.nextIndex;
+          consumedNestedCall = true;
+          break;
+        }
         const nestedCall = argParts.length === 1
           ? /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(argPart)
           : null;
@@ -3695,6 +3747,38 @@ function parseMultilineCallParts(
     if (!consumedNestedCall) {
       nextIndex += 1;
     }
+  }
+  return null;
+}
+
+function collectMultilineSubscriptExpression(
+  lines: string[],
+  startIndex: number,
+  pythonReceiver: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): { expression: string; nextIndex: number } | null {
+  const indexLines: string[] = [];
+  let nextIndex = startIndex;
+  while (nextIndex < lines.length) {
+    const trimmed = lines[nextIndex].trim();
+    if (trimmed === ']' || trimmed === '],') {
+      if (indexLines.length === 0) {
+        return null;
+      }
+      return {
+        expression: `${translateExpression(pythonReceiver, nameMap, arrayNames, validatedTypeAliases, mapNames)}[${translateExpression(indexLines.join(' '), nameMap, arrayNames, validatedTypeAliases, mapNames)}]`,
+        nextIndex: nextIndex + 1,
+      };
+    }
+    if (trimmed === '') {
+      nextIndex += 1;
+      continue;
+    }
+    indexLines.push(trimmed.replace(/,$/, ''));
+    nextIndex += 1;
   }
   return null;
 }
@@ -4237,6 +4321,9 @@ function translateRaiseExpression(
   const translatedCallee = translateExpression(pythonCallee, nameMap, arrayNames, validatedTypeAliases, mapNames);
   if (translatedCallee === 'TypeError') {
     return `new TypeError(${message})`;
+  }
+  if (translatedCallee === 'IndexError') {
+    return `new RangeError(${message})`;
   }
   if (
     translatedCallee.includes('.')

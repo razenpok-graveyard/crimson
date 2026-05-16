@@ -103,7 +103,7 @@ function damageType1HeadingJitter(ctx: CreatureDamageCtx): void {
 }
 
 function damageType7IonGunMaster(ctx: CreatureDamageCtx): void {
-  if (ctx.players.some((player) => perkActive(player, PerkId.ION_GUN_MASTER))) {
+  if (Array.from(ctx.players).some((player) => perkActive(player, PerkId.ION_GUN_MASTER))) {
     ctx.damage *= 1.2;
   }
 }

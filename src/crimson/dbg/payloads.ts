@@ -23,10 +23,10 @@ export function coerceBuiltinValue(value: unknown, opts: { field: string }): Bui
     return String(value);
   }
   if (Array.isArray(value)) {
-    return value.map((item) => coerceBuiltinValue(item, { field: `${field}[]` }));
+    return Array.from(value).map((item) => coerceBuiltinValue(item, { field: `${field}[]` }));
   }
   if (Array.isArray(value)) {
-    return value.map((item) => coerceBuiltinValue(item, { field: `${field}[]` }));
+    return Array.from(value).map((item) => coerceBuiltinValue(item, { field: `${field}[]` }));
   }
   if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
     const out: BuiltinObject = {};

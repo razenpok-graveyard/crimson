@@ -144,6 +144,10 @@ function tsTypeForAssignedExpression(expression: string): string | null {
   if (/^new TextDecoder\(.+\)\.decode\(/.test(trimmed) || /\.trim\(\)$/.test(trimmed)) {
     return 'string';
   }
+  const enumValidation = /\bObject\.values\(([A-Z][A-Za-z0-9_]*Mode)\)\.includes/.exec(trimmed);
+  if (enumValidation !== null) {
+    return enumValidation[1];
+  }
   const constructor = /^new ([A-Za-z_$][A-Za-z0-9_$]*)\(/.exec(trimmed);
   if (constructor !== null) {
     if (constructor[1] === 'Set') {
@@ -154,7 +158,7 @@ function tsTypeForAssignedExpression(expression: string): string | null {
     }
     return constructor[1];
   }
-  const enumMode = /\b([A-Z][A-Za-z0-9_]*Mode)\b/.exec(trimmed);
+  const enumMode = /^([A-Z][A-Za-z0-9_]*Mode)(?:\.[A-Z0-9_]+)?$/.exec(trimmed);
   if (enumMode !== null) {
     return enumMode[1];
   }

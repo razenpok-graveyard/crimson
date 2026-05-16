@@ -74,7 +74,7 @@ export function loadRecords(state: GameState, request: HighScoresRequest): HighS
   const dateMode = int(state.config.profile.scoreDateMode);
   if (dateMode > 0) {
     const now = new Date();
-    records = records.filter((entry) => passesDateFilter(entry, { dateMode: dateMode, now: now }));
+    records = Array.from(records).filter((entry) => passesDateFilter(entry, { dateMode: dateMode, now: now }));
   }
   return records;
 }

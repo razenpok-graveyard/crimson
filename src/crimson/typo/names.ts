@@ -1,239 +1,165 @@
 // Port of crimson/typo/names.py
 
 import type { CrandLike } from '@grim/rand.ts';
+import { GameMode } from '@crimson/game-modes.ts';
+import { readHighscoreTable } from '@crimson/persistence/highscores.ts';
 import { RngCallerStatic } from '@crimson/rng-caller-static.ts';
+import { readFileSync } from 'node:fs';
 
 export const NAME_MAX_CHARS = 16; // creature_name_assign_random enforces strlen < 0x10.
-
-const _NAME_PARTS: readonly string[] = [
-  'lamb',   'gun',    'head',   'tail',   'leg',
-  'nose',   'road',   'stab',   'high',   'low',
-  'hat',    'pie',    'hand',   'jack',   'cube',
-  'ice',    'cow',    'king',   'lord',   'mate',
-  'mary',   'dick',   'bill',   'cat',    'harry',
-  'tom',    'fly',    'call',   'shot',   'gate',
-  'quick',  'brown',  'fox',    'jumper', 'over',
-  'lazy',   'dog',    'zeta',   'unique', 'nerd',
-  'earl',   'sleep',  'onyx',   'mill',   'blue',
-  'below',  'scape',  'reap',   'damo',   'break',
-  'boom',   'the',
+export const NAME_PARTS: readonly string[] = [
+  'lamb',
+  'gun',
+  'head',
+  'tail',
+  'leg',
+  'nose',
+  'road',
+  'stab',
+  'high',
+  'low',
+  'hat',
+  'pie',
+  'hand',
+  'jack',
+  'cube',
+  'ice',
+  'cow',
+  'king',
+  'lord',
+  'mate',
+  'mary',
+  'dick',
+  'bill',
+  'cat',
+  'harry',
+  'tom',
+  'fly',
+  'call',
+  'shot',
+  'gate',
+  'quick',
+  'brown',
+  'fox',
+  'jumper',
+  'over',
+  'lazy',
+  'dog',
+  'zeta',
+  'unique',
+  'nerd',
+  'earl',
+  'sleep',
+  'onyx',
+  'mill',
+  'blue',
+  'below',
+  'scape',
+  'reap',
+  'damo',
+  'break',
+  'boom',
+  'the',
 ];
 
-function _draw(rng: CrandLike, caller?: number): number {
-  return rng.rand(caller !== undefined ? { caller } : undefined);
-}
-
-function _pickHighscoreName(rng: CrandLike, highscoreNames: readonly string[]): string {
-  if (highscoreNames.length === 0) return 'quickbrownfox';
-  return highscoreNames[
-    _draw(rng, RngCallerStatic.TYPO_WORD_PICK_HIGHSCORE_NAME) % highscoreNames.length
-  ];
-}
-
-export function typoNamePart(rng: CrandLike, opts: { allowThe: boolean }): string {
-  const allowThe = opts.allowThe;
-  const mod = allowThe ? 52 : 51;
-  const idx = _draw(rng, RngCallerStatic.TYPO_WORD_PICK_FRAGMENT) % mod;
-  if (idx === 39) return 'nerd';
-  return _NAME_PARTS[idx];
-}
-
-export function typoBuildName(
-  rng: CrandLike,
-  opts: { scoreXp: number; dictionaryWords?: readonly string[] | null; highscoreNames?: readonly string[] },
-): string {
-  const dictionaryWords = opts.dictionaryWords ?? null;
-  const highscoreNames = opts.highscoreNames ?? [];
-  let scoreXp = opts.scoreXp;
-  scoreXp = int(scoreXp);
-
-  if (dictionaryWords && dictionaryWords.length > 0) {
-    return _typoBuildCustomName(rng, scoreXp, dictionaryWords);
+function pythonSplitlines(text: string): string[] {
+  if (text === '') {
+    return [];
   }
-
-  if (scoreXp > 120) {
-    if (_draw(rng, RngCallerStatic.TYPO_TARGET_NAME_ASSIGN_RANDOM_HIGHSCORE_GATE) % 100 < 10) {
-      return _pickHighscoreName(rng, highscoreNames);
-    }
-    if (_draw(rng, RngCallerStatic.TYPO_TARGET_NAME_ASSIGN_RANDOM_FOUR_WORD_GATE) % 100 < 80) {
-      return (
-        typoNamePart(rng, { allowThe: true }) +
-        typoNamePart(rng, { allowThe: false }) +
-        typoNamePart(rng, { allowThe: false }) +
-        typoNamePart(rng, { allowThe: false })
-      );
-    }
+  const lines = text.split(/\r\n|\r|\n/);
+  if (/(?:\r\n|\r|\n)$/.test(text)) {
+    lines.pop();
   }
-
-  if (
-    (scoreXp > 80 &&
-      _draw(rng, RngCallerStatic.TYPO_TARGET_NAME_ASSIGN_RANDOM_THREE_WORD_GATE_GT80) % 100 < 80) ||
-    (scoreXp > 60 &&
-      _draw(rng, RngCallerStatic.TYPO_TARGET_NAME_ASSIGN_RANDOM_THREE_WORD_GATE_GT60) % 100 < 40)
-  ) {
-    return (
-      typoNamePart(rng, { allowThe: true }) +
-      typoNamePart(rng, { allowThe: false }) +
-      typoNamePart(rng, { allowThe: false })
-    );
-  }
-
-  if (
-    (scoreXp > 40 &&
-      _draw(rng, RngCallerStatic.TYPO_TARGET_NAME_ASSIGN_RANDOM_TWO_WORD_GATE_GT40) % 100 < 80) ||
-    (scoreXp > 20 &&
-      _draw(rng, RngCallerStatic.TYPO_TARGET_NAME_ASSIGN_RANDOM_TWO_WORD_GATE_GT20) % 100 < 40)
-  ) {
-    return (
-      typoNamePart(rng, { allowThe: true }) +
-      typoNamePart(rng, { allowThe: false })
-    );
-  }
-
-  return typoNamePart(rng, { allowThe: false });
-}
-
-function _pickWord(rng: CrandLike, words: readonly string[]): string {
-  return words[_draw(rng) % words.length];
-}
-
-function _pickUniqueWords(
-  rng: CrandLike,
-  words: readonly string[],
-  count: number,
-): string[] {
-  if (count <= 1) return [_pickWord(rng, words)];
-  if (words.length <= count) {
-    const result: string[] = [];
-    for (let i = 0; i < count; i++) result.push(_pickWord(rng, words));
-    return result;
-  }
-
-  const picked: string[] = [];
-  const used = new Set<number>();
-  while (picked.length < count) {
-    const idx = _draw(rng) % words.length;
-    if (used.has(idx)) continue;
-    used.add(idx);
-    picked.push(words[idx]);
-  }
-  return picked;
-}
-
-function _typoBuildCustomName(
-  rng: CrandLike,
-  scoreXp: number,
-  dictionaryWords: readonly string[],
-): string {
-  scoreXp = int(scoreXp);
-
-  if (scoreXp > 120) {
-    if (_draw(rng) % 100 < 10) return _pickWord(rng, dictionaryWords);
-    if (_draw(rng) % 100 < 80) return _pickUniqueWords(rng, dictionaryWords, 4).join('');
-  }
-
-  if (
-    (scoreXp > 80 && _draw(rng) % 100 < 80) ||
-    (scoreXp > 60 && _draw(rng) % 100 < 40)
-  ) {
-    return _pickUniqueWords(rng, dictionaryWords, 3).join('');
-  }
-
-  if (
-    (scoreXp > 40 && _draw(rng) % 100 < 80) ||
-    (scoreXp > 20 && _draw(rng) % 100 < 40)
-  ) {
-    return _pickUniqueWords(rng, dictionaryWords, 2).join('');
-  }
-
-  return _pickWord(rng, dictionaryWords);
-}
-
-export function loadTypoDictionary(_path: string): string[] {
-  // Path.read_text filesystem access is not available in the WebGL runtime.
-  return [];
-}
-
-export function loadTypoHighscoreNames(_path: string): string[] {
-  // read_highscore_table filesystem access is not available in the WebGL runtime.
-  return [];
+  return lines;
 }
 
 export class CreatureNameTable {
   names: string[];
 
-  constructor(opts: { names: string[] }) {
+  constructor(opts: {
+    names: string[];
+  }) {
     this.names = opts.names;
   }
 
   static sized(size: number): CreatureNameTable {
-    return new CreatureNameTable({ names: new Array(int(size)).fill('') });
+    return new CreatureNameTable({ names: Array.from({ length: int(size) }, () => '') });
   }
 
   clear(idx: number): void {
-    idx = int(idx);
-    if (idx >= 0 && idx < this.names.length) {
-      this.names[idx] = '';
+    if (int(idx) >= 0 && int(idx) < this.names.length) {
+      this.names[int(idx)] = '';
     }
   }
 
-  activeEntries(opts: { activeMask: readonly boolean[] }): Array<[number, string]> {
+  activeEntries(opts: { activeMask: readonly boolean[] }): [number, string][] {
     const activeMask = opts.activeMask;
-    const entries: Array<[number, string]> = [];
-    for (let idx = 0; idx < this.names.length; idx++) {
-      const name = this.names[idx];
-      if (!name) continue;
-      if (!(idx >= 0 && idx < activeMask.length && activeMask[idx])) continue;
-      entries.push([idx, name]);
+    const entries: [number, string][] = [];
+    for (const [idx, name] of this.names.entries()) {
+      if (!name) {
+        continue;
+      }
+      if (!(idx >= 0 && idx < activeMask.length && activeMask[idx])) {
+        continue;
+      }
+      entries.push([int(idx), String(name)]);
     }
     return entries;
   }
 
   findByName(name: string, opts: { activeMask: readonly boolean[] }): number | null {
     const activeMask = opts.activeMask;
-    for (let idx = 0; idx < this.names.length; idx++) {
-      if (!(idx >= 0 && idx < activeMask.length && activeMask[idx])) continue;
-      if (this.names[idx] === name) return idx;
+    for (const [idx, existing] of this.names.entries()) {
+      if (!(idx >= 0 && idx < activeMask.length && activeMask[idx])) {
+        continue;
+      }
+      if (existing === name) {
+        return idx;
+      }
     }
     return null;
   }
 
   isUnique(name: string, opts: { excludeIdx: number; activeMask: readonly boolean[] }): boolean {
-    const excludeIdx = int(opts.excludeIdx);
+    const excludeIdx = opts.excludeIdx;
     const activeMask = opts.activeMask;
-    for (let idx = 0; idx < this.names.length; idx++) {
-      if (idx === excludeIdx) continue;
-      if (!(idx >= 0 && idx < activeMask.length && activeMask[idx])) continue;
-      if (this.names[idx] === name) return false;
+    const exclude = int(excludeIdx);
+    for (const [idx, existing] of this.names.entries()) {
+      if (idx === exclude) {
+        continue;
+      }
+      if (!(idx >= 0 && idx < activeMask.length && activeMask[idx])) {
+        continue;
+      }
+      if (existing === name) {
+        return false;
+      }
     }
     return true;
   }
 
-  assignRandom(
-    creatureIdx: number,
-    rng: CrandLike,
-    opts: { scoreXp: number; activeMask: readonly boolean[]; dictionaryWords?: readonly string[] | null; highscoreNames?: readonly string[] },
-  ): string {
+  assignRandom(creatureIdx: number, rng: CrandLike, opts: { scoreXp: number; activeMask: readonly boolean[]; dictionaryWords?: readonly string[] | null; highscoreNames?: readonly string[] }): string {
     const scoreXp = opts.scoreXp;
     const activeMask = opts.activeMask;
     const dictionaryWords = opts.dictionaryWords ?? null;
     const highscoreNames = opts.highscoreNames ?? [];
     const idx = int(creatureIdx);
-    if (idx < 0 || idx >= this.names.length) {
+    if (!(idx >= 0 && idx < this.names.length)) {
       throw new RangeError(`creature_idx out of range: ${idx}`);
     }
 
     let tooLongAttempts = 0;
     let attempts = 0;
-    for (;;) {
-      const name = typoBuildName(rng, { scoreXp, dictionaryWords, highscoreNames });
-
-      if (!this.isUnique(name, { excludeIdx: idx, activeMask })) {
+    while (true) {
+      const name = typoBuildName(rng, { scoreXp: scoreXp, dictionaryWords: dictionaryWords, highscoreNames: highscoreNames });
+      if (!this.isUnique(name, { excludeIdx: idx, activeMask: activeMask })) {
         attempts += 1;
-        if (attempts < 200) continue;
+        if (attempts < 200) {
+          continue;
+        }
       }
 
-      if (Array.from(name).length < NAME_MAX_CHARS) {
+      if (name.length < NAME_MAX_CHARS) {
         this.names[idx] = name;
         return name;
       }
@@ -245,4 +171,157 @@ export class CreatureNameTable {
       }
     }
   }
+}
+
+function draw(rng: CrandLike, opts: { caller?: number | null } = {}): number {
+  const caller = opts.caller ?? null;
+  return rng.rand({ caller: caller });
+}
+
+function pickHighscoreName(rng: CrandLike, highscoreNames: readonly string[]): string {
+  if (highscoreNames.length === 0) {
+    return 'quickbrownfox';
+  }
+  return String(highscoreNames[draw(rng, { caller: RngCallerStatic.TYPO_WORD_PICK_HIGHSCORE_NAME }) % highscoreNames.length]);
+}
+
+export function typoNamePart(rng: CrandLike, opts: { allowThe: boolean }): string {
+  const allowThe = opts.allowThe;
+  const mod = allowThe ? 52 : 51;
+  const idx = draw(rng, { caller: RngCallerStatic.TYPO_WORD_PICK_FRAGMENT }) % mod;
+  if (idx === 39) {
+    return 'nerd';
+  }
+  return NAME_PARTS[idx];
+}
+
+export function typoBuildName(rng: CrandLike, opts: { scoreXp: number; dictionaryWords?: readonly string[] | null; highscoreNames?: readonly string[] }): string {
+  let scoreXp = opts.scoreXp;
+  const dictionaryWords = opts.dictionaryWords ?? null;
+  const highscoreNames = opts.highscoreNames ?? [];
+  scoreXp = int(scoreXp);
+  if (dictionaryWords !== null && dictionaryWords.length > 0) {
+    return typoBuildCustomName(rng, { scoreXp: scoreXp, dictionaryWords: dictionaryWords });
+  }
+  if (scoreXp > 120) {
+    if (draw(rng, { caller: RngCallerStatic.TYPO_TARGET_NAME_ASSIGN_RANDOM_HIGHSCORE_GATE }) % 100 < 10) {
+      return pickHighscoreName(rng, highscoreNames);
+    }
+    if (draw(rng, { caller: RngCallerStatic.TYPO_TARGET_NAME_ASSIGN_RANDOM_FOUR_WORD_GATE }) % 100 < 80) {
+      return [typoNamePart(rng, { allowThe: true }), typoNamePart(rng, { allowThe: false }), typoNamePart(rng, { allowThe: false }), typoNamePart(rng, { allowThe: false })].join("");
+    }
+  }
+
+  if ((scoreXp > 80 && draw(rng, { caller: RngCallerStatic.TYPO_TARGET_NAME_ASSIGN_RANDOM_THREE_WORD_GATE_GT80 }) % 100 < 80) || (scoreXp > 60 && draw(rng, { caller: RngCallerStatic.TYPO_TARGET_NAME_ASSIGN_RANDOM_THREE_WORD_GATE_GT60 }) % 100 < 40)) {
+    return [typoNamePart(rng, { allowThe: true }), typoNamePart(rng, { allowThe: false }), typoNamePart(rng, { allowThe: false })].join("");
+  }
+
+  if ((scoreXp > 40 && draw(rng, { caller: RngCallerStatic.TYPO_TARGET_NAME_ASSIGN_RANDOM_TWO_WORD_GATE_GT40 }) % 100 < 80) || (scoreXp > 20 && draw(rng, { caller: RngCallerStatic.TYPO_TARGET_NAME_ASSIGN_RANDOM_TWO_WORD_GATE_GT20 }) % 100 < 40)) {
+    return [typoNamePart(rng, { allowThe: true }), typoNamePart(rng, { allowThe: false })].join("");
+  }
+
+  return typoNamePart(rng, { allowThe: false });
+}
+
+function pickWord(rng: CrandLike, words: readonly string[]): string {
+  return String(words[draw(rng) % words.length]);
+}
+
+function pickUniqueWords(rng: CrandLike, words: readonly string[], count: number): string[] {
+  if (count <= 1) {
+    return [pickWord(rng, words)];
+  }
+  if (words.length <= count) {
+    return Array.from({ length: Math.max(0, count) }, (_, i) => i).map((_) => pickWord(rng, words));
+  }
+
+  const picked: string[] = [];
+  const used: Set<number> = new Set();
+  while (picked.length < count) {
+    const idx = draw(rng) % words.length;
+    if (used.has(idx)) {
+      continue;
+    }
+    used.add(idx);
+    picked.push(String(words[idx]));
+  }
+  return picked;
+}
+
+function typoBuildCustomName(rng: CrandLike, opts: { scoreXp: number; dictionaryWords: readonly string[] }): string {
+  let scoreXp = opts.scoreXp;
+  const dictionaryWords = opts.dictionaryWords;
+  scoreXp = int(scoreXp);
+  if (scoreXp > 120) {
+    if (draw(rng) % 100 < 10) {
+      return pickWord(rng, dictionaryWords);
+    }
+    if (draw(rng) % 100 < 80) {
+      return pickUniqueWords(rng, dictionaryWords, 4).join("");
+    }
+  }
+
+  if ((scoreXp > 80 && draw(rng) % 100 < 80) || (scoreXp > 60 && draw(rng) % 100 < 40)) {
+    return pickUniqueWords(rng, dictionaryWords, 3).join("");
+  }
+
+  if ((scoreXp > 40 && draw(rng) % 100 < 80) || (scoreXp > 20 && draw(rng) % 100 < 40)) {
+    return pickUniqueWords(rng, dictionaryWords, 2).join("");
+  }
+
+  return pickWord(rng, dictionaryWords);
+}
+
+export function loadTypoDictionary(path: string): string[] {
+  let raw: ReturnType<typeof readFileSync>;
+  try {
+    raw = readFileSync(String(path), 'utf8');
+  } catch (exc) {
+    return [];
+  }
+
+  const words: string[] = [];
+  const seen: Set<string> = new Set();
+  for (const line of pythonSplitlines(raw)) {
+    const text = line.split('#', 1)[0].trim();
+    if (text.length === 0) {
+      continue;
+    }
+    if (text.length >= NAME_MAX_CHARS) {
+      continue;
+    }
+    if (seen.has(text)) {
+      continue;
+    }
+    words.push(text);
+    seen.add(text);
+  }
+  return words;
+}
+
+export function loadTypoHighscoreNames(path: string): string[] {
+  let records: ReturnType<typeof readHighscoreTable>;
+  try {
+    records = readHighscoreTable(path, { gameModeId: GameMode.TYPO });
+  } catch (exc) {
+    return [];
+  }
+
+  const names: string[] = [];
+  const seen: Set<string> = new Set();
+  for (const record of records) {
+    const name = record.name();
+    if (!name) {
+      continue;
+    }
+    if (seen.has(name)) {
+      continue;
+    }
+    if (!Array.from(name).every((ch) => /^\p{L}+$/u.test(ch) || ch === '.')) {
+      continue;
+    }
+    names.push(name);
+    seen.add(name);
+  }
+  return names;
 }

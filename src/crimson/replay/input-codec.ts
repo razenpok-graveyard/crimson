@@ -64,7 +64,7 @@ export function unpackPlayerInput(packed: PackedPlayerInput): PlayerInput {
 }
 
 export function unpackTickInputs(packedTick: PackedTickInputs): PlayerInput[] {
-  return packedTick.map((packed) => unpackPlayerInput(packed));
+  return Array.from(packedTick).map((packed) => unpackPlayerInput(packed));
 }
 
 export function packTickInputs(inputs: readonly PlayerInput[], opts: { quant?: InputQuantization } = {}): PackedTickInputs {

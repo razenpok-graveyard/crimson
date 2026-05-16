@@ -128,7 +128,7 @@ export class QuestResultsView {
     record.shotsFired = fired;
     record.shotsHit = hit;
 
-    let playerHealthValues = outcome.playerHealthValues.map((v) => v);
+    let playerHealthValues = Array.from(outcome.playerHealthValues).map((v) => v);
     if (playerHealthValues.length === 0) {
       playerHealthValues = [outcome.playerHealth];
       if (outcome.player2Health !== null) {

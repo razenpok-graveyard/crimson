@@ -151,7 +151,7 @@ export class WorldRuntime {
     }
 
     const screenSize = viewport.cameraScreenSize({ worldSize: this.worldSize, config: this.config, runtimeW: wgl.getScreenWidth(), runtimeH: wgl.getScreenHeight() });
-    const alive = this.simWorld.players.filter((player) => player.health > 0.0);
+    const alive = Array.from(this.simWorld.players).filter((player) => player.health > 0.0);
     let camera: Vec2;
     if (alive.length > 0) {
       const invAlive = 1.0 / alive.length;

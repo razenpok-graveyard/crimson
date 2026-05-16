@@ -59,7 +59,7 @@ function bonusPickSuppressed(opts: { state: GameplayState; players: PlayerState[
 }
 
 export function bonusPickRandomType(pool: BonusPool, state: GameplayState, players: PlayerState[]): BonusId {
-  const hasFireBulletsDrop = pool.entries.some((entry) => entry.bonusId === BonusId.FIRE_BULLETS && !entry.picked);
+  const hasFireBulletsDrop = Array.from(pool.entries).some((entry) => entry.bonusId === BonusId.FIRE_BULLETS && !entry.picked);
 
   for (let i = 0; i < 101; i++) {
     const roll = state.rng.rand({ caller: RngCallerStatic.BONUS_PICK_RANDOM_TYPE_ROLL }) % 162 + 1;

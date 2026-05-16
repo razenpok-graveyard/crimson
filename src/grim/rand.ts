@@ -181,6 +181,6 @@ export class RecordingCrand {
   }
 
   valuesSince(startCall: number = 0): number[] {
-    return this.recordsSince(startCall).map((record) => record.value);
+    return Array.from(this.recordsSince(startCall)).map((record) => record.value);
   }
 }

@@ -46,7 +46,7 @@ function selectJinxedAccidentTarget(ctx: PerksUpdateEffectsCtx): PlayerState {
     return player0;
   }
 
-  const alivePlayers = ctx.players.filter((player) => player.health > 0.0);
+  const alivePlayers = Array.from(ctx.players).filter((player) => player.health > 0.0);
   if (alivePlayers.length === 0) {
     return player0;
   }

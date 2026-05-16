@@ -79,7 +79,7 @@ export function drawBeamEffect(ctx: ProjectileDrawCtx): boolean {
 
   // In the native renderer, Ion Gun Master increases the chain effect thickness and reach.
   let perkScale = 1.0;
-  if (renderFrame.players.some((player) => perkActive(player, PerkId.ION_GUN_MASTER))) {
+  if (Array.from(renderFrame.players).some((player) => perkActive(player, PerkId.ION_GUN_MASTER))) {
     perkScale = 1.2;
   }
 

@@ -123,7 +123,7 @@ export function perkCanOffer(state: GameplayState, player: PlayerState, perkId: 
     return false;
   }
 
-  if (meta.prereq && meta.prereq.some((req) => perkCountGet(player, req) <= 0)) {
+  if (meta.prereq && Array.from(meta.prereq).some((req) => perkCountGet(player, req) <= 0)) {
     return false;
   }
 

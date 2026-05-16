@@ -44,7 +44,7 @@ export function applyTypoCommand(world: WorldState, command: TypoCharCommand | T
       return;
     }
     world.state.sfxQueue.push(SfxId.UI_TYPEENTER);
-    const activeMask = world.creatures.entries.map((entry) => entry.active);
+    const activeMask = Array.from(world.creatures.entries).map((entry) => entry.active);
     const targetIdx = typo.names.findByName(typing.text, { activeMask: activeMask });
     const entered = typing.submit({ matched: targetIdx !== null });
     typo.pendingFireTarget = null;
@@ -92,7 +92,7 @@ export function typoMidStep(ctx: MidStepContext): void {
     if (creatureIdx === null) {
       continue;
     }
-    const activeMask = ctx.world.creatures.entries.map((entry) => entry.active);
+    const activeMask = Array.from(ctx.world.creatures.entries).map((entry) => entry.active);
     typo.names.assignRandom(
       int(creatureIdx),
       ctx.world.state.rng,

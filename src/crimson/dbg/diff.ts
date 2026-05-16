@@ -103,8 +103,8 @@ export function diffTraces(opts: { expectedTracePath: string; actualTracePath: s
   let channelName: ReturnType<typeof String>;
   let pairs: ReturnType<typeof loadPairs>;
   try {
-    expectedChannels = new Set(expectedTrace.meta.channels.map((channel: any) => String(channel)));
-    actualChannels = new Set(actualTrace.meta.channels.map((channel: any) => String(channel)));
+    expectedChannels = new Set(Array.from(expectedTrace.meta.channels).map((channel) => String(channel)));
+    actualChannels = new Set(Array.from(actualTrace.meta.channels).map((channel) => String(channel)));
     for (const requiredChannel of TRACE_REQUIRED_CHANNELS) {
       channelName = String(requiredChannel);
       if (!expectedChannels.has(channelName) || !actualChannels.has(channelName)) {

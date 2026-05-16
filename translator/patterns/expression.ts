@@ -489,6 +489,10 @@ export function translateExpression(
   if (pathlibReadBytes !== null) {
     return `readFileSync(String(${translateExpression(pathlibReadBytes[1] ?? pathlibReadBytes[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}))`;
   }
+  const pathlibReadText = /^(?:Path\((.+)\)|(.+))\.read_text\((.*)\)$/.exec(trimmed);
+  if (pathlibReadText !== null) {
+    return `readFileSync(String(${translateExpression(pathlibReadText[1] ?? pathlibReadText[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}), 'utf8')`;
+  }
 
   const lstripCall = /^(.+)\.lstrip\(\)$/.exec(trimmed);
   if (lstripCall !== null) {
@@ -771,6 +775,11 @@ export function translateExpression(
     return constructExpression;
   }
 
+  const isAlphaCall = /^(.+)\.isalpha\(\)$/.exec(trimmed);
+  if (isAlphaCall !== null) {
+    return `/^\\p{L}+$/u.test(${translateExpression(isAlphaCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
   const vec2FromXyCall = /^Vec2\.from_xy\((.*)\)$/.exec(trimmed);
   if (vec2FromXyCall !== null) {
     return `Vec2.fromXY(${translateExpression(vec2FromXyCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
@@ -1013,12 +1022,17 @@ export function translateExpression(
   for (const [pythonName, tsMethod] of [['any', 'some'], ['all', 'every']] as const) {
     const generatorCall = parseCallPrefix(trimmed, pythonName);
     if (generatorCall !== null && generatorCall.rest === '') {
-      const generator = /^(.+?)(?:,)? for ([A-Za-z_][A-Za-z0-9_]*) in (.+)$/.exec(generatorCall.argsText.trim());
+      const generator = parseSimpleGeneratorExpression(generatorCall.argsText.trim());
       if (generator !== null) {
-        const itemName = tsExportNameForPythonName(generator[2]);
+        const itemName = tsExportNameForPythonName(generator.itemName);
         const itemNameMap = new Map(nameMap);
-        itemNameMap.set(generator[2], itemName);
-        return `${translateExpression(generator[3], nameMap, arrayNames, validatedTypeAliases, mapNames)}.${tsMethod}((${itemName}) => ${translateExpression(generator[1], itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+        itemNameMap.set(generator.itemName, itemName);
+        const iterable = arrayMethodIterableExpression(generator.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames);
+        const expression = translateExpression(generator.expression, itemNameMap, arrayNames, validatedTypeAliases, mapNames);
+        const condition = generator.condition === null
+          ? expression
+          : `(${translateExpression(generator.condition, itemNameMap, arrayNames, validatedTypeAliases, mapNames)}) && (${expression})`;
+        return `${iterable}.${tsMethod}((${itemName}) => ${condition})`;
       }
     }
   }
@@ -2190,6 +2204,11 @@ export function translateExpression(
     return `${receiver}[${receiver}.length - ${negativeIndex[2]}]`;
   }
 
+  const simpleSubscript = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[(.+)\]$/.exec(trimmed);
+  if (simpleSubscript !== null && !hasTopLevelColon(simpleSubscript[2])) {
+    return `${translateExpression(simpleSubscript[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}[${translateExpression(simpleSubscript[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}]`;
+  }
+
   const fullSlice = /^(.+)\[(.*):(.*)\]$/.exec(trimmed);
   if (fullSlice !== null) {
     const receiver = translateExpression(fullSlice[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -2210,11 +2229,6 @@ export function translateExpression(
   const openEndedSlice = /^(.+)\[(.+):\]$/.exec(trimmed);
   if (openEndedSlice !== null) {
     return `${translateExpression(openEndedSlice[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.slice(${translateExpression(openEndedSlice[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
-  }
-
-  const simpleSubscript = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[(.+)\]$/.exec(trimmed);
-  if (simpleSubscript !== null) {
-    return `${translateExpression(simpleSubscript[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}[${translateExpression(simpleSubscript[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}]`;
   }
 
   const enumIdCast = /^([A-Z][A-Za-z0-9_]*(?:Id|Type|Flags))\((.+)\)$/.exec(trimmed);
@@ -2699,6 +2713,24 @@ function translateAggregateGeneratorCall(
       }
     }
   }
+  const allCall = parseCallPrefix(pythonExpression, 'all');
+  if (allCall !== null && allCall.rest === '') {
+    const args = splitTopLevelComma(allCall.argsText);
+    if (args.length === 1) {
+      const generator = parseSimpleGeneratorExpression(args[0]);
+      if (generator !== null) {
+        const itemName = tsExportNameForPythonName(generator.itemName);
+        const itemNameMap = new Map(nameMap);
+        itemNameMap.set(generator.itemName, itemName);
+        const iterable = arrayMethodIterableExpression(generator.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames);
+        const expression = translateExpression(generator.expression, itemNameMap, arrayNames, validatedTypeAliases, mapNames);
+        const condition = generator.condition === null
+          ? expression
+          : `(${translateExpression(generator.condition, itemNameMap, arrayNames, validatedTypeAliases, mapNames)}) && (${expression})`;
+        return `${iterable}.every((${itemName}) => ${condition})`;
+      }
+    }
+  }
   return null;
 }
 
@@ -3032,11 +3064,30 @@ function arrayMethodIterableExpression(
   mapNames: ReadonlySet<string>,
 ): string {
   const iterable = iterableExpressionForIteration(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
-  return expressionLooksIteratorResult(iterable) ? `Array.from(${iterable})` : iterable;
+  if (expressionLooksIteratorResult(iterable)) {
+    return `Array.from(${iterable})`;
+  }
+  if (
+    arrayNames.has(pythonExpression)
+    || arrayNames.has(iterable)
+    || expressionLooksArrayResult(iterable)
+  ) {
+    return iterable;
+  }
+  return `Array.from(${iterable})`;
 }
 
 function expressionLooksIteratorResult(tsExpression: string): boolean {
   return /^[A-Za-z_$][A-Za-z0-9_.$]*\.(?:keys|values|entries)\(\)$/.test(tsExpression);
+}
+
+function expressionLooksArrayResult(tsExpression: string): boolean {
+  return (
+    tsExpression.startsWith('[')
+    || tsExpression.startsWith('Array.from(')
+    || tsExpression.startsWith('Object.keys(')
+    || /^[A-Za-z_$][A-Za-z0-9_.$()[\]]*\.(?:filter|map|slice)\(/.test(tsExpression)
+  );
 }
 
 function rangeArrayExpression(
@@ -4009,6 +4060,44 @@ function pythonContainsExpression(containerExpression: string, valueExpression: 
 
 function expressionCanBeTypeArgument(expression: string): boolean {
   return /^[A-Z][A-Za-z0-9_$]*$/.test(expression);
+}
+
+function hasTopLevelColon(value: string): boolean {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      if (char === quote && expressionCharIsNotEscaped(value, index)) {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'" || char === '`') {
+      quote = char;
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char === ')' || char === ']' || char === '}') {
+      depth -= 1;
+      continue;
+    }
+    if (char === ':' && depth === 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function expressionCharIsNotEscaped(value: string, index: number): boolean {
+  let slashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && value[cursor] === '\\'; cursor -= 1) {
+    slashCount += 1;
+  }
+  return slashCount % 2 === 0;
 }
 
 function parseCallPrefix(expression: string, callee: string): { argsText: string; rest: string } | null {

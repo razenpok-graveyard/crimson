@@ -263,7 +263,7 @@ export class ClientLockstepState {
   ingestTickFrame(frame: TickFrame, opts: { nowMs: number }): void {
     const nowMs = opts.nowMs;
     const tick = int(frame.tickIndex);
-    this._canonicalByTick.set(int(tick), new TickFrame({ tickIndex: int(frame.tickIndex), frameInputs: frame.frameInputs.map((item) => Array.from(item)), commands: Array.from(frame.commands) }));
+    this._canonicalByTick.set(int(tick), new TickFrame({ tickIndex: int(frame.tickIndex), frameInputs: Array.from(frame.frameInputs).map((item) => Array.from(item)), commands: Array.from(frame.commands) }));
     this._lastProgressMs = int(nowMs);
   }
 

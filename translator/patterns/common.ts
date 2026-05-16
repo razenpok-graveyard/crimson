@@ -382,6 +382,9 @@ export function inferPythonExpressionType(pythonExpression: string): string {
   if (/^str\(/.test(trimmed) || /\.(?:strip|lower|upper)\(\)/.test(trimmed)) {
     return 'string';
   }
+  if (/\.read_text\(/.test(trimmed)) {
+    return 'string';
+  }
   if (/^bool\(/.test(trimmed)) {
     return 'boolean';
   }
