@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import type {
   InitReexports,
   LazyWrapperModule,
@@ -5,7 +7,7 @@ import type {
   Reexport,
 } from '../model.js';
 import { tsExportNameForPythonName, tsTypeExpression } from '../naming.js';
-import { tsImportPathForPythonModule, tsImportPathForPythonNamespace } from '../paths.js';
+import { tsImportPathForPythonModule, tsImportPathForPythonNamespace, tsTargetRoot } from '../paths.js';
 import {
   flattenFromImportBlocks,
   isOneLineAllAssignment,
@@ -13,7 +15,7 @@ import {
   stripAllAssignments,
 } from '../python-utils.js';
 
-export function parseInitReexports(trimmedPython: string): InitReexports | null {
+export function parseInitReexports(trimmedPython: string, relativePath: string): InitReexports | null {
   const docstring = splitLeadingModuleDocstring(trimmedPython);
   const body = docstring === null ? trimmedPython : docstring.remainder.trim();
   const namespaceReexports: NamespaceReexport[] = [];
@@ -56,13 +58,41 @@ export function parseInitReexports(trimmedPython: string): InitReexports | null 
 
     reexports.push({
       modulePath: tsImportPathForPythonModule(fromImport[1]),
-      names: fromImport[2].split(', ').map(tsExportNameForPythonName),
+      names: fromImport[2].split(', ').map((name) => {
+        const exportName = tsExportNameForPythonName(name);
+        return tsModuleExportsTypeOnly(tsImportPathForPythonModule(fromImport[1]), exportName, relativePath)
+          ? `type ${exportName}`
+          : exportName;
+      }),
     });
   }
 
   return sawAll && namespaceReexports.length + reexports.length > 0
     ? { docstring: docstring?.value ?? null, namespaceReexports, reexports }
     : null;
+}
+
+function tsModuleExportsTypeOnly(modulePath: string, name: string, relativePath: string): boolean {
+  const sourcePath = tsSourcePathForImportPath(modulePath, relativePath);
+  if (sourcePath === null || !fs.existsSync(sourcePath)) {
+    return false;
+  }
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^export\\s+(?:type\\s+${escapedName}\\b|interface\\s+${escapedName}\\b)`, 'm').test(source);
+}
+
+function tsSourcePathForImportPath(modulePath: string, relativePath: string): string | null {
+  if (modulePath.startsWith('@crimson/')) {
+    return path.join(tsTargetRoot, 'crimson', modulePath.slice('@crimson/'.length));
+  }
+  if (modulePath.startsWith('@grim/')) {
+    return path.join(tsTargetRoot, 'grim', modulePath.slice('@grim/'.length));
+  }
+  if (modulePath.startsWith('./') || modulePath.startsWith('../')) {
+    return path.resolve(tsTargetRoot, path.dirname(relativePath), modulePath);
+  }
+  return null;
 }
 
 export function parseNamespaceReexports(trimmedPython: string): NamespaceReexport[] | null {

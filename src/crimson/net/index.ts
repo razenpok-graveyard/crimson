@@ -9,4 +9,4 @@ export { RelayServer, RelayServerConfig } from './relay-service.ts';
 export { ReliableLink } from './reliable.ts';
 export { ResyncAssembler, ResyncBuildError, buildResyncMessages } from './resync.ts';
 export { RollbackRuntime, RollbackRuntimeConfig } from './rollback-runtime.ts';
-export { PeerAddr, UdpTransport } from './transport.ts';
+export { type PeerAddr, UdpTransport } from './transport.ts';

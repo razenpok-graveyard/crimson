@@ -48,7 +48,7 @@ import {
 
 export async function translateFile(job: TranslationJob): Promise<string> {
   const futureStripped = stripFutureImports(job.python).trim();
-  const initReexports = parseInitReexports(futureStripped);
+  const initReexports = parseInitReexports(futureStripped, job.relativePath);
   if (initReexports !== null) {
     return renderInitReexports(job.relativePath, initReexports);
   }
