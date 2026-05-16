@@ -98,6 +98,21 @@ export function translatePositionalCallExpression(
 ): string {
   const callee = translateCallCalleeExpression(pythonCallee, nameMap, arrayNames, validatedTypeAliases);
   const args = positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases));
+  const raylibConstructor = /^(r[dl]|wgl)\.(Color|Vector2|Rectangle)$/.exec(callee);
+  if (raylibConstructor !== null) {
+    if (raylibConstructor[2] === 'Color' && positionalParts.length === 4) {
+      return `${raylibConstructor[1]}.makeColor(${positionalParts.map((arg) => translateRaylibColorArg(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;
+    }
+    if (raylibConstructor[2] === 'Vector2' && args.length === 2) {
+      return `${raylibConstructor[1]}.makeVector2(${args.join(', ')})`;
+    }
+    if (raylibConstructor[2] === 'Rectangle' && args.length === 1 && positionalParts[0]?.trim().startsWith('*') === true) {
+      return translateExpression(positionalParts[0].trim().slice(1), nameMap, arrayNames, validatedTypeAliases);
+    }
+    if (raylibConstructor[2] === 'Rectangle' && args.length === 4) {
+      return `${raylibConstructor[1]}.makeRectangle(${args.join(', ')})`;
+    }
+  }
   if (pythonCallee.endsWith('.extend') && args.length === 1) {
     return `${callee}(...${args[0]})`;
   }
@@ -189,6 +204,23 @@ export function translateExpression(
   const toBytesCall = /^(.+)\.tobytes\(\)$/.exec(trimmed);
   if (toBytesCall !== null) {
     return `bytesFrom(${translateExpression(toBytesCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
+  const stringEncodeCall = /^(.+)\.encode\((.*)\)$/.exec(trimmed);
+  if (stringEncodeCall !== null) {
+    const args = splitTopLevelComma(stringEncodeCall[2]);
+    const encoding = args[0] === undefined ? null : parsePythonStringExpression(args[0]);
+    const errors = args
+      .map((arg) => /^errors=(.+)$/.exec(arg.trim()))
+      .find((match): match is RegExpExecArray => match !== null);
+    const errorsValue = errors === undefined ? null : parsePythonStringExpression(errors[1]);
+    if (
+      encoding !== null
+      && ['latin-1', 'latin1', 'iso-8859-1'].includes(encoding.content.toLowerCase())
+      && (errorsValue?.content ?? 'strict') === 'replace'
+    ) {
+      return `latin1EncodeReplace(${translateExpression(stringEncodeCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
   }
 
   const constructField = parseConstructFieldExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -410,6 +442,15 @@ export function translateExpression(
   const reprCall = parseCallPrefix(trimmed, 'repr');
   if (reprCall !== null && reprCall.rest === '') {
     return `String(${translateExpression(reprCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
+  const stringCountCall = /^(.+)\.count\((.*)\)$/.exec(trimmed);
+  if (stringCountCall !== null) {
+    const args = splitTopLevelComma(stringCountCall[2]);
+    const value = translateExpression(stringCountCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (args.length === 1 && (arrayNames.has(stringNameMarker(stringCountCall[1])) || arrayNames.has(stringNameMarker(value)))) {
+      return `pythonStringCount(${value}, ${translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
   }
 
   for (const primitiveName of ['float', 'str', 'bool']) {
@@ -785,6 +826,17 @@ export function translateExpression(
     )
     .replaceAll(/\b(?:list|tuple)\(([^()]*)\)/g, 'Array.from($1)')
     .replaceAll(/\b(?:float|str|bool)\(([^()]*)\)/g, '$1')
+    .replaceAll(/\b([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.count\(([^()]*)\)/g, (_match, name: string, countArgsText: string) => {
+      const translatedName = translateExpression(name, nameMap, arrayNames, validatedTypeAliases, mapNames);
+      if (!arrayNames.has(stringNameMarker(name)) && !arrayNames.has(stringNameMarker(translatedName))) {
+        return _match;
+      }
+      const countArgs = splitTopLevelComma(countArgsText);
+      if (countArgs.length !== 1) {
+        return _match;
+      }
+      return `pythonStringCount(${translatedName}, ${translateExpression(countArgs[0], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    })
     .replaceAll(/\blen\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, (_match, name: string) => {
       const translatedName = translateExpression(name, nameMap, arrayNames, validatedTypeAliases, mapNames);
       return arrayNames.has(stringNameMarker(name)) || arrayNames.has(stringNameMarker(translatedName))
@@ -830,7 +882,11 @@ export function translateExpression(
     .replaceAll(/\.BLEND_ADDITIVE\b/g, '.ADDITIVE')
     .replaceAll(/\.BLEND_ALPHA\b/g, '.ALPHA')
     .replaceAll(/\.BLEND_MULTIPLIED\b/g, '.MULTIPLY')
-    .replaceAll(/\.BLEND_NONE\b/g, '.NONE');
+    .replaceAll(/\.BLEND_NONE\b/g, '.NONE')
+    .replaceAll(/\.TEXTURE_FILTER_POINT\b/g, '.POINT')
+    .replaceAll(/\.TEXTURE_FILTER_BILINEAR\b/g, '.BILINEAR')
+    .replaceAll(/\.TEXTURE_WRAP_REPEAT\b/g, '.REPEAT')
+    .replaceAll(/\.TEXTURE_WRAP_CLAMP\b/g, '.CLAMP');
 }
 
 function translateIdentifierName(name: string, nameMap: Map<string, string>): string {

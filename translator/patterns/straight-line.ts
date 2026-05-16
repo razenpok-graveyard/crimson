@@ -552,6 +552,20 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     leadingStatements.unshift(...helperStatements);
   }
   const moduleValueText = moduleValueUsageText(typeAliases, protocols, classes, plainClasses, [...leadingStatements, ...trailingStatements], functions, [...leadingAssignments, ...assignments]);
+  if (moduleValueText.includes('latin1EncodeReplace(')) {
+    const helperStatements = latin1EncodeReplaceHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
+  if (moduleValueText.includes('pythonStringCount(')) {
+    const helperStatements = pythonStringCountHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
   if (moduleValueText.includes('constructStruct(')) {
     const helperStatements = constructBinaryHelperStatements();
     if (leadingStatements.length > 0) {
@@ -721,6 +735,39 @@ function pythonReprHelperStatements(): string[] {
     "    return 'None';",
     '  }',
     '  return String(value);',
+    '}',
+  ];
+}
+
+function latin1EncodeReplaceHelperStatements(): string[] {
+  return [
+    'function latin1EncodeReplace(text: string): number[] {',
+    '  const bytes: number[] = [];',
+    '  for (const char of text) {',
+    '    const codePoint = char.codePointAt(0) ?? 0;',
+    '    bytes.push(codePoint <= 0xff ? codePoint : 0x3f);',
+    '  }',
+    '  return bytes;',
+    '}',
+  ];
+}
+
+function pythonStringCountHelperStatements(): string[] {
+  return [
+    'function pythonStringCount(text: string, needle: string): number {',
+    "  if (needle === '') {",
+    '    return Array.from(text).length + 1;',
+    '  }',
+    '  let count = 0;',
+    '  let start = 0;',
+    '  while (true) {',
+    '    const index = text.indexOf(needle, start);',
+    '    if (index === -1) {',
+    '      return count;',
+    '    }',
+    '    count += 1;',
+    '    start = index + needle.length;',
+    '  }',
     '}',
   ];
 }
