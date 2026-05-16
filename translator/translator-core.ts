@@ -175,6 +175,7 @@ function usesUnsupportedRuntimeIo(trimmedPython: string): boolean {
     /^import urllib\.(?:error|request)$/m,
     /^from PIL import /m,
     /^import ast$/m,
+    /^class RGBA\(msgspec\.Struct, frozen=True\):$/m,
   ].some((pattern) => pattern.test(trimmedPython));
 }
 
