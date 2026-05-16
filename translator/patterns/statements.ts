@@ -1940,14 +1940,15 @@ export function parseTopLevelAssignment(
         continue;
       }
 
-      const dictItem = /^(.+): (.+),$/.exec(trimmed);
+      const parsedItemLine = splitInlineComment(trimmed);
+      const dictItem = /^(.+): (.+),$/.exec(parsedItemLine.code);
       if (dictItem !== null) {
-        valueLines.push(`  [${translateExpression(dictItem[1], nameMap)}, ${translateExpression(dictItem[2], nameMap)}],`);
+        valueLines.push(`  [${translateExpression(dictItem[1], nameMap)}, ${translateExpression(dictItem[2], nameMap)}],${parsedItemLine.comment === null ? '' : ` // ${parsedItemLine.comment}`}`);
         nextIndex += 1;
         continue;
       }
 
-      const multilineDictItem = /^(.+): ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(trimmed);
+      const multilineDictItem = /^(.+): ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(parsedItemLine.code);
       if (multilineDictItem === null) {
         return null;
       }

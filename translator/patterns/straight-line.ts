@@ -74,6 +74,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   const moduleNameMap = new Map<string, string>();
   const mapNames = new Set<string>();
   const structConstructorFields = new Map<string, string[]>();
+  const typeVarNames = new Set<string>();
   const pendingAssignmentComments: string[] = [];
   let index = 0;
 
@@ -145,6 +146,12 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
     if (isStructFloatHelperAssignment(trimmed)) {
+      index += 1;
+      continue;
+    }
+    const typeVar = parseTypeVarAssignment(trimmed);
+    if (typeVar !== null) {
+      typeVarNames.add(typeVar);
       index += 1;
       continue;
     }
@@ -342,6 +349,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       index += 1;
       continue;
     }
+    const typeVar = parseTypeVarAssignment((lines[index] ?? '').trim());
+    if (typeVar !== null) {
+      typeVarNames.add(typeVar);
+      pendingAssignmentComments.length = 0;
+      index += 1;
+      continue;
+    }
 
     const interleavedAssignment = parseTopLevelAssignment(lines, index, moduleNameMap);
     if (interleavedAssignment !== null) {
@@ -476,6 +490,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       name: tsExportNameForPythonName(header.name),
       exported: !header.name.startsWith('_'),
       async: statements.some((statement) => statement.includes('await ')),
+      typeParams: simpleFunctionTypeParams(typeVarNames, parameters, optsParams, tsTypeExpression(header.returnType)),
       parameters,
       optsParams,
       returnType: tsTypeExpression(header.returnType),
@@ -523,6 +538,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
     if (isStructFloatHelperAssignment(trimmed)) {
+      pendingAssignmentComments.length = 0;
+      index += 1;
+      continue;
+    }
+    const typeVar = parseTypeVarAssignment(trimmed);
+    if (typeVar !== null) {
+      typeVarNames.add(typeVar);
       pendingAssignmentComments.length = 0;
       index += 1;
       continue;
@@ -661,6 +683,32 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
 function isStructFloatHelperAssignment(trimmedLine: string): boolean {
   return /^_[A-Z0-9_]+ = struct\.Struct\("[^"]+"\)$/.test(trimmedLine)
     || /^_[A-Z0-9_]+ = _[A-Z0-9_]+\.(?:pack|unpack)$/.test(trimmedLine);
+}
+
+function parseTypeVarAssignment(trimmedLine: string): string | null {
+  const typeVar = /^([A-Za-z_][A-Za-z0-9_]*) = TypeVar\("([A-Za-z_][A-Za-z0-9_]*)"\)$/.exec(trimmedLine);
+  if (typeVar === null || typeVar[1] !== typeVar[2]) {
+    return null;
+  }
+  return tsPublicNameForPythonName(typeVar[1]);
+}
+
+function simpleFunctionTypeParams(
+  typeVarNames: ReadonlySet<string>,
+  parameters: readonly FunctionParameter[],
+  optsParams: readonly OptionalFunctionParameter[],
+  returnType: string,
+): string[] | undefined {
+  if (typeVarNames.size === 0) {
+    return undefined;
+  }
+  const typeText = [
+    returnType,
+    ...parameters.map((parameter) => parameter.typeExpression),
+    ...optsParams.map((parameter) => parameter.typeExpression),
+  ].join('\n');
+  const usedTypeVars = [...typeVarNames].filter((name) => identifierPattern(name).test(typeText));
+  return usedTypeVars.length === 0 ? undefined : usedTypeVars;
 }
 
 function straightLineModuleUsesPythonRepr(

@@ -101,6 +101,9 @@ export function tsTypeExpression(pythonType: string): string {
   if (trimmed === 'bool') {
     return 'boolean';
   }
+  if (/^_+[A-Z][A-Z0-9_]*$/.test(trimmed)) {
+    return tsPublicNameForPythonName(trimmed);
+  }
   return tsExportNameForPythonName(trimmed);
 }
 

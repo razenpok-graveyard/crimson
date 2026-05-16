@@ -312,6 +312,14 @@ export function translateExpression(
     }
   }
 
+  const mapItemsCall = /^([A-Za-z_][A-Za-z0-9_]*)\.items\(\)$/.exec(trimmed);
+  if (mapItemsCall !== null) {
+    const mapName = translateExpression(mapItemsCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (mapNames.has(mapName)) {
+      return `${mapName}.entries()`;
+    }
+  }
+
   const mapSubscript = /^([A-Za-z_][A-Za-z0-9_]*)\[(.+)\]$/.exec(trimmed);
   if (mapSubscript !== null) {
     const mapName = translateExpression(mapSubscript[1], nameMap, arrayNames, validatedTypeAliases, mapNames);

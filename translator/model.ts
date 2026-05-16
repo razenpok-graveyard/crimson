@@ -193,6 +193,7 @@ export interface SimpleModuleFunction {
   exported: boolean;
   async?: boolean;
   static?: boolean;
+  typeParams?: string[];
   parameters: FunctionParameter[];
   optsParams: OptionalFunctionParameter[];
   returnType: string;

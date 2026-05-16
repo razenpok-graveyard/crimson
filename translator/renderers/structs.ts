@@ -113,7 +113,7 @@ export function renderStructClasses(lines: string[], classes: StructModule['clas
         const allOptsHaveDefaults = method.optsParams.every((param) => param.defaultValue !== null);
         params.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
       }
-      lines.push(`  ${method.static === true ? 'static ' : ''}${method.async === true ? 'async ' : ''}${method.name}(${params.join(', ')}): ${renderFunctionReturnType(method)} {`);
+      lines.push(`  ${method.static === true ? 'static ' : ''}${method.async === true ? 'async ' : ''}${method.name}${renderTypeParameters(method)}(${params.join(', ')}): ${renderFunctionReturnType(method)} {`);
       for (const param of method.optsParams) {
         if (param.defaultValue === null) {
           lines.push(`    const ${param.name} = opts.${param.name};`);
@@ -235,7 +235,7 @@ export function renderSimpleModuleFunctions(
       const allOptsHaveDefaults = fn.optsParams.every((param) => param.defaultValue !== null);
       params.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
     }
-    lines.push(`${fn.exported ? 'export ' : ''}${fn.async === true ? 'async ' : ''}function${generator ? '*' : ''} ${fn.name}(${params.join(', ')}): ${renderFunctionReturnType(fn)} {`);
+    lines.push(`${fn.exported ? 'export ' : ''}${fn.async === true ? 'async ' : ''}function${generator ? '*' : ''} ${fn.name}${renderTypeParameters(fn)}(${params.join(', ')}): ${renderFunctionReturnType(fn)} {`);
     let statementIndex = 0;
     while (
       statementIndex < fn.statements.length
@@ -261,6 +261,10 @@ export function renderSimpleModuleFunctions(
       lines.push('');
     }
   }
+}
+
+function renderTypeParameters(fn: SimpleModuleFunction): string {
+  return fn.typeParams === undefined || fn.typeParams.length === 0 ? '' : `<${fn.typeParams.join(', ')}>`;
 }
 
 function functionBodyAssignsName(statements: string[], name: string): boolean {
