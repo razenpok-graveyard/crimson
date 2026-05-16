@@ -237,9 +237,9 @@ export function buildEntries(entries: Iterable<[string, Uint8Array]>): Uint8Arra
     if (ArrayBuffer.isView(data) && !(data instanceof Uint8Array)) {
       data = bytesFrom(data);
     }
-    builtEntries.push({ name: String(name), size: data.length, payload: bytesFrom(data) });
+    builtEntries.push({ 'name': String(name), 'size': data.length, 'payload': bytesFrom(data) });
   }
-  return PAQ.build({ magic: MAGIC, entries: builtEntries });
+  return PAQ.build({ 'magic': MAGIC, 'entries': builtEntries });
 }
 
 export function writePaq(dest: string, entries: Iterable<[string, Uint8Array]>): void {

@@ -125,7 +125,7 @@ export function checkpointDeepdiff(expected: ReplayCheckpoint, actual: ReplayChe
     return null;
   }
 
-  const payload = toBuiltinObject({ mismatches: mismatches }, { field: 'checkpoint_diff.payload' });
+  const payload = toBuiltinObject({ 'mismatches': mismatches }, { field: 'checkpoint_diff.payload' });
   return new CheckpointDeepDiff({ payload: payload, pretty: pythonJsonDumps(payload, { sortKeys: true, indent: 2 }), diffCount: int(diffCount) });
 }
 

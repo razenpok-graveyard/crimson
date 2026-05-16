@@ -64,5 +64,5 @@ export function focusTick(opts: { goldenTrace: string; candidateTrace: string; t
 
   let diverged = checkpointDiff !== null || !(rngStream['ok'] ?? null) || entityDiverged || !entitySamplesOk || !simStateOk;
 
-  return toBuiltinObject({ tick_index: int(tick), diverged: diverged, checkpoint_diff_count: checkpointDiff === null ? 0 : int(checkpointDiff.diffCount), checkpoint_diff: checkpointDiff === null ? null : { payload: checkpointDiff.payload, pretty: checkpointDiff.pretty }, rng_stream: rngStream, entity_presence: entityPresence, entity_samples: { ok: entitySamplesOk, detail: entitySamplesDetail }, sim_state: { ok: simStateOk, detail: simStateDetail } }, { field: 'focus_tick' });
+  return toBuiltinObject({ 'tick_index': int(tick), 'diverged': diverged, 'checkpoint_diff_count': checkpointDiff === null ? 0 : int(checkpointDiff.diffCount), 'checkpoint_diff': checkpointDiff === null ? null : { 'payload': checkpointDiff.payload, 'pretty': checkpointDiff.pretty }, 'rng_stream': rngStream, 'entity_presence': entityPresence, 'entity_samples': { 'ok': entitySamplesOk, 'detail': entitySamplesDetail }, 'sim_state': { 'ok': simStateOk, 'detail': simStateDetail } }, { field: 'focus_tick' });
 }

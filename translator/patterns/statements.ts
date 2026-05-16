@@ -448,7 +448,11 @@ export function translateStraightLineStatement(
       '}',
     ];
     while (nextIndex < lines.length) {
-      const elifStatement = /^elif (.+):$/.exec((lines[nextIndex] ?? '').trim());
+      const nextLine = lines[nextIndex] ?? '';
+      if (!lineStartsAtIndent(nextLine, indent)) {
+        break;
+      }
+      const elifStatement = /^elif (.+):$/.exec(nextLine.trim());
       if (elifStatement === null) {
         break;
       }
@@ -460,7 +464,7 @@ export function translateStraightLineStatement(
       statements.push(...elifBranch.statements, '}');
       nextIndex = elifBranch.nextIndex;
     }
-    if ((lines[nextIndex] ?? '').trim() === 'else:') {
+    if (lineStartsAtIndent(lines[nextIndex] ?? '', indent) && (lines[nextIndex] ?? '').trim() === 'else:') {
       const elseBranch = translateBranch(nextIndex + 1);
       if (elseBranch === null) {
         return null;
@@ -1075,6 +1079,7 @@ export function translateStraightLineStatement(
       nameMap,
       arrayNames,
       validatedTypeAliases,
+      mapNames,
     );
     if (callExpression === null) {
       return null;
@@ -1194,6 +1199,7 @@ export function translateStraightLineStatement(
         nameMap,
         arrayNames,
         validatedTypeAliases,
+        mapNames,
       );
       if (callExpression === null) {
         return null;
@@ -1761,7 +1767,7 @@ function parseMultilineCallExpression(
   }
   if (callParts.keywordParts.length === 0) {
     return {
-      expression: translatePositionalCallExpression(pythonCallee, callParts.positionalParts, nameMap, arrayNames, validatedTypeAliases, true),
+      expression: translatePositionalCallExpression(pythonCallee, callParts.positionalParts, nameMap, arrayNames, validatedTypeAliases, mapNames, true),
       nextIndex: callParts.nextIndex,
     };
   }
@@ -1773,7 +1779,7 @@ function parseMultilineCallExpression(
   }
   return {
     expression: `${callPrefix}(${[
-      ...callParts.positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases)),
+      ...callParts.positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)),
       `{ ${callParts.keywordParts.join(', ')} }`,
     ].join(', ')})`,
     nextIndex: callParts.nextIndex,
@@ -2138,6 +2144,10 @@ function addMutableName(names: ReadonlySet<string>, name: string): void {
   if (names instanceof Set) {
     names.add(name);
   }
+}
+
+function lineStartsAtIndent(line: string, indent: string): boolean {
+  return line.startsWith(indent) && !line.slice(indent.length).startsWith(' ');
 }
 
 function hoistTryBlockDeclarations(statements: string[]): { declarations: string[]; statements: string[] } {

@@ -94,10 +94,11 @@ export function translatePositionalCallExpression(
   nameMap: Map<string, string>,
   arrayNames: Set<string>,
   validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string> = new Set(),
   constructUppercase = false,
 ): string {
   const callee = translateCallCalleeExpression(pythonCallee, nameMap, arrayNames, validatedTypeAliases);
-  const args = positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases));
+  const args = positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
   const raylibConstructor = /^(r[dl]|wgl)\.(Color|Vector2|Rectangle)$/.exec(callee);
   if (raylibConstructor !== null) {
     if (raylibConstructor[2] === 'Color' && positionalParts.length === 4) {
@@ -128,9 +129,13 @@ export function translateCallArgumentExpression(
   nameMap: Map<string, string>,
   arrayNames: Set<string>,
   validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string> = new Set(),
 ): string {
+  if (pythonExpression.includes('=>')) {
+    return pythonExpression;
+  }
   return translateBoundMethodReference(pythonExpression, nameMap, arrayNames, validatedTypeAliases)
-    ?? translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases);
+    ?? translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
 }
 
 function translateCallCalleeExpression(
@@ -341,6 +346,19 @@ export function translateExpression(
     const itemNameMap = new Map(nameMap);
     itemNameMap.set(dictComprehension[3], itemName);
     return `new Map(Array.from(${translateExpression(dictComprehension[4], nameMap, arrayNames, validatedTypeAliases, mapNames)}, (${itemName}) => [${translateExpression(dictComprehension[1], itemNameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(dictComprehension[2], itemNameMap, arrayNames, validatedTypeAliases, mapNames)}] as const))`;
+  }
+
+  const tupleDictComprehension = /^\{(.+): (.+) for ([A-Za-z_][A-Za-z0-9_]*), ([A-Za-z_][A-Za-z0-9_]*) in (.+)\}$/.exec(trimmed);
+  if (tupleDictComprehension !== null) {
+    const keyName = tsExportNameForPythonName(tupleDictComprehension[3]);
+    const valueName = tsExportNameForPythonName(tupleDictComprehension[4]);
+    const itemNameMap = new Map(nameMap);
+    itemNameMap.set(tupleDictComprehension[3], keyName);
+    itemNameMap.set(tupleDictComprehension[4], valueName);
+    const iterable = translateExpression(tupleDictComprehension[5], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const keyExpression = translateExpression(tupleDictComprehension[1], itemNameMap, arrayNames, validatedTypeAliases, mapNames);
+    const valueExpression = translateExpression(tupleDictComprehension[2], itemNameMap, arrayNames, validatedTypeAliases, mapNames);
+    return `Object.fromEntries(Array.from(${iterable}, ([${keyName}, ${valueName}]) => [${keyExpression}, ${valueExpression}] as const))`;
   }
 
   const boolCall = parseCallPrefix(trimmed, 'bool');
@@ -631,6 +649,21 @@ export function translateExpression(
   const reprCall = parseCallPrefix(trimmed, 'repr');
   if (reprCall !== null && reprCall.rest === '') {
     return `String(${translateExpression(reprCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
+  const lenCall = parseCallPrefix(trimmed, 'len');
+  if (lenCall !== null && lenCall.rest === '') {
+    const value = translateExpression(lenCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (mapNames.has(value)) {
+      return `${value}.size`;
+    }
+    if (arrayNames.has(setNameMarker(lenCall.argsText)) || arrayNames.has(setNameMarker(value))) {
+      return `${value}.size`;
+    }
+    if (arrayNames.has(objectNameMarker(lenCall.argsText)) || arrayNames.has(objectNameMarker(value))) {
+      return `Object.keys(${value}).length`;
+    }
+    return `${value}.length`;
   }
 
   const castCall = parseCallPrefix(trimmed, 'cast');
@@ -1004,6 +1037,20 @@ export function translateExpression(
       .join(' || ');
   }
 
+  const tupleLiteral = /^\((.*)\)$/.exec(trimmed);
+  if (tupleLiteral !== null && tupleLiteral[1].includes(',')) {
+    const values = splitTopLevelComma(tupleLiteral[1])
+      .map((part) => part.trim())
+      .filter((part) => part !== '')
+      .map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
+    return `[${values.join(', ')}]`;
+  }
+
+  const topLevelTupleParts = splitTopLevelComma(trimmed);
+  if (topLevelTupleParts.length > 1) {
+    return `[${topLevelTupleParts.map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')}]`;
+  }
+
   const additiveWithAggregateGenerator = splitTopLevelAdditive(trimmed);
   if (
     additiveWithAggregateGenerator !== null
@@ -1020,6 +1067,11 @@ export function translateExpression(
     && additiveWithHighPrecedenceOperator.parts.some((part) => part.includes(' // ') || part.includes(' >> '))
   ) {
     return joinTranslatedAdditive(additiveWithHighPrecedenceOperator, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  }
+
+  const additive = splitTopLevelAdditive(trimmed);
+  if (additive !== null) {
+    return joinTranslatedAdditive(additive, nameMap, arrayNames, validatedTypeAliases, mapNames);
   }
 
   const withoutOuterParens = stripBalancedOuterParens(trimmed);
@@ -1069,20 +1121,6 @@ export function translateExpression(
     return `${translateExpression(openEndedSlice[1], nameMap, arrayNames, validatedTypeAliases)}.slice(${openEndedSlice[2]})`;
   }
 
-  const tupleLiteral = /^\((.*)\)$/.exec(trimmed);
-  if (tupleLiteral !== null && tupleLiteral[1].includes(',')) {
-    const values = splitTopLevelComma(tupleLiteral[1])
-      .map((part) => part.trim())
-      .filter((part) => part !== '')
-      .map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
-    return `[${values.join(', ')}]`;
-  }
-
-  const topLevelTupleParts = splitTopLevelComma(trimmed);
-  if (topLevelTupleParts.length > 1) {
-    return `[${topLevelTupleParts.map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')}]`;
-  }
-
   const enumIdCast = /^([A-Z][A-Za-z0-9_]*Id)\((.+)\)$/.exec(trimmed);
   if (enumIdCast !== null) {
     return translateExpression(enumIdCast[2], nameMap, arrayNames, validatedTypeAliases);
@@ -1126,6 +1164,7 @@ export function translateExpression(
       nameMap,
       arrayNames,
       validatedTypeAliases,
+      mapNames,
       true,
     );
   }
@@ -1262,11 +1301,19 @@ function translateChainedComparison(
 }
 
 function translateComparisonClause(left: string, operator: string, right: string, arrayNames: ReadonlySet<string>): string {
+  const leftOperand = parenthesizeComparisonOperand(left);
+  const rightOperand = parenthesizeComparisonOperand(right);
   if ((operator === '==' || operator === '!=') && comparisonNeedsPythonEquality(left, right, arrayNames)) {
-    const equality = `pythonEquals(${left}, ${right})`;
+    const equality = `pythonEquals(${leftOperand}, ${rightOperand})`;
     return operator === '==' ? equality : `!${equality}`;
   }
-  return `${left} ${tsComparisonOperator(operator)} ${right}`;
+  return `${leftOperand} ${tsComparisonOperator(operator)} ${rightOperand}`;
+}
+
+function parenthesizeComparisonOperand(value: string): string {
+  return value.includes(' ?? ') || value.includes(' && ') || value.includes(' || ')
+    ? `(${value})`
+    : value;
 }
 
 function tsComparisonOperator(operator: string): string {
@@ -1729,9 +1776,7 @@ function translateInlineRecordLiteral(
     if (key === null) {
       return null;
     }
-    const renderedKey = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key.content)
-      ? key.content
-      : `[${tsStringLiteral(JSON.stringify(key.content))}]`;
+    const renderedKey = tsStringLiteral(JSON.stringify(key.content));
     properties.push(`${renderedKey}: ${translateExpression(valueExpression, nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
   }
   return `{ ${properties.join(', ')} }`;
