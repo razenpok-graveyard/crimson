@@ -3147,6 +3147,12 @@ function parseMultilineCallExpression(
       nextIndex: callParts.nextIndex,
     };
   }
+  if (pythonCallee === 'subprocess.check_output') {
+    return {
+      expression: 'new Uint8Array()',
+      nextIndex: callParts.nextIndex,
+    };
+  }
   if (pythonCallee === 'msgspec.msgpack.encode' && callParts.positionalParts.length === 1 && callParts.keywordParts.length === 0) {
     return {
       expression: `new MsgpackEncoder().encode(${translateExpression(callParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames)})`,
@@ -4271,6 +4277,9 @@ function tsTypeForAssignedExpression(expression: string): string | null {
   if (awaited !== null) {
     const innerType = tsTypeForAssignedExpression(awaited[1]);
     return innerType === null ? null : `Awaited<${innerType}>`;
+  }
+  if (/^new TextDecoder\(.+\)\.decode\(/.test(trimmed) || /\.trim\(\)$/.test(trimmed)) {
+    return 'string';
   }
   const constructor = /^new ([A-Za-z_$][A-Za-z0-9_$]*)\(/.exec(trimmed);
   if (constructor !== null) {

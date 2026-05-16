@@ -67,6 +67,37 @@ export function tsRegExpExpression(pythonLiteral: string): string {
   return `new RegExp(${JSON.stringify(content)})`;
 }
 
+function tsRegExpSourceExpression(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string {
+  const literal = /^([rRfF]{0,2})(["'])([\s\S]*)\2$/.exec(pythonExpression.trim());
+  if (literal === null) {
+    return translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  }
+
+  const prefix = literal[1].toLowerCase();
+  const content = literal[3];
+  return prefix.includes('f')
+    ? `\`${tsFStringTemplateContent(content, nameMap, arrayNames, validatedTypeAliases, mapNames)}\``
+    : JSON.stringify(content);
+}
+
+function tsRegExpFlagsExpression(pythonExpression: string | undefined): string {
+  if (pythonExpression === undefined) {
+    return '';
+  }
+  const flags = [
+    pythonExpression.includes('re.IGNORECASE') ? 'i' : '',
+    pythonExpression.includes('re.MULTILINE') ? 'm' : '',
+    pythonExpression.includes('re.DOTALL') ? 's' : '',
+  ].join('');
+  return [...new Set(flags.split(''))].join('');
+}
+
 export function tsFStringTemplateContent(
   content: string,
   nameMap: Map<string, string> = new Map(),
@@ -598,6 +629,15 @@ export function translateExpression(
     }
   }
 
+  const bytesDecodeStripCall = /^(.+)\.decode\((.*)\)\.strip\(\)$/.exec(trimmed);
+  if (bytesDecodeStripCall !== null) {
+    const args = splitTopLevelComma(bytesDecodeStripCall[2]);
+    const encoding = args[0] === undefined ? 'utf-8' : parsePythonStringExpression(args[0])?.content ?? null;
+    if (encoding !== null) {
+      return `new TextDecoder(${tsStringLiteral(JSON.stringify(encoding))}).decode(${translateExpression(bytesDecodeStripCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}).trim()`;
+    }
+  }
+
   const bytesDecodeCall = /^(.+)\.decode\((.*)\)$/.exec(trimmed);
   if (bytesDecodeCall !== null) {
     const args = splitTopLevelComma(bytesDecodeCall[2]);
@@ -978,6 +1018,48 @@ export function translateExpression(
     return `pythonEndsWith(${translateExpression(endsWithCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(endsWithCall[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
+  const regexCompileCall = parseCallPrefix(trimmed, 're.compile');
+  if (regexCompileCall !== null && regexCompileCall.rest === '') {
+    const args = splitTopLevelComma(regexCompileCall.argsText);
+    const pattern = args.find((arg) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(arg));
+    if (pattern !== undefined) {
+      const flagsArg = args.find((arg) => /^flags=/.test(arg)) ?? args.find((arg, index) => index > 0 && arg.includes('re.'));
+      const flags = tsRegExpFlagsExpression(flagsArg?.replace(/^flags=/, ''));
+      const source = tsRegExpSourceExpression(pattern, nameMap, arrayNames, validatedTypeAliases, mapNames);
+      return flags === '' ? `new RegExp(${source})` : `new RegExp(${source}, '${flags}')`;
+    }
+  }
+
+  const regexSearchCall = parseCallPrefix(trimmed, 're.search');
+  if (regexSearchCall !== null && regexSearchCall.rest === '') {
+    const args = splitTopLevelComma(regexSearchCall.argsText);
+    if (args.length >= 2) {
+      const flagsArg = args.find((arg) => /^flags=/.test(arg)) ?? args.find((arg, index) => index > 1 && arg.includes('re.'));
+      const flags = tsRegExpFlagsExpression(flagsArg?.replace(/^flags=/, ''));
+      const source = tsRegExpSourceExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const value = translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const regex = flags === '' ? `new RegExp(${source})` : `new RegExp(${source}, '${flags}')`;
+      return `${regex}.exec(String(${value}))`;
+    }
+  }
+
+  const regexFullmatchCall = /^(.+)\.fullmatch\((.*)\)$/.exec(trimmed);
+  if (regexFullmatchCall !== null) {
+    const pattern = translateExpression(regexFullmatchCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const value = translateExpression(regexFullmatchCall[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return `((pattern: RegExp, value: string) => { const match = pattern.exec(value); return match !== null && match[0] === value ? match : null; })(${pattern}, String(${value}))`;
+  }
+
+  const regexGroupLowerCall = /^([A-Za-z_][A-Za-z0-9_]*)\.group\((\d+)\)\.lower\(\)$/.exec(trimmed);
+  if (regexGroupLowerCall !== null) {
+    return `${translateExpression(regexGroupLowerCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}[${regexGroupLowerCall[2]}].toLowerCase()`;
+  }
+
+  const regexGroupCall = /^([A-Za-z_][A-Za-z0-9_]*)\.group\((\d+)\)$/.exec(trimmed);
+  if (regexGroupCall !== null) {
+    return `${translateExpression(regexGroupCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}[${regexGroupCall[2]}]`;
+  }
+
   const mappingConstantSubscript = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[(.+)\]$/.exec(trimmed);
   if (mappingConstantSubscript !== null && looksLikeMappingConstantName(mappingConstantSubscript[1])) {
     const mapName = translateExpression(mappingConstantSubscript[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -1342,6 +1424,24 @@ export function translateExpression(
   const pathCall = parseCallPrefix(trimmed, 'Path');
   if (pathCall !== null && pathCall.rest === '') {
     return translateExpression(pathCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  }
+
+  if (/^Path\(__file__\)\.resolve\(\)\.parents\[\d+\]$/.test(trimmed)) {
+    return "''";
+  }
+
+  const shutilWhichCall = parseCallPrefix(trimmed, 'shutil.which');
+  if (shutilWhichCall !== null && shutilWhichCall.rest === '') {
+    return 'null';
+  }
+
+  const subprocessCheckOutputCall = parseCallPrefix(trimmed, 'subprocess.check_output');
+  if (subprocessCheckOutputCall !== null && subprocessCheckOutputCall.rest === '') {
+    return 'new Uint8Array()';
+  }
+
+  if (trimmed === 'subprocess.DEVNULL') {
+    return 'null';
   }
 
   const pathOpenCall = /^(.+)\.open\((.*)\)$/.exec(trimmed);

@@ -376,6 +376,9 @@ export function inferPythonExpressionType(pythonExpression: string): string {
   if (/^(?:int|float)\(/.test(trimmed)) {
     return 'number';
   }
+  if (/^str\(/.test(trimmed) || /\.(?:strip|lower|upper)\(\)/.test(trimmed)) {
+    return 'string';
+  }
   if (/^bool\(/.test(trimmed)) {
     return 'boolean';
   }

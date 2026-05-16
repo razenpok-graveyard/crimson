@@ -183,9 +183,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       || isDataclassOnlyImport(trimmed)
       || trimmed === 'from collections import OrderedDict'
       || trimmed === 'from collections import defaultdict'
+      || trimmed === 'from functools import lru_cache'
       || trimmed === 'from pathlib import Path'
       || trimmed === 'from threading import Lock'
       || trimmed.startsWith('from construct import ')
+      || trimmed === 'import re'
+      || trimmed === 'import shutil'
+      || trimmed === 'import subprocess'
       || trimmed === 'import msgspec'
       || trimmed === 'import io'
       || trimmed === 'import secrets'
@@ -277,9 +281,18 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
 
-    const aliasedFromImport = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*) as ([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);
+    const aliasedFromImport = /^from (\.+(?:[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)?|[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*) as ([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);
     if (aliasedFromImport !== null) {
       const aliasName = tsLocalNameForPythonAlias(aliasedFromImport[3]);
+      if (/^\.+$/.test(aliasedFromImport[1]) && !aliasedFromImport[2].startsWith('__')) {
+        namespaceImports.push({
+          alias: aliasName,
+          modulePath: tsImportPathForPythonImport(`${aliasedFromImport[1]}${aliasedFromImport[2]}`, relativePath),
+        });
+        moduleNameMap.set(aliasedFromImport[3], aliasName);
+        index += 1;
+        continue;
+      }
       const modulePath = tsImportPathForPythonImport(aliasedFromImport[1], relativePath);
       const importedName = tsImportNameForPythonName(modulePath, aliasedFromImport[2], relativePath);
       imports.push({
@@ -339,9 +352,21 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
 
-    const fromImport = /^from (\.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
+    const fromImport = /^from (\.+(?:[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)?|[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*) import ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
     if (fromImport !== null) {
       const importedNames = fromImport[2].split(', ');
+      if (/^\.+$/.test(fromImport[1]) && importedNames.every((name) => !name.startsWith('__'))) {
+        for (const moduleName of importedNames) {
+          const alias = tsLocalNameForPythonAlias(moduleName);
+          pushUniqueNamespaceImport(namespaceImports, {
+            alias,
+            modulePath: tsImportPathForPythonImport(`${fromImport[1]}${moduleName}`, relativePath),
+          });
+          moduleNameMap.set(moduleName, alias);
+        }
+        index += 1;
+        continue;
+      }
       if (importedNames.length === 1) {
         const submodulePath = tsImportPathForPythonImport(`${fromImport[1]}.${importedNames[0]}`, relativePath);
         if (tsImportPathExists(submodulePath, relativePath)) {
@@ -543,6 +568,11 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       }
       index = interleavedAssignment.nextIndex;
       continue;
+    }
+
+    const functionIndex = skipIgnorableFunctionDecorators(lines, index);
+    if (functionIndex !== index) {
+      index = functionIndex;
     }
 
     if (!(lines[index] ?? '').startsWith('def ')) {
@@ -1867,6 +1897,9 @@ function tsReexportName(modulePath: string, name: string, relativePath: string):
 }
 
 function tsImportNameForPythonName(modulePath: string, pythonName: string, relativePath: string): string {
+  if (pythonName === '__version__' && tsModuleExportsName(modulePath, 'VERSION', relativePath)) {
+    return 'VERSION';
+  }
   const exactName = tsExportNameForPythonName(pythonName);
   const publicName = tsPublicNameForPythonName(pythonName);
   if (
@@ -1877,6 +1910,14 @@ function tsImportNameForPythonName(modulePath: string, pythonName: string, relat
     return publicName;
   }
   return exactName;
+}
+
+function skipIgnorableFunctionDecorators(lines: string[], index: number): number {
+  let nextIndex = index;
+  while (/^@(?:functools\.)?lru_cache\([^)]*\)$/.test(lines[nextIndex]?.trim() ?? '')) {
+    nextIndex += 1;
+  }
+  return (nextIndex !== index && (lines[nextIndex] ?? '').startsWith('def ')) ? nextIndex : index;
 }
 
 function menuViewHelperImportNames(): string[] {
