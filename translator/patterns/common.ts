@@ -341,6 +341,9 @@ export function inferPythonExpressionType(pythonExpression: string): string {
   if (/^(?:proj_origin|Vec2|rl\.Vector2)\(/.test(trimmed)) {
     return '{ x: number; y: number }';
   }
+  if (/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+$/.test(trimmed)) {
+    return `typeof ${trimmed.split('.').map(tsExportNameForPythonName).join('.')}`;
+  }
   return 'any';
 }
 export function stripTypeOnlyStatementSyntax(text: string): string {

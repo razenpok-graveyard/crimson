@@ -25,6 +25,7 @@ import {
   translateExpression,
   translateMapKeyExpression,
   translatePositionalCallExpression,
+  dateNameMarker,
   objectNameMarker,
   setNameMarker,
   translatedExpressionLooksVector,
@@ -165,7 +166,8 @@ function predeclareIfBranchAssignments(
   for (const [name, types] of assignedTypes) {
     const concreteTypes = [...types].filter((type) => type !== 'any');
     const candidateTypes = concreteTypes.length > 0 ? concreteTypes : [...types];
-    const type = new Set(candidateTypes).size === 1 ? candidateTypes[0] : 'any';
+    const uniqueTypes = [...new Set(candidateTypes)];
+    const type = uniqueTypes.length === 1 ? uniqueTypes[0] : uniqueTypes.join(' | ');
     declarations.push(`let ${tsExportNameForPythonName(name)}: ${type};`);
     declaredNames.add(name);
   }
@@ -392,6 +394,7 @@ export function translateStraightLineStatement(
           validatedTypeAliases,
           relativePath,
           mapNames,
+          imports,
         );
         if (innerStatement === null) {
           return null;
@@ -464,6 +467,7 @@ export function translateStraightLineStatement(
           validatedTypeAliases,
           relativePath,
           mapNames,
+          imports,
         );
         if (innerStatement === null) {
           return null;
@@ -685,6 +689,7 @@ export function translateStraightLineStatement(
         validatedTypeAliases,
         relativePath,
         mapNames,
+        imports,
       );
       if (innerStatement === null) {
         return null;
@@ -727,6 +732,7 @@ export function translateStraightLineStatement(
         validatedTypeAliases,
         relativePath,
         mapNames,
+        imports,
       );
       if (innerStatement === null) {
         return null;
@@ -797,6 +803,7 @@ export function translateStraightLineStatement(
         validatedTypeAliases,
         relativePath,
         mapNames,
+        imports,
       );
       if (innerStatement === null) {
         return null;
@@ -848,6 +855,7 @@ export function translateStraightLineStatement(
         validatedTypeAliases,
         relativePath,
         mapNames,
+        imports,
       );
       if (innerStatement === null) {
         return null;
@@ -893,6 +901,7 @@ export function translateStraightLineStatement(
         validatedTypeAliases,
         relativePath,
         mapNames,
+        imports,
       );
       if (innerStatement === null) {
         return null;
@@ -1085,6 +1094,10 @@ export function translateStraightLineStatement(
     if (typeExpression === 'BuiltinObject' || typeExpression.startsWith('Record<')) {
       arrayNames.add(objectNameMarker(annotatedAssignment[1]));
       arrayNames.add(objectNameMarker(tsName));
+    }
+    if (typeExpression === 'Date') {
+      arrayNames.add(dateNameMarker(annotatedAssignment[1]));
+      arrayNames.add(dateNameMarker(tsName));
     }
     return {
       statements: [
@@ -1941,6 +1954,10 @@ function translateStraightLineAssignment(
       arrayNames.add(vectorNameMarker(localAssignment[1]));
       arrayNames.add(vectorNameMarker(tsName));
     }
+    if (assignedRight === 'new Date()') {
+      arrayNames.add(dateNameMarker(localAssignment[1]));
+      arrayNames.add(dateNameMarker(tsName));
+    }
     return {
       statements: [
         `${reassignedNames.has(localAssignment[1]) ? 'let' : 'const'} ${tsName} = ${assignedRight};`,
@@ -2060,7 +2077,7 @@ function hoistTryBlockDeclarations(statements: string[]): { declarations: string
         return `${destructuringDeclaration[1]}[${destructuringDeclaration[2]}] = ${destructuringDeclaration[3]};`;
       }
     }
-    const declaration = /^(\s*)const ([A-Za-z_$][A-Za-z0-9_$]*) = (.+);$/.exec(statement);
+    const declaration = /^(\s*)(?:const|let) ([A-Za-z_$][A-Za-z0-9_$]*) = (.+);$/.exec(statement);
     if (declaration === null) {
       return statement;
     }

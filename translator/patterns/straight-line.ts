@@ -119,6 +119,10 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       index += 1;
       continue;
     }
+    if (trimmed === 'import datetime' || trimmed === 'import datetime as dt') {
+      index += 1;
+      continue;
+    }
     if (trimmed === 'import socket') {
       pushUniqueNamespaceImport(namespaceImports, {
         alias: 'socket',

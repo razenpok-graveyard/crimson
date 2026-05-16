@@ -184,6 +184,10 @@ export function objectNameMarker(name: string): string {
   return `__object__:${name}`;
 }
 
+export function dateNameMarker(name: string): string {
+  return `__date__:${name}`;
+}
+
 export function translatedExpressionLooksVector(tsExpression: string): boolean {
   const trimmed = tsExpression.trim();
   if (/^(?:Vec2\.|new Vec2\b)/.test(trimmed) && !/\.(?:length|toHeading)\(\)$/.test(trimmed)) {
@@ -216,6 +220,24 @@ export function translateExpression(
   const toBytesCall = /^(.+)\.tobytes\(\)$/.exec(trimmed);
   if (toBytesCall !== null) {
     return `bytesFrom(${translateExpression(toBytesCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
+  if (trimmed === 'dt.date.today()' || trimmed === 'datetime.date.today()') {
+    return 'new Date()';
+  }
+
+  const dateAttribute = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.(day|month|year)$/.exec(trimmed);
+  if (dateAttribute !== null) {
+    const receiver = translateExpression(dateAttribute[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (arrayNames.has(dateNameMarker(dateAttribute[1])) || arrayNames.has(dateNameMarker(receiver))) {
+      if (dateAttribute[2] === 'day') {
+        return `${receiver}.getDate()`;
+      }
+      if (dateAttribute[2] === 'month') {
+        return `${receiver}.getMonth() + 1`;
+      }
+      return `${receiver}.getFullYear()`;
+    }
   }
 
   const bytesDecodeCall = /^(.+)\.decode\((.*)\)$/.exec(trimmed);
@@ -345,12 +367,19 @@ export function translateExpression(
     }
   }
 
-  const listComprehension = /^\[(.+) for ([A-Za-z_][A-Za-z0-9_]*) in (.+)\]$/.exec(trimmed);
+  const listComprehension = parseSimpleListComprehension(trimmed);
   if (listComprehension !== null) {
-    const itemName = tsExportNameForPythonName(listComprehension[2]);
+    const itemName = tsExportNameForPythonName(listComprehension.itemName);
     const itemNameMap = new Map(nameMap);
-    itemNameMap.set(listComprehension[2], itemName);
-    return `${translateExpression(listComprehension[3], nameMap, arrayNames, validatedTypeAliases, mapNames)}.map((${itemName}) => ${translateExpression(listComprehension[1], itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    itemNameMap.set(listComprehension.itemName, itemName);
+    const iterable = translateExpression(listComprehension.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const translatedItem = translateExpression(listComprehension.expression, itemNameMap, arrayNames, validatedTypeAliases, mapNames);
+    const filtered = listComprehension.condition === null
+      ? iterable
+      : `${iterable}.filter((${itemName}) => ${translateExpression(listComprehension.condition!, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    return listComprehension.condition !== null && translatedItem === itemName
+      ? filtered
+      : `${filtered}.map((${itemName}) => ${translatedItem})`;
   }
 
   const aggregateGenerator = translateAggregateGeneratorCall(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -982,6 +1011,22 @@ export function translateExpression(
     }
   }
 
+  const simplePositionalCall = parseSimplePositionalCall(trimmed);
+  if (
+    simplePositionalCall !== null
+    && simplePositionalCall.args.every((arg) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(arg))
+    && simplePositionalCall.args.some((arg) => expressionContainsKnownDateAttribute(arg, nameMap, arrayNames, validatedTypeAliases, mapNames))
+  ) {
+    return translatePositionalCallExpression(
+      simplePositionalCall.callee,
+      simplePositionalCall.args,
+      nameMap,
+      arrayNames,
+      validatedTypeAliases,
+      true,
+    );
+  }
+
   const tupleLiteral = /^\((.*)\)$/.exec(trimmed);
   if (tupleLiteral !== null && tupleLiteral[1].includes(',')) {
     const values = tupleLiteral[1]
@@ -1172,6 +1217,52 @@ function parseSimpleGeneratorExpression(pythonExpression: string): { expression:
     itemName: generator[2],
     iterable: generator[3],
   };
+}
+
+function parseSimpleListComprehension(
+  pythonExpression: string,
+): { expression: string; itemName: string; iterable: string; condition: string | null } | null {
+  const listComprehension = /^\[(.+?) for ([A-Za-z_][A-Za-z0-9_]*) in (.+?)(?: if (.+))?\]$/.exec(pythonExpression);
+  if (listComprehension === null) {
+    return null;
+  }
+  return {
+    expression: listComprehension[1],
+    itemName: listComprehension[2],
+    iterable: listComprehension[3],
+    condition: listComprehension[4] ?? null,
+  };
+}
+
+function parseSimplePositionalCall(pythonExpression: string): { callee: string; args: string[] } | null {
+  const callStart = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\(/.exec(pythonExpression);
+  if (callStart === null) {
+    return null;
+  }
+  const closeIndex = matchingCloseParen(pythonExpression, callStart[1].length);
+  if (closeIndex !== pythonExpression.length - 1) {
+    return null;
+  }
+  return {
+    callee: callStart[1],
+    args: splitTopLevelComma(pythonExpression.slice(callStart[1].length + 1, closeIndex)),
+  };
+}
+
+function expressionContainsKnownDateAttribute(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): boolean {
+  for (const match of pythonExpression.matchAll(/\b([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.(day|month|year)\b/g)) {
+    const receiver = translateExpression(match[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (arrayNames.has(dateNameMarker(match[1])) || arrayNames.has(dateNameMarker(receiver))) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function translateSortedCall(
@@ -1841,9 +1932,7 @@ function translateMixedKeywordCall(
     keywordParts.push(`${tsExportNameForPythonName(keyword[1])}: ${translateExpression(keyword[2], nameMap, arrayNames, validatedTypeAliases)}`);
   }
   if (keywordParts.length === 0) {
-    return positionalParts.some((part) => part.includes('='))
-      ? translatePositionalCallExpression(call[1], positionalParts, nameMap, arrayNames, validatedTypeAliases)
-      : null;
+    return null;
   }
   const callee = translateExpression(call[1], nameMap, arrayNames, validatedTypeAliases);
   const callPrefix = /^[A-Z][A-Za-z0-9_]*$/.test(callee) ? `new ${callee}` : callee;

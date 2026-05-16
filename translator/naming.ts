@@ -98,6 +98,9 @@ export function tsTypeExpression(pythonType: string): string {
   if (trimmed === 'Path') {
     return 'string';
   }
+  if (trimmed === 'dt.date' || trimmed === 'datetime.date') {
+    return 'Date';
+  }
   if (trimmed === 'bool') {
     return 'boolean';
   }
