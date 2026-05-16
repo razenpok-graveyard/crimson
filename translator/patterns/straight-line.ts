@@ -55,7 +55,7 @@ import {
   parseStraightLineFunctionHeader,
   tsFunctionReturnTypeExpression,
 } from './function-headers.js';
-import { recordImportedInstanceMethodSignatures } from './imported-classes.js';
+import { recordImportedFunctionReturnTypes, recordImportedInstanceMethodSignatures } from './imported-classes.js';
 import { parseFunctionParameterText, pythonParameterNames } from './parameters.js';
 import {
   bytesFromHelperStatements,
@@ -291,6 +291,12 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         relativePath,
         moduleNameMap,
       );
+      recordImportedFunctionReturnTypes(
+        modulePath,
+        [{ importedName, localName: aliasName }],
+        relativePath,
+        moduleNameMap,
+      );
       moduleNameMap.set(aliasedFromImport[3], aliasName);
       index += 1;
       continue;
@@ -361,6 +367,12 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         structConstructorFields,
       );
       recordImportedStaticClassMethods(
+        modulePath,
+        importBindings.map((binding) => ({ importedName: binding.importedName, localName: binding.importedName })),
+        relativePath,
+        moduleNameMap,
+      );
+      recordImportedFunctionReturnTypes(
         modulePath,
         importBindings.map((binding) => ({ importedName: binding.importedName, localName: binding.importedName })),
         relativePath,
@@ -1999,7 +2011,7 @@ function markNamespaceImports(namespaceImports: NamespaceImportDefinition[], val
 }
 
 function moduleUsesRaylibInput(lines: string[]): boolean {
-  return lines.some((line) => /\br[dl]\.(?:get_char_pressed|get_key_pressed|is_key_pressed|is_key_pressed_repeat|is_key_down)\b/.test(line));
+  return lines.some((line) => /\br[dl]\.(?:get_char_pressed|get_key_pressed|is_key_pressed|is_key_pressed_repeat|is_key_down|get_mouse_position|is_mouse_button_pressed|is_mouse_button_down)\b/.test(line));
 }
 
 function importedBindingName(importName: string): string {

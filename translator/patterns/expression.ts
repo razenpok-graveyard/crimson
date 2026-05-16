@@ -8,6 +8,7 @@ import {
 import {
   colorNameMarker,
   dateNameMarker,
+  functionReturnTypeMarker,
   instanceMethodSignatureMarker,
   nullableNameMarker,
   objectNameMarker,
@@ -32,6 +33,7 @@ export {
   arrayValueMapNameMarker,
   colorNameMarker,
   dateNameMarker,
+  functionReturnTypeMarker,
   instanceMethodSignatureMarker,
   nullableNameMarker,
   numberArrayNameMarker,
@@ -505,6 +507,33 @@ export function translateExpression(
     return `InputState.${method}(${translateExpression(raylibKeyInputCall[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
+  const raylibGetMousePositionCall = /^(?:r[dl]|wgl)\.(?:get_mouse_position|getMousePosition)\(\)$/.exec(trimmed);
+  if (raylibGetMousePositionCall !== null) {
+    return '(() => { const [x, y] = InputState.mousePosition(); return { x, y }; })()';
+  }
+
+  const raylibMouseInputCall = /^(?:r[dl]|wgl)\.(is_mouse_button_pressed|isMouseButtonPressed|is_mouse_button_down|isMouseButtonDown)\((.*)\)$/.exec(trimmed);
+  if (raylibMouseInputCall !== null) {
+    const method = raylibMouseInputCall[1].includes('down') || raylibMouseInputCall[1].includes('Down')
+      ? 'isMouseButtonDown'
+      : 'wasMouseButtonPressed';
+    return `InputState.${method}(${translateExpression(raylibMouseInputCall[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
+  const raylibMouseButton = /^(?:r[dl]|wgl)\.MouseButton\.(MOUSE_BUTTON_[A-Z_]+)$/.exec(trimmed);
+  if (raylibMouseButton !== null) {
+    const buttons = new Map([
+      ['MOUSE_BUTTON_LEFT', 0],
+      ['MOUSE_BUTTON_RIGHT', 1],
+      ['MOUSE_BUTTON_MIDDLE', 2],
+      ['MOUSE_BUTTON_SIDE', 3],
+      ['MOUSE_BUTTON_EXTRA', 4],
+      ['MOUSE_BUTTON_FORWARD', 5],
+      ['MOUSE_BUTTON_BACK', 6],
+    ]);
+    return String(buttons.get(raylibMouseButton[1]) ?? 0);
+  }
+
   const superMethodCall = /^super\(\)\.([A-Za-z_][A-Za-z0-9_]*)\((.*)\)$/.exec(trimmed);
   if (superMethodCall !== null) {
     const args = translateCallArgsWithKeywordObject(
@@ -591,6 +620,11 @@ export function translateExpression(
     return constructExpression;
   }
 
+  const vec2FromXyCall = /^Vec2\.from_xy\((.*)\)$/.exec(trimmed);
+  if (vec2FromXyCall !== null) {
+    return `Vec2.fromXY(${translateExpression(vec2FromXyCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
   const stringJoinCall = /^((?:[fF])?(["'])(?:\\.|(?!\2)[\s\S])*\2)\.join\((.+)\)$/.exec(trimmed);
   if (stringJoinCall !== null) {
     const separator = parsePythonStringExpression(stringJoinCall[1]);
@@ -614,6 +648,21 @@ export function translateExpression(
     const args = splitTopLevelComma(stringReplaceCall[2]);
     if (args.length === 2 && parsePythonStringExpression(args[0]) !== null) {
       return `${translateExpression(stringReplaceCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.replaceAll(${translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
+  }
+
+  const stringFormatCall = /^(.+)\.format\((.*)\)$/.exec(trimmed);
+  if (stringFormatCall !== null && delimitersBalanced(stringFormatCall[1])) {
+    const args = splitTopLevelComma(stringFormatCall[2]);
+    if (args.length > 0 && args.every((arg) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(arg.trim()))) {
+      return args.reduce((formatted, arg) => {
+        const keyword = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(arg.trim());
+        if (keyword === null) {
+          return formatted;
+        }
+        const value = translateExpression(keyword[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+        return `${formatted}.replaceAll('{${keyword[1]}}', String(${value}))`;
+      }, translateExpression(stringFormatCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames));
     }
   }
 
@@ -3510,6 +3559,39 @@ function matchingCloseParen(value: string, openIndex: number): number | null {
     }
   }
   return null;
+}
+
+function delimitersBalanced(value: string): boolean {
+  const stack: string[] = [];
+  let quote: string | null = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      if (char === quote && value[index - 1] !== '\\') {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') {
+      stack.push(char);
+      continue;
+    }
+    if (char === ')' || char === ']' || char === '}') {
+      const open = stack.pop();
+      if (
+        (char === ')' && open !== '(')
+        || (char === ']' && open !== '[')
+        || (char === '}' && open !== '{')
+      ) {
+        return false;
+      }
+    }
+  }
+  return quote === null && stack.length === 0;
 }
 
 function translateMixedKeywordCall(

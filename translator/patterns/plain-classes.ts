@@ -14,6 +14,7 @@ import {
 } from './common.js';
 import {
   arrayValueMapNameMarker,
+  functionReturnTypeMarker,
   objectNameMarker,
   translateExpression,
   tupleElementArrayNameMarker,
@@ -75,7 +76,7 @@ function parsePlainClassFieldAssignment(
   const pythonName = assignment.assignment.pythonName;
   const fieldName = tsAttributeNameForPythonName(pythonName);
   const typeExpression = assignment.assignment.typeExpression
-    ?? inferPlainClassFieldType(assignment.assignment.valueLines.join(' '), new Map());
+    ?? inferPlainClassFieldType(assignment.assignment.valueLines.join(' '), new Map(), moduleNameMap);
   if (typeExpression === null) {
     return null;
   }
@@ -232,7 +233,7 @@ export function parsePlainClass(
         const multilineConstructorCall = /^(_?[A-Z][A-Za-z0-9_]*(?:\.[A-Z][A-Za-z0-9_]*)?)\($/.exec(valueText.trim());
         const typeExpression = annotatedFieldAssignment === null
           ? multilineConstructorCall === null
-            ? inferPlainClassFieldType(valueText, fieldTypes)
+            ? inferPlainClassFieldType(valueText, fieldTypes, constructorNameMap)
             : inferConstructorCallTypeExpression(multilineConstructorCall[1], constructorNameMap, constructorArrayNames, constructorMapNames)
           : tsTypeExpression(assignment[2]);
         if (typeExpression === null) {
@@ -307,6 +308,7 @@ export function parsePlainClass(
 
   const methods: SimpleModuleFunction[] = [];
   const staticMethodNames = new Set<string>();
+  const classNameMap = new Map(moduleNameMap);
   const pendingMethodComments: string[] = [];
   const takePendingMethodComments = (): string[] | undefined => {
     if (pendingMethodComments.length === 0) {
@@ -336,7 +338,7 @@ export function parsePlainClass(
       break;
     }
     if (trimmed === '@property') {
-      const propertyMethod = parsePlainClassMethod(lines, nextIndex + 1, fieldNameMap, moduleNameMap, false, fieldArrayNames, fieldMapNames, null, relativePath, imports);
+      const propertyMethod = parsePlainClassMethod(lines, nextIndex + 1, fieldNameMap, classNameMap, false, fieldArrayNames, fieldMapNames, null, relativePath, imports);
       if (propertyMethod === null || propertyMethod.method.parameters.length > 0 || propertyMethod.method.optsParams.length > 0) {
         return null;
       }
@@ -345,12 +347,13 @@ export function parsePlainClass(
         ...pendingMethodCommentFields(),
         name: `get ${propertyMethod.method.name}`,
       });
+      recordPlainClassMethodReturnType(classNameMap, className, propertyMethod.method);
       nextIndex = propertyMethod.nextIndex;
       continue;
     }
     const propertySetter = /^@([A-Za-z_][A-Za-z0-9_]*)\.setter$/.exec(trimmed);
     if (propertySetter !== null) {
-      const setterMethod = parsePlainClassMethod(lines, nextIndex + 1, fieldNameMap, moduleNameMap, false, fieldArrayNames, fieldMapNames, null, relativePath, imports);
+      const setterMethod = parsePlainClassMethod(lines, nextIndex + 1, fieldNameMap, classNameMap, false, fieldArrayNames, fieldMapNames, null, relativePath, imports);
       if (
         setterMethod === null
         || setterMethod.method.name !== tsExportNameForPythonName(propertySetter[1])
@@ -364,11 +367,12 @@ export function parsePlainClass(
         ...pendingMethodCommentFields(),
         name: `set ${setterMethod.method.name}`,
       });
+      recordPlainClassMethodReturnType(classNameMap, className, setterMethod.method);
       nextIndex = setterMethod.nextIndex;
       continue;
     }
     if (trimmed === '@staticmethod') {
-      const staticMethod = parsePlainClassMethod(lines, nextIndex + 1, fieldNameMap, moduleNameMap, true, fieldArrayNames, fieldMapNames, null, relativePath, imports);
+      const staticMethod = parsePlainClassMethod(lines, nextIndex + 1, fieldNameMap, classNameMap, true, fieldArrayNames, fieldMapNames, null, relativePath, imports);
       if (staticMethod === null) {
         return null;
       }
@@ -377,11 +381,12 @@ export function parsePlainClass(
         ...pendingMethodCommentFields(),
       });
       staticMethodNames.add(staticMethod.method.name);
+      recordPlainClassMethodReturnType(classNameMap, className, staticMethod.method);
       nextIndex = staticMethod.nextIndex;
       continue;
     }
     if (trimmed === '@classmethod') {
-      const classMethod = parsePlainClassMethod(lines, nextIndex + 1, fieldNameMap, moduleNameMap, true, fieldArrayNames, fieldMapNames, className, relativePath, imports);
+      const classMethod = parsePlainClassMethod(lines, nextIndex + 1, fieldNameMap, classNameMap, true, fieldArrayNames, fieldMapNames, className, relativePath, imports);
       if (classMethod === null) {
         return null;
       }
@@ -390,10 +395,11 @@ export function parsePlainClass(
         ...pendingMethodCommentFields(),
       });
       staticMethodNames.add(classMethod.method.name);
+      recordPlainClassMethodReturnType(classNameMap, className, classMethod.method);
       nextIndex = classMethod.nextIndex;
       continue;
     }
-    const method = parsePlainClassMethod(lines, nextIndex, fieldNameMap, moduleNameMap, false, fieldArrayNames, fieldMapNames, null, relativePath, imports);
+    const method = parsePlainClassMethod(lines, nextIndex, fieldNameMap, classNameMap, false, fieldArrayNames, fieldMapNames, null, relativePath, imports);
     if (method === null) {
       return null;
     }
@@ -401,6 +407,7 @@ export function parsePlainClass(
       ...method.method,
       ...pendingMethodCommentFields(),
     });
+    recordPlainClassMethodReturnType(classNameMap, className, method.method);
     nextIndex = method.nextIndex;
   }
 
@@ -461,11 +468,24 @@ function rewritePlainClassStaticMethodCalls(
   });
 }
 
+function recordPlainClassMethodReturnType(
+  nameMap: Map<string, string>,
+  className: string,
+  method: SimpleModuleFunction,
+): void {
+  nameMap.set(functionReturnTypeMarker(`this.${method.name}`), method.returnType);
+  nameMap.set(functionReturnTypeMarker(`${className}.${method.name}`), method.returnType);
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function inferPlainClassFieldType(valueText: string, fieldTypes: ReadonlyMap<string, string>): string | null {
+function inferPlainClassFieldType(
+  valueText: string,
+  fieldTypes: ReadonlyMap<string, string>,
+  nameMap: ReadonlyMap<string, string> = new Map(),
+): string | null {
   if (/^Path\([A-Za-z_][A-Za-z0-9_]*\)$/.test(valueText)) {
     return 'string';
   }
@@ -509,12 +529,30 @@ function inferPlainClassFieldType(valueText: string, fieldTypes: ReadonlyMap<str
   if (constructorCall !== null) {
     return tsExportNameForPythonName(valueText.trim().slice(0, valueText.trim().indexOf('(')));
   }
+  const functionCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\(.*\)$/.exec(valueText.trim());
+  if (functionCall !== null) {
+    const callee = translatedFunctionCallee(functionCall[1], nameMap);
+    const returnType = nameMap.get(functionReturnTypeMarker(callee))
+      ?? nameMap.get(functionReturnTypeMarker(functionCall[1]));
+    if (returnType !== undefined) {
+      return returnType;
+    }
+  }
   const directParameterType = fieldTypes.get(tsExportNameForPythonName(valueText));
   if (directParameterType !== undefined) {
     return directParameterType;
   }
   const literalType = inferPythonExpressionType(valueText);
   return literalType === 'any' ? null : literalType;
+}
+
+function translatedFunctionCallee(functionName: string, nameMap: ReadonlyMap<string, string>): string {
+  return functionName
+    .split('.')
+    .map((part, index) => index === 0
+      ? nameMap.get(part) ?? tsExportNameForPythonName(part)
+      : tsExportNameForPythonName(part))
+    .join('.');
 }
 
 function inferConstructorCallTypeExpression(

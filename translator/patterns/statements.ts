@@ -27,6 +27,7 @@ import {
   translatePositionalCallExpression,
   arrayValueMapNameMarker,
   dateNameMarker,
+  functionReturnTypeMarker,
   instanceMethodSignatureMarker,
   nullableNameMarker,
   numberArrayNameMarker,
@@ -3657,7 +3658,7 @@ function translateStraightLineAssignment(
     }
     if (declaredNames.has(localAssignment[1])) {
       const localAssignedRight = assignedRightAsKnownVector(localAssignment[1], tsName, assignedRight, arrayNames);
-      recordLocalAssignmentMarkers(localAssignment[1], tsName, localAssignedRight, arrayNames, mapNames);
+      recordLocalAssignmentMarkers(localAssignment[1], tsName, localAssignedRight, nameMap, arrayNames, mapNames);
       return {
         statements: [`${tsName} = ${localAssignedRight};`],
         nextIndex,
@@ -3665,7 +3666,7 @@ function translateStraightLineAssignment(
     }
     declaredNames.add(localAssignment[1]);
     const localAssignedRight = assignedRightAsKnownVector(localAssignment[1], tsName, assignedRight, arrayNames);
-    recordLocalAssignmentMarkers(localAssignment[1], tsName, localAssignedRight, arrayNames, mapNames);
+    recordLocalAssignmentMarkers(localAssignment[1], tsName, localAssignedRight, nameMap, arrayNames, mapNames);
     return {
       statements: [
         `${reassignedNames.has(localAssignment[1]) ? 'let' : 'const'} ${tsName} = ${localAssignedRight};`,
@@ -3763,6 +3764,7 @@ function recordLocalAssignmentMarkers(
   pythonName: string,
   tsName: string,
   assignedRight: string,
+  nameMap: ReadonlyMap<string, string>,
   arrayNames: Set<string>,
   mapNames: ReadonlySet<string>,
 ): void {
@@ -3815,7 +3817,7 @@ function recordLocalAssignmentMarkers(
     arrayNames.add(pythonName);
     arrayNames.add(tsName);
   }
-  const callAssignment = /^(?:await )?([A-Za-z_$][A-Za-z0-9_$]*)\(/.exec(assignedRight);
+  const callAssignment = /^(?:await )?([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\(/.exec(assignedRight);
   if (assignedRight.startsWith('new Set(') || (callAssignment !== null && arrayNames.has(setNameMarker(callAssignment[1])))) {
     arrayNames.add(setNameMarker(pythonName));
     arrayNames.add(setNameMarker(tsName));
@@ -3829,6 +3831,10 @@ function recordLocalAssignmentMarkers(
     arrayNames.add(stringNameMarker(tsName));
   }
   if (translatedExpressionLooksVector(assignedRight)) {
+    arrayNames.add(vectorNameMarker(pythonName));
+    arrayNames.add(vectorNameMarker(tsName));
+  }
+  if (callAssignment !== null && nameMap.get(functionReturnTypeMarker(callAssignment[1])) === 'Vec2') {
     arrayNames.add(vectorNameMarker(pythonName));
     arrayNames.add(vectorNameMarker(tsName));
   }

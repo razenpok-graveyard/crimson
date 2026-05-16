@@ -222,7 +222,7 @@ export class GameLoopView implements View {
       if (resources === null) {
         return null;
       }
-      this._demoTrialOverlay = new DemoTrialOverlayUi(resources);
+      this._demoTrialOverlay = new DemoTrialOverlayUi(this.state.assetsDir);
     }
     return this._demoTrialOverlay;
   }

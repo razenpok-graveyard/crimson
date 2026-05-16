@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { tsTargetRoot } from '../paths.js';
 import { splitTopLevelComma } from './common.js';
-import { instanceMethodSignatureMarker } from './expression.js';
+import { functionReturnTypeMarker, instanceMethodSignatureMarker } from './expression.js';
 
 export function recordImportedInstanceMethodSignatures(
   modulePath: string,
@@ -47,6 +47,22 @@ export function recordImportedStructConstructorFields(
   }
 }
 
+export function recordImportedFunctionReturnTypes(
+  modulePath: string,
+  names: { importedName: string; localName: string }[],
+  relativePath: string,
+  moduleNameMap: Map<string, string>,
+): void {
+  for (const name of names) {
+    const returnType = importedFunctionReturnType(modulePath, name.importedName, relativePath);
+    if (returnType === null) {
+      continue;
+    }
+    moduleNameMap.set(functionReturnTypeMarker(name.localName), `ReturnType<typeof ${name.localName}>`);
+    moduleNameMap.set(functionReturnTypeMarker(name.importedName), `ReturnType<typeof ${name.importedName}>`);
+  }
+}
+
 function importedInstanceMethodSignatures(classSource: string): { methodName: string; positional: string[] }[] {
   const signatures: { methodName: string; positional: string[] }[] = [];
   const methodStart = /^\s+(?!(?:constructor|static|get|set)\b)(?:(?:public|private|protected)\s+)?(?:async\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:<[^>\n]+>)?\(/gm;
@@ -65,6 +81,26 @@ function importedInstanceMethodSignatures(classSource: string): { methodName: st
     });
   }
   return signatures;
+}
+
+function importedFunctionReturnType(modulePath: string, functionName: string, relativePath: string): string | null {
+  const sourcePath = tsSourcePathForImportPath(modulePath, relativePath);
+  if (sourcePath === null || !fs.existsSync(sourcePath)) {
+    return null;
+  }
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const escapedName = functionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const functionStart = source.search(new RegExp(`export\\s+(?:async\\s+)?function\\s+${escapedName}\\b(?:<[^\\n(]+>)?\\s*\\(`));
+  if (functionStart === -1) {
+    return null;
+  }
+  const openIndex = source.indexOf('(', functionStart);
+  const closeIndex = openIndex === -1 ? null : matchingCloseParen(source, openIndex);
+  if (closeIndex === null) {
+    return null;
+  }
+  const returnType = /^\s*:\s*([^{};=\n]+)\s*\{/.exec(source.slice(closeIndex + 1))?.[1]?.trim();
+  return returnType === undefined || returnType === '' ? null : returnType;
 }
 
 function matchingCloseParen(source: string, openIndex: number): number | null {
