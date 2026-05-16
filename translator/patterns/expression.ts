@@ -165,7 +165,7 @@ function translateBoundMethodReference(
     return null;
   }
   const receiver = translateExpression(parts.slice(0, -1).join('.'), nameMap, arrayNames, validatedTypeAliases);
-  const method = tsExportNameForPythonName(parts[parts.length - 1]);
+  const method = tsMemberNameForPythonName(parts[parts.length - 1]);
   return `${receiver}.${method}.bind(${receiver})`;
 }
 
@@ -191,6 +191,14 @@ export function objectNameMarker(name: string): string {
 
 export function dateNameMarker(name: string): string {
   return `__date__:${name}`;
+}
+
+export function pathNameMarker(name: string): string {
+  return `__path__:${name}`;
+}
+
+export function pathArrayNameMarker(name: string): string {
+  return `__path_array__:${name}`;
 }
 
 export function translatedExpressionLooksVector(tsExpression: string): boolean {
@@ -244,6 +252,42 @@ export function translateExpression(
   }
   if (trimmed === 'os.getpid()') {
     return 'globalThis.process?.pid ?? 0';
+  }
+
+  const superMethodCall = /^super\(\)\.([A-Za-z_][A-Za-z0-9_]*)\((.*)\)$/.exec(trimmed);
+  if (superMethodCall !== null) {
+    const args = translateCallArgsWithKeywordObject(
+      superMethodCall[2],
+      nameMap,
+      arrayNames,
+      validatedTypeAliases,
+      mapNames,
+    );
+    if (superMethodCall[1] === '__init__') {
+      return `super(${args.join(', ')})`;
+    }
+    return `super.${tsMemberNameForPythonName(superMethodCall[1])}(${args.join(', ')})`;
+  }
+
+  const menuViewHelper = menuViewHelperName(trimmed);
+  if (menuViewHelper !== null) {
+    return menuViewHelper;
+  }
+
+  const pathGlobCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.glob\((.*)\)$/.exec(trimmed);
+  if (pathGlobCall !== null) {
+    const args = splitTopLevelComma(pathGlobCall[2]);
+    if (args.length === 1) {
+      return `_globPath(String(${translateExpression(pathGlobCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}), ${translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
+  }
+
+  const pathNameAttribute = /^(.+)\.name$/.exec(trimmed);
+  if (pathNameAttribute !== null) {
+    const receiver = translateExpression(pathNameAttribute[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (arrayNames.has(pathNameMarker(pathNameAttribute[1])) || arrayNames.has(pathNameMarker(receiver))) {
+      return `_basename(String(${receiver}))`;
+    }
   }
 
   const dateAttribute = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.(day|month|year)$/.exec(trimmed);
@@ -318,6 +362,11 @@ export function translateExpression(
     if (arrayNames.has(colorNameMarker(colorChannel[1])) || arrayNames.has(colorNameMarker(translatedName))) {
       return `${translatedName}.${colorChannel[2]} * 255`;
     }
+  }
+
+  const privateDottedIdentifier = /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\._[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/.exec(trimmed);
+  if (privateDottedIdentifier !== null && shouldPreservePrivateDottedName(trimmed)) {
+    return translateIdentifierNamePreservingPrivateMembers(trimmed, nameMap);
   }
 
   const inlineRecord = translateInlineRecordLiteral(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -747,6 +796,15 @@ export function translateExpression(
         ? "'utf-8'"
         : translateExpression(encodingArg[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
       return `_openTextFile(String(${translateExpression(pathOpenCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}), { mode: ${mode}, encoding: ${encoding} })`;
+    }
+  }
+
+  const privateDottedPositionalCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\._[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\((.*)\)$/.exec(trimmed);
+  if (privateDottedPositionalCall !== null && shouldPreservePrivateDottedName(privateDottedPositionalCall[1])) {
+    const args = splitTopLevelComma(privateDottedPositionalCall[2]);
+    if (args.every((arg) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(arg))) {
+      const callee = translateIdentifierNamePreservingPrivateMembers(privateDottedPositionalCall[1], nameMap);
+      return `${callee}(${args.map((arg) => translateCallArgumentExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')})`;
     }
   }
 
@@ -1280,6 +1338,77 @@ function translateIdentifierName(name: string, nameMap: Map<string, string>): st
     root,
     ...parts.slice(1).map((part) => nameMap.get(part) ?? tsExportNameForPythonName(part)),
   ].join('.');
+}
+
+function translateIdentifierNamePreservingPrivateMembers(name: string, nameMap: Map<string, string>): string {
+  if (!name.includes('.')) {
+    return nameMap.get(name) ?? tsExportNameForPythonName(name);
+  }
+  const parts = name.split('.');
+  const root = nameMap.get(parts[0]) ?? tsExportNameForPythonName(parts[0]);
+  return [
+    root,
+    ...parts.slice(1).map((part) => nameMap.get(part) ?? tsMemberNameForPythonName(part)),
+  ].join('.');
+}
+
+function shouldPreservePrivateDottedName(pythonName: string): boolean {
+  return pythonName.startsWith('self.');
+}
+
+function tsMemberNameForPythonName(pythonName: string): string {
+  if (pythonName.startsWith('__') && pythonName.endsWith('__')) {
+    return pythonName;
+  }
+  return pythonName.startsWith('_')
+    ? `_${tsExportNameForPythonName(pythonName)}`
+    : tsExportNameForPythonName(pythonName);
+}
+
+function menuViewHelperName(pythonExpression: string): string | null {
+  const menuViewHelper = /^MenuView\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(pythonExpression);
+  if (menuViewHelper === null) {
+    return null;
+  }
+  switch (menuViewHelper[1]) {
+    case '_ui_element_anim':
+      return 'uiElementAnim';
+    case '_label_alpha':
+      return 'labelAlpha';
+    case '_sign_layout_scale':
+      return 'signLayoutScale';
+    case '_menu_slot_pos_x':
+      return 'menuSlotPosX';
+    case '_menu_slot_start_ms':
+      return 'menuSlotStartMs';
+    case '_menu_slot_end_ms':
+      return 'menuSlotEndMs';
+    default:
+      return null;
+  }
+}
+
+function translateCallArgsWithKeywordObject(
+  argsText: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string[] {
+  const args = splitTopLevelComma(argsText).filter((arg) => arg !== '');
+  const positionalArgs: string[] = [];
+  const keywordArgs: string[] = [];
+  for (const arg of args) {
+    const keywordArg = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(arg);
+    if (keywordArg === null) {
+      positionalArgs.push(translateCallArgumentExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames));
+      continue;
+    }
+    keywordArgs.push(`${tsExportNameForPythonName(keywordArg[1])}: ${translateExpression(keywordArg[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
+  }
+  return keywordArgs.length === 0
+    ? positionalArgs
+    : [...positionalArgs, `{ ${keywordArgs.join(', ')} }`];
 }
 
 function translateChainedComparison(
@@ -1904,15 +2033,18 @@ function expressionIsKnownVector(
   arrayNames: Set<string>,
 ): boolean {
   const trimmed = stripBalancedOuterParens(pythonExpression);
-  if (trimmed.startsWith('Vec2.')) {
+  if (trimmed.startsWith('Vec2.') || trimmed.startsWith('Vec2(')) {
     return true;
   }
-  if (/\.(?:aim|pos|vel)$/.test(trimmed)) {
+  if (/\.(?:aim|pos|vel|[A-Za-z0-9_]*(?:_pos|_offset))$/.test(trimmed)) {
+    return true;
+  }
+  const translated = translateIdentifierName(trimmed, nameMap);
+  if (/\.(?:aim|pos|vel|[A-Za-z0-9_$]*(?:Pos|Offset))$/.test(translated)) {
     return true;
   }
   const identifier = /^[A-Za-z_][A-Za-z0-9_]*$/.exec(trimmed);
   if (identifier !== null) {
-    const translated = translateIdentifierName(identifier[0], nameMap);
     return arrayNames.has(vectorNameMarker(identifier[0])) || arrayNames.has(vectorNameMarker(translated));
   }
   return translatedExpressionLooksVector(trimmed);

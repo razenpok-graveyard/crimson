@@ -399,7 +399,7 @@ export function parseStructClass(
       return null;
     }
     const defaultValue = field[3] === undefined ? null : tsStructFieldDefaultValue(field[3]);
-    const fieldName = tsExportNameForPythonName(field[1]);
+    const fieldName = tsAttributeNameForPythonName(field[1]);
     const typeExpression = tsStructFieldType(field[2]);
     if (typeExpression.endsWith('[]')) {
       arrayFieldNames.add(`self.${field[1]}`);
@@ -544,7 +544,7 @@ function parseStructMethod(
 
   return {
     method: {
-      name: header.name === '__post_init__' ? '__post_init__' : tsExportNameForPythonName(header.name),
+      name: header.name === '__post_init__' ? '__post_init__' : tsAttributeNameForPythonName(header.name),
       exported: false,
       static: staticMethod,
       async: statements.some((statement) => statement.includes('await ')),
@@ -565,11 +565,15 @@ function tsAttributeNameForPythonName(pythonName: string): string {
 export function parsePlainClass(
   lines: string[],
   index: number,
+  moduleNameMap: ReadonlyMap<string, string> = new Map(),
 ): { plainClass: PlainClassDefinition; nextIndex: number } | null {
-  const header = /^class ([A-Za-z_][A-Za-z0-9_]*):$/.exec(lines[index] ?? '');
+  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)(?:\(([A-Za-z_][A-Za-z0-9_]*)\))?:$/.exec(lines[index] ?? '');
   if (header === null) {
     return null;
   }
+  const extendsName = header[2] === undefined
+    ? undefined
+    : moduleNameMap.get(header[2]) ?? tsExportNameForPythonName(header[2]);
 
   let nextIndex = index + 1;
   const docstring = parseIndentedDocstring(lines, nextIndex);
@@ -603,7 +607,7 @@ export function parsePlainClass(
   const fieldMap = new Map<string, PlainClassDefinition['fields'][number]>();
   const fieldNameMap = new Map<string, string>();
   const constructorStatements: string[] = [];
-  const constructorNameMap = new Map<string, string>([['self', 'this']]);
+  const constructorNameMap = new Map<string, string>([...moduleNameMap, ['self', 'this']]);
   for (const parameter of constructorParams.optsParams) {
     constructorNameMap.set(parameter.name, parameter.name);
   }
@@ -671,7 +675,7 @@ export function parsePlainClass(
       break;
     }
     if (trimmed === '@property') {
-      const propertyMethod = parsePlainClassMethod(lines, nextIndex + 1, fieldNameMap);
+      const propertyMethod = parsePlainClassMethod(lines, nextIndex + 1, fieldNameMap, moduleNameMap);
       if (propertyMethod === null || propertyMethod.method.parameters.length > 0 || propertyMethod.method.optsParams.length > 0) {
         return null;
       }
@@ -682,7 +686,7 @@ export function parsePlainClass(
       nextIndex = propertyMethod.nextIndex;
       continue;
     }
-    const method = parsePlainClassMethod(lines, nextIndex, fieldNameMap);
+    const method = parsePlainClassMethod(lines, nextIndex, fieldNameMap, moduleNameMap);
     if (method === null) {
       return null;
     }
@@ -707,6 +711,7 @@ export function parsePlainClass(
   return {
     plainClass: {
       name: tsExportNameForPythonName(header[1]),
+      ...(extendsName === undefined ? {} : { extendsName }),
       docstring: docstring?.value ?? null,
       fields,
       constructorDefinition: {
@@ -739,6 +744,7 @@ function parsePlainClassMethod(
   lines: string[],
   index: number,
   fieldNameMap: Map<string, string>,
+  moduleNameMap: ReadonlyMap<string, string>,
 ): { method: SimpleModuleFunction; nextIndex: number } | null {
   const header = parseIndentedFunctionHeader(lines, index, '    ');
   if (header === null || header.name === '__init__') {
@@ -758,7 +764,7 @@ function parsePlainClassMethod(
   }
 
   const statements: string[] = [];
-  const nameMap = new Map<string, string>([['self', 'this'], ...fieldNameMap]);
+  const nameMap = new Map<string, string>([...moduleNameMap, ['self', 'this'], ...fieldNameMap]);
   const declaredNames = new Set<string>(pythonParameterNames(
     parametersText === 'self' ? '' : parametersText.slice('self, '.length),
   ));
@@ -794,7 +800,7 @@ function parsePlainClassMethod(
   }
   return {
     method: {
-      name: tsExportNameForPythonName(header.name),
+      name: tsAttributeNameForPythonName(header.name),
       exported: false,
       async: statements.some((statement) => statement.includes('await ')),
       parameters: parsedParams.parameters,

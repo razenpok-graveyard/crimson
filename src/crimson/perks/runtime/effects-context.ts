@@ -47,7 +47,7 @@ export class PerksUpdateEffectsCtx {
   dt: number;
   creatures: readonly CreatureState[] | null;
   fxQueue: FxQueue | null;
-  aimTargetByPlayerIndex: Map<number, number>;
+  _aimTargetByPlayerIndex: Map<number, number>;
 
   constructor(opts: {
     state: GameplayState;
@@ -55,46 +55,46 @@ export class PerksUpdateEffectsCtx {
     dt: number;
     creatures: readonly CreatureState[] | null;
     fxQueue: FxQueue | null;
-    aimTargetByPlayerIndex?: Map<number, number>;
+    _aimTargetByPlayerIndex?: Map<number, number>;
   }) {
     this.state = opts.state;
     this.players = opts.players;
     this.dt = opts.dt;
     this.creatures = opts.creatures;
     this.fxQueue = opts.fxQueue;
-    this.aimTargetByPlayerIndex = opts.aimTargetByPlayerIndex ?? new Map();
+    this._aimTargetByPlayerIndex = opts._aimTargetByPlayerIndex ?? new Map();
   }
 
   aimTargetForPlayer(playerIndex: number): number {
     playerIndex = int(playerIndex);
-    if (this.aimTargetByPlayerIndex.has(playerIndex)) {
-      return int(this.aimTargetByPlayerIndex.get(playerIndex)!);
+    if (this._aimTargetByPlayerIndex.has(playerIndex)) {
+      return int(this._aimTargetByPlayerIndex.get(playerIndex)!);
     }
 
     let target = -1;
     if (this.creatures === null) {
-      this.aimTargetByPlayerIndex.set(playerIndex, int(target));
+      this._aimTargetByPlayerIndex.set(playerIndex, int(target));
       return int(target);
     }
 
     if (this.state.preserveBugs && playerIndex !== 0) {
-      this.aimTargetByPlayerIndex.set(playerIndex, int(target));
+      this._aimTargetByPlayerIndex.set(playerIndex, int(target));
       return int(target);
     }
 
     if (!(playerIndex >= 0 && playerIndex < this.players.length)) {
-      this.aimTargetByPlayerIndex.set(playerIndex, int(target));
+      this._aimTargetByPlayerIndex.set(playerIndex, int(target));
       return int(target);
     }
 
     const player = this.players[playerIndex];
     if (!this.state.preserveBugs && player.health <= 0.0) {
-      this.aimTargetByPlayerIndex.set(playerIndex, int(target));
+      this._aimTargetByPlayerIndex.set(playerIndex, int(target));
       return int(target);
     }
 
     target = creatureFindInRadius(this.creatures, { pos: player.aim, radius: 12.0, startIndex: 0 });
-    this.aimTargetByPlayerIndex.set(playerIndex, int(target));
+    this._aimTargetByPlayerIndex.set(playerIndex, int(target));
     return int(target);
   }
 }

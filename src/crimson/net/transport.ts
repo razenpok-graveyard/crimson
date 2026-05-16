@@ -9,22 +9,22 @@ export class UdpTransport {
   bindHost: string;
   bindPort: number;
   recvBufferSize: number;
-  sock: socket.socket | null;
+  _sock: socket.socket | null;
 
   constructor(opts: {
     bindHost: string;
     bindPort: number;
     recvBufferSize?: number;
-    sock?: socket.socket | null;
+    _sock?: socket.socket | null;
   }) {
     this.bindHost = opts.bindHost;
     this.bindPort = opts.bindPort;
     this.recvBufferSize = opts.recvBufferSize ?? 65536;
-    this.sock = opts.sock ?? null;
+    this._sock = opts._sock ?? null;
   }
 
   get boundPort(): number {
-    const sock = this.sock;
+    const sock = this._sock;
     if (sock === null) {
       return int(this.bindPort);
     }
@@ -32,18 +32,18 @@ export class UdpTransport {
   }
 
   open(): void {
-    if (this.sock !== null) {
+    if (this._sock !== null) {
       return;
     }
     const sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM);
     sock.setblocking(false);
     sock.bind([String(this.bindHost), int(this.bindPort)]);
-    this.sock = sock;
+    this._sock = sock;
   }
 
   close(): void {
-    const sock = this.sock;
-    this.sock = null;
+    const sock = this._sock;
+    this._sock = null;
     if (sock === null) {
       return;
     }
@@ -55,7 +55,7 @@ export class UdpTransport {
   }
 
   sendPacket(addr: PeerAddr, packet: LockstepPacket): void {
-    const sock = this.sock;
+    const sock = this._sock;
     if (sock === null) {
       throw new Error('transport is not open');
     }
@@ -65,7 +65,7 @@ export class UdpTransport {
 
   recvPackets(opts: { maxPackets?: number | null } = {}): [PeerAddr, LockstepPacket][] {
     const maxPackets = opts.maxPackets ?? null;
-    const sock = this.sock;
+    const sock = this._sock;
     if (sock === null) {
       return [];
     }

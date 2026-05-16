@@ -217,6 +217,7 @@ export interface PlainClassConstructorDefinition {
 
 export interface PlainClassDefinition {
   name: string;
+  extendsName?: string;
   docstring: string | null;
   fields: PlainClassFieldDefinition[];
   constructorDefinition: PlainClassConstructorDefinition;

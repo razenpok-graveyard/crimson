@@ -27,6 +27,8 @@ import {
   translatePositionalCallExpression,
   dateNameMarker,
   objectNameMarker,
+  pathArrayNameMarker,
+  pathNameMarker,
   setNameMarker,
   translatedExpressionLooksVector,
   vectorNameMarker,
@@ -931,6 +933,11 @@ export function translateStraightLineStatement(
     const innerStatements: string[] = [];
     const branchDeclaredNames = new Set(declaredNames);
     branchDeclaredNames.add(forOfStatement[1]);
+    if (iterableIsPathArray(forOfStatement[2], nameMap, arrayNames, validatedTypeAliases, mapNames)) {
+      const itemName = tsExportNameForPythonName(forOfStatement[1]);
+      arrayNames.add(pathNameMarker(forOfStatement[1]));
+      arrayNames.add(pathNameMarker(itemName));
+    }
     let nextIndex = index + 1;
     while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, innerIndent)) {
       if (lines[nextIndex].trim() === '') {
@@ -1006,6 +1013,25 @@ export function translateStraightLineStatement(
         nextIndex: listComprehension.nextIndex,
       };
     }
+    const listLiteral = collectMultilineListLiteral(
+      lines,
+      index + 1,
+      indent,
+      nameMap,
+      arrayNames,
+      validatedTypeAliases,
+      mapNames,
+    );
+    if (listLiteral !== null) {
+      return {
+        statements: [
+          'return [',
+          ...listLiteral.items.map((item) => `  ${item},`),
+          '];',
+        ],
+        nextIndex: listLiteral.nextIndex,
+      };
+    }
   }
   if (statement === 'break') {
     return { statements: ['break;'], nextIndex: index + 1 };
@@ -1054,7 +1080,7 @@ export function translateStraightLineStatement(
     let nextIndex = index + 1;
     while (nextIndex < lines.length) {
       const trimmed = lines[nextIndex].trim();
-      if (trimmed === ')') {
+      if (lineStartsAtIndent(lines[nextIndex] ?? '', indent) && trimmed === ')') {
         return {
           statements: [`return ${translateExpression(expressionLines.join(' '), nameMap, arrayNames, validatedTypeAliases, mapNames)};`],
           nextIndex: nextIndex + 1,
@@ -1150,6 +1176,18 @@ export function translateStraightLineStatement(
     if (typeExpression.startsWith('Set<') || typeExpression.startsWith('ReadonlySet<')) {
       arrayNames.add(setNameMarker(annotatedAssignment[1]));
       arrayNames.add(setNameMarker(tsName));
+    }
+    if (typeExpression.endsWith('[]')) {
+      arrayNames.add(annotatedAssignment[1]);
+      arrayNames.add(tsName);
+    }
+    if (annotatedAssignment[2].trim() === 'Path') {
+      arrayNames.add(pathNameMarker(annotatedAssignment[1]));
+      arrayNames.add(pathNameMarker(tsName));
+    }
+    if (annotatedAssignment[2].trim() === 'list[Path]') {
+      arrayNames.add(pathArrayNameMarker(annotatedAssignment[1]));
+      arrayNames.add(pathArrayNameMarker(tsName));
     }
     if (typeExpression === 'BuiltinObject' || typeExpression.startsWith('Record<')) {
       arrayNames.add(objectNameMarker(annotatedAssignment[1]));
@@ -1247,7 +1285,7 @@ export function translateStraightLineStatement(
       let nextIndex = index + 1;
       while (nextIndex < lines.length) {
         const trimmed = lines[nextIndex].trim();
-        if (trimmed === ')') {
+        if (lineStartsAtIndent(lines[nextIndex] ?? '', indent) && trimmed === ')') {
           return translateStraightLineAssignment(
             assignment[1],
             assignment[2],
@@ -1429,6 +1467,28 @@ export function translateStraightLineStatement(
     return null;
   }
 
+  if (statement === 'super().__init__(') {
+    const callParts = parseMultilineCallParts(
+      lines,
+      index + 1,
+      nameMap,
+      arrayNames,
+      validatedTypeAliases,
+      mapNames,
+    );
+    if (callParts === null) {
+      return null;
+    }
+    const args = [
+      ...callParts.positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)),
+      ...(callParts.keywordParts.length === 0 ? [] : [`{ ${callParts.keywordParts.join(', ')} }`]),
+    ];
+    return {
+      statements: [`super(${args.join(', ')});`],
+      nextIndex: callParts.nextIndex,
+    };
+  }
+
   const callStatement = /^(.+\))$/.exec(statement);
   if (callStatement !== null) {
     const pathlibWriteBytes = /^Path\((.+)\)\.write_bytes\((.+)\)$/.exec(callStatement[1]);
@@ -1442,6 +1502,13 @@ export function translateStraightLineStatement(
     if (dictPopDefaultNone !== null) {
       return {
         statements: [`delete ${translateExpression(dictPopDefaultNone[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}[${translateExpression(dictPopDefaultNone[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}];`],
+        nextIndex: index + 1,
+      };
+    }
+    const superMethodCall = /^super\(\)\.([A-Za-z_][A-Za-z0-9_]*)\((.*)\)$/.exec(callStatement[1]);
+    if (superMethodCall !== null) {
+      return {
+        statements: [`${translateExpression(callStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)};`],
         nextIndex: index + 1,
       };
     }
@@ -1565,6 +1632,56 @@ function parseMultilineListComprehension(
     expression: `${iterable}.map((${itemName}) => ${itemExpression})`,
     nextIndex: nextIndex + 2,
   };
+}
+
+function collectMultilineListLiteral(
+  lines: string[],
+  startIndex: number,
+  indent: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): { items: string[]; nextIndex: number } | null {
+  const innerIndent = `${indent}    `;
+  const items: string[] = [];
+  let nextIndex = startIndex;
+  while (nextIndex < lines.length) {
+    const line = lines[nextIndex] ?? '';
+    const trimmed = line.trim();
+    if (line.startsWith(indent) && trimmed === ']') {
+      return { items, nextIndex: nextIndex + 1 };
+    }
+    if (trimmed === '') {
+      nextIndex += 1;
+      continue;
+    }
+    if (!line.startsWith(innerIndent)) {
+      return null;
+    }
+    const item = trimmed.replace(/,$/, '');
+    const multilineCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(item);
+    if (multilineCall !== null) {
+      const callExpression = parseMultilineCallExpression(
+        lines,
+        nextIndex + 1,
+        multilineCall[1],
+        nameMap,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+      );
+      if (callExpression === null) {
+        return null;
+      }
+      items.push(callExpression.expression);
+      nextIndex = callExpression.nextIndex;
+      continue;
+    }
+    items.push(translateExpression(item, nameMap, arrayNames, validatedTypeAliases, mapNames));
+    nextIndex += 1;
+  }
+  return null;
 }
 
 function collectMultilineDictLiteral(
@@ -2144,6 +2261,19 @@ function addMutableName(names: ReadonlySet<string>, name: string): void {
   if (names instanceof Set) {
     names.add(name);
   }
+}
+
+function iterableIsPathArray(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): boolean {
+  const prefixSlice = /^(.+)\[:.+\]$/.exec(pythonExpression.trim());
+  const baseExpression = prefixSlice?.[1] ?? pythonExpression.trim();
+  const translated = translateExpression(baseExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  return arrayNames.has(pathArrayNameMarker(baseExpression)) || arrayNames.has(pathArrayNameMarker(translated));
 }
 
 function lineStartsAtIndent(line: string, indent: string): boolean {

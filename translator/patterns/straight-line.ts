@@ -208,18 +208,18 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
 
-    const plainClass = parsePlainClass(lines, index);
-    if (plainClass !== null) {
-      plainClasses.push(plainClass.plainClass);
-      index = plainClass.nextIndex;
-      continue;
-    }
-
     const exceptionClass = parseSimpleExceptionClass(lines, index);
     if (exceptionClass !== null) {
       leadingStatements.push(...exceptionClass.statements);
       moduleNameMap.set(exceptionClass.name, exceptionClass.name);
       index = exceptionClass.nextIndex;
+      continue;
+    }
+
+    const plainClass = parsePlainClass(lines, index, moduleNameMap);
+    if (plainClass !== null) {
+      plainClasses.push(plainClass.plainClass);
+      index = plainClass.nextIndex;
       continue;
     }
 
@@ -269,9 +269,17 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         importedName: tsImportNameForPythonName(modulePath, name, relativePath),
         defaultName: tsExportNameForPythonName(name),
       }));
+      const importNames = importBindings.map((binding) => binding.importedName);
+      if (modulePath === '@crimson/screens/menu.ts' && importBindings.some((binding) => binding.pythonName === 'MenuView')) {
+        for (const helperName of menuViewHelperImportNames()) {
+          if (!importNames.includes(helperName)) {
+            importNames.push(helperName);
+          }
+        }
+      }
       imports.push({
         modulePath,
-        names: importBindings.map((binding) => binding.importedName),
+        names: importNames,
       });
       recordImportedStructConstructorFields(
         modulePath,
@@ -408,18 +416,18 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         continue;
       }
 
-      const plainClass = parsePlainClass(lines, index);
-      if (plainClass !== null) {
-        plainClasses.push(plainClass.plainClass);
-        index = plainClass.nextIndex;
-        continue;
-      }
-
       const exceptionClass = parseSimpleExceptionClass(lines, index);
       if (exceptionClass !== null) {
         trailingStatements.push(...exceptionClass.statements);
         moduleNameMap.set(exceptionClass.name, exceptionClass.name);
         index = exceptionClass.nextIndex;
+        continue;
+      }
+
+      const plainClass = parsePlainClass(lines, index, moduleNameMap);
+      if (plainClass !== null) {
+        plainClasses.push(plainClass.plainClass);
+        index = plainClass.nextIndex;
         continue;
       }
 
@@ -684,17 +692,29 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   if (moduleValueText.includes('_strftimeUtcNow(')) {
     pathHelperStatements.push(...strftimeUtcNowHelperStatements());
   }
-  if (moduleValueText.includes('_pathJoin(')) {
+  if (moduleValueText.includes('_pathJoin(') || moduleValueText.includes('_globPath(')) {
     if (pathHelperStatements.length > 0) {
       pathHelperStatements.push('');
     }
     pathHelperStatements.push(...pathJoinHelperStatements());
+  }
+  if (moduleValueText.includes('_basename(')) {
+    if (pathHelperStatements.length > 0) {
+      pathHelperStatements.push('');
+    }
+    pathHelperStatements.push(...pathBasenameHelperStatements());
   }
   if (moduleValueText.includes('_dirname(') || moduleValueText.includes('_mkdirParents(')) {
     if (pathHelperStatements.length > 0) {
       pathHelperStatements.push('');
     }
     pathHelperStatements.push(...pathFsHelperStatements());
+  }
+  if (moduleValueText.includes('_globPath(')) {
+    if (pathHelperStatements.length > 0) {
+      pathHelperStatements.push('');
+    }
+    pathHelperStatements.push(...globPathHelperStatements());
   }
   if (moduleValueText.includes('_openTextFile(')) {
     if (pathHelperStatements.length > 0) {
@@ -727,6 +747,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     || moduleValueText.includes('appendFileSync(')
     || moduleValueText.includes('_openTextFile(')
     || moduleValueText.includes('_mkdirParents(')
+    || moduleValueText.includes('_globPath(')
   ) {
     pushUniqueImportDefinition(imports, {
       modulePath: 'node:fs',
@@ -735,6 +756,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         ...(moduleValueText.includes('writeFileSync(') || moduleValueText.includes('_openTextFile(') ? ['writeFileSync'] : []),
         ...(moduleValueText.includes('appendFileSync(') || moduleValueText.includes('_openTextFile(') ? ['appendFileSync'] : []),
         ...(moduleValueText.includes('_mkdirParents(') ? ['mkdirSync'] : []),
+        ...(moduleValueText.includes('_globPath(') ? ['readdirSync'] : []),
       ],
     });
   }
@@ -872,6 +894,7 @@ function moduleValueUsageText(
       ...method.parameters.map((parameter) => parameter.defaultValue ?? ''),
       ...method.optsParams.map((parameter) => parameter.defaultValue ?? ''),
     ])),
+    ...plainClasses.map((plainClass) => plainClass.extendsName ?? ''),
     ...plainClasses.flatMap((plainClass) => plainClass.constructorDefinition.statements),
     ...plainClasses.flatMap((plainClass) => plainClass.methods.flatMap((method) => method.statements)),
     ...statements,
@@ -1132,6 +1155,16 @@ function pathJoinHelperStatements(): string[] {
   ];
 }
 
+function pathBasenameHelperStatements(): string[] {
+  return [
+    'function _basename(path: string): string {',
+    "  const normalized = path.replace(/\\/+$/g, '');",
+    "  const idx = normalized.lastIndexOf('/');",
+    '  return idx < 0 ? normalized : normalized.slice(idx + 1);',
+    '}',
+  ];
+}
+
 function pathFsHelperStatements(): string[] {
   return [
     'function _dirname(path: string): string {',
@@ -1147,6 +1180,31 @@ function pathFsHelperStatements(): string[] {
     '',
     'function _mkdirParents(path: string): void {',
     '  mkdirSync(path, { recursive: true });',
+    '}',
+  ];
+}
+
+function globPathHelperStatements(): string[] {
+  return [
+    'function _globPath(dir: string, pattern: string): string[] {',
+    '  const regexp = _globPattern(pattern);',
+    '  return readdirSync(dir, { withFileTypes: true })',
+    '    .filter((entry) => entry.isFile() && regexp.test(entry.name))',
+    '    .map((entry) => _pathJoin(dir, entry.name));',
+    '}',
+    '',
+    'function _globPattern(pattern: string): RegExp {',
+    "  let source = '';",
+    '  for (const char of pattern) {',
+    "    if (char === '*') {",
+    "      source += '[^/]*';",
+    "    } else if (char === '?') {",
+    "      source += '[^/]';",
+    '    } else {',
+    "      source += /[\\\\^$.*+?()[\\]{}|]/.test(char) ? `\\\\${char}` : char;",
+    '    }',
+    '  }',
+    '  return new RegExp(`^${source}$`);',
     '}',
   ];
 }
@@ -1474,6 +1532,17 @@ function tsImportNameForPythonName(modulePath: string, pythonName: string, relat
   return exactName;
 }
 
+function menuViewHelperImportNames(): string[] {
+  return [
+    'uiElementAnim',
+    'labelAlpha',
+    'signLayoutScale',
+    'menuSlotPosX',
+    'menuSlotStartMs',
+    'menuSlotEndMs',
+  ];
+}
+
 function tsModuleExportsName(modulePath: string, name: string, relativePath: string): boolean {
   const sourcePath = tsSourcePathForImportPath(modulePath, relativePath);
   if (sourcePath === null || !fs.existsSync(sourcePath)) {
@@ -1577,6 +1646,7 @@ function markTypeOnlyImports(
       ...method.parameters.map((parameter) => parameter.defaultValue ?? ''),
       ...method.optsParams.map((parameter) => parameter.defaultValue ?? ''),
     ])),
+    ...plainClasses.map((plainClass) => plainClass.extendsName ?? ''),
     ...plainClasses.flatMap((plainClass) => plainClass.constructorDefinition.statements),
     ...plainClasses.flatMap((plainClass) => plainClass.methods.flatMap((method) => method.statements)),
     ...leadingStatements,

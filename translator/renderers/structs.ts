@@ -155,7 +155,7 @@ export function renderPlainClasses(lines: string[], classes: StraightLineModule[
         lines.push(line === '' ? '//' : `// ${line}`);
       }
     }
-    lines.push(`export class ${plainClass.name} {`);
+    lines.push(`export class ${plainClass.name}${plainClass.extendsName === undefined ? '' : ` extends ${plainClass.extendsName}`} {`);
     for (const field of plainClass.fields) {
       lines.push(`  ${field.private ? 'private ' : ''}${field.readonly ? 'readonly ' : ''}${field.name}: ${field.typeExpression};`);
     }

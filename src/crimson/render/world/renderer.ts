@@ -48,7 +48,7 @@ export class WorldRenderer {
     );
   }
 
-  cameraScreenSize(opts: { runtimeW?: number | null; runtimeH?: number | null } = {}): Vec2 {
+  _cameraScreenSize(opts: { runtimeW?: number | null; runtimeH?: number | null } = {}): Vec2 {
     const runtimeW = opts.runtimeW ?? null;
     const runtimeH = opts.runtimeH ?? null;
     const outW = runtimeW !== null ? runtimeW : wgl.getScreenWidth();
@@ -56,23 +56,23 @@ export class WorldRenderer {
     return viewport.cameraScreenSize({ worldSize: this.worldSize, config: this.config, runtimeW: outW, runtimeH: outH });
   }
 
-  clampCamera(camera: Vec2, screenSize: Vec2): Vec2 {
+  _clampCamera(camera: Vec2, screenSize: Vec2): Vec2 {
     return viewport.clampCamera({ worldSize: this.worldSize, camera: camera, screenSize: screenSize });
   }
 
-  worldParams(): [Vec2, Vec2] {
+  _worldParams(): [Vec2, Vec2] {
     const outSize = new Vec2(wgl.getScreenWidth(), wgl.getScreenHeight());
     const [camera, viewScale, screenSize] = viewport.viewTransform({ worldSize: this.worldSize, config: this.config, camera: this.camera, outSize: outSize });
     return [camera, viewScale];
   }
 
   worldToScreen(pos: Vec2): Vec2 {
-    const [camera, viewScale] = this.worldParams();
+    const [camera, viewScale] = this._worldParams();
     return viewport.worldToScreenWith(pos, { camera: camera, viewScale: viewScale });
   }
 
   screenToWorld(pos: Vec2): Vec2 {
-    const [camera, viewScale] = this.worldParams();
+    const [camera, viewScale] = this._worldParams();
     return viewport.screenToWorldWith(pos, { camera: camera, viewScale: viewScale });
   }
 }
