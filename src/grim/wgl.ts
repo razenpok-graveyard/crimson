@@ -47,6 +47,31 @@ export function drawRectangle(x: number, y: number, w: number, h: number, color:
   ctx.drawRectangle(x, y, w, h, color.r, color.g, color.b, color.a);
 }
 
+export function drawCircleLines(x: number, y: number, radius: number, color: Color): void {
+  const r = Math.max(1.0, radius);
+  const innerR = Math.max(0.0, r - 0.5);
+  const outerR = r + 0.5;
+  const segments = Math.max(24, Math.trunc(r * 0.25 + 24.0));
+  const step = (Math.PI * 2.0) / segments;
+
+  ctx.beginQuads(ctx.whiteTexture);
+  ctx.texCoord2f(0.5, 0.5);
+  ctx.color4f(color.r, color.g, color.b, color.a);
+  for (let i = 0; i < segments; i += 1) {
+    const a0 = i * step;
+    const a1 = (i + 1) * step;
+    const cos0 = Math.cos(a0);
+    const sin0 = Math.sin(a0);
+    const cos1 = Math.cos(a1);
+    const sin1 = Math.sin(a1);
+    ctx.vertex2f(x + cos0 * innerR, y + sin0 * innerR);
+    ctx.vertex2f(x + cos0 * outerR, y + sin0 * outerR);
+    ctx.vertex2f(x + cos1 * outerR, y + sin1 * outerR);
+    ctx.vertex2f(x + cos1 * innerR, y + sin1 * innerR);
+  }
+  ctx.endQuads();
+}
+
 export function beginBlendMode(mode: BlendMode): void { ctx.setBlendMode(mode); }
 export function endBlendMode(): void { ctx.setBlendMode(BlendMode.ALPHA); }
 
