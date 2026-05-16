@@ -283,5 +283,9 @@ function renderTypeParameters(fn: SimpleModuleFunction): string {
 
 function functionBodyAssignsName(statements: string[], name: string): boolean {
   const pattern = new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} (?:\\+=|-=|\\*=|/=|=) `);
-  return statements.some((statement) => pattern.test(statement.trim()));
+  const destructuringPattern = new RegExp(`^\\[[^\\]]*\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b[^\\]]*\\] = `);
+  return statements.some((statement) => {
+    const trimmed = statement.trim();
+    return pattern.test(trimmed) || destructuringPattern.test(trimmed);
+  });
 }

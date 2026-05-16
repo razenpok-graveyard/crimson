@@ -49,6 +49,26 @@ type WithItem = {
   close: false;
 };
 
+type FunctionCallSignature = {
+  positional: string[];
+};
+
+type MultilineKeywordPart = {
+  pythonName: string;
+  expression: string;
+};
+
+type MultilineCallParts = {
+  positionalParts: string[];
+  keywordParts: string[];
+  keywordArgParts: MultilineKeywordPart[];
+  nextIndex: number;
+};
+
+export function functionSignatureMarker(pythonName: string): string {
+  return `__function_signature__:${pythonName}`;
+}
+
 export function parseStraightLineFunctionHeader(
   lines: string[],
   index: number,
@@ -1925,6 +1945,21 @@ function parseMultilineCallExpression(
       nextIndex: callParts.nextIndex,
     };
   }
+  const signatureCall = translateMultilineCallWithLocalSignature(
+    pythonCallee,
+    callPrefix,
+    callParts,
+    nameMap,
+    arrayNames,
+    validatedTypeAliases,
+    mapNames,
+  );
+  if (signatureCall !== null) {
+    return {
+      expression: signatureCall,
+      nextIndex: callParts.nextIndex,
+    };
+  }
   if (callParts.keywordParts.length === 0) {
     return {
       expression: translatePositionalCallExpression(pythonCallee, callParts.positionalParts, nameMap, arrayNames, validatedTypeAliases, mapNames, true),
@@ -1944,6 +1979,62 @@ function parseMultilineCallExpression(
     ].join(', ')})`,
     nextIndex: callParts.nextIndex,
   };
+}
+
+function translateMultilineCallWithLocalSignature(
+  pythonCallee: string,
+  callPrefix: string,
+  callParts: MultilineCallParts,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  if (callParts.keywordArgParts.length === 0) {
+    return null;
+  }
+  const signature = parseLocalFunctionCallSignature(pythonCallee, nameMap);
+  if (signature === null) {
+    return null;
+  }
+
+  const consumedKeywords = new Set<string>();
+  const args = callParts.positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
+  for (const pythonName of signature.positional.slice(args.length)) {
+    const keywordPart = callParts.keywordArgParts.find((part) => part.pythonName === pythonName);
+    if (keywordPart === undefined) {
+      break;
+    }
+    args.push(keywordPart.expression);
+    consumedKeywords.add(pythonName);
+  }
+
+  const keywordParts = callParts.keywordArgParts
+    .filter((part) => !consumedKeywords.has(part.pythonName))
+    .map((part) => `${tsExportNameForPythonName(part.pythonName)}: ${part.expression}`);
+  if (keywordParts.length > 0) {
+    args.push(`{ ${keywordParts.join(', ')} }`);
+  }
+  return `${callPrefix}(${args.join(', ')})`;
+}
+
+function parseLocalFunctionCallSignature(
+  pythonCallee: string,
+  nameMap: Map<string, string>,
+): FunctionCallSignature | null {
+  const signatureText = nameMap.get(functionSignatureMarker(pythonCallee));
+  if (signatureText === undefined) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(signatureText) as Partial<FunctionCallSignature>;
+    if (!Array.isArray(parsed.positional) || !parsed.positional.every((name) => typeof name === 'string')) {
+      return null;
+    }
+    return { positional: parsed.positional };
+  } catch {
+    return null;
+  }
 }
 
 function parseMultilineCallExpressionWithOuterClose(
@@ -2100,15 +2191,16 @@ function parseMultilineCallParts(
   arrayNames: Set<string>,
   validatedTypeAliases: ReadonlySet<string> = new Set(),
   mapNames: ReadonlySet<string> = new Set(),
-): { positionalParts: string[]; keywordParts: string[]; nextIndex: number } | null {
+): MultilineCallParts | null {
   const positionalParts: string[] = [];
   const keywordParts: string[] = [];
+  const keywordArgParts: MultilineKeywordPart[] = [];
   let sawKeyword = false;
   let nextIndex = startIndex;
   while (nextIndex < lines.length) {
     const trimmed = lines[nextIndex].trim();
     if (trimmed === ')' || trimmed === '),') {
-      return { positionalParts, keywordParts, nextIndex: nextIndex + 1 };
+      return { positionalParts, keywordParts, keywordArgParts, nextIndex: nextIndex + 1 };
     }
 
     const arg = trimmed.replace(/,$/, '');
@@ -2127,6 +2219,7 @@ function parseMultilineCallParts(
         return null;
       }
       keywordParts.push(`${tsExportNameForPythonName(lambdaKeyword[1])}: ${lambdaExpression.expression}`);
+      keywordArgParts.push({ pythonName: lambdaKeyword[1], expression: lambdaExpression.expression });
       nextIndex = lambdaExpression.nextIndex;
       sawKeyword = true;
       continue;
@@ -2216,11 +2309,14 @@ function parseMultilineCallParts(
             return null;
           }
           keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${callExpression.expression}`);
+          keywordArgParts.push({ pythonName: keywordArg[1], expression: callExpression.expression });
           nextIndex = callExpression.nextIndex;
           consumedNestedCall = true;
           break;
         }
-        keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${translateExpression(keywordArg[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
+        const expression = translateExpression(keywordArg[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+        keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${expression}`);
+        keywordArgParts.push({ pythonName: keywordArg[1], expression });
       }
     }
     if (!consumedNestedCall) {
@@ -2327,16 +2423,26 @@ function translateStraightLineAssignment(
     const names = tupleAssignment[1].split(', ');
     const tsNames = names.map((name) => name === '_' ? '' : tsExportNameForPythonName(name));
     const alreadyDeclared = names.filter((name) => name !== '_').every((name) => declaredNames.has(name));
+    const someAlreadyDeclared = names.some((name) => name !== '_' && declaredNames.has(name));
     const declaration = alreadyDeclared
       ? ''
+      : someAlreadyDeclared ? ''
       : names.some((name) => reassignedNames.has(name)) ? 'let ' : 'const ';
+    const preDeclarations = alreadyDeclared || !someAlreadyDeclared
+      ? []
+      : names
+        .filter((name) => name !== '_' && !declaredNames.has(name))
+        .map((name) => `let ${tsExportNameForPythonName(name)}: any;`);
     for (const name of names) {
       if (name !== '_') {
         declaredNames.add(name);
       }
     }
     return {
-      statements: [`${declaration}[${tsNames.join(', ')}] = ${assignedRight};`],
+      statements: [
+        ...preDeclarations,
+        `${declaration}[${tsNames.join(', ')}] = ${assignedRight};`,
+      ],
       nextIndex,
     };
   }

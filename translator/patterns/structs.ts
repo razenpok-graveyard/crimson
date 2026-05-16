@@ -29,6 +29,7 @@ import {
 import { stringNameMarker, translateExpression } from './expression.js';
 import { parseFunctionParametersText, pythonParameterNames } from './parameters.js';
 import {
+  functionSignatureMarker,
   parseStraightLineFunctionHeader,
   reassignedLocalNames,
   rewriteStructPositionalConstructors,
@@ -194,6 +195,8 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
     const fn = parseStructModuleFunction(lines, index, structConstructorFields, moduleNameMap);
     if (fn !== null) {
       functions.push(fn.fn);
+      moduleNameMap.set(functionSignatureMarker(fn.pythonName), JSON.stringify({ positional: fn.signaturePositionalNames }));
+      moduleNameMap.set(fn.pythonName, fn.fn.name);
       index = fn.nextIndex;
       continue;
     }
@@ -243,13 +246,29 @@ function parseStructModuleFunction(
   index: number,
   structConstructorFields: ReadonlyMap<string, string[]> = new Map(),
   moduleNameMap: ReadonlyMap<string, string> = new Map(),
-): { fn: SimpleModuleFunction; nextIndex: number } | null {
+): { fn: SimpleModuleFunction; nextIndex: number; pythonName: string; signaturePositionalNames: string[] } | null {
   const header = parseStraightLineFunctionHeader(lines, index);
   if (header === null) {
     return null;
   }
 
   const arrayNames = new Set<string>();
+  const signaturePositionalNames: string[] = [];
+  let keywordOnly = false;
+  for (const parameterText of splitTopLevelComma(header.parametersText)) {
+    if (parameterText === '*') {
+      keywordOnly = true;
+      continue;
+    }
+    if (keywordOnly || parameterText === '') {
+      continue;
+    }
+    const parameterName = /^\*\*?([A-Za-z_][A-Za-z0-9_]*)|^([A-Za-z_][A-Za-z0-9_]*)/.exec(parameterText);
+    const pythonParameterName = parameterName?.[1] ?? parameterName?.[2] ?? null;
+    if (pythonParameterName !== null) {
+      signaturePositionalNames.push(pythonParameterName);
+    }
+  }
   const parsedParams = parseFunctionParametersText(header.parametersText, arrayNames);
   if (parsedParams === null) {
     return null;
@@ -257,6 +276,7 @@ function parseStructModuleFunction(
 
   const statements: string[] = [];
   const nameMap = new Map(moduleNameMap);
+  nameMap.set(functionSignatureMarker(header.name), JSON.stringify({ positional: signaturePositionalNames }));
   const declaredNames = new Set<string>(pythonParameterNames(header.parametersText));
   let nextIndex = header.nextIndex;
   const docstring = parseIndentedDocstring(lines, nextIndex);
@@ -301,6 +321,8 @@ function parseStructModuleFunction(
       statements: statements.map((statement) => rewriteStructPositionalConstructors(statement, structConstructorFields)),
     },
     nextIndex,
+    pythonName: header.name,
+    signaturePositionalNames,
   };
 }
 

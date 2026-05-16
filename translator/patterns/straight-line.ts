@@ -46,6 +46,7 @@ import { objectNameMarker, setNameMarker, translateExpression } from './expressi
 import { parseFunctionParameterText, pythonParameterNames } from './parameters.js';
 import { bytesFromHelperStatements, constructBinaryHelperStatements } from './runtime-helpers.js';
 import {
+  functionSignatureMarker,
   parseStraightLineFunctionHeader,
   parseTopLevelAssignment,
   reassignedLocalNames,
@@ -456,6 +457,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
 
     const parameters: FunctionParameter[] = [];
     const optsParams: OptionalFunctionParameter[] = [];
+    const signaturePositionalNames: string[] = [];
     const arrayNames = new Set<string>();
     const functionMapNames = new Set(mapNames);
     for (const name of setReturnFunctionNames) {
@@ -491,9 +493,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
           });
         } else {
           parameters.push(parameter);
+          if (pythonParameterName !== null) {
+            signaturePositionalNames.push(pythonParameterName);
+          }
         }
       }
     }
+    moduleNameMap.set(functionSignatureMarker(header.name), JSON.stringify({ positional: signaturePositionalNames }));
 
     const statements: string[] = [];
     const nameMap = new Map(moduleNameMap);

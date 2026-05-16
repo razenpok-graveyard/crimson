@@ -196,7 +196,13 @@ export function questPostStep(ctx: PostStepContext, spawn: QuestSpawnState): voi
   const dtMs = ctx.stepResult.timing.dtMsI32;
   const creaturesNoneActive = !ctx.world.creatures.entries.some((c) => c.active);
 
-  const result = tickQuestModeSpawns(
+  const [
+    entries,
+    timelineMs,
+    resultCreaturesNoneActive,
+    noCreaturesTimerMs,
+    spawns,
+  ] = tickQuestModeSpawns(
     spawn.spawnEntries,
     spawn.spawnTimelineMs,
     dtMs,
@@ -207,17 +213,17 @@ export function questPostStep(ctx: PostStepContext, spawn: QuestSpawnState): voi
     },
   );
 
-  spawn.spawnEntries = result.entries;
-  spawn.spawnTimelineMs = result.questSpawnTimelineMs;
-  spawn.noCreaturesTimerMs = result.noCreaturesTimerMs;
+  spawn.spawnEntries = entries;
+  spawn.spawnTimelineMs = timelineMs;
+  spawn.noCreaturesTimerMs = noCreaturesTimerMs;
 
   const spawnTableEmptyNow = questSpawnTableEmpty(spawn.spawnEntries);
-  if (!state.demoModeActive && result.creaturesNoneActive && spawnTableEmptyNow) {
+  if (!state.demoModeActive && resultCreaturesNoneActive && spawnTableEmptyNow) {
     state.bonuses.reflexBoost = 0.0;
     state.timeScaleActive = false;
   }
 
-  for (const call of result.spawnCalls) {
+  for (const call of spawns) {
     ctx.world.creatures.spawnTemplate(call.templateId, call.pos, call.heading, state.rng);
   }
 
@@ -233,7 +239,7 @@ export function questPostStep(ctx: PostStepContext, spawn: QuestSpawnState): voi
       spawn.completionTransitionMs,
       dtMs,
       {
-        creaturesNoneActive: result.creaturesNoneActive,
+        creaturesNoneActive: resultCreaturesNoneActive,
         spawnTableEmpty: spawnTableEmptyNow,
       },
     );
