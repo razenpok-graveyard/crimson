@@ -26,8 +26,8 @@ import {
   splitTopLevelComma,
   stripTypeOnlyStatementSyntax,
 } from './common.js';
-import { stringNameMarker, translateExpression } from './expression.js';
-import { parseFunctionParametersText, pythonParameterNames } from './parameters.js';
+import { translateExpression } from './expression.js';
+import { parseFunctionParameterText, parseFunctionParametersText, pythonParameterNames } from './parameters.js';
 import {
   functionSignatureMarker,
   parseStraightLineFunctionHeader,
@@ -498,36 +498,24 @@ function parseStructMethod(
         keywordOnly = true;
         continue;
       }
-      const parameter = /^([A-Za-z_][A-Za-z0-9_]*): ([^=]+?)(?: = (.+))?$/.exec(parameterText);
-      if (parameter === null) {
+      const parsedParameter = parseFunctionParameterText(parameterText, arrayNames);
+      if (parsedParameter === null) {
         return null;
       }
-      const parsedParameter = {
-        name: tsExportNameForPythonName(parameter[1]),
-        typeExpression: tsTypeExpression(parameter[2]),
-      };
-      if (parsedParameter.typeExpression.endsWith('[]')) {
-        arrayNames.add(parameter[1]);
-      }
+      const pythonParameterName = /^([A-Za-z_][A-Za-z0-9_]*)/.exec(parameterText)?.[1] ?? null;
       if (parsedParameter.typeExpression.startsWith('Map<')) {
         mapNames.add(parsedParameter.name);
-      }
-      if (parsedParameter.typeExpression === 'string') {
-        arrayNames.add(stringNameMarker(parameter[1]));
-        arrayNames.add(stringNameMarker(parsedParameter.name));
+        if (pythonParameterName !== null) {
+          mapNames.add(pythonParameterName);
+        }
       }
       if (keywordOnly) {
         optsParams.push({
           ...parsedParameter,
-          defaultValue: parameter[3] === undefined ? null : translateExpression(parameter[3], undefined, arrayNames),
+          defaultValue: parsedParameter.defaultValue === undefined ? null : parsedParameter.defaultValue,
         });
-      } else if (parameter[3] === undefined) {
-        parameters.push(parsedParameter);
       } else {
-        parameters.push({
-          ...parsedParameter,
-          defaultValue: translateExpression(parameter[3], undefined, arrayNames),
-        });
+        parameters.push(parsedParameter);
       }
     }
   }

@@ -1040,6 +1040,17 @@ export function translateExpression(
   ) {
     return `${translateExpression(stripBalancedOuterParens(multiplicativeWithFloorDivision.left), nameMap, arrayNames, validatedTypeAliases, mapNames)} * ${translateExpression(stripBalancedOuterParens(multiplicativeWithFloorDivision.right), nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
   }
+  if (
+    multiplicativeWithFloorDivision !== null
+    && (
+      parseTopLevelConditionalExpression(stripBalancedOuterParens(multiplicativeWithFloorDivision.left)) !== null
+      || parseTopLevelConditionalExpression(stripBalancedOuterParens(multiplicativeWithFloorDivision.right)) !== null
+    )
+  ) {
+    const left = translateExpression(stripBalancedOuterParens(multiplicativeWithFloorDivision.left), nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const right = translateExpression(stripBalancedOuterParens(multiplicativeWithFloorDivision.right), nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return `${parenthesizeForMultiplicative(left)} * ${parenthesizeForMultiplicative(right)}`;
+  }
 
   const vectorSubMethod = /^\((.+) - (.+)\)\.to_heading\(\)$/.exec(trimmed);
   if (vectorSubMethod !== null) {
@@ -1074,14 +1085,14 @@ export function translateExpression(
     return `Object.values(${enumName}).includes(${conditionValue} as ${enumName}) ? ${translateExpression(enumModeConditional[1], nameMap, arrayNames, validatedTypeAliases, mapNames)} as ${enumName} : ${translateExpression(`${enumName}(${enumModeConditional[5]})`, nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
   }
 
-  const conditionalExpression = /^(.+) if (.+) else (.+)$/.exec(trimmed);
+  const conditionalExpression = parseTopLevelConditionalExpression(trimmed);
   if (conditionalExpression !== null) {
     return [
-      translateExpression(conditionalExpression[2], nameMap, arrayNames, validatedTypeAliases, mapNames),
+      translateExpression(conditionalExpression.condition, nameMap, arrayNames, validatedTypeAliases, mapNames),
       '?',
-      translateExpression(conditionalExpression[1], nameMap, arrayNames, validatedTypeAliases, mapNames),
+      translateExpression(conditionalExpression.trueExpression, nameMap, arrayNames, validatedTypeAliases, mapNames),
       ':',
-      translateExpression(conditionalExpression[3], nameMap, arrayNames, validatedTypeAliases, mapNames),
+      translateExpression(conditionalExpression.falseExpression, nameMap, arrayNames, validatedTypeAliases, mapNames),
     ].join(' ');
   }
 
@@ -1706,6 +1717,55 @@ function translateAggregateGeneratorCall(
     }
     const defaultValue = translateExpression(defaultArg[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
     return `(() => { const values = ${values}; return values.length === 0 ? ${defaultValue} : ${tsName}(...values); })()`;
+  }
+  return null;
+}
+
+function parseTopLevelConditionalExpression(
+  pythonExpression: string,
+): { trueExpression: string; condition: string; falseExpression: string } | null {
+  const ifIndex = findTopLevelToken(pythonExpression, ' if ');
+  if (ifIndex === null) {
+    return null;
+  }
+  const elseIndex = findTopLevelToken(pythonExpression, ' else ', ifIndex + ' if '.length);
+  if (elseIndex === null) {
+    return null;
+  }
+  const trueExpression = pythonExpression.slice(0, ifIndex).trim();
+  const condition = pythonExpression.slice(ifIndex + ' if '.length, elseIndex).trim();
+  const falseExpression = pythonExpression.slice(elseIndex + ' else '.length).trim();
+  return trueExpression === '' || condition === '' || falseExpression === ''
+    ? null
+    : { trueExpression, condition, falseExpression };
+}
+
+function findTopLevelToken(value: string, token: string, startIndex = 0): number | null {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let index = startIndex; index <= value.length - token.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      if (char === quote && value[index - 1] !== '\\') {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char === ')' || char === ']' || char === '}') {
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
+    if (depth === 0 && value.slice(index, index + token.length) === token) {
+      return index;
+    }
   }
   return null;
 }
@@ -2376,6 +2436,10 @@ function parenthesizeForLogicalOr(value: string): string {
   return value.includes(' && ') && matchingCloseParen(value, 0) !== value.length - 1 ? `(${value})` : value;
 }
 
+function parenthesizeForMultiplicative(value: string): string {
+  return value.includes(' ? ') ? `(${value})` : value;
+}
+
 function stripBalancedOuterParens(value: string): string {
   const trimmed = value.trim();
   if (!trimmed.startsWith('(')) {
@@ -2545,6 +2609,10 @@ function translateMixedKeywordCall(
 ): string | null {
   const call = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\((.*)\)$/.exec(pythonExpression);
   if (call === null || !call[2].includes('=')) {
+    return null;
+  }
+  const closeIndex = matchingCloseParen(pythonExpression, call[1].length);
+  if (closeIndex !== pythonExpression.length - 1) {
     return null;
   }
 

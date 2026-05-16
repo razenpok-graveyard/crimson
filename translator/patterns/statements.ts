@@ -421,6 +421,35 @@ export function translateStraightLineStatement(
       ifBodyStartIndex = callExpression.nextIndex;
     }
   }
+  if (ifCondition === null && translatedIfCondition === null) {
+    const multilineIfCondition = /^if (.+\()$/.exec(statement);
+    if (multilineIfCondition !== null) {
+      const conditionLines = [multilineIfCondition[1]];
+      let conditionIndex = index + 1;
+      while (conditionIndex < lines.length) {
+        const conditionLine = lines[conditionIndex] ?? '';
+        const conditionTrimmed = conditionLine.trim();
+        const close = /^\)(.*):$/.exec(conditionTrimmed);
+        if (conditionLine.startsWith(indent) && close !== null) {
+          const conditionBody = `${conditionLines.join(' ')})${close[1]}`
+            .replaceAll(/,\s*\)/g, ')')
+            .replaceAll(/\(\s+/g, '(')
+            .replaceAll(/\s+\)/g, ')');
+          ifCondition = conditionBody;
+          ifBodyStartIndex = conditionIndex + 1;
+          break;
+        }
+        if (!conditionLine.startsWith(`${indent}    `) || conditionTrimmed === '') {
+          return null;
+        }
+        conditionLines.push(conditionTrimmed);
+        conditionIndex += 1;
+      }
+      if (ifCondition === null) {
+        return null;
+      }
+    }
+  }
   if (ifCondition === null && statement === 'if (') {
     const conditionLines: string[] = [];
     let conditionIndex = index + 1;
