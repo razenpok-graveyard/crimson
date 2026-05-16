@@ -42,7 +42,7 @@ import {
   stripTypeOnlyStatementSyntax,
 } from './common.js';
 import { parseStringEnumClass } from './enums.js';
-import { translateExpression } from './expression.js';
+import { setNameMarker, translateExpression } from './expression.js';
 import { parseFunctionParameterText, pythonParameterNames } from './parameters.js';
 import { bytesFromHelperStatements, constructBinaryHelperStatements } from './runtime-helpers.js';
 import {
@@ -75,6 +75,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   const mapNames = new Set<string>();
   const structConstructorFields = new Map<string, string[]>();
   const typeVarNames = new Set<string>();
+  const setReturnFunctionNames = new Set<string>();
   const pendingAssignmentComments: string[] = [];
   let index = 0;
 
@@ -424,6 +425,9 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     const parameters: FunctionParameter[] = [];
     const optsParams: OptionalFunctionParameter[] = [];
     const arrayNames = new Set<string>();
+    for (const name of setReturnFunctionNames) {
+      arrayNames.add(setNameMarker(name));
+    }
     let keywordOnly = false;
     if (header.parametersText !== '') {
       for (const parameterText of splitTopLevelComma(header.parametersText)) {
@@ -494,17 +498,21 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       index = statement.nextIndex;
     }
 
+    const returnType = tsTypeExpression(header.returnType);
     functions.push({
       name: tsExportNameForPythonName(header.name),
       exported: !header.name.startsWith('_'),
       async: statements.some((statement) => statement.includes('await ')),
-      typeParams: simpleFunctionTypeParams(typeVarNames, parameters, optsParams, tsTypeExpression(header.returnType)),
+      typeParams: simpleFunctionTypeParams(typeVarNames, parameters, optsParams, returnType),
       parameters,
       optsParams,
-      returnType: tsTypeExpression(header.returnType),
+      returnType,
       statements,
     });
     moduleNameMap.set(header.name, tsExportNameForPythonName(header.name));
+    if (returnType.startsWith('Set<') || returnType.startsWith('ReadonlySet<')) {
+      setReturnFunctionNames.add(tsExportNameForPythonName(header.name));
+    }
   }
 
   while (index < lines.length) {

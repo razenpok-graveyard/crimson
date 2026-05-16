@@ -176,6 +176,14 @@ export function colorNameMarker(name: string): string {
   return `__color__:${name}`;
 }
 
+export function setNameMarker(name: string): string {
+  return `__set__:${name}`;
+}
+
+export function objectNameMarker(name: string): string {
+  return `__object__:${name}`;
+}
+
 export function translatedExpressionLooksVector(tsExpression: string): boolean {
   const trimmed = tsExpression.trim();
   if (/^(?:Vec2\.|new Vec2\b)/.test(trimmed) && !/\.(?:length|toHeading)\(\)$/.test(trimmed)) {
@@ -261,6 +269,11 @@ export function translateExpression(
     const itemNameMap = new Map(nameMap);
     itemNameMap.set(dictComprehension[3], itemName);
     return `new Map(${translateExpression(dictComprehension[4], nameMap, arrayNames, validatedTypeAliases, mapNames)}.map((${itemName}) => [${translateExpression(dictComprehension[1], itemNameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(dictComprehension[2], itemNameMap, arrayNames, validatedTypeAliases, mapNames)}] as const))`;
+  }
+
+  const boolCall = parseCallPrefix(trimmed, 'bool');
+  if (boolCall !== null && boolCall.rest === '') {
+    return translateBooleanCast(boolCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames);
   }
 
   const lengthComparison = /^(.+?) (<=|>=|<|>|==|!=) (.+)$/.exec(trimmed);
@@ -516,10 +529,33 @@ export function translateExpression(
     return `int(${translateExpression(intCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
-  for (const primitiveName of ['float', 'str', 'bool']) {
+  for (const primitiveName of ['float', 'str']) {
     const primitiveCall = parseCallPrefix(trimmed, primitiveName);
     if (primitiveCall !== null && primitiveCall.rest === '') {
       return translateExpression(primitiveCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    }
+  }
+
+  const setCall = parseCallPrefix(trimmed, 'set');
+  if (setCall !== null && setCall.rest === '') {
+    const args = splitTopLevelComma(setCall.argsText);
+    if (args.length === 0) {
+      return 'new Set()';
+    }
+    if (args.length === 1) {
+      return `new Set(${translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
+  }
+
+  const dictCall = parseCallPrefix(trimmed, 'dict');
+  if (dictCall !== null && dictCall.rest === '') {
+    const args = splitTopLevelComma(dictCall.argsText);
+    if (args.length === 0) {
+      return '{}';
+    }
+    if (args.length === 1) {
+      const source = translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      return `{ ...${source.includes(' ') ? `(${source})` : source} }`;
     }
   }
 
@@ -564,14 +600,16 @@ export function translateExpression(
     return `new ${tsExportNameForPythonName(zeroArgConstructor[1])}()`;
   }
 
-  const dictGet = /^(.+)\.get\((.*)\)$/.exec(trimmed);
+  const dictGet = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*|\{[\s\S]+\})\.get\((.*)\)$/.exec(trimmed);
   if (dictGet !== null) {
     const parts = splitTopLevelComma(dictGet[2]);
     if (parts.length === 1 || parts.length === 2) {
       const inlineMap = translateInlineDictMapExpression(dictGet[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
       const mapName = inlineMap ?? translateExpression(dictGet[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
       const key = translateMapKeyExpression(mapName, translateExpression(parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames));
-      const value = `${mapName}.get(${key})`;
+      const value = inlineMap === null && (arrayNames.has(objectNameMarker(dictGet[1])) || arrayNames.has(objectNameMarker(mapName)))
+        ? `${mapName}[${key}]`
+        : `${mapName}.get(${key})`;
       return parts.length === 1 ? `${value} ?? null` : `${value} ?? ${translateExpression(parts[1], nameMap, arrayNames, validatedTypeAliases)}`;
     }
   }
@@ -719,7 +757,7 @@ export function translateExpression(
   const notExpression = /^not (.+)$/.exec(trimmed);
   if (notExpression !== null) {
     const operand = stripBalancedOuterParens(notExpression[1]);
-    const value = translateExpression(operand, nameMap, arrayNames, validatedTypeAliases);
+    const value = translateExpression(operand, nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (arrayNames.has(operand) || arrayNames.has(value)) {
       return `${value}.length === 0`;
     }
@@ -930,6 +968,9 @@ export function translateExpression(
     })
     .replaceAll(/\blen\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\)/g, (_match, name: string) => {
       const translatedName = translateExpression(name, nameMap, arrayNames, validatedTypeAliases, mapNames);
+      if (arrayNames.has(setNameMarker(name)) || arrayNames.has(setNameMarker(translatedName))) {
+        return `${translatedName}.size`;
+      }
       return arrayNames.has(stringNameMarker(name)) || arrayNames.has(stringNameMarker(translatedName))
         ? `Array.from(${translatedName}).length`
         : `${translatedName}.length`;
@@ -1027,7 +1068,7 @@ function translateSortedCall(
   const reverse = parts.some((part) => part === 'reverse=True');
   const iterable = sortedIterableExpression(iterablePart, nameMap, arrayNames, validatedTypeAliases, mapNames);
   if (keyPart === undefined) {
-    return `${iterable}.sort(${reverse ? '(left, right) => left < right ? 1 : left > right ? -1 : 0' : ''})`;
+    return `${iterable}.sort((left, right) => left < right ? ${reverse ? 1 : -1} : left > right ? ${reverse ? -1 : 1} : 0)`;
   }
 
   const lambda = /^key=lambda ([A-Za-z_][A-Za-z0-9_]*): (.+)$/.exec(keyPart);
@@ -1053,8 +1094,62 @@ function sortedIterableExpression(
   validatedTypeAliases: ReadonlySet<string>,
   mapNames: ReadonlySet<string>,
 ): string {
+  const setDifference = topLevelSetDifference(pythonExpression);
+  if (setDifference !== null) {
+    const left = translateExpression(setDifference.left, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const right = translateExpression(setDifference.right, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return `Array.from(${left}).filter((item) => !${right}.has(item))`;
+  }
   const iterable = translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
   return `Array.from(${iterable})`;
+}
+
+function topLevelSetDifference(pythonExpression: string): { left: string; right: string } | null {
+  const additive = splitTopLevelAdditive(pythonExpression);
+  if (additive === null || additive.parts.length !== 2 || additive.operators[0] !== '-') {
+    return null;
+  }
+  return { left: additive.parts[0], right: additive.parts[1] };
+}
+
+function translateBooleanCast(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string {
+  if (pythonExpression.includes(' or ')) {
+    return pythonExpression
+      .split(' or ')
+      .map((part) => translatePythonTruthy(part, nameMap, arrayNames, validatedTypeAliases, mapNames))
+      .join(' || ');
+  }
+  if (pythonExpression.includes(' and ')) {
+    return pythonExpression
+      .split(' and ')
+      .map((part) => translatePythonTruthy(part, nameMap, arrayNames, validatedTypeAliases, mapNames))
+      .join(' && ');
+  }
+  return translatePythonTruthy(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+}
+
+function translatePythonTruthy(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string {
+  const trimmed = pythonExpression.trim();
+  const translated = translateExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (arrayNames.has(setNameMarker(trimmed)) || arrayNames.has(setNameMarker(translated))) {
+    return `${translated}.size > 0`;
+  }
+  if (arrayNames.has(trimmed) || arrayNames.has(translated)) {
+    return `${translated}.length > 0`;
+  }
+  return translated;
 }
 
 function replaceTranslatedRaylibConstructors(value: string): string {
