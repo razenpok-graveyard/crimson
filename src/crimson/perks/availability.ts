@@ -10,7 +10,7 @@ import { perkCountGet } from '@crimson/perks/helpers.ts';
 import { PERK_BY_ID, PerkFlags, PerkId } from '@crimson/perks/ids.ts';
 
 const _PERK_BASE_AVAILABLE_MAX_ID = int(PerkId.BONUS_MAGNET);
-const _PERK_ALWAYS_AVAILABLE: readonly PerkId[] = [
+export const PERK_ALWAYS_AVAILABLE: readonly PerkId[] = [
   PerkId.MAN_BOMB,
   PerkId.LIVING_FORTRESS,
   PerkId.FIRE_CAUGH,
@@ -64,7 +64,7 @@ export function buildPerkAvailability(opts: { status: GameStatus | null }): bool
     }
   }
 
-  for (const perkId of _PERK_ALWAYS_AVAILABLE) {
+  for (const perkId of PERK_ALWAYS_AVAILABLE) {
     if (perkId >= 0 && perkId < available.length) {
       available[perkId] = true;
     }

@@ -175,7 +175,7 @@ export const BONUS_TABLE = [
   }),
 ];
 export const BONUS_BY_ID = new Map(Array.from(BONUS_TABLE, (entry) => [entry.bonusId, entry] as const));
-const _BONUS_FIXED_NAMES: Map<BonusId, string> = new Map();
+export const BONUS_FIXED_NAMES: Map<BonusId, string> = new Map();
 const _BONUS_FIXED_DESCRIPTIONS = new Map([
   [BonusId.WEAPON_POWER_UP, 'Your fire rate and load time increase for a short period.'],
   [BonusId.FIRE_BULLETS, 'For a few seconds -- make them count.'],
@@ -188,7 +188,7 @@ export function bonusDisplayName(bonusId: BonusId, opts: { preserveBugs?: boolea
     return 'unknown';
   }
   if (!preserveBugs) {
-    const fixed = _BONUS_FIXED_NAMES.get(bonusId) ?? null;
+    const fixed = BONUS_FIXED_NAMES.get(bonusId) ?? null;
     if (fixed !== null) {
       return fixed;
     }

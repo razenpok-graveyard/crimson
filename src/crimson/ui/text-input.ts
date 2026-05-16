@@ -8,7 +8,7 @@ import { INPUT_CODE_UNBOUND, inputCodeIsDown } from '@crimson/input-codes.ts';
 import { RngCallerStatic } from '@crimson/rng-caller-static.ts';
 
 const _CONTROL_BIND_SLOTS = 5;
-const _SINGLE_PLAYER_ALT_MOVE_CODES: readonly number[] = [0xC8, 0xD0, 0xCB, 0xCD];
+export const SINGLE_PLAYER_ALT_MOVE_CODES: readonly number[] = [0xC8, 0xD0, 0xCB, 0xCD];
 
 export function pollTextInput(maxLen: number, opts: { allowSpace?: boolean } = {}): string {
   const allowSpace = opts.allowSpace ?? true;
@@ -95,7 +95,7 @@ export function gameplayControlsHeld(config: CrimsonConfig): boolean {
     }
   }
 
-  for (const code of _SINGLE_PLAYER_ALT_MOVE_CODES) {
+  for (const code of SINGLE_PLAYER_ALT_MOVE_CODES) {
     if (inputCodeIsDown(int(code), { playerIndex: 0 })) {
       return true;
     }

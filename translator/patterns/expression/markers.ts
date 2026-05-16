@@ -66,6 +66,10 @@ export function numberArrayNameMarker(name: string): string {
   return `__number_array__:${name}`;
 }
 
+export function numberNameMarker(name: string): string {
+  return `__number__:${name}`;
+}
+
 export function tupleElementArrayNameMarker(name: string): string {
   return `__tuple_element_array__:${name}`;
 }

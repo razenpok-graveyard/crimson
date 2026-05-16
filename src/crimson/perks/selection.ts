@@ -13,7 +13,7 @@ import type { PerkSelectionState } from '@crimson/perks/state.ts';
 import type { CreatureState } from '@crimson/creatures/runtime.ts';
 
 export const PERK_ID_MAX = Math.max(...Array.from(PERK_BY_ID.keys(), (perkId) => int(perkId)));
-const _DEATH_CLOCK_BLOCKED: ReadonlySet<PerkId> = new Set([
+export const DEATH_CLOCK_BLOCKED: ReadonlySet<PerkId> = new Set([
   PerkId.JINXED,
   PerkId.BREATHING_ROOM,
   PerkId.GRIM_DEAL,
@@ -26,7 +26,7 @@ const _DEATH_CLOCK_BLOCKED: ReadonlySet<PerkId> = new Set([
   PerkId.THICK_SKINNED,
   PerkId.BANDAGE,
 ]);
-const _PERK_RARITY_GATE: ReadonlySet<PerkId> = new Set([
+export const PERK_RARITY_GATE: ReadonlySet<PerkId> = new Set([
   PerkId.JINXED,
   PerkId.AMMUNITION_WITHIN,
   PerkId.ANXIOUS_LOADER,
@@ -185,12 +185,12 @@ export function perkGenerateChoices(state: GameplayState, player: PlayerState, o
         continue;
       }
 
-      if (deathClockActive && _DEATH_CLOCK_BLOCKED.has(perkId)) {
+      if (deathClockActive && DEATH_CLOCK_BLOCKED.has(perkId)) {
         continue;
       }
 
       // Global rarity gate: certain perks have a 25% chance to be rejected.
-      if (_PERK_RARITY_GATE.has(perkId) && (state.rng.rand({ caller: RngCallerStatic.PERKS_GENERATE_CHOICES_RARITY_GATE }) & 3) === 1) {
+      if (PERK_RARITY_GATE.has(perkId) && (state.rng.rand({ caller: RngCallerStatic.PERKS_GENERATE_CHOICES_RARITY_GATE }) & 3) === 1) {
         continue;
       }
 

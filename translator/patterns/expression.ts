@@ -14,6 +14,7 @@ import {
   mapValueMapNameMarker,
   mapValueTypeMarker,
   nullableNameMarker,
+  numberNameMarker,
   objectNameMarker,
   pathNameMarker,
   pythonMappingNameMarker,
@@ -43,6 +44,7 @@ export {
   mapValueTypeMarker,
   nullableNameMarker,
   numberArrayNameMarker,
+  numberNameMarker,
   objectNameMarker,
   pathArrayNameMarker,
   pathNameMarker,
@@ -1760,8 +1762,13 @@ export function translateExpression(
   }
 
   const vectorScale = splitTopLevelMultiplicative(trimmed);
+  const vectorScaleContainsComparison = vectorScale !== null && (
+    splitTopLevelComparisonOperators(vectorScale.left) !== null
+    || splitTopLevelComparisonOperators(vectorScale.right) !== null
+  );
   if (
     vectorScale !== null
+    && !vectorScaleContainsComparison
     && (
       translateAggregateGeneratorCall(vectorScale.left, nameMap, arrayNames, validatedTypeAliases, mapNames) !== null
       || translateAggregateGeneratorCall(vectorScale.right, nameMap, arrayNames, validatedTypeAliases, mapNames) !== null
@@ -1769,7 +1776,19 @@ export function translateExpression(
   ) {
     return `${translateExpression(vectorScale.left, nameMap, arrayNames, validatedTypeAliases, mapNames)} * ${translateExpression(vectorScale.right, nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
   }
-  if (vectorScale !== null && expressionIsKnownVector(vectorScale.left, nameMap, arrayNames)) {
+  const vectorScaleLeft = vectorScale === null ? null : stripBalancedOuterParens(vectorScale.left);
+  const vectorScaleRight = vectorScale === null ? null : stripBalancedOuterParens(vectorScale.right);
+  if (
+    vectorScale !== null
+    && !vectorScaleContainsComparison
+    && vectorScaleLeft !== null
+    && vectorScaleRight !== null
+    && vectorScaleLeft === vectorScaleRight
+    && /^[A-Za-z_][A-Za-z0-9_]*$/.test(vectorScaleLeft)
+  ) {
+    return `${translateExpression(vectorScaleLeft, nameMap, arrayNames, validatedTypeAliases, mapNames)} * ${translateExpression(vectorScaleRight, nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
+  }
+  if (vectorScale !== null && !vectorScaleContainsComparison && expressionIsKnownVector(vectorScale.left, nameMap, arrayNames)) {
     return `${translateExpression(vectorScale.left, nameMap, arrayNames, validatedTypeAliases, mapNames)}.mul(${translateExpression(stripBalancedOuterParens(vectorScale.right), nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
@@ -3608,6 +3627,14 @@ function expressionIsKnownVector(
   arrayNames: Set<string>,
 ): boolean {
   const trimmed = stripBalancedOuterParens(pythonExpression);
+  const translated = translateIdentifierName(trimmed, nameMap);
+  if (arrayNames.has(numberNameMarker(trimmed)) || arrayNames.has(numberNameMarker(translated))) {
+    return false;
+  }
+  const fieldType = knownClassFieldType(trimmed, nameMap) ?? knownClassFieldType(translated, nameMap);
+  if (fieldType === 'Vec2' || fieldType === 'wgl.Vector2') {
+    return true;
+  }
   if (trimmed.startsWith('Vec2.') || trimmed.startsWith('Vec2(')) {
     return true;
   }
@@ -3617,7 +3644,6 @@ function expressionIsKnownVector(
   if (/\.(?:aim|pos|vel|[A-Za-z0-9_]*(?:_pos|_offset))$/.test(trimmed)) {
     return true;
   }
-  const translated = translateIdentifierName(trimmed, nameMap);
   if (/\.(?:aim|pos|vel|[A-Za-z0-9_$]*(?:Pos|Offset))$/.test(translated)) {
     return true;
   }
@@ -3631,6 +3657,15 @@ function expressionIsKnownVector(
     return arrayNames.has(vectorArrayNameMarker(indexedIdentifier[1])) || arrayNames.has(vectorArrayNameMarker(translatedBase));
   }
   return translatedExpressionLooksVector(trimmed);
+}
+
+function knownClassFieldType(tsExpression: string, nameMap: Map<string, string>): string | null {
+  const dottedField = /^(.+)\.([A-Za-z_$][A-Za-z0-9_$]*)$/.exec(tsExpression);
+  if (dottedField === null) {
+    return null;
+  }
+  const receiverType = nameMap.get(receiverTypeNameMarker(dottedField[1]));
+  return receiverType === undefined ? null : nameMap.get(classFieldTypeMarker(receiverType, dottedField[2])) ?? null;
 }
 
 function finalVectorMethodCall(tsExpression: string): boolean {

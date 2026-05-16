@@ -34,6 +34,7 @@ import {
   mapValueTypeMarker,
   nullableNameMarker,
   numberArrayNameMarker,
+  numberNameMarker,
   objectNameMarker,
   pathArrayNameMarker,
   pathNameMarker,
@@ -550,6 +551,62 @@ function nameReferencedAfterBlock(lines: string[], startIndex: number, indent: s
     index += 1;
   }
   return false;
+}
+
+function predeclareTryFinallyAssignments(
+  lines: string[],
+  index: number,
+  indent: string,
+  declaredNames: Set<string>,
+  nameMap: ReadonlyMap<string, string>,
+): string[] {
+  const innerIndent = `${indent}    `;
+  const tryEndIndex = indentedBlockEndIndex(lines, index + 1, innerIndent);
+  const finallyLine = lines[tryEndIndex] ?? '';
+  if (!lineStartsAtIndent(finallyLine, indent) || finallyLine.trim() !== 'finally:') {
+    return [];
+  }
+  const afterFinallyIndex = indentedBlockEndIndex(lines, tryEndIndex + 1, innerIndent);
+  const assignedTypes = new Map<string, Set<string>>();
+  for (let lineIndex = index + 1; lineIndex < tryEndIndex; lineIndex += 1) {
+    const line = lines[lineIndex] ?? '';
+    if (!lineStartsAtIndent(line, innerIndent)) {
+      continue;
+    }
+    const statement = line.slice(innerIndent.length);
+    const assignment = /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(statement);
+    if (assignment === null || declaredNames.has(assignment[1])) {
+      continue;
+    }
+    if (!nameReferencedAfterBlock(lines, afterFinallyIndex, indent, assignment[1])) {
+      continue;
+    }
+    const types = assignedTypes.get(assignment[1]) ?? new Set<string>();
+    types.add(inferPredeclaredAssignmentType(lines, lineIndex, innerIndent, assignment[2], nameMap));
+    assignedTypes.set(assignment[1], types);
+  }
+
+  const declarations: string[] = [];
+  for (const [name, types] of assignedTypes) {
+    const concreteTypes = [...types].filter((type) => type !== 'any');
+    const candidateTypes = concreteTypes.length > 0 ? concreteTypes : [...types];
+    const uniqueTypes = [...new Set(candidateTypes)];
+    declarations.push(`let ${tsExportNameForPythonName(name)}: ${uniqueTypes.length === 1 ? uniqueTypes[0] : uniqueTypes.join(' | ')};`);
+    declaredNames.add(name);
+  }
+  return declarations;
+}
+
+function indentedBlockEndIndex(lines: string[], startIndex: number, indent: string): number {
+  let index = startIndex;
+  while (index < lines.length) {
+    const line = lines[index] ?? '';
+    if (line.trim() !== '' && !isIndentedBlockLine(lines, index, indent)) {
+      break;
+    }
+    index += 1;
+  }
+  return index;
 }
 
 function inferPredeclaredAssignmentType(
@@ -1083,6 +1140,7 @@ export function translateStraightLineStatement(
     }
 
     const innerIndent = `${indent}    `;
+    const tryFinallyPredeclarations = predeclareTryFinallyAssignments(lines, index, indent, declaredNames, nameMap);
     const translateBlock = (startIndex: number): { statements: string[]; nextIndex: number } | null => {
       const blockStatements: string[] = [];
       let nextIndex = startIndex;
@@ -1126,6 +1184,7 @@ export function translateStraightLineStatement(
       }
       return {
         statements: [
+          ...tryFinallyPredeclarations,
           'try {',
           ...tryBlock.statements,
           '} finally {',
@@ -4199,6 +4258,10 @@ function recordLocalAssignmentMarkers(
     arrayNames.add(stringNameMarker(pythonName));
     arrayNames.add(stringNameMarker(tsName));
   }
+  if (translatedExpressionLooksNumber(assignedRight)) {
+    arrayNames.add(numberNameMarker(pythonName));
+    arrayNames.add(numberNameMarker(tsName));
+  }
   if (translatedExpressionLooksVector(assignedRight)) {
     arrayNames.add(vectorNameMarker(pythonName));
     arrayNames.add(vectorNameMarker(tsName));
@@ -4215,6 +4278,24 @@ function recordLocalAssignmentMarkers(
     arrayNames.add(dateNameMarker(pythonName));
     arrayNames.add(dateNameMarker(tsName));
   }
+}
+
+function translatedExpressionLooksNumber(tsExpression: string): boolean {
+  const trimmed = tsExpression.trim();
+  if (/^-?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(trimmed)) {
+    return true;
+  }
+  if (/^(?:int|f32|Math\.[A-Za-z_$][A-Za-z0-9_$]*)\(/.test(trimmed)) {
+    return true;
+  }
+  if (
+    !translatedExpressionLooksVector(trimmed)
+    && !/["'`]/.test(trimmed)
+    && / [+\-*/%] /.test(trimmed)
+  ) {
+    return true;
+  }
+  return false;
 }
 
 function translateMapPopAssignment(
@@ -4575,13 +4656,13 @@ export function parseTopLevelAssignment(
   );
   const name = annotatedType === null
     ? pythonName.startsWith('_') ? tsExportNameForPythonName(pythonName) : tsPublicNameForPythonName(pythonName)
-    : publicUppercaseName ? tsPublicNameForPythonName(pythonName) : privateUppercaseName ? tsExportNameForPythonName(pythonName) : tsMutableNameForPythonName(pythonName);
+    : publicUppercaseName ? tsPublicNameForPythonName(pythonName) : privateUppercaseName ? tsPublicNameForPythonName(pythonName) : tsMutableNameForPythonName(pythonName);
   const typeExpression = annotatedType === null ? undefined : tsTopLevelAssignmentTypeExpression(annotatedType);
   const baseAssignment = {
     pythonName,
     name,
     declaration: annotatedType === null || publicUppercaseName || privateUppercaseName ? 'const' as const : 'let' as const,
-    exported: !pythonName.startsWith('_'),
+    exported: !pythonName.startsWith('_') || privateUppercaseName,
     typeExpression,
     trailingComment: parsedLine.comment ?? undefined,
   };

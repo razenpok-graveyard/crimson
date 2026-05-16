@@ -12,12 +12,12 @@ import { perkActive } from '@crimson/perks/helpers.ts';
 import { RngCallerStatic } from '@crimson/rng-caller-static.ts';
 import type { GameplayState, PlayerState } from '@crimson/sim/state-types.ts';
 
-const _PLAYER_PAIN_SFX: readonly SfxId[] = [
+const PLAYER_PAIN_SFX: readonly SfxId[] = [
   SfxId.TROOPER_INPAIN_01,
   SfxId.TROOPER_INPAIN_02,
   SfxId.TROOPER_INPAIN_03,
 ];
-const _PLAYER_DEATH_SFX: readonly SfxId[] = [SfxId.TROOPER_DIE_01, SfxId.TROOPER_DIE_02];
+const PLAYER_DEATH_SFX: readonly SfxId[] = [SfxId.TROOPER_DIE_01, SfxId.TROOPER_DIE_02];
 const _THICK_SKINNED_DAMAGE_SCALE_F32 = 0.6660000085830688;
 
 export function playerTakeDamage(state: GameplayState, player: PlayerState, damage: number, opts: { dt?: number | null; players?: readonly PlayerState[] | null; onLethal?: (() => void) | null } = {}): number {
@@ -93,7 +93,7 @@ export function playerTakeDamage(state: GameplayState, player: PlayerState, dama
 
   // Native emits pain/death VO before heading jitter + low-health timer RNG work.
   if (!lethalHit) {
-    state.sfxQueue.push(_PLAYER_PAIN_SFX[state.rng.rand({ caller: RngCallerStatic.PLAYER_TAKE_DAMAGE_PAIN_SFX }) % _PLAYER_PAIN_SFX.length]);
+    state.sfxQueue.push(PLAYER_PAIN_SFX[state.rng.rand({ caller: RngCallerStatic.PLAYER_TAKE_DAMAGE_PAIN_SFX }) % PLAYER_PAIN_SFX.length]);
     if (!wasAlive) {
       return Math.max(0.0, healthBefore - player.health);
     }
@@ -102,7 +102,7 @@ export function playerTakeDamage(state: GameplayState, player: PlayerState, dama
       return Math.max(0.0, healthBefore - player.health);
     }
     if (!perkActive(player, PerkId.FINAL_REVENGE)) {
-      state.sfxQueue.push(_PLAYER_DEATH_SFX[state.rng.rand({ caller: RngCallerStatic.PLAYER_TAKE_DAMAGE_DEATH_SFX }) & 1]);
+      state.sfxQueue.push(PLAYER_DEATH_SFX[state.rng.rand({ caller: RngCallerStatic.PLAYER_TAKE_DAMAGE_DEATH_SFX }) & 1]);
     } else if (onLethal !== null) {
       onLethal();
       state.playerDeathHookSkipIndices.add(int(player.index));

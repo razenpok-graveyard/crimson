@@ -28,14 +28,14 @@ export class SecondaryRocketStyle {
   }
 }
 
-const _ROCKET_STYLE_BY_TYPE: Map<number, SecondaryRocketStyle> = new Map([
+const ROCKET_STYLE_BY_TYPE: Map<number, SecondaryRocketStyle> = new Map([
   [SecondaryProjectileTypeId.ROCKET, new SecondaryRocketStyle({ baseSize: 14.0, glowSize: 60.0, glowRgb: [1.0, 1.0, 1.0], glowAlphaMul: 0.68 })],
   [SecondaryProjectileTypeId.HOMING_ROCKET, new SecondaryRocketStyle({ baseSize: 10.0, glowSize: 40.0, glowRgb: [1.0, 1.0, 1.0], glowAlphaMul: 0.58 })],
   [SecondaryProjectileTypeId.ROCKET_MINIGUN, new SecondaryRocketStyle({ baseSize: 8.0, glowSize: 30.0, glowRgb: [0.7, 0.7, 1.0], glowAlphaMul: 0.158 })],
 ]);
 
 export function drawSecondaryRocket(ctx: SecondaryProjectileDrawCtx): boolean {
-  const style = _ROCKET_STYLE_BY_TYPE.get(ctx.projType) ?? null;
+  const style = ROCKET_STYLE_BY_TYPE.get(ctx.projType) ?? null;
   if (style === null) {
     return false;
   }

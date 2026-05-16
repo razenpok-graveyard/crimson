@@ -60,7 +60,7 @@ export function weaponAssignPlayer(player: PlayerState, weaponId: WeaponId, opts
 
   const clipSize = int(weapon.clipSize);
   const clipCtx = new WeaponAssignCtx({ player: player, clipSize: Math.max(0, clipSize) });
-  for (const modifier of _WEAPON_ASSIGN_CLIP_MODIFIERS) {
+  for (const modifier of WEAPON_ASSIGN_CLIP_MODIFIERS) {
     modifier(clipCtx);
   }
   player.weapon.clipSize = Math.max(0, int(clipCtx.clipSize));
@@ -131,7 +131,7 @@ export function playerStartReload(player: PlayerState, state: GameplayState): vo
   player.weapon.reloadTimerMax = player.weapon.reloadTimer;
 }
 
-const _WEAPON_ASSIGN_CLIP_MODIFIERS: readonly WeaponAssignClipModifier[] = [
+export const WEAPON_ASSIGN_CLIP_MODIFIERS: readonly WeaponAssignClipModifier[] = [
   weaponAssignClipAmmoManiac,
   weaponAssignClipMyFavouriteWeapon,
 ];

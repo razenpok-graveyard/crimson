@@ -12,11 +12,14 @@ import { OwnerRef } from '@crimson/owner-ref.ts';
 import { RngCallerStatic } from '@crimson/rng-caller-static.ts';
 import { weaponEntryForProjectileTypeId } from '@crimson/weapons.ts';
 import { spawnIonHitEffects, spawnPlasmaCannonHitEffects, spawnShrinkifierHitEffects, spawnSplitterHitEffects } from '@crimson/projectiles/effects.ts';
-import { Projectile, ProjectileTemplateId } from '@crimson/projectiles/types.ts';
-import { applyDamageToCreature, hitRadiusFor } from './collision.ts';
+import type { Projectile } from '@crimson/projectiles/types.ts';
+import { ProjectileTemplateId } from '@crimson/projectiles/types.ts';
+import { applyDamageToCreature, hitRadiusFor } from '@crimson/projectiles/runtime/collision.ts';
 import type { CreatureState } from '@crimson/creatures/runtime.ts';
 import type { GameplayState } from '@crimson/gameplay.ts';
-import type { ProjectilePool } from './projectile-pool.ts';
+import type { ProjectilePool } from '@crimson/projectiles/runtime/projectile-pool.ts';
+
+export type ProjectileHitPerkHook = (arg0: ProjectileHitPerkCtx) => void;
 
 export class ProjectileUpdateCtx {
   pool: ProjectilePool;
@@ -78,14 +81,14 @@ export class ProjectileHitPerkCtx {
   proj: Projectile;
   creature: CreatureState;
   rng: CrandLike;
-  ownerPerkActive: (owner: OwnerRef, perkIdx: number) => boolean;
+  ownerPerkActive: (arg0: OwnerRef, arg1: number) => boolean;
   poisonIdx: number;
 
   constructor(opts: {
     proj: Projectile;
     creature: CreatureState;
     rng: CrandLike;
-    ownerPerkActive: (owner: OwnerRef, perkIdx: number) => boolean;
+    ownerPerkActive: (arg0: OwnerRef, arg1: number) => boolean;
     poisonIdx: number;
   }) {
     this.proj = opts.proj;
@@ -96,20 +99,13 @@ export class ProjectileHitPerkCtx {
   }
 }
 
-export type ProjectileHitPerkHook = (ctx: ProjectileHitPerkCtx) => void;
-
 export function projectileHitPerkPoisonBullets(ctx: ProjectileHitPerkCtx): void {
-  if (
-    ctx.ownerPerkActive(ctx.proj.owner, int(ctx.poisonIdx)) &&
-    (ctx.rng.rand({ caller: RngCallerStatic.PROJECTILE_UPDATE_POISON_BULLETS_GATE }) & 7) === 1
-  ) {
+  if (ctx.ownerPerkActive(ctx.proj.owner, int(ctx.poisonIdx)) && (ctx.rng.rand({ caller: RngCallerStatic.PROJECTILE_UPDATE_POISON_BULLETS_GATE }) & 7) === 1) {
     ctx.creature.flags |= CreatureFlags.SELF_DAMAGE_TICK;
   }
 }
 
-export const PROJECTILE_HIT_PERK_HOOKS: readonly ProjectileHitPerkHook[] = [projectileHitPerkPoisonBullets];
-
-function lifeTimerSubF32(lifeTimer: number, amount: number): number {
+export function lifeTimerSubF32(lifeTimer: number, amount: number): number {
   return f32(lifeTimer - amount);
 }
 
@@ -121,21 +117,14 @@ export function lingerGaussGun(ctx: ProjectileUpdateCtx, proj: Projectile): void
   proj.lifeTimer = lifeTimerSubF32(proj.lifeTimer, ctx.dt * 0.1);
 }
 
-function lingerIonAoe(
-  ctx: ProjectileUpdateCtx,
-  proj: Projectile,
-  opts: {
-    lifeDecayScale: number;
-    damagePerSecond: number;
-    baseRadius: number;
-  },
-): void {
-  const { lifeDecayScale, damagePerSecond, baseRadius } = opts;
+export function lingerIonAoe(ctx: ProjectileUpdateCtx, proj: Projectile, opts: { lifeDecayScale: number; damagePerSecond: number; baseRadius: number }): void {
+  const lifeDecayScale = opts.lifeDecayScale;
+  const damagePerSecond = opts.damagePerSecond;
+  const baseRadius = opts.baseRadius;
   proj.lifeTimer = lifeTimerSubF32(proj.lifeTimer, ctx.dt * lifeDecayScale);
   const damage = ctx.dt * damagePerSecond;
   const radius = ctx.ionScale * baseRadius;
-  for (let creatureIdx = 0; creatureIdx < ctx.creatures.length; creatureIdx++) {
-    const creature = ctx.creatures[creatureIdx];
+  for (const [creatureIdx, creature] of ctx.creatures.entries()) {
     if (!creature.active) {
       continue;
     }
@@ -149,27 +138,34 @@ function lingerIonAoe(
         ctx.creatures,
         creatureIdx,
         damage,
-        {
-          damageType: CreatureDamageType.ION,
-          impulse: new Vec2(),
-          owner: proj.owner,
-          applyCreatureDamage: ctx.pool.creatureDamageApplier,
-        },
+        { damageType: CreatureDamageType.ION, impulse: new Vec2(), owner: proj.owner, applyCreatureDamage: ctx.pool.creatureDamageApplier },
       );
     }
   }
 }
 
 export function lingerIonMinigun(ctx: ProjectileUpdateCtx, proj: Projectile): void {
-  lingerIonAoe(ctx, proj, { lifeDecayScale: 1.0, damagePerSecond: 40.0, baseRadius: 60.0 });
+  lingerIonAoe(
+    ctx,
+    proj,
+    { lifeDecayScale: 1.0, damagePerSecond: 40.0, baseRadius: 60.0 },
+  );
 }
 
 export function lingerIonRifle(ctx: ProjectileUpdateCtx, proj: Projectile): void {
-  lingerIonAoe(ctx, proj, { lifeDecayScale: 1.0, damagePerSecond: 100.0, baseRadius: 88.0 });
+  lingerIonAoe(
+    ctx,
+    proj,
+    { lifeDecayScale: 1.0, damagePerSecond: 100.0, baseRadius: 88.0 },
+  );
 }
 
 export function lingerIonCannon(ctx: ProjectileUpdateCtx, proj: Projectile): void {
-  lingerIonAoe(ctx, proj, { lifeDecayScale: 0.7, damagePerSecond: 300.0, baseRadius: 128.0 });
+  lingerIonAoe(
+    ctx,
+    proj,
+    { lifeDecayScale: 0.7, damagePerSecond: 300.0, baseRadius: 128.0 },
+  );
 }
 
 export function preHitSplitter(ctx: ProjectileUpdateCtx, proj: Projectile, hitIdx: number): void {
@@ -210,25 +206,22 @@ export function postHitIonRifle(ctx: ProjectileUpdateCtx, hit: ProjectileHitInfo
   const runtimeState = ctx.runtimeState;
   const creatures = ctx.creatures;
   const hitCreature = int(hit.hitIdx);
-  if (
-    runtimeState !== null &&
-    runtimeState.shockChainProjectileId === hit.projIndex &&
-    0 <= hitCreature && hitCreature < creatures.length
-  ) {
-    let linksLeft = int(runtimeState.shockChainLinksLeft);
+  if (runtimeState !== null && runtimeState.shockChainProjectileId === hit.projIndex && hitCreature >= 0 && hitCreature < creatures.length) {
+    const linksLeft = int(runtimeState.shockChainLinksLeft);
+    let bestIdx: any;
+    let bestDistSq: any;
     if (linksLeft > 0 && creatures.length > 0) {
       runtimeState.shockChainLinksLeft = linksLeft - 1;
 
       const originPos = hit.proj.pos;
       const minDistSq = 100.0 * 100.0;
 
-      let bestIdx = runtimeState.preserveBugs ? 0 : -1;
-      let bestDistSq = 1e12;
-      for (let creatureId = 0; creatureId < creatures.length; creatureId++) {
+      bestIdx = runtimeState.preserveBugs ? 0 : -1;
+      bestDistSq = 1e12;
+      for (const [creatureId, creature] of creatures.entries()) {
         if (creatureId === hitCreature) {
           continue;
         }
-        const creature = creatures[creatureId];
         if (!creature.active) {
           continue;
         }
@@ -253,15 +246,9 @@ export function postHitIonRifle(ctx: ProjectileUpdateCtx, hit: ProjectileHitInfo
 
       const prevGuard = runtimeState.bonusSpawnGuard;
       runtimeState.bonusSpawnGuard = true;
-      let projId: number;
+      let projId: any;
       try {
-        projId = ctx.pool.spawn({
-          pos: originPos,
-          angle,
-          typeId: hit.proj.typeId,
-          owner: OwnerRef.fromCreature(hitCreature),
-          travelBudget: hit.proj.travelBudget,
-        });
+        projId = ctx.pool.spawn({ pos: originPos, angle: angle, typeId: hit.proj.typeId, owner: OwnerRef.fromCreature(hitCreature), travelBudget: hit.proj.travelBudget });
       } finally {
         runtimeState.bonusSpawnGuard = prevGuard;
       }
@@ -324,12 +311,7 @@ export function postHitShrinkifier(ctx: ProjectileUpdateCtx, hit: ProjectileHitI
       ctx.creatures,
       int(hit.hitIdx),
       creature.hp + 1.0,
-      {
-        damageType: CreatureDamageType.BULLET,
-        impulse: new Vec2(),
-        owner: hit.proj.owner,
-        applyCreatureDamage: ctx.pool.creatureDamageApplier,
-      },
+      { damageType: CreatureDamageType.BULLET, impulse: new Vec2(), owner: hit.proj.owner, applyCreatureDamage: ctx.pool.creatureDamageApplier },
     );
   }
   hit.proj.lifeTimer = 0.25;
@@ -344,3 +326,5 @@ export function postHitPlagueSpreader(ctx: ProjectileUpdateCtx, hit: ProjectileH
   const creature = ctx.creatures[int(hit.hitIdx)];
   creature.plagueInfected = true;
 }
+
+export const PROJECTILE_HIT_PERK_HOOKS: readonly ProjectileHitPerkHook[] = [projectileHitPerkPoisonBullets];

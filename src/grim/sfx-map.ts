@@ -85,7 +85,7 @@ export enum SfxId {
   BLOODSPILL_02 = 'sfx_bloodspill_02',
 }
 
-const _SFX_NATIVE_SPECS: readonly [SfxId, SfxSpec][] = [
+export const SFX_NATIVE_SPECS: readonly [SfxId, SfxSpec][] = [
   [SfxId.TROOPER_INPAIN_01, new SfxSpec({ entryName: 'trooper_inPain_01.ogg' })],
   [SfxId.TROOPER_INPAIN_02, new SfxSpec({ entryName: 'trooper_inPain_02.ogg' })],
   [SfxId.TROOPER_INPAIN_03, new SfxSpec({ entryName: 'trooper_inPain_03.ogg' })],
@@ -159,7 +159,7 @@ const _SFX_NATIVE_SPECS: readonly [SfxId, SfxSpec][] = [
   [SfxId.BLOODSPILL_01, new SfxSpec({ entryName: 'bloodSpill_01.ogg' })],
   [SfxId.BLOODSPILL_02, new SfxSpec({ entryName: 'bloodSpill_02.ogg' })],
 ];
-export const SFX_SPECS: ReadonlyMap<SfxId, SfxSpec> = new Map(_SFX_NATIVE_SPECS);
+export const SFX_SPECS: ReadonlyMap<SfxId, SfxSpec> = new Map(SFX_NATIVE_SPECS);
 // Extracted from `audio_init_sfx` (FUN_0043caa0) in `crimsonland.exe`.
 // `sfx_load_sample()` allocates the first free slot, so the load order defines stable ids.
-export const SFX_NATIVE_ORDER: readonly SfxId[] = _SFX_NATIVE_SPECS.map(([sfxId, _spec]) => sfxId);
+export const SFX_NATIVE_ORDER: readonly SfxId[] = SFX_NATIVE_SPECS.map(([sfxId, _spec]) => sfxId);

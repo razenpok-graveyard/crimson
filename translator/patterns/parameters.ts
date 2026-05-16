@@ -8,6 +8,7 @@ import { splitTopLevelComma } from './common.js';
 import {
   colorNameMarker,
   dateNameMarker,
+  numberNameMarker,
   objectNameMarker,
   nullableNameMarker,
   pathNameMarker,
@@ -79,6 +80,10 @@ export function parseFunctionParameterText(
     if (typeExpression === 'string') {
       arrayNames.add(stringNameMarker(typedParameter[1]));
       arrayNames.add(stringNameMarker(parameterName));
+    }
+    if (typeExpression === 'number') {
+      arrayNames.add(numberNameMarker(typedParameter[1]));
+      arrayNames.add(numberNameMarker(parameterName));
     }
     if (typedParameter[2].trim() === 'Path') {
       arrayNames.add(pathNameMarker(typedParameter[1]));

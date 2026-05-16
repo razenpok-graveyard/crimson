@@ -17,7 +17,7 @@ export const UNLOCK_TERRAIN_SLOTS: Map<number, TerrainSlotTriplet> = new Map([
   [30, Q3_TERRAIN_SLOTS], // after quest 3.10 "Zombie Masters"
   [20, Q2_TERRAIN_SLOTS], // after quest 2.10 "Spideroids"
 ]);
-const _TEXTURE_ID_BY_TERRAIN_SLOT: Map<number, TextureId> = new Map([
+const TEXTURE_ID_BY_TERRAIN_SLOT: Map<number, TextureId> = new Map([
   [0, TextureId.TER_Q1_BASE],
   [1, TextureId.TER_Q1_OVERLAY],
   [2, TextureId.TER_Q2_BASE],
@@ -61,7 +61,7 @@ export function chooseUnlockTerrainSlots(opts: { unlockIndex: number; rng: Crand
 }
 
 export function terrainSlotsToTextureIds(slots: TerrainSlotTriplet): [TextureId, TextureId, TextureId] {
-  return [_TEXTURE_ID_BY_TERRAIN_SLOT.get(slots[0])!, _TEXTURE_ID_BY_TERRAIN_SLOT.get(slots[1])!, _TEXTURE_ID_BY_TERRAIN_SLOT.get(slots[2])!];
+  return [TEXTURE_ID_BY_TERRAIN_SLOT.get(slots[0])!, TEXTURE_ID_BY_TERRAIN_SLOT.get(slots[1])!, TEXTURE_ID_BY_TERRAIN_SLOT.get(slots[2])!];
 }
 
 export function resolveTerrainSlots<T>(slots: TerrainSlotTriplet, lookup: (arg0: TextureId) => T): [T, T, T] {

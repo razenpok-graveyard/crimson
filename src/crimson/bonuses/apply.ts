@@ -23,7 +23,7 @@ import { applyWeapon } from '@crimson/bonuses/weapon.ts';
 import { applyWeaponPowerUp } from '@crimson/bonuses/weapon-power-up.ts';
 import type { CreatureState } from '@crimson/creatures/runtime.ts';
 
-const _BONUS_APPLY_HANDLERS: Map<BonusId, BonusApplyHandler> = new Map([
+export const BONUS_APPLY_HANDLERS: Map<BonusId, BonusApplyHandler> = new Map([
   [BonusId.POINTS, applyPoints],
   [BonusId.ENERGIZER, applyEnergizer],
   [BonusId.WEAPON_POWER_UP, applyWeaponPowerUp],
@@ -62,7 +62,7 @@ export function bonusApply(state: GameplayState, player: PlayerState, bonusId: B
   const iconId = meta.iconId !== null ? int(meta.iconId) : -1;
   const label = meta.name;
   const ctx = new BonusApplyCtx({ state: state, player: player, bonusId: bonusId, amount: int(amount), originPos: origin, creatures: creatures, players: players, detailPreset: int(detailPreset), economistMultiplier: economistMultiplier, label: String(label), iconId: int(iconId), deferFreezeCorpseFx: deferFreezeCorpseFx, freezeCorpseIndices: freezeCorpseIndices });
-  const handler = _BONUS_APPLY_HANDLERS.get(bonusId) ?? null;
+  const handler = BONUS_APPLY_HANDLERS.get(bonusId) ?? null;
   if (handler !== null) {
     handler(ctx);
   }

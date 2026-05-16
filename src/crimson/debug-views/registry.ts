@@ -2,7 +2,7 @@
 
 import { View } from '@grim/view.ts';
 
-const _VIEW_REGISTRY: Map<string, ViewDefinition> = new Map();
+export const VIEW_REGISTRY: Map<string, ViewDefinition> = new Map();
 
 export class ViewDefinition {
   readonly name: string;
@@ -22,10 +22,10 @@ export class ViewDefinition {
 
 export function registerView(name: string, title: string): (arg0: (...args: any[]) => View) => (...args: any[]) => View {
   const decorator = (factory: (...args: any[]) => View): (...args: any[]) => View => {
-    if (_VIEW_REGISTRY.has(name)) {
+    if (VIEW_REGISTRY.has(name)) {
       throw new Error(`view already registered: ${name}`);
     }
-    _VIEW_REGISTRY.set(name, new ViewDefinition({ name: name, title: title, factory: factory }));
+    VIEW_REGISTRY.set(name, new ViewDefinition({ name: name, title: title, factory: factory }));
     return factory;
   };
 
@@ -33,9 +33,9 @@ export function registerView(name: string, title: string): (arg0: (...args: any[
 }
 
 export function allViews(): ViewDefinition[] {
-  return Array.from(_VIEW_REGISTRY.keys()).sort((left, right) => left.toLowerCase().localeCompare(right.toLowerCase())).map((name) => _VIEW_REGISTRY.get(name)!);
+  return Array.from(VIEW_REGISTRY.keys()).sort((left, right) => left.toLowerCase().localeCompare(right.toLowerCase())).map((name) => VIEW_REGISTRY.get(name)!);
 }
 
 export function viewByName(name: string): ViewDefinition | null {
-  return _VIEW_REGISTRY.get(name) ?? null;
+  return VIEW_REGISTRY.get(name) ?? null;
 }

@@ -29,7 +29,7 @@ function i32(value: number): number {
 export function creatureCorpseFrameForType(typeId: number): number {
   // Resolve the bodyset frame index used for corpse decals (`fx_queue_render`).
 
-  return _CREATURE_CORPSE_FRAMES.get(int(typeId)) ?? int(typeId) & 0xF;
+  return CREATURE_CORPSE_FRAMES.get(int(typeId)) ?? int(typeId) & 0xF;
 }
 
 export function creatureAnimIsLongStrip(flags: number): boolean {
@@ -177,7 +177,7 @@ export function creatureAnimSelectFrame(phase: number, opts: { baseFrame: number
   return [frame, false, 'ping-pong'];
 }
 
-const _CREATURE_CORPSE_FRAMES: Map<number, number> = new Map([
+export const CREATURE_CORPSE_FRAMES: Map<number, number> = new Map([
   [0, 0], // zombie
   [1, 3], // lizard
   [2, 4], // alien

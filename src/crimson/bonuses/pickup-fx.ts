@@ -43,14 +43,14 @@ export function emitBonusPickupEffects(opts: { state: GameplayState; pickups: Bo
   const detailPreset = opts.detailPreset;
   for (const pickup of pickups) {
     applyDefaultPickupBurst({ state: state, pickup: pickup, detailPreset: int(detailPreset) });
-    const hook = _BONUS_PICKUP_HOOKS.get(pickup.bonusId) ?? null;
+    const hook = BONUS_PICKUP_HOOKS.get(pickup.bonusId) ?? null;
     if (hook !== null) {
       hook(state, pickup, int(detailPreset));
     }
   }
 }
 
-const _BONUS_PICKUP_HOOKS: Map<BonusId, BonusPickupFxHook> = new Map([
+export const BONUS_PICKUP_HOOKS: Map<BonusId, BonusPickupFxHook> = new Map([
   [BonusId.REFLEX_BOOST, applyReflexBoostHook],
   [BonusId.FREEZE, applyFreezeHook],
 ]);

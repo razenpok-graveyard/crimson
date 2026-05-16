@@ -177,14 +177,14 @@ export function resolveFireRecipe(weaponId: WeaponId, opts: { pelletCount: numbe
   }
 
   let speedScale: SpeedScaleRule = new NoSpeedScale();
-  if (pellets > 1 && _SHOTGUN_SPEED_RANDOMIZE_WEAPONS.has(weaponId)) {
+  if (pellets > 1 && SHOTGUN_SPEED_RANDOMIZE_WEAPONS.has(weaponId)) {
     speedScale = _DEFAULT_SPEED_SCALE;
   }
 
   return new FireRecipe({ mode: new PrimaryPelletsMode({ typeId: projectileTypeIdForWeaponId(weaponId), count: pellets, jitter: jitter, speedScale: speedScale }) });
 }
 
-const _SHOTGUN_SPEED_RANDOMIZE_WEAPONS: ReadonlySet<WeaponId> = new Set([
+const SHOTGUN_SPEED_RANDOMIZE_WEAPONS: ReadonlySet<WeaponId> = new Set([
   WeaponId.SHOTGUN,
   WeaponId.SAWED_OFF_SHOTGUN,
   WeaponId.JACKHAMMER,
