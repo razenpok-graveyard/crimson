@@ -799,7 +799,9 @@ export function translateExpression(
     const itemName = tsExportNameForPythonName(dictComprehension[3]);
     const itemNameMap = new Map(nameMap);
     itemNameMap.set(dictComprehension[3], itemName);
-    return `new Map(Array.from(${translateExpression(dictComprehension[4], nameMap, arrayNames, validatedTypeAliases, mapNames)}, (${itemName}) => [${translateExpression(dictComprehension[1], itemNameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(dictComprehension[2], itemNameMap, arrayNames, validatedTypeAliases, mapNames)}] as const))`;
+    const iterable = translateExpression(dictComprehension[4], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const itemParameter = methodCallIterableCallbackParameter(itemName, iterable);
+    return `new Map(Array.from(${iterable}, (${itemParameter}) => [${translateExpression(dictComprehension[1], itemNameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(dictComprehension[2], itemNameMap, arrayNames, validatedTypeAliases, mapNames)}] as const))`;
   }
 
   const tupleDictComprehension = /^\{(.+): (.+) for ([A-Za-z_][A-Za-z0-9_]*), ([A-Za-z_][A-Za-z0-9_]*) in (.+)\}$/.exec(trimmed);
@@ -2021,6 +2023,12 @@ export function translateExpression(
     return translateComparisonClause(left, binaryComparison[2], right, arrayNames);
   }
 
+  const negativeIndexAttribute = /^(.+)\[-(\d+)\]\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);
+  if (negativeIndexAttribute !== null) {
+    const receiver = translateExpression(negativeIndexAttribute[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return `${receiver}[${receiver}.length - ${negativeIndexAttribute[2]}].${tsExportNameForPythonName(negativeIndexAttribute[3])}`;
+  }
+
   const negativeIndex = /^(.+)\[-(\d+)\]$/.exec(trimmed);
   if (negativeIndex !== null) {
     const receiver = translateExpression(negativeIndex[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -3080,10 +3088,19 @@ function translateSetComprehensionExpression(
   const itemNameMap = new Map(nameMap);
   itemNameMap.set(generator.itemName, itemName);
   const iterable = iterableExpressionForIteration(generator.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const itemParameter = propertyChainIterableCallbackParameter(itemName, iterable);
   const filtered = generator.condition === null
     ? iterable
     : `${iterable}.filter((${itemName}) => ${translateExpression(generator.condition, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
-  return `new Set(${filtered}.map((${itemName}) => ${translateExpression(generator.expression, itemNameMap, arrayNames, validatedTypeAliases, mapNames)}))`;
+  return `new Set(${filtered}.map((${itemParameter}) => ${translateExpression(generator.expression, itemNameMap, arrayNames, validatedTypeAliases, mapNames)}))`;
+}
+
+function methodCallIterableCallbackParameter(itemName: string, iterableExpression: string): string {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*\(/.test(iterableExpression) ? `${itemName}: any` : itemName;
+}
+
+function propertyChainIterableCallbackParameter(itemName: string, iterableExpression: string): string {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)+$/.test(iterableExpression) ? `${itemName}: any` : itemName;
 }
 
 function translateNextCall(

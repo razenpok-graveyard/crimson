@@ -27,6 +27,7 @@ import {
 } from './common.js';
 import {
   arrayValueMapNameMarker,
+  functionReturnTypeMarker,
   receiverTypeNameMarker,
   translateExpression,
   tupleElementArrayNameMarker,
@@ -255,6 +256,8 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       functions.push(fn.fn);
       moduleNameMap.set(functionSignatureMarker(fn.pythonName), JSON.stringify({ positional: fn.signaturePositionalNames }));
       moduleNameMap.set(fn.pythonName, fn.fn.name);
+      moduleNameMap.set(functionReturnTypeMarker(fn.pythonName), fn.fn.returnType);
+      moduleNameMap.set(functionReturnTypeMarker(fn.fn.name), fn.fn.returnType);
       index = fn.nextIndex;
       continue;
     }
@@ -355,6 +358,7 @@ function parseStructModuleFunction(
     return null;
   }
 
+  const mapNames = new Set<string>();
   const statements: string[] = [];
   const nameMap = new Map(moduleNameMap);
   nameMap.set(functionSignatureMarker(header.name), JSON.stringify({ positional: signaturePositionalNames }));
@@ -383,6 +387,9 @@ function parseStructModuleFunction(
       declaredNames,
       reassignedNames,
       arrayNames,
+      new Set(),
+      null,
+      mapNames,
     );
     if (statement === null) {
       return null;

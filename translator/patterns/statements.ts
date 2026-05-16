@@ -1122,7 +1122,7 @@ export function translateStraightLineStatement(
     }
     const exceptClause = parseExceptClause(afterTry);
     if (exceptClause !== null) {
-      const exceptBlocks: Array<{ catchName: string; statements: string[] }> = [];
+      const exceptBlocks: Array<{ catchName: string; statements: string[]; types: string[] }> = [];
       let exceptIndex = tryBlock.nextIndex;
       while (exceptIndex < lines.length) {
         const clause = parseExceptClause((lines[exceptIndex] ?? '').trim());
@@ -1136,6 +1136,7 @@ export function translateStraightLineStatement(
         exceptBlocks.push({
           catchName: tsExportNameForPythonName(clause.name ?? 'exc'),
           statements: exceptBlock.statements,
+          types: clause.types,
         });
         exceptIndex = exceptBlock.nextIndex;
       }
@@ -1144,13 +1145,27 @@ export function translateStraightLineStatement(
       }
       const hoistedTry = hoistTryBlockDeclarations(tryBlock.statements);
       const catchName = exceptBlocks[0].catchName;
+      const exceptGuard = tsExceptGuardExpression(
+        exceptBlocks.flatMap((block) => block.types),
+        catchName,
+        nameMap,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+      );
+      const catchStatements = exceptGuard === null ? exceptBlocks[0].statements : [
+        `  if (!(${exceptGuard})) {`,
+        `    throw ${catchName};`,
+        '  }',
+        ...exceptBlocks[0].statements,
+      ];
       return {
         statements: [
           ...hoistedTry.declarations,
           'try {',
           ...hoistedTry.statements,
           `} catch (${catchName}) {`,
-          ...exceptBlocks[0].statements,
+          ...catchStatements,
           '}',
         ],
         nextIndex: exceptIndex,
@@ -1902,6 +1917,7 @@ export function translateStraightLineStatement(
     const typeExpression = tsTypeExpression(annotatedAssignment[2]);
     let assignedRight = maybeAwaitAsyncCall(
       translateExpression(annotatedAssignment[3], nameMap, arrayNames, validatedTypeAliases, mapNames),
+      nameMap,
     );
     declaredNames.add(annotatedAssignment[1]);
     if (typeExpression.startsWith('Set<') || typeExpression.startsWith('ReadonlySet<')) {
@@ -3834,6 +3850,44 @@ function parseMultilineCallParts(
         positionalParts.push(argPart);
       } else {
         sawKeyword = true;
+        if (keywordArg[2] === '{') {
+          const dictLiteral = collectMultilineDictLiteral(
+            lines,
+            nextIndex + 1,
+            nameMap,
+            arrayNames,
+            validatedTypeAliases,
+            mapNames,
+          );
+          if (dictLiteral === null) {
+            return null;
+          }
+          keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${dictLiteral.expression}`);
+          keywordArgParts.push({ pythonName: keywordArg[1], expression: dictLiteral.expression });
+          nextIndex = dictLiteral.nextIndex;
+          consumedNestedCall = true;
+          break;
+        }
+        if (keywordArg[2] === '[' || keywordArg[2] === '(') {
+          const sequenceLiteral = collectMultilineSequenceLiteral(
+            lines,
+            nextIndex + 1,
+            keywordArg[2] === '(' ? ')' : ']',
+            nameMap,
+            arrayNames,
+            validatedTypeAliases,
+            mapNames,
+          );
+          if (sequenceLiteral === null) {
+            return null;
+          }
+          const expression = `[${sequenceLiteral.items.join(', ')}]`;
+          keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${expression}`);
+          keywordArgParts.push({ pythonName: keywordArg[1], expression });
+          nextIndex = sequenceLiteral.nextIndex;
+          consumedNestedCall = true;
+          break;
+        }
         const nestedCall = argParts.length === 1
           ? /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(keywordArg[2])
           : null;
@@ -3889,7 +3943,7 @@ function translateStraightLineAssignment(
     };
   }
 
-  const assignedRight = operator === '=' ? maybeAwaitAsyncCall(tsRight) : tsRight;
+  const assignedRight = operator === '=' ? maybeAwaitAsyncCall(tsRight, nameMap) : tsRight;
   const mapItemAssignment = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[(.+)\]$/.exec(pythonLeft);
   if (operator === '=' && mapItemAssignment !== null) {
     const mapName = translateExpression(mapItemAssignment[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -4087,6 +4141,13 @@ function recordLocalAssignmentMarkers(
     arrayNames.add(tsName);
   }
   const callAssignment = /^(?:await )?([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\(/.exec(assignedRight);
+  if (callAssignment !== null) {
+    const returnType = nameMap.get(functionReturnTypeMarker(callAssignment[1]));
+    if (returnType?.endsWith('[]') === true || returnType?.startsWith('readonly ') === true && returnType.endsWith('[]')) {
+      arrayNames.add(pythonName);
+      arrayNames.add(tsName);
+    }
+  }
   if (assignedRight.startsWith('new Set(') || (callAssignment !== null && arrayNames.has(setNameMarker(callAssignment[1])))) {
     arrayNames.add(setNameMarker(pythonName));
     arrayNames.add(setNameMarker(tsName));
@@ -4196,9 +4257,43 @@ function translateRaiseExpression(
   return `new ${translatedCallee}(${message})`;
 }
 
-function parseExceptClause(statement: string): { name: string | null } | null {
-  const clause = /^except (?:(?:[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)|\((?:[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)(?:, [A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)+\))(?: as ([A-Za-z_][A-Za-z0-9_]*))?:$/.exec(statement);
-  return clause === null ? null : { name: clause[1] ?? null };
+function parseExceptClause(statement: string): { name: string | null; types: string[] } | null {
+  const typeNamePattern = '[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*';
+  const identifierNamePattern = '[A-Za-z_][A-Za-z0-9_]*';
+  const clause = new RegExp(`^except (?:(` + typeNamePattern + `)|\\((${typeNamePattern}(?:, ${typeNamePattern})+),?\\))(?: as (${identifierNamePattern}))?:$`).exec(statement);
+  if (clause === null) {
+    return null;
+  }
+  return {
+    name: clause[3] ?? null,
+    types: (clause[1] ?? clause[2]).split(',').map((typeName) => typeName.trim()),
+  };
+}
+
+function tsExceptGuardExpression(
+  pythonTypes: string[],
+  catchName: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  const guards: string[] = [];
+  for (const pythonType of pythonTypes) {
+    const translatedType = translateExpression(pythonType, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (!tsExceptionTypeIsGuardable(translatedType)) {
+      return null;
+    }
+    guards.push(`${catchName} instanceof ${translatedType}`);
+  }
+  return guards.length === 0 ? null : guards.join(' || ');
+}
+
+function tsExceptionTypeIsGuardable(tsType: string): boolean {
+  if (!/^[A-Z][A-Za-z0-9_$]*$/.test(tsType)) {
+    return false;
+  }
+  return !new Set(['Exception', 'RuntimeError', 'ValueError', 'KeyError', 'OSError', 'FileNotFoundError']).has(tsType);
 }
 
 function translateKeyErrorLookupStatement(
@@ -4366,6 +4461,12 @@ function tsTypeForAssignedExpression(expression: string): string | null {
   }
   const constructor = /^new ([A-Za-z_$][A-Za-z0-9_$]*)\(/.exec(trimmed);
   if (constructor !== null) {
+    if (constructor[1] === 'Set') {
+      return 'Set<any>';
+    }
+    if (constructor[1] === 'Map') {
+      return 'Map<any, any>';
+    }
     return constructor[1];
   }
   const enumMode = /\b([A-Z][A-Za-z0-9_]*Mode)\b/.exec(trimmed);
@@ -4388,7 +4489,19 @@ function tsTypeForAssignedExpression(expression: string): string | null {
   return null;
 }
 
-function maybeAwaitAsyncCall(tsExpression: string): string {
+function maybeAwaitAsyncCall(tsExpression: string, nameMap: ReadonlyMap<string, string> = new Map()): string {
+  const call = /^([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\(/.exec(tsExpression);
+  if (call !== null) {
+    const returnType = nameMap.get(functionReturnTypeMarker(call[1]));
+    if (returnType !== undefined) {
+      if (returnType.startsWith('Promise<')) {
+        return `await ${tsExpression}`;
+      }
+      if (!returnType.startsWith('ReturnType<typeof ')) {
+        return tsExpression;
+      }
+    }
+  }
   return /^(?:load[A-Z][A-Za-z0-9_]*|initAudioState)\(.*\)$/.test(tsExpression) ? `await ${tsExpression}` : tsExpression;
 }
 
@@ -4910,13 +5023,18 @@ function parseMultilineDictComprehensionExpression(
   const iterable = translateExpression(forClause[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
   const key = translateExpression(keyValue[1], itemNameMap, arrayNames, validatedTypeAliases, mapNames);
   const value = translateExpression(keyValue[2], itemNameMap, arrayNames, validatedTypeAliases, mapNames);
+  const itemParameter = methodCallIterableCallbackParameter(itemName, iterable);
   const source = filterExpression === null
     ? iterable
-    : `${iterable}.filter((${itemName}) => ${translateExpression(filterExpression, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    : `${iterable}.filter((${itemParameter}) => ${translateExpression(filterExpression, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   return {
-    expression: `new Map(Array.from(${source}, (${itemName}) => [${key}, ${value}] as const))`,
+    expression: `new Map(Array.from(${source}, (${itemParameter}) => [${key}, ${value}] as const))`,
     nextIndex: closeIndex + 1,
   };
+}
+
+function methodCallIterableCallbackParameter(itemName: string, iterableExpression: string): string {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*\(/.test(iterableExpression) ? `${itemName}: any` : itemName;
 }
 
 function collectMultilineExpression(

@@ -79,6 +79,9 @@ export function builtinObjectOrEmpty(value: BuiltinValue | null): BuiltinObject 
   try {
     coerced = coerceBuiltinValue(value, { field: 'payload' });
   } catch (exc) {
+    if (!(exc instanceof TypeError)) {
+      throw exc;
+    }
     return {};
   }
   if (typeof coerced === 'object' && coerced !== null && !Array.isArray(coerced)) {
@@ -99,6 +102,9 @@ export function builtinRowsOrEmpty(value: BuiltinValue | null): BuiltinRows {
     try {
       rows.push(toBuiltinObject(item, { field: 'payload[]' }));
     } catch (exc) {
+      if (!(exc instanceof TypeError)) {
+        throw exc;
+      }
       return [];
     }
   }
