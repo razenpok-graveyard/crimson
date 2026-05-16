@@ -70,7 +70,7 @@ export function applyPresentationOutputs(opts: { outputs: readonly PresentationT
   const updateCamera = opts.updateCamera;
   const onOutputApplied = opts.onOutputApplied ?? null;
   const applyAudio = opts.applyAudio;
-  if (!outputs.length) {
+  if (outputs.length === 0) {
     return;
   }
 

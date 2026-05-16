@@ -9,13 +9,16 @@ import { CREATURE_CORPSE_DESPAWN_LIFECYCLE } from '@crimson/creatures/lifecycle.
 import { f32 } from '@crimson/math-parity.ts';
 import { RngCallerStatic } from '@crimson/rng-caller-static.ts';
 import type { BonusPickupEvent, GameplayState } from '@crimson/sim/state-types.ts';
-import type { BonusApplyCtx } from './apply-context.ts';
+import type { BonusApplyCtx } from '@crimson/bonuses/apply-context.ts';
 
 export class DeferredFreezeCorpseFx {
   readonly pos: Vec2;
   readonly detailPreset: number;
 
-  constructor(opts: { pos: Vec2; detailPreset: number }) {
+  constructor(opts: {
+    pos: Vec2;
+    detailPreset: number;
+  }) {
     this.pos = opts.pos;
     this.detailPreset = opts.detailPreset;
   }
@@ -29,11 +32,10 @@ export function applyFreeze(ctx: BonusApplyCtx): void {
   ctx.state.bonuses.freeze = f32(old + ctx.amount * ctx.economistMultiplier);
 
   const creatures = ctx.creatures;
-  if (creatures && creatures.length > 0) {
+  if (creatures.length > 0) {
     const deferCorpseFx = ctx.deferFreezeCorpseFx;
     const allowedIndices = ctx.freezeCorpseIndices;
-    for (let idx = 0; idx < creatures.length; idx++) {
-      const creature = creatures[idx];
+    for (const [idx, creature] of creatures.entries()) {
       if (!creature.active) {
         continue;
       }
@@ -46,29 +48,25 @@ export function applyFreeze(ctx: BonusApplyCtx): void {
         creature.active = false;
         continue;
       }
-      const allowShatterFx = allowedIndices === null || allowedIndices.has(int(idx));
+      const allowShatterFx = allowedIndices === null || (((container: unknown, value: unknown) => container instanceof Set || container instanceof Map ? container.has(value) : Array.isArray(container) ? container.includes(value) : typeof container === 'string' ? container.includes(String(value)) : container !== null && typeof container === 'object' ? Object.prototype.hasOwnProperty.call(container, String(value)) : false)(allowedIndices, int(idx)));
       const pos = creature.pos;
+      let angle: number;
       if (allowShatterFx && deferCorpseFx) {
-        ctx.state.deferredFreezeCorpseFx.push(
-          new DeferredFreezeCorpseFx({
-            pos: new Vec2(pos.x, pos.y),
-            detailPreset: int(ctx.detailPreset),
-          }),
-        );
+        ctx.state.deferredFreezeCorpseFx.push(new DeferredFreezeCorpseFx({ pos: new Vec2(pos.x, pos.y), detailPreset: int(ctx.detailPreset) }));
       } else if (allowShatterFx) {
-        for (let j = 0; j < 8; j++) {
-          const angle = (ctx.state.rng.rand({ caller: RngCallerStatic.BONUS_APPLY_FREEZE_SHARD_ANGLE }) % 612) * 0.01;
+        for (let i = 0; i < 8; i++) {
+          angle = ctx.state.rng.rand({ caller: RngCallerStatic.BONUS_APPLY_FREEZE_SHARD_ANGLE }) % 612 * 0.01;
           ctx.state.effects.spawnFreezeShard({
-            pos,
-            angle,
+            pos: pos,
+            angle: angle,
             rng: ctx.state.rng,
             detailPreset: int(ctx.detailPreset),
           });
         }
-        const angle = (ctx.state.rng.rand({ caller: RngCallerStatic.BONUS_APPLY_FREEZE_SHATTER_ANGLE }) % 612) * 0.01;
+        angle = ctx.state.rng.rand({ caller: RngCallerStatic.BONUS_APPLY_FREEZE_SHATTER_ANGLE }) % 612 * 0.01;
         ctx.state.effects.spawnFreezeShatter({
-          pos,
-          angle,
+          pos: pos,
+          angle: angle,
           rng: ctx.state.rng,
           detailPreset: int(ctx.detailPreset),
         });
@@ -82,27 +80,26 @@ export function applyFreeze(ctx: BonusApplyCtx): void {
 
 export function flushDeferredFreezeCorpseFx(state: GameplayState): void {
   const pending = state.deferredFreezeCorpseFx;
-  if (!pending || pending.length === 0) {
+  if (pending.length === 0) {
     return;
   }
 
-  for (let i = 0; i < pending.length; i++) {
-    const queued = pending[i];
+  for (const queued of pending) {
     const pos = queued.pos;
     const detail = int(queued.detailPreset);
-    for (let j = 0; j < 8; j++) {
-      const angle = (state.rng.rand({ caller: RngCallerStatic.BONUS_APPLY_FREEZE_SHARD_ANGLE }) % 612) * 0.01;
+    for (let i = 0; i < 8; i++) {
+      let angle = state.rng.rand({ caller: RngCallerStatic.BONUS_APPLY_FREEZE_SHARD_ANGLE }) % 612 * 0.01;
       state.effects.spawnFreezeShard({
-        pos,
-        angle,
+        pos: pos,
+        angle: angle,
         rng: state.rng,
         detailPreset: detail,
       });
     }
-    const angle = (state.rng.rand({ caller: RngCallerStatic.BONUS_APPLY_FREEZE_SHATTER_ANGLE }) % 612) * 0.01;
+    let angle = state.rng.rand({ caller: RngCallerStatic.BONUS_APPLY_FREEZE_SHATTER_ANGLE }) % 612 * 0.01;
     state.effects.spawnFreezeShatter({
-      pos,
-      angle,
+      pos: pos,
+      angle: angle,
       rng: state.rng,
       detailPreset: detail,
     });
@@ -112,14 +109,18 @@ export function flushDeferredFreezeCorpseFx(state: GameplayState): void {
 
 export function freezeBonusActive(opts: { state: GameplayState }): boolean {
   // Return whether Freeze timer is currently active.
-  return opts.state.bonuses.freeze > 0.0;
+  const state = opts.state;
+  return state.bonuses.freeze > 0.0;
 }
 
 export function applyFreezePickupFx(opts: { state: GameplayState; pickup: BonusPickupEvent; detailPreset: number }): void {
   // Spawn the freeze-tinted ring used by Freeze bonus pickups.
-  opts.state.effects.spawnRing({
-    pos: opts.pickup.pos,
-    detailPreset: int(opts.detailPreset),
+  const state = opts.state;
+  const pickup = opts.pickup;
+  const detailPreset = opts.detailPreset;
+  state.effects.spawnRing({
+    pos: pickup.pos,
+    detailPreset: int(detailPreset),
     color: new RGBA(0.3, 0.5, 0.8, 1.0),
   });
 }

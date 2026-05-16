@@ -14,7 +14,7 @@ export function perkApply(state: GameplayState, players: PlayerState[], perkId: 
   const perkState = opts.perkState ?? null;
   const dt = opts.dt ?? null;
   const creatures = opts.creatures ?? null;
-  if (!players.length) {
+  if (players.length === 0) {
     return;
   }
   const owner = players[0];

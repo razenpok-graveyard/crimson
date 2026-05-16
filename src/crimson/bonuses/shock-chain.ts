@@ -10,7 +10,7 @@ import type { BonusApplyCtx } from '@crimson/bonuses/apply-context.ts';
 
 export function applyShockChain(ctx: BonusApplyCtx): void {
   const creatures = ctx.creatures;
-  if (!creatures.length) {
+  if (creatures.length === 0) {
     return;
   }
 

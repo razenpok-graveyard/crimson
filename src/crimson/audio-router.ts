@@ -111,7 +111,7 @@ export class AudioRouter {
     const gameMode = opts.gameMode;
     const rng = opts.rng;
     const beamTypes = opts.beamTypes;
-    if (this.audio === null || !hits.length) {
+    if (this.audio === null || hits.length === 0) {
       return;
     }
 

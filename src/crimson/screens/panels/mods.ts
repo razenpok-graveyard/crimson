@@ -105,7 +105,7 @@ export class ModsMenuView extends PanelMenuView {
       dlls = [];
     }
 
-    if (!dlls.length) {
+    if (dlls.length === 0) {
       return [
         'No mod DLLs found.',
         '',

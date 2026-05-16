@@ -335,7 +335,7 @@ export function inferPythonExpressionType(pythonExpression: string): string {
   if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) {
     return 'number';
   }
-  if (/^(?:int|float)\(.+\)$/.test(trimmed)) {
+  if (/^(?:int|float)\(/.test(trimmed)) {
     return 'number';
   }
   const enumCast = /^([A-Z][A-Za-z0-9_]*(?:Id|Mode|Type))\(.+\)$/.exec(trimmed);

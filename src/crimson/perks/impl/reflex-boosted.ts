@@ -12,7 +12,7 @@ export function applyReflexBoostedDt(opts: { dt: number; players: PlayerState[] 
   if (dt <= 0.0) {
     return dt;
   }
-  if (!players.length) {
+  if (players.length === 0) {
     return dt;
   }
   if (!perkActive(players[0], PerkId.REFLEX_BOOSTED)) {

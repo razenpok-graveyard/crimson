@@ -527,6 +527,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       }
       index = docstring.nextIndex;
     }
+    markIteratedLocalNames(lines, index, '    ', arrayNames);
     const reassignedNames = reassignedLocalNames(lines, index);
     while (index < lines.length) {
       const line = lines[index];
@@ -883,6 +884,26 @@ function simpleFunctionTypeParams(
   ].join('\n');
   const usedTypeVars = [...typeVarNames].filter((name) => identifierPattern(name).test(typeText));
   return usedTypeVars.length === 0 ? undefined : usedTypeVars;
+}
+
+function markIteratedLocalNames(
+  lines: string[],
+  startIndex: number,
+  indent: string,
+  arrayNames: Set<string>,
+): void {
+  let index = startIndex;
+  while (index < lines.length && isIndentedBlockLine(lines, index, indent)) {
+    const trimmed = lines[index].trim();
+    const enumerateLoop = /^for [A-Za-z_][A-Za-z0-9_]*, [A-Za-z_][A-Za-z0-9_]* in enumerate\(([A-Za-z_][A-Za-z0-9_]*)\):$/.exec(trimmed);
+    const simpleLoop = /^for [A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)* in ([A-Za-z_][A-Za-z0-9_]*):$/.exec(trimmed);
+    const iterableName = enumerateLoop?.[1] ?? simpleLoop?.[1] ?? null;
+    if (iterableName !== null) {
+      arrayNames.add(iterableName);
+      arrayNames.add(tsExportNameForPythonName(iterableName));
+    }
+    index += 1;
+  }
 }
 
 function returnTupleMarkersForType(

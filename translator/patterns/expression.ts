@@ -577,13 +577,28 @@ export function translateExpression(
     }
   }
 
-  const mapMembership = /^(.+) in ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
-  if (mapMembership !== null) {
-    const mapName = translateExpression(mapMembership[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const hasTopLevelLogicalOperator = splitTopLevelLogicalOperator(trimmed, 'or') !== null
+    || splitTopLevelLogicalOperator(trimmed, 'and') !== null;
+  const mapNotMembership = /^(.+) not in ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
+  if (mapNotMembership !== null && !hasTopLevelLogicalOperator) {
+    const mapName = translateExpression(mapNotMembership[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const value = translateExpression(mapNotMembership[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (mapNames.has(mapName)) {
-      const key = translateMapKeyExpression(mapName, translateExpression(mapMembership[1], nameMap, arrayNames, validatedTypeAliases, mapNames));
+      const key = translateMapKeyExpression(mapName, value);
+      return `!${mapName}.has(${key})`;
+    }
+    return `!${pythonContainsExpression(mapName, value)}`;
+  }
+
+  const mapMembership = /^(.+) in ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
+  if (mapMembership !== null && !hasTopLevelLogicalOperator) {
+    const mapName = translateExpression(mapMembership[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const value = translateExpression(mapMembership[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (mapNames.has(mapName)) {
+      const key = translateMapKeyExpression(mapName, value);
       return `${mapName}.has(${key})`;
     }
+    return pythonContainsExpression(mapName, value);
   }
 
   const mapItemsCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.items\(\)$/.exec(trimmed);
@@ -1160,8 +1175,11 @@ export function translateExpression(
 
   const notIdentifier = /^not ([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);
   if (notIdentifier !== null) {
-    const value = translateExpression(notIdentifier[1], nameMap, arrayNames, validatedTypeAliases);
-    return arrayNames.has(notIdentifier[1]) ? `!${value}.length` : `!${value}`;
+    const value = translateExpression(notIdentifier[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (mapNames.has(value)) {
+      return `${value}.size === 0`;
+    }
+    return arrayNames.has(notIdentifier[1]) || arrayNames.has(value) ? `${value}.length === 0` : `!${value}`;
   }
 
   const notPlayersCollection = /^not ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\.players)$/.exec(trimmed);
@@ -2760,6 +2778,10 @@ function translateMixedKeywordCallWithRest(
 
 function translateAttributeRest(rest: string): string {
   return rest.replaceAll(/\b[A-Za-z_][A-Za-z0-9_]*\b/g, tsExportNameForPythonName);
+}
+
+function pythonContainsExpression(containerExpression: string, valueExpression: string): string {
+  return `((container: unknown, value: unknown) => container instanceof Set || container instanceof Map ? container.has(value) : Array.isArray(container) ? container.includes(value) : typeof container === 'string' ? container.includes(String(value)) : container !== null && typeof container === 'object' ? Object.prototype.hasOwnProperty.call(container, String(value)) : false)(${containerExpression}, ${valueExpression})`;
 }
 
 function parseCallPrefix(expression: string, callee: string): { argsText: string; rest: string } | null {

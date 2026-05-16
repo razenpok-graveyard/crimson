@@ -1464,6 +1464,7 @@ export function translateStraightLineStatement(
         nameMap,
         arrayNames,
         validatedTypeAliases,
+        mapNames,
       );
       if (wrappedExpression === null) {
         return null;
@@ -1722,6 +1723,39 @@ export function translateStraightLineStatement(
         nextIndex: index + 1,
       };
     }
+    const clearCall = /^(.+)\.clear\(\)$/.exec(callStatement[1]);
+    if (clearCall !== null && /^[A-Za-z_][A-Za-z0-9_]*$/.test(clearCall[1]) && !['self', 'cls', 'this'].includes(clearCall[1])) {
+      const target = translateExpression(clearCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      if (arrayNames.has(clearCall[1]) || arrayNames.has(target)) {
+        return {
+          statements: [`${target}.length = 0;`],
+          nextIndex: index + 1,
+        };
+      }
+      if (
+        mapNames.has(clearCall[1])
+        || mapNames.has(target)
+        || arrayNames.has(setNameMarker(clearCall[1]))
+        || arrayNames.has(setNameMarker(target))
+      ) {
+        return {
+          statements: [`${target}.clear();`],
+          nextIndex: index + 1,
+        };
+      }
+      return {
+        statements: [
+          '((target: unknown) => {',
+          '  if (target !== null && typeof target === \'object\' && typeof (target as { clear?: unknown }).clear === \'function\') {',
+          '    (target as { clear: () => void }).clear();',
+          '  } else if (target !== null && typeof target === \'object\' && \'length\' in target) {',
+          '    (target as { length: number }).length = 0;',
+          '  }',
+          `})(${target});`,
+        ],
+        nextIndex: index + 1,
+      };
+    }
     const simpleCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\((.*)\)$/.exec(callStatement[1]);
     if (simpleCall !== null) {
       const args = splitTopLevelComma(simpleCall[2]);
@@ -1743,16 +1777,22 @@ function parseWrappedMultilineExpression(
   nameMap: Map<string, string>,
   arrayNames: Set<string>,
   validatedTypeAliases: ReadonlySet<string> = new Set(),
+  mapNames: ReadonlySet<string> = new Set(),
 ): { expression: string; nextIndex: number } | null {
   const parts: string[] = [];
   let nextIndex = startIndex;
   while (nextIndex < lines.length) {
     const trimmed = lines[nextIndex].trim();
-    if (trimmed === ')') {
+    const close = /^\)(.*)$/.exec(trimmed);
+    if (close !== null) {
+      const suffix = close[1].trim();
+      const expression = suffix === ''
+        ? parts.join(' ')
+        : `${parts.join(' ')} ${suffix}`;
       return parts.length === 0
         ? null
         : {
-          expression: translateExpression(parts.join(' '), nameMap, arrayNames, validatedTypeAliases),
+          expression: translateExpression(expression, nameMap, arrayNames, validatedTypeAliases, mapNames),
           nextIndex: nextIndex + 1,
         };
     }
@@ -1771,6 +1811,7 @@ function parseWrappedMultilineExpression(
         nameMap,
         arrayNames,
         validatedTypeAliases,
+        mapNames,
       );
       if (callExpression === null) {
         return null;

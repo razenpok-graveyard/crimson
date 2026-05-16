@@ -25,7 +25,7 @@ export function drawTypoNameLabels(opts: { creatures: readonly CreatureState[]; 
   const worldToScreen = opts.worldToScreen;
   const drawText = opts.drawText;
   const measureTextWidth = opts.measureTextWidth;
-  if (!names.length) {
+  if (names.length === 0) {
     return;
   }
 
