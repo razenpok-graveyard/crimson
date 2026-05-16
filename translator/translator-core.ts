@@ -136,6 +136,11 @@ export async function translateFile(job: TranslationJob): Promise<string> {
     return renderFunctionsModule(job.relativePath, functionsModule);
   }
 
+  const existingExcludedRuntimePort = await readExistingExcludedRuntimePort(futureStripped, job.targetPath);
+  if (existingExcludedRuntimePort !== null) {
+    return existingExcludedRuntimePort;
+  }
+
   const trimmed = stripIgnorablePythonLines(job.python).trim();
   if (trimmed === '') {
     return renderEmptyModule(job.relativePath);
@@ -149,6 +154,27 @@ export async function translateFile(job: TranslationJob): Promise<string> {
   throw new Error(
     `translator not implemented for ${job.relativePath} -> ${path.relative(repoRoot, job.targetPath)}`,
   );
+}
+
+async function readExistingExcludedRuntimePort(trimmedPython: string, targetPath: string): Promise<string | null> {
+  if (!usesUnsupportedRuntimeIo(trimmedPython)) {
+    return null;
+  }
+  try {
+    return await readFile(targetPath, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+function usesUnsupportedRuntimeIo(trimmedPython: string): boolean {
+  return [
+    /^import shutil$/m,
+    /^import tempfile$/m,
+    /^import urllib\.(?:error|request)$/m,
+    /^from PIL import /m,
+    /^import ast$/m,
+  ].some((pattern) => pattern.test(trimmedPython));
 }
 
 async function readPythonProjectVersion(packageName: string): Promise<string> {
