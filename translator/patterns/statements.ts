@@ -1191,15 +1191,20 @@ export function translateStraightLineStatement(
     }
     if (rangeLoop !== null) {
       const rangeArgs = splitTopLevelComma(rangeLoop[1]);
-      if (rangeArgs.length < 1 || rangeArgs.length > 2) {
+      if (rangeArgs.length < 1 || rangeArgs.length > 3) {
         return null;
       }
       const loopName = forOfStatement[1] === '_' ? 'i' : tsExportNameForPythonName(forOfStatement[1]);
       const start = rangeArgs.length === 1 ? '0' : translateExpression(rangeArgs[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
-      const stop = translateExpression(rangeArgs.at(-1) ?? '', nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const stop = translateExpression(rangeArgs.length === 1 ? rangeArgs[0] : rangeArgs[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const step = rangeArgs.length === 3
+        ? translateExpression(rangeArgs[2], nameMap, arrayNames, validatedTypeAliases, mapNames)
+        : null;
       return {
         statements: [
-          `for (let ${loopName} = ${start}; ${loopName} < ${stop}; ${loopName}++) {`,
+          step === null
+            ? `for (let ${loopName} = ${start}; ${loopName} < ${stop}; ${loopName}++) {`
+            : `for (let ${loopName} = ${start}; ${step} >= 0 ? ${loopName} < ${stop} : ${loopName} > ${stop}; ${loopName} += ${step}) {`,
           ...innerStatements,
           '}',
         ],
@@ -1399,7 +1404,7 @@ export function translateStraightLineStatement(
     }
     const message = callParts.positionalParts[0] === undefined
       ? `'${multilineRaiseCall[1]}'`
-      : translateCallArgumentExpression(callParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases);
+      : translateCallArgumentExpression(callParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
     return {
       statements: [`throw ${translateRaiseExpression(multilineRaiseCall[1], message, nameMap, arrayNames, validatedTypeAliases, mapNames, true)};`],
       nextIndex: callParts.nextIndex,
@@ -2209,7 +2214,7 @@ function parseMultilineListComprehension(
   if (!forLine.startsWith(innerIndent)) {
     return null;
   }
-  const forClause = /^for ([A-Za-z_][A-Za-z0-9_]*) in (.+)$/.exec(forLine.trim());
+  const forClause = /^for ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*) in (.+)$/.exec(forLine.trim());
   if (forClause === null) {
     return null;
   }
@@ -2224,15 +2229,23 @@ function parseMultilineListComprehension(
   if (!closeLine.startsWith(indent) || closeLine.trim() !== ']') {
     return null;
   }
-  const itemName = tsExportNameForPythonName(forClause[1]);
   const itemNameMap = new Map(nameMap);
-  itemNameMap.set(forClause[1], itemName);
-  const iterable = iterableExpressionForIteration(forClause[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const targetNames = forClause[1].split(', ');
+  for (const targetName of targetNames) {
+    itemNameMap.set(targetName, tsExportNameForPythonName(targetName));
+  }
+  const mapParameter = targetNames.length === 1
+    ? tsExportNameForPythonName(targetNames[0])
+    : `[${targetNames.map(tsExportNameForPythonName).join(', ')}]`;
+  const enumerateIterable = /^enumerate\((.+)\)$/.exec(forClause[2]);
+  const iterable = targetNames.length > 1 && enumerateIterable !== null
+    ? `Array.from(${iterableExpressionForIteration(enumerateIterable[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.entries())`
+    : iterableExpressionForIteration(forClause[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
   const filtered = filterExpression === null
     ? iterable
-    : `${iterable}.filter((${itemName}) => ${translateExpression(filterExpression, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    : `${iterable}.filter((${mapParameter}) => ${translateExpression(filterExpression, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   return {
-    expression: `${filtered}.map((${itemName}) => ${itemExpression})`,
+    expression: `${filtered}.map((${mapParameter}) => ${itemExpression})`,
     nextIndex: closeIndex + 1,
     tupleElements,
   };

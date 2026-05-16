@@ -12,6 +12,31 @@ export function bytesFromHelperStatements(): string[] {
   ];
 }
 
+export function concatBytesHelperStatements(): string[] {
+  return [
+    'function concatBytes(chunks: readonly Uint8Array[]): Uint8Array {',
+    '  const total = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);',
+    '  const output = new Uint8Array(total);',
+    '  let offset = 0;',
+    '  for (const chunk of chunks) {',
+    '    output.set(chunk, offset);',
+    '    offset += chunk.byteLength;',
+    '  }',
+    '  return output;',
+    '}',
+  ];
+}
+
+export function secretsTokenHexHelperStatements(): string[] {
+  return [
+    'function secretsTokenHex(byteLength: number): string {',
+    '  const bytes = new Uint8Array(byteLength);',
+    '  globalThis.crypto.getRandomValues(bytes);',
+    "  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');",
+    '}',
+  ];
+}
+
 export function constructBinaryHelperStatements(): string[] {
   return [
     'interface Construct<T> {',

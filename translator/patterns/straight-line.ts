@@ -59,6 +59,7 @@ import { parseFunctionParameterText, pythonParameterNames } from './parameters.j
 import {
   bytesFromHelperStatements,
   arrayRemoveHelperStatements,
+  concatBytesHelperStatements,
   constructBinaryHelperStatements,
   globPathHelperStatements,
   latin1EncodeReplaceHelperStatements,
@@ -76,6 +77,7 @@ import {
   pythonSplitlinesHelperStatements,
   pythonStringCountHelperStatements,
   pythonTruthyHelperStatements,
+  secretsTokenHexHelperStatements,
   strftimeUtcNowHelperStatements,
   structFloatBufferStatements,
   tupleKeyHelperStatements,
@@ -178,9 +180,11 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       || trimmed === 'from threading import Lock'
       || trimmed.startsWith('from construct import ')
       || trimmed === 'import msgspec'
+      || trimmed === 'import secrets'
       || trimmed === 'import tempfile'
       || trimmed === 'import typer'
       || trimmed === 'import warnings'
+      || trimmed === 'import zlib'
     ) {
       index += 1;
       continue;
@@ -820,6 +824,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     leadingStatements.unshift(...helperStatements);
   }
+  if (moduleValueText.includes('secretsTokenHex(')) {
+    const helperStatements = secretsTokenHexHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
   if (moduleValueText.includes('pythonEquals(')) {
     const helperStatements = pythonEqualsHelperStatements();
     if (leadingStatements.length > 0) {
@@ -902,6 +913,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     leadingStatements.unshift(...pathHelperStatements);
   }
+  if (moduleValueText.includes('concatBytes(') && !moduleValueText.includes('constructStruct(')) {
+    const helperStatements = concatBytesHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
   if (moduleValueText.includes('constructStruct(')) {
     const helperStatements = constructBinaryHelperStatements();
     if (leadingStatements.length > 0) {
@@ -931,6 +949,15 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         ...(moduleValueText.includes('appendFileSync(') || moduleValueText.includes('_openTextFile(') ? ['appendFileSync'] : []),
         ...(moduleValueText.includes('_mkdirParents(') ? ['mkdirSync'] : []),
         ...(moduleValueText.includes('_globPath(') ? ['readdirSync'] : []),
+      ],
+    });
+  }
+  if (moduleValueText.includes('deflateSync(') || moduleValueText.includes('inflateSync(')) {
+    pushUniqueImportDefinition(imports, {
+      modulePath: 'node:zlib',
+      names: [
+        ...(moduleValueText.includes('deflateSync(') ? ['deflateSync'] : []),
+        ...(moduleValueText.includes('inflateSync(') ? ['inflateSync'] : []),
       ],
     });
   }
