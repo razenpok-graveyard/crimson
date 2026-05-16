@@ -55,12 +55,12 @@ export class LanTickSync {
 export class LanSyncCallbacks {
   role: string;
   takeFrameSample: (arg0: number) => LanFrameSample | null;
-  broadcastTickFrame: ((arg0: number, arg1: readonly number[][], arg2: readonly GameCommand[]) => void) | null;
+  broadcastTickFrame: ((arg0: number, arg1: number[][], arg2: GameCommand[]) => void) | null;
 
   constructor(opts: {
     role: string;
     takeFrameSample: (arg0: number) => LanFrameSample | null;
-    broadcastTickFrame?: ((arg0: number, arg1: readonly number[][], arg2: readonly GameCommand[]) => void) | null;
+    broadcastTickFrame?: ((arg0: number, arg1: number[][], arg2: GameCommand[]) => void) | null;
   }) {
     this.role = opts.role;
     this.takeFrameSample = opts.takeFrameSample;

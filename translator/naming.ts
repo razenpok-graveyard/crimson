@@ -196,9 +196,16 @@ export function tsCallableType(argsText: string, returnText: string): string {
     ? ''
     : args
       .split(topLevelCommaPattern())
-      .map((arg, index) => `arg${index}: ${tsTypeExpression(arg)}`)
+      .map((arg, index) => `arg${index}: ${tsCallableArgTypeExpression(arg)}`)
       .join(', ');
   return `(${params}) => ${tsTypeExpression(returnText)}`;
+}
+
+function tsCallableArgTypeExpression(pythonType: string): string {
+  const typeExpression = tsTypeExpression(pythonType);
+  return pythonType.includes('tuple[')
+    ? typeExpression.replace(/\breadonly /g, '')
+    : typeExpression;
 }
 
 function topLevelCommaPattern(): RegExp {

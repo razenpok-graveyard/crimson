@@ -391,47 +391,54 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         }
       }
       const modulePath = tsImportPathForPythonImport(fromImport[1], relativePath);
-      const importBindings = importedNames.map((name) => ({
-        pythonName: name,
-        importedName: tsImportNameForPythonName(modulePath, name, relativePath),
-        defaultName: tsExportNameForPythonName(name),
-      }));
-      const importNames = importBindings.map((binding) => binding.importedName);
-      if (modulePath === '@crimson/screens/menu.ts' && importBindings.some((binding) => binding.pythonName === 'MenuView')) {
-        for (const helperName of menuViewHelperImportNames()) {
-          if (!importNames.includes(helperName)) {
-            importNames.push(helperName);
+      const importBindings = importedNames.map((name) => {
+        const bindingModulePath = tsImportModulePathForPythonName(modulePath, name, relativePath);
+        return {
+          pythonName: name,
+          modulePath: bindingModulePath,
+          importedName: tsImportNameForPythonName(bindingModulePath, name, relativePath),
+          defaultName: tsExportNameForPythonName(name),
+        };
+      });
+      const importBindingsByModule = groupImportBindingsByModule(importBindings);
+      for (const [bindingModulePath, moduleImportBindings] of importBindingsByModule) {
+        const importNames = moduleImportBindings.map((binding) => binding.importedName);
+        if (bindingModulePath === '@crimson/screens/menu.ts' && moduleImportBindings.some((binding) => binding.pythonName === 'MenuView')) {
+          for (const helperName of menuViewHelperImportNames()) {
+            if (!importNames.includes(helperName)) {
+              importNames.push(helperName);
+            }
           }
         }
+        imports.push({
+          modulePath: bindingModulePath,
+          names: importNames,
+        });
+        recordImportedStructConstructorFields(
+          bindingModulePath,
+          moduleImportBindings.map((binding) => ({ importedName: binding.importedName, localName: binding.importedName })),
+          relativePath,
+          structConstructorFields,
+        );
+        recordImportedStaticClassMethods(
+          bindingModulePath,
+          moduleImportBindings.map((binding) => ({ importedName: binding.importedName, localName: binding.importedName })),
+          relativePath,
+          moduleNameMap,
+        );
+        recordImportedFunctionReturnTypes(
+          bindingModulePath,
+          moduleImportBindings.map((binding) => ({ importedName: binding.importedName, localName: binding.importedName })),
+          relativePath,
+          moduleNameMap,
+        );
+        recordImportedMapNames(
+          bindingModulePath,
+          moduleImportBindings.map((binding) => ({ importedName: binding.importedName, localName: binding.importedName })),
+          relativePath,
+          mapNames,
+        );
       }
-      imports.push({
-        modulePath,
-        names: importNames,
-      });
-      recordImportedStructConstructorFields(
-        modulePath,
-        importBindings.map((binding) => ({ importedName: binding.importedName, localName: binding.importedName })),
-        relativePath,
-        structConstructorFields,
-      );
-      recordImportedStaticClassMethods(
-        modulePath,
-        importBindings.map((binding) => ({ importedName: binding.importedName, localName: binding.importedName })),
-        relativePath,
-        moduleNameMap,
-      );
-      recordImportedFunctionReturnTypes(
-        modulePath,
-        importBindings.map((binding) => ({ importedName: binding.importedName, localName: binding.importedName })),
-        relativePath,
-        moduleNameMap,
-      );
-      recordImportedMapNames(
-        modulePath,
-        importBindings.map((binding) => ({ importedName: binding.importedName, localName: binding.importedName })),
-        relativePath,
-        mapNames,
-      );
       for (const binding of importBindings) {
         if (binding.importedName !== binding.defaultName) {
           moduleNameMap.set(binding.pythonName, binding.importedName);
@@ -1970,6 +1977,22 @@ function tsReexportName(modulePath: string, name: string, relativePath: string):
   return tsModuleExportsTypeOnly(modulePath, name, relativePath) ? `type ${name}` : name;
 }
 
+function tsImportModulePathForPythonName(modulePath: string, pythonName: string, relativePath: string): string {
+  const candidateNames = pythonName === '__version__'
+    ? ['VERSION']
+    : [...new Set([tsExportNameForPythonName(pythonName), tsPublicNameForPythonName(pythonName)])];
+  if (candidateNames.some((name) => tsModuleExportsName(modulePath, name, relativePath))) {
+    return modulePath;
+  }
+  for (const name of candidateNames) {
+    const forwardedModulePath = tsModuleImportsNameFrom(modulePath, name, relativePath);
+    if (forwardedModulePath !== null) {
+      return forwardedModulePath;
+    }
+  }
+  return modulePath;
+}
+
 function tsImportNameForPythonName(modulePath: string, pythonName: string, relativePath: string): string {
   if (pythonName === '__version__' && tsModuleExportsName(modulePath, 'VERSION', relativePath)) {
     return 'VERSION';
@@ -1984,6 +2007,57 @@ function tsImportNameForPythonName(modulePath: string, pythonName: string, relat
     return publicName;
   }
   return exactName;
+}
+
+function groupImportBindingsByModule<T extends { modulePath: string }>(bindings: T[]): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+  for (const binding of bindings) {
+    const group = groups.get(binding.modulePath) ?? [];
+    group.push(binding);
+    groups.set(binding.modulePath, group);
+  }
+  return groups;
+}
+
+function tsModuleImportsNameFrom(modulePath: string, name: string, relativePath: string): string | null {
+  const sourcePath = tsSourcePathForImportPath(modulePath, relativePath);
+  if (sourcePath === null || !fs.existsSync(sourcePath)) {
+    return null;
+  }
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  for (const importStatement of source.matchAll(/^import\s+(?:type\s+)?\{([^}]+)\}\s+from\s+['"](.+)['"];?$/gm)) {
+    for (const importedName of splitTopLevelComma(importStatement[1]).map((part) => part.trim())) {
+      const cleanName = importedName.replace(/^type\s+/, '');
+      const alias = /^([A-Za-z_$][A-Za-z0-9_$]*)\s+as\s+([A-Za-z_$][A-Za-z0-9_$]*)$/.exec(cleanName);
+      const localName = alias === null ? cleanName : alias[2];
+      if (localName === name) {
+        return tsImportPathForNestedSourceImport(sourcePath, importStatement[2]);
+      }
+    }
+  }
+  return null;
+}
+
+function tsImportPathForNestedSourceImport(sourcePath: string, importPath: string): string {
+  if (!importPath.startsWith('.')) {
+    return importPath;
+  }
+  const importedSourcePath = path.resolve(path.dirname(sourcePath), importPath);
+  return tsImportPathForSourcePath(importedSourcePath) ?? importPath;
+}
+
+function tsImportPathForSourcePath(sourcePath: string): string | null {
+  const crimsonRoot = path.join(tsTargetRoot, 'crimson');
+  const grimRoot = path.join(tsTargetRoot, 'grim');
+  const crimsonRelative = path.relative(crimsonRoot, sourcePath);
+  if (!crimsonRelative.startsWith('..') && !path.isAbsolute(crimsonRelative)) {
+    return `@crimson/${crimsonRelative.split(path.sep).join('/')}`;
+  }
+  const grimRelative = path.relative(grimRoot, sourcePath);
+  if (!grimRelative.startsWith('..') && !path.isAbsolute(grimRelative)) {
+    return `@grim/${grimRelative.split(path.sep).join('/')}`;
+  }
+  return null;
 }
 
 function skipIgnorableFunctionDecorators(lines: string[], index: number): number {

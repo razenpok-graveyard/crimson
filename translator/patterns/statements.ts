@@ -3078,10 +3078,23 @@ function collectMultilineSequenceLiteral(
       continue;
     }
 
-    items.push(translateExpression(item, nameMap, arrayNames, validatedTypeAliases, mapNames));
+    items.push(translateSequenceItemExpression(item, nameMap, arrayNames, validatedTypeAliases, mapNames));
     nextIndex += 1;
   }
   return null;
+}
+
+function translateSequenceItemExpression(
+  item: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string {
+  const starred = /^\*(.+)$/.exec(item.trim());
+  return starred === null
+    ? translateExpression(item, nameMap, arrayNames, validatedTypeAliases, mapNames)
+    : `...${translateExpression(starred[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
 }
 
 function collectMultilineDictLiteral(
@@ -4710,7 +4723,7 @@ export function parseTopLevelAssignment(
       if (tupleItem === null) {
         return null;
       }
-      valueLines.push(`  ${translateExpression(tupleItem[1], nameMap, new Set(), new Set(), mapNames)},`);
+      valueLines.push(`  ${translateSequenceItemExpression(tupleItem[1], nameMap, new Set(), new Set(), mapNames)},`);
       nextIndex += 1;
     }
 
@@ -4754,7 +4767,7 @@ export function parseTopLevelAssignment(
       if (listItem === null) {
         return null;
       }
-      valueLines.push(`  ${translateExpression(listItem[1], nameMap, new Set(), new Set(), mapNames)},`);
+      valueLines.push(`  ${translateSequenceItemExpression(listItem[1], nameMap, new Set(), new Set(), mapNames)},`);
       nextIndex += 1;
     }
     return null;
@@ -4791,6 +4804,27 @@ export function parseTopLevelAssignment(
       if (dictItem !== null) {
         valueLines.push(`  [${translateExpression(dictItem[1], nameMap, new Set(), new Set(), mapNames)}, ${translateExpression(dictItem[2], nameMap, new Set(), new Set(), mapNames)}],${parsedItemLine.comment === null ? '' : ` // ${parsedItemLine.comment}`}`);
         nextIndex += 1;
+        continue;
+      }
+
+      const multilineSequenceDictItem = /^(.+): ([([])$/.exec(parsedItemLine.code);
+      if (multilineSequenceDictItem !== null) {
+        const sequenceLiteral = collectMultilineSequenceLiteral(
+          lines,
+          nextIndex + 1,
+          multilineSequenceDictItem[2] === '(' ? ')' : ']',
+          nameMap,
+          new Set(),
+          new Set(),
+          mapNames,
+        );
+        if (sequenceLiteral === null) {
+          return null;
+        }
+        valueLines.push(`  [${translateExpression(multilineSequenceDictItem[1], nameMap, new Set(), new Set(), mapNames)}, [`);
+        valueLines.push(...sequenceLiteral.items.map((item) => `    ${item},`));
+        valueLines.push('  ]],');
+        nextIndex = sequenceLiteral.nextIndex;
         continue;
       }
 
