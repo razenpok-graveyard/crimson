@@ -303,7 +303,7 @@ export function translateExpression(
     }
   }
 
-  const mapMembership = /^(.+) in ([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);
+  const mapMembership = /^(.+) in ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
   if (mapMembership !== null) {
     const mapName = translateExpression(mapMembership[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (mapNames.has(mapName)) {
@@ -312,7 +312,7 @@ export function translateExpression(
     }
   }
 
-  const mapItemsCall = /^([A-Za-z_][A-Za-z0-9_]*)\.items\(\)$/.exec(trimmed);
+  const mapItemsCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.items\(\)$/.exec(trimmed);
   if (mapItemsCall !== null) {
     const mapName = translateExpression(mapItemsCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (mapNames.has(mapName)) {
@@ -320,7 +320,7 @@ export function translateExpression(
     }
   }
 
-  const mapSubscript = /^([A-Za-z_][A-Za-z0-9_]*)\[(.+)\]$/.exec(trimmed);
+  const mapSubscript = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[(.+)\]$/.exec(trimmed);
   if (mapSubscript !== null) {
     const mapName = translateExpression(mapSubscript[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (mapNames.has(mapName)) {
@@ -486,16 +486,21 @@ export function translateExpression(
     }
   }
 
+  const intCall = parseCallPrefix(trimmed, 'int');
+  if (intCall !== null && intCall.rest === '') {
+    return `int(${translateExpression(intCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
   for (const primitiveName of ['float', 'str', 'bool']) {
     const primitiveCall = parseCallPrefix(trimmed, primitiveName);
     if (primitiveCall !== null && primitiveCall.rest === '') {
-      return translateExpression(primitiveCall.argsText, nameMap, arrayNames, validatedTypeAliases);
+      return translateExpression(primitiveCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames);
     }
   }
 
   const pathCall = parseCallPrefix(trimmed, 'Path');
   if (pathCall !== null && pathCall.rest === '') {
-    return translateExpression(pathCall.argsText, nameMap, arrayNames, validatedTypeAliases);
+    return translateExpression(pathCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames);
   }
 
   const raylibConstructor = /^(r[dl])\.(Color|Vector2|Rectangle)\((.*)\)$/.exec(trimmed);
@@ -612,6 +617,14 @@ export function translateExpression(
   const vectorSubLengthMethod = /^\((.+) - (.+)\)\.length\(\)$/.exec(trimmed);
   if (vectorSubLengthMethod !== null) {
     return `${translateExpression(vectorSubLengthMethod[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.sub(${translateExpression(vectorSubLengthMethod[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}).length()`;
+  }
+
+  if (
+    vectorAdditive !== null
+    && vectorAdditive.parts.length === 2
+    && /^\(.+ - .+\)\.length\(\)$/.test(vectorAdditive.parts[0])
+  ) {
+    return `${translateExpression(vectorAdditive.parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames)} ${vectorAdditive.operators[0]} ${translateExpression(vectorAdditive.parts[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
   }
 
   const mixedKeywordCall = translateMixedKeywordCall(trimmed, nameMap, arrayNames, validatedTypeAliases);

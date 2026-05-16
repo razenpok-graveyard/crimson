@@ -1672,7 +1672,7 @@ function translateStraightLineAssignment(
   }
 
   const assignedRight = operator === '=' ? maybeAwaitAsyncCall(tsRight) : tsRight;
-  const mapItemAssignment = /^([A-Za-z_][A-Za-z0-9_]*)\[(.+)\]$/.exec(pythonLeft);
+  const mapItemAssignment = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[(.+)\]$/.exec(pythonLeft);
   if (operator === '=' && mapItemAssignment !== null) {
     const mapName = translateExpression(mapItemAssignment[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (mapNames.has(mapName)) {

@@ -321,6 +321,7 @@ export function parseStructClass(
   const fields: StructModule['classes'][number]['fields'] = [];
   const methods: SimpleModuleFunction[] = [];
   const arrayFieldNames = new Set<string>();
+  const mapFieldNames = new Set<string>();
   let postInitStatements: string[] = [];
   while (nextIndex < lines.length) {
     const line = lines[nextIndex];
@@ -339,7 +340,7 @@ export function parseStructClass(
     }
 
     if (trimmedField === '@property') {
-      const propertyMethod = parseStructMethod(lines, nextIndex + 1, false, arrayFieldNames, moduleNameMap);
+      const propertyMethod = parseStructMethod(lines, nextIndex + 1, false, arrayFieldNames, mapFieldNames, moduleNameMap);
       if (propertyMethod === null || propertyMethod.method.parameters.length > 0 || propertyMethod.method.optsParams.length > 0) {
         return null;
       }
@@ -352,7 +353,7 @@ export function parseStructClass(
     }
 
     if (trimmedField === '@staticmethod') {
-      const staticMethod = parseStructMethod(lines, nextIndex + 1, true, arrayFieldNames, moduleNameMap);
+      const staticMethod = parseStructMethod(lines, nextIndex + 1, true, arrayFieldNames, mapFieldNames, moduleNameMap);
       if (staticMethod === null) {
         return null;
       }
@@ -361,7 +362,7 @@ export function parseStructClass(
       continue;
     }
 
-    const method = parseStructMethod(lines, nextIndex, false, arrayFieldNames, moduleNameMap);
+    const method = parseStructMethod(lines, nextIndex, false, arrayFieldNames, mapFieldNames, moduleNameMap);
     if (method !== null) {
       if (method.method.name === '__post_init__') {
         postInitStatements = method.method.statements;
@@ -382,6 +383,10 @@ export function parseStructClass(
     if (typeExpression.endsWith('[]')) {
       arrayFieldNames.add(`self.${field[1]}`);
       arrayFieldNames.add(`this.${fieldName}`);
+    }
+    if (typeExpression.startsWith('Map<')) {
+      mapFieldNames.add(`self.${field[1]}`);
+      mapFieldNames.add(`this.${fieldName}`);
     }
     fields.push({
       name: fieldName,
@@ -410,6 +415,7 @@ function parseStructMethod(
   index: number,
   staticMethod = false,
   initialArrayNames: ReadonlySet<string> = new Set(),
+  initialMapNames: ReadonlySet<string> = new Set(),
   moduleNameMap: ReadonlyMap<string, string> = new Map(),
 ): { method: SimpleModuleFunction; nextIndex: number } | null {
   const header = parseIndentedFunctionHeader(lines, index, '    ');
@@ -424,6 +430,7 @@ function parseStructMethod(
   const parameters: FunctionParameter[] = [];
   const optsParams: OptionalFunctionParameter[] = [];
   const arrayNames = new Set<string>(initialArrayNames);
+  const mapNames = new Set<string>(initialMapNames);
   const extraParameters = staticMethod
     ? parametersText
     : parametersText === 'self' ? '' : parametersText.slice('self, '.length);
@@ -444,6 +451,9 @@ function parseStructMethod(
       };
       if (parsedParameter.typeExpression.endsWith('[]')) {
         arrayNames.add(parameter[1]);
+      }
+      if (parsedParameter.typeExpression.startsWith('Map<')) {
+        mapNames.add(parsedParameter.name);
       }
       if (parsedParameter.typeExpression === 'string') {
         arrayNames.add(stringNameMarker(parameter[1]));
@@ -484,6 +494,9 @@ function parseStructMethod(
       declaredNames,
       reassignedNames,
       arrayNames,
+      new Set(),
+      null,
+      mapNames,
     );
     if (statement === null) {
       return null;
@@ -920,6 +933,9 @@ function tsStructFieldDefaultValue(pythonValue: string): string | null {
 
   if (trimmed === 'msgspec.field(default_factory=list)') {
     return '[]';
+  }
+  if (trimmed === 'msgspec.field(default_factory=dict)') {
+    return 'new Map()';
   }
 
   const dataclassFactory = /^field\(default_factory=([A-Za-z_][A-Za-z0-9_]*)\)$/.exec(trimmed);
