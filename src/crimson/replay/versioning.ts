@@ -60,8 +60,8 @@ export function warnOnGameVersionMismatch(replay: Replay, opts: { action?: strin
 
   const action = opts.action ?? 'playback';
   const currentVersion = opts.currentVersion ?? null;
-  const expected = currentVersion !== null ? currentVersion.trim() : (currentReplayGameVersion()).trim();
-  const got = replay.header.gameVersion.trim();
+  const expected = (currentVersion !== null ? (String(currentVersion)).trim() : String(currentReplayGameVersion())).trim();
+  const got = (String(replay.header.gameVersion)).trim();
 
   if (!got) {
     throw new ReplayGameVersionError(`Replay is missing game_version; ${action} requires a matching game version (current=${pythonRepr(expected)}).`);

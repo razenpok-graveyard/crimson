@@ -378,6 +378,29 @@ export function pythonRoundHelperStatements(): string[] {
   ];
 }
 
+export function pythonFloatHelperStatements(): string[] {
+  return [
+    'function pythonFloat(value: unknown): number {',
+    "  if (typeof value === 'number') {",
+    '    return value;',
+    '  }',
+    '  const text = String(value).trim();',
+    "  if (/^[+-]?nan$/i.test(text)) {",
+    '    return Number.NaN;',
+    '  }',
+    "  if (/^[+-]?inf(?:inity)?$/i.test(text)) {",
+    "    return text.startsWith('-') ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY;",
+    '  }',
+    "  const digits = String.raw`\\d(?:_?\\d)*`;",
+    "  const decimalPattern = new RegExp(String.raw`^[+-]?(?:(?:${digits}(?:\\.(?:${digits})?)?|\\.(?:${digits}))(?:[eE][+-]?${digits})?)$`);",
+    '  if (!decimalPattern.test(text)) {',
+    "    throw new Error(`invalid float literal: ${text}`);",
+    '  }',
+    "  return Number(text.replaceAll('_', ''));",
+    '}',
+  ];
+}
+
 export function tupleKeyHelperStatements(): string[] {
   return [
     'function tupleKey(value: readonly unknown[] | string): string {',

@@ -83,6 +83,7 @@ import {
   pathFsHelperStatements,
   pathJoinHelperStatements,
   pythonEqualsHelperStatements,
+  pythonFloatHelperStatements,
   pythonIdHelperStatements,
   pythonJsonDumpsHelperStatements,
   pythonRoundHelperStatements,
@@ -918,6 +919,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   }
   if (moduleValueText.includes('pyRound(')) {
     const helperStatements = pythonRoundHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
+  if (moduleValueText.includes('pythonFloat(')) {
+    const helperStatements = pythonFloatHelperStatements();
     if (leadingStatements.length > 0) {
       helperStatements.push('');
     }

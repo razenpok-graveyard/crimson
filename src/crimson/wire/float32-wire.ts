@@ -3,7 +3,7 @@
 import { f32 } from '@crimson/math-parity.ts';
 
 function fieldLabel(field: string | null): string {
-  if (field && field.trim()) {
+  if (field && (String(field)).trim()) {
     return String(field);
   }
   return 'value';

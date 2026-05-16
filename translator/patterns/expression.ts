@@ -237,6 +237,11 @@ export function translatePositionalCallExpression(
     const rect = translateExpression(positionalParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
     return `${drawRectangleRec[1]}.drawRectangle(${rect}.x, ${rect}.y, ${rect}.w, ${rect}.h, ${args[1]})`;
   }
+  const drawTextureV = /^(?:r[dl]|wgl)\.drawTextureV$/.exec(callee);
+  if (drawTextureV !== null && args.length === 3) {
+    const [texture, position, tint] = args;
+    return `(() => { const texture = ${texture}; const position = ${position}; wgl.drawTexturePro(texture, wgl.makeRectangle(0, 0, texture.width, texture.height), wgl.makeRectangle(position.x, position.y, texture.width, texture.height), wgl.makeVector2(0, 0), 0.0, ${tint}); })()`;
+  }
   const raylibColor4ub = /^(r[dl]|wgl)\.rlColor4ub$/.exec(callee);
   if (raylibColor4ub !== null && positionalParts.length === 4) {
     return `${raylibColor4ub[1]}.rlColor4f(${positionalParts.map((arg) => translateRaylibColorArg(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;
@@ -498,6 +503,10 @@ export function translateExpression(
   if (lstripCall !== null) {
     return `pythonLstrip(${translateExpression(lstripCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
+  const stripCall = /^(.+)\.strip\(\)$/.exec(trimmed);
+  if (stripCall !== null && splitTopLevelComma(stripCall[1]).length === 1) {
+    return `${tsPropertyAccessBase(translateExpression(stripCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames))}.trim()`;
+  }
 
   const toBytesCall = /^(.+)\.tobytes\(\)$/.exec(trimmed);
   if (toBytesCall !== null) {
@@ -521,6 +530,17 @@ export function translateExpression(
   }
   if (trimmed === 'os.getpid()') {
     return 'globalThis.process?.pid ?? 0';
+  }
+  const osGetenvCall = parseCallPrefix(trimmed, 'os.getenv');
+  if (osGetenvCall !== null && osGetenvCall.rest === '') {
+    const args = splitTopLevelComma(osGetenvCall.argsText);
+    if (args.length >= 1 && args.length <= 2) {
+      const key = translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const fallback = args.length === 2
+        ? translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames)
+        : 'null';
+      return `(globalThis.process?.env?.[${key}] ?? ${fallback})`;
+    }
   }
 
   if (trimmed === 'uuid.uuid4().hex') {
@@ -625,8 +645,8 @@ export function translateExpression(
   if (raylibMouseButton !== null) {
     const buttons = new Map([
       ['MOUSE_BUTTON_LEFT', 0],
-      ['MOUSE_BUTTON_RIGHT', 1],
-      ['MOUSE_BUTTON_MIDDLE', 2],
+      ['MOUSE_BUTTON_MIDDLE', 1],
+      ['MOUSE_BUTTON_RIGHT', 2],
       ['MOUSE_BUTTON_SIDE', 3],
       ['MOUSE_BUTTON_EXTRA', 4],
       ['MOUSE_BUTTON_FORWARD', 5],
@@ -1462,6 +1482,10 @@ export function translateExpression(
     if (expressionIsKnownMap(value, nameMap, mapNames)) {
       return `${value}.size`;
     }
+    const fieldType = knownClassFieldType(lenCall.argsText, nameMap) ?? knownClassFieldType(value, nameMap);
+    if (fieldType !== null && typeExpressionLooksMap(fieldType)) {
+      return `${value}.size`;
+    }
     if (arrayNames.has(setNameMarker(lenCall.argsText)) || arrayNames.has(setNameMarker(value))) {
       return `${value}.size`;
     }
@@ -1488,6 +1512,14 @@ export function translateExpression(
   const intCall = parseCallPrefix(trimmed, 'int');
   if (intCall !== null && intCall.rest === '') {
     return `int(${translateExpression(intCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+  const floatCall = parseCallPrefix(trimmed, 'float');
+  if (floatCall !== null && floatCall.rest === '') {
+    const argText = floatCall.argsText.trim();
+    const translated = translateExpression(argText, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return arrayNames.has(stringNameMarker(argText)) || arrayNames.has(stringNameMarker(translated))
+      ? `pythonFloat(${translated})`
+      : translated;
   }
 
   const idCall = parseCallPrefix(trimmed, 'id');
@@ -3762,8 +3794,47 @@ function knownClassFieldType(tsExpression: string, nameMap: Map<string, string>)
   if (dottedField === null) {
     return null;
   }
-  const receiverType = nameMap.get(receiverTypeNameMarker(dottedField[1]));
+  const receiverType = nameMap.get(receiverTypeNameMarker(dottedField[1]))
+    ?? nullableTypeExpressionBase(knownClassFieldType(dottedField[1], nameMap));
   return receiverType === undefined ? null : nameMap.get(classFieldTypeMarker(receiverType, dottedField[2])) ?? null;
+}
+
+function nullableTypeExpressionBase(typeExpression: string | null): string | undefined {
+  if (typeExpression === null) {
+    return undefined;
+  }
+  const parts = splitTopLevelTypeUnion(typeExpression)
+    .map((part) => part.trim().replace(/^readonly\s+/, ''))
+    .filter((part) => part !== 'null' && part !== 'undefined');
+  return parts.length === 1 ? parts[0] : undefined;
+}
+
+function splitTopLevelTypeUnion(typeExpression: string): string[] {
+  const parts: string[] = [];
+  let start = 0;
+  let depth = 0;
+  for (let index = 0; index < typeExpression.length; index += 1) {
+    const char = typeExpression[index];
+    if (char === '<' || char === '(' || char === '[' || char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char === '>' || char === ')' || char === ']' || char === '}') {
+      depth -= 1;
+      continue;
+    }
+    if (char === '|' && depth === 0) {
+      parts.push(typeExpression.slice(start, index));
+      start = index + 1;
+    }
+  }
+  parts.push(typeExpression.slice(start));
+  return parts;
+}
+
+function typeExpressionLooksMap(typeExpression: string): boolean {
+  const normalized = nullableTypeExpressionBase(typeExpression) ?? typeExpression.trim();
+  return /^(?:ReadonlyMap|Map)<|^Map\b|^ReadonlyMap\b/.test(normalized);
 }
 
 function finalVectorMethodCall(tsExpression: string): boolean {

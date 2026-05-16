@@ -4125,6 +4125,10 @@ function recordLocalAssignmentMarkers(
     arrayNames.add(stringNameMarker(pythonName));
     arrayNames.add(stringNameMarker(tsName));
   }
+  if (/\.trim\(\)$/.test(assignedRight)) {
+    arrayNames.add(stringNameMarker(pythonName));
+    arrayNames.add(stringNameMarker(tsName));
+  }
   if (assignedRight.startsWith('new Map(')) {
     addMutableName(mapNames, pythonName);
     addMutableName(mapNames, tsName);

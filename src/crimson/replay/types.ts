@@ -201,7 +201,7 @@ export function currentReplayGameVersion(): string {
     }
     repoRoot = '';
     out = new Uint8Array();
-    build = new TextDecoder('utf-8').decode(out).trim();
+    build = (new TextDecoder('utf-8').decode(out)).trim();
     if (!build) {
       return version;
     }

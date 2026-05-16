@@ -283,11 +283,11 @@ export function loadTypoDictionary(path: string): string[] {
   const words: string[] = [];
   const seen: Set<string> = new Set();
   for (const line of pythonSplitlines(raw)) {
-    const text = line.split('#', 1)[0].trim();
+    const text = (line.split('#', 1)[0]).trim();
     if (text.length === 0) {
       continue;
     }
-    if (text.length >= NAME_MAX_CHARS) {
+    if (Array.from(text).length >= NAME_MAX_CHARS) {
       continue;
     }
     if (seen.has(text)) {

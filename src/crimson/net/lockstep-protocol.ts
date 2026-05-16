@@ -808,7 +808,7 @@ export function currentBuildId(): string {
       return version;
     }
     out = new Uint8Array();
-    build = new TextDecoder('utf-8').decode(out).trim();
+    build = (new TextDecoder('utf-8').decode(out)).trim();
     if (build) {
       if (((container: unknown, value: unknown) => container instanceof Set || container instanceof Map ? container.has(value) : Array.isArray(container) ? container.includes(value) : typeof container === 'string' ? container.includes(String(value)) : container !== null && typeof container === 'object' ? Object.prototype.hasOwnProperty.call(container, String(value)) : false)(version, '+')) {
         return `${version}.g${build}`;

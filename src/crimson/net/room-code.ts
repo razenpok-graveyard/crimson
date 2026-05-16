@@ -16,7 +16,7 @@ export function parseRoomCode(value: string): RoomCode {
 }
 
 export function parseOptionalRoomCode(value: string | null): RoomCode | null {
-  const text = (value || '').trim();
+  const text = (String(value || '')).trim();
   if (!text) {
     return null;
   }
