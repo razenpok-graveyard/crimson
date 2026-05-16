@@ -883,6 +883,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   }
 
   const reexports = reexportsForAllNames(imports, allNames, relativePath);
+  ensureInferredTypeImports(imports, typeAliases, protocols, classes, plainClasses, [...leadingStatements, ...trailingStatements], functions, [...leadingAssignments, ...assignments]);
   markTypeOnlyImports(imports, typeAliases, protocols, classes, plainClasses, [...leadingStatements, ...trailingStatements], functions, [...leadingAssignments, ...assignments]);
   markNamespaceImports(namespaceImports, moduleValueUsageText(typeAliases, protocols, classes, plainClasses, [...leadingStatements, ...trailingStatements], functions, [...leadingAssignments, ...assignments]));
   if (allNames.length > 0) {
@@ -1625,36 +1626,7 @@ function markTypeOnlyImports(
     ]),
     ...assignments.flatMap((assignment) => assignment.valueLines),
   ].join('\n'));
-  const typeText = [
-    ...typeAliases.map((alias) => alias.typeExpression),
-    ...protocols.flatMap((protocol) => protocol.methods.flatMap((method) => [
-      method.returnType,
-      ...method.parameters.map((parameter) => parameter.typeExpression),
-      ...method.optsParams.map((parameter) => parameter.typeExpression),
-    ])),
-    ...classes.flatMap((structClass) => structClass.fields.map((field) => field.typeExpression)),
-    ...classes.flatMap((structClass) => structClass.methods.flatMap((method) => [
-      method.returnType,
-      ...method.parameters.map((parameter) => parameter.typeExpression),
-      ...method.optsParams.map((parameter) => parameter.typeExpression),
-    ])),
-    ...plainClasses.flatMap((plainClass) => plainClass.fields.map((field) => field.typeExpression)),
-    ...plainClasses.flatMap((plainClass) => [
-      ...plainClass.constructorDefinition.parameters.map((parameter) => parameter.typeExpression),
-      ...plainClass.constructorDefinition.optsParams.map((parameter) => parameter.typeExpression),
-    ]),
-    ...plainClasses.flatMap((plainClass) => plainClass.methods.flatMap((method) => [
-      method.returnType,
-      ...method.parameters.map((parameter) => parameter.typeExpression),
-      ...method.optsParams.map((parameter) => parameter.typeExpression),
-    ])),
-    ...functions.flatMap((fn) => [
-      fn.returnType,
-      ...fn.parameters.map((parameter) => parameter.typeExpression),
-      ...fn.optsParams.map((parameter) => parameter.typeExpression),
-    ]),
-    ...assignments.flatMap((assignment) => assignment.typeExpression ?? []),
-  ].join('\n');
+  const typeText = straightLineModuleTypeUsageText(typeAliases, protocols, classes, plainClasses, leadingStatements, functions, assignments);
 
   for (let index = 0; index < imports.length; index += 1) {
     const importDefinition = imports[index];
@@ -1685,6 +1657,77 @@ function markTypeOnlyImports(
     );
     index += 1;
   }
+}
+
+function ensureInferredTypeImports(
+  imports: ImportDefinition[],
+  typeAliases: TypeAlias[],
+  protocols: StraightLineModule['protocols'],
+  classes: StructModule['classes'],
+  plainClasses: PlainClassDefinition[],
+  leadingStatements: string[],
+  functions: SimpleModuleFunction[],
+  assignments: SimpleModuleAssignment[],
+): void {
+  const typeText = straightLineModuleTypeUsageText(typeAliases, protocols, classes, plainClasses, leadingStatements, functions, assignments);
+  if (identifierPattern('Vec2').test(typeText) && !imports.some((importDefinition) => importDefinition.names.some((name) => importedBindingName(name) === 'Vec2'))) {
+    pushUniqueImportDefinition(imports, {
+      modulePath: '@grim/geom.ts',
+      names: ['Vec2'],
+    });
+  }
+}
+
+function straightLineModuleTypeUsageText(
+  typeAliases: TypeAlias[],
+  protocols: StraightLineModule['protocols'],
+  classes: StructModule['classes'],
+  plainClasses: PlainClassDefinition[],
+  leadingStatements: string[],
+  functions: SimpleModuleFunction[],
+  assignments: SimpleModuleAssignment[],
+): string {
+  return [
+    ...typeAliases.map((alias) => alias.typeExpression),
+    ...protocols.flatMap((protocol) => protocol.methods.flatMap((method) => [
+      method.returnType,
+      ...method.parameters.map((parameter) => parameter.typeExpression),
+      ...method.optsParams.map((parameter) => parameter.typeExpression),
+    ])),
+    ...classes.flatMap((structClass) => structClass.fields.map((field) => field.typeExpression)),
+    ...classes.flatMap((structClass) => structClass.methods.flatMap((method) => [
+      method.returnType,
+      ...method.parameters.map((parameter) => parameter.typeExpression),
+      ...method.optsParams.map((parameter) => parameter.typeExpression),
+      straightLineStatementTypeUsageText(method.statements),
+    ])),
+    ...plainClasses.flatMap((plainClass) => plainClass.fields.map((field) => field.typeExpression)),
+    ...plainClasses.flatMap((plainClass) => [
+      ...plainClass.constructorDefinition.parameters.map((parameter) => parameter.typeExpression),
+      ...plainClass.constructorDefinition.optsParams.map((parameter) => parameter.typeExpression),
+      straightLineStatementTypeUsageText(plainClass.constructorDefinition.statements),
+    ]),
+    ...plainClasses.flatMap((plainClass) => plainClass.methods.flatMap((method) => [
+      method.returnType,
+      ...method.parameters.map((parameter) => parameter.typeExpression),
+      ...method.optsParams.map((parameter) => parameter.typeExpression),
+      straightLineStatementTypeUsageText(method.statements),
+    ])),
+    straightLineStatementTypeUsageText(leadingStatements),
+    ...functions.flatMap((fn) => [
+      fn.returnType,
+      ...fn.parameters.map((parameter) => parameter.typeExpression),
+      ...fn.optsParams.map((parameter) => parameter.typeExpression),
+      straightLineStatementTypeUsageText(fn.statements),
+    ]),
+    ...assignments.flatMap((assignment) => assignment.typeExpression ?? []),
+  ].join('\n');
+}
+
+function straightLineStatementTypeUsageText(statements: string[]): string {
+  return statements
+    .flatMap((statement) => [...statement.matchAll(/\b(?:const|let|var)\s+[A-Za-z_$][A-Za-z0-9_$]*:\s*([^=;]+)/g)].map((match) => match[1]))
+    .join('\n');
 }
 
 function markNamespaceImports(namespaceImports: NamespaceImportDefinition[], valueText: string): void {

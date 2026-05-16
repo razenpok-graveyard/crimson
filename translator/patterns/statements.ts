@@ -34,7 +34,9 @@ import {
   setNameMarker,
   splitTopLevelLogicalOperator,
   stringNameMarker,
+  translatedExpressionLooksVectorArray,
   translatedExpressionLooksVector,
+  vectorArrayNameMarker,
   vectorNameMarker,
 } from './expression.js';
 import {
@@ -1909,12 +1911,6 @@ export function translateStraightLineStatement(
           nextIndex: index + 1,
         };
       }
-      if (clearCall[1].includes('.')) {
-        return {
-          statements: [`${target}.clear();`],
-          nextIndex: index + 1,
-        };
-      }
       return {
         statements: [
           '((target: unknown) => {',
@@ -2985,63 +2981,19 @@ function translateStraightLineAssignment(
       return { statements: [], nextIndex };
     }
     if (declaredNames.has(localAssignment[1])) {
+      const localAssignedRight = assignedRightAsKnownVector(localAssignment[1], tsName, assignedRight, arrayNames);
+      recordLocalAssignmentMarkers(localAssignment[1], tsName, localAssignedRight, arrayNames, mapNames);
       return {
-        statements: [`${tsName} = ${assignedRight};`],
+        statements: [`${tsName} = ${localAssignedRight};`],
         nextIndex,
       };
     }
     declaredNames.add(localAssignment[1]);
-    if (/\.(?:creatures|pickups|players)\b/.test(assignedRight)) {
-      arrayNames.add(localAssignment[1]);
-    }
-    if (/^Array\.from\(/.test(assignedRight)) {
-      arrayNames.add(localAssignment[1]);
-      arrayNames.add(tsName);
-    }
-    if (assignedRight.startsWith('[')) {
-      arrayNames.add(localAssignment[1]);
-      arrayNames.add(tsName);
-    }
-    if (assignedRight === '{}' || assignedRight.startsWith('{ ...')) {
-      arrayNames.add(objectNameMarker(localAssignment[1]));
-      arrayNames.add(objectNameMarker(tsName));
-    }
-    if (/^(?:[A-Za-z_$][A-Za-z0-9_$]*\.)?makeRectangle\(/.test(assignedRight)) {
-      arrayNames.add(rectangleNameMarker(localAssignment[1]));
-      arrayNames.add(rectangleNameMarker(tsName));
-    }
-    if (/^(?:'[^']*'|"[^"]*"|`[^`]*`)$/.test(assignedRight)) {
-      arrayNames.add(stringNameMarker(localAssignment[1]));
-      arrayNames.add(stringNameMarker(tsName));
-    }
-    if (assignedRight.startsWith('new Map(')) {
-      addMutableName(mapNames, localAssignment[1]);
-      addMutableName(mapNames, tsName);
-    }
-    const callAssignment = /^(?:await )?([A-Za-z_$][A-Za-z0-9_$]*)\(/.exec(assignedRight);
-    if (assignedRight.startsWith('new Set(') || (callAssignment !== null && arrayNames.has(setNameMarker(callAssignment[1])))) {
-      arrayNames.add(setNameMarker(localAssignment[1]));
-      arrayNames.add(setNameMarker(tsName));
-    }
-    if (callAssignment !== null && arrayNames.has(objectNameMarker(callAssignment[1]))) {
-      arrayNames.add(objectNameMarker(localAssignment[1]));
-      arrayNames.add(objectNameMarker(tsName));
-    }
-    if (callAssignment !== null && arrayNames.has(stringNameMarker(callAssignment[1]))) {
-      arrayNames.add(stringNameMarker(localAssignment[1]));
-      arrayNames.add(stringNameMarker(tsName));
-    }
-    if (translatedExpressionLooksVector(assignedRight)) {
-      arrayNames.add(vectorNameMarker(localAssignment[1]));
-      arrayNames.add(vectorNameMarker(tsName));
-    }
-    if (assignedRight === 'new Date()') {
-      arrayNames.add(dateNameMarker(localAssignment[1]));
-      arrayNames.add(dateNameMarker(tsName));
-    }
+    const localAssignedRight = assignedRightAsKnownVector(localAssignment[1], tsName, assignedRight, arrayNames);
+    recordLocalAssignmentMarkers(localAssignment[1], tsName, localAssignedRight, arrayNames, mapNames);
     return {
       statements: [
-        `${reassignedNames.has(localAssignment[1]) ? 'let' : 'const'} ${tsName} = ${assignedRight};`,
+        `${reassignedNames.has(localAssignment[1]) ? 'let' : 'const'} ${tsName} = ${localAssignedRight};`,
       ],
       nextIndex,
     };
@@ -3085,6 +3037,84 @@ function translateStraightLineAssignment(
     statements: [`${translateExpression(pythonLeft, nameMap, arrayNames, validatedTypeAliases, mapNames)} ${operator} ${assignedRight};`],
     nextIndex,
   };
+}
+
+function assignedRightAsKnownVector(
+  pythonName: string,
+  tsName: string,
+  assignedRight: string,
+  arrayNames: ReadonlySet<string>,
+): string {
+  if (!arrayNames.has(vectorNameMarker(pythonName)) && !arrayNames.has(vectorNameMarker(tsName))) {
+    return assignedRight;
+  }
+  const makeVector = /^(?:[A-Za-z_$][A-Za-z0-9_$]*\.)?makeVector2\(([\s\S]+)\)$/.exec(assignedRight);
+  if (makeVector === null) {
+    return assignedRight;
+  }
+  const args = splitTopLevelComma(makeVector[1]);
+  return args.length === 2 ? `new Vec2(${args.join(', ')})` : assignedRight;
+}
+
+function recordLocalAssignmentMarkers(
+  pythonName: string,
+  tsName: string,
+  assignedRight: string,
+  arrayNames: Set<string>,
+  mapNames: ReadonlySet<string>,
+): void {
+  if (/^[A-Za-z_$][A-Za-z0-9_.$]*(?:creatures|pickups|players)$/.test(assignedRight)) {
+    arrayNames.add(pythonName);
+  }
+  if (/^Array\.from\(/.test(assignedRight)) {
+    arrayNames.add(pythonName);
+    arrayNames.add(tsName);
+  }
+  if (assignedRight.startsWith('[')) {
+    arrayNames.add(pythonName);
+    arrayNames.add(tsName);
+  }
+  if (assignedRight === '{}' || assignedRight.startsWith('{ ...')) {
+    arrayNames.add(objectNameMarker(pythonName));
+    arrayNames.add(objectNameMarker(tsName));
+  }
+  if (/^(?:[A-Za-z_$][A-Za-z0-9_$]*\.)?makeRectangle\(/.test(assignedRight)) {
+    arrayNames.add(rectangleNameMarker(pythonName));
+    arrayNames.add(rectangleNameMarker(tsName));
+  }
+  if (/^(?:'[^']*'|"[^"]*"|`[^`]*`)$/.test(assignedRight)) {
+    arrayNames.add(stringNameMarker(pythonName));
+    arrayNames.add(stringNameMarker(tsName));
+  }
+  if (assignedRight.startsWith('new Map(')) {
+    addMutableName(mapNames, pythonName);
+    addMutableName(mapNames, tsName);
+  }
+  const callAssignment = /^(?:await )?([A-Za-z_$][A-Za-z0-9_$]*)\(/.exec(assignedRight);
+  if (assignedRight.startsWith('new Set(') || (callAssignment !== null && arrayNames.has(setNameMarker(callAssignment[1])))) {
+    arrayNames.add(setNameMarker(pythonName));
+    arrayNames.add(setNameMarker(tsName));
+  }
+  if (callAssignment !== null && arrayNames.has(objectNameMarker(callAssignment[1]))) {
+    arrayNames.add(objectNameMarker(pythonName));
+    arrayNames.add(objectNameMarker(tsName));
+  }
+  if (callAssignment !== null && arrayNames.has(stringNameMarker(callAssignment[1]))) {
+    arrayNames.add(stringNameMarker(pythonName));
+    arrayNames.add(stringNameMarker(tsName));
+  }
+  if (translatedExpressionLooksVector(assignedRight)) {
+    arrayNames.add(vectorNameMarker(pythonName));
+    arrayNames.add(vectorNameMarker(tsName));
+  }
+  if (translatedExpressionLooksVectorArray(assignedRight)) {
+    arrayNames.add(vectorArrayNameMarker(pythonName));
+    arrayNames.add(vectorArrayNameMarker(tsName));
+  }
+  if (assignedRight === 'new Date()') {
+    arrayNames.add(dateNameMarker(pythonName));
+    arrayNames.add(dateNameMarker(tsName));
+  }
 }
 
 function translateMapPopAssignment(

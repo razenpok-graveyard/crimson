@@ -4,6 +4,7 @@ import { TextureId } from '@grim/assets.ts';
 import { clamp } from '@grim/math.ts';
 import { RAD_TO_DEG, projOrigin } from '@crimson/render/projectile-draw/common.ts';
 import type { ProjectileDrawCtx } from '@crimson/render/projectile-draw/types.ts';
+import { Vec2 } from '@grim/geom.ts';
 import * as wgl from '@wgl';
 
 export function drawBulletTrail(ctx: ProjectileDrawCtx): boolean {
@@ -19,7 +20,7 @@ export function drawBulletTrail(ctx: ProjectileDrawCtx): boolean {
   let drawn = false;
 
   const bulletTrail = resources.texture(TextureId.BULLET_TRAIL);
-  let origin: { x: number; y: number };
+  let origin: Vec2;
   if (bulletTrail !== null) {
     origin = projOrigin(ctx.proj, ctx.pos);
     const originScreen = renderer.worldToScreen(origin);
@@ -31,7 +32,7 @@ export function drawBulletTrail(ctx: ProjectileDrawCtx): boolean {
     const size = renderer.bulletSpriteSize(typeId, { scale: ctx.scale });
     const src = wgl.makeRectangle(0.0, 0.0, bullet.width, bullet.height);
     const dst = wgl.makeRectangle(ctx.screenPos.x, ctx.screenPos.y, size, size);
-    origin = wgl.makeVector2(size * 0.5, size * 0.5);
+    origin = new Vec2(size * 0.5, size * 0.5);
     const tint = wgl.makeColor(220 / 255, 220 / 255, 220 / 255, int(alphaByte) / 255);
     wgl.drawTexturePro(bullet, src, dst, origin, ctx.angle * RAD_TO_DEG, tint);
     drawn = true;

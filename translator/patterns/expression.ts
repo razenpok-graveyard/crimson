@@ -228,6 +228,10 @@ export function vectorNameMarker(name: string): string {
   return `__vector__:${name}`;
 }
 
+export function vectorArrayNameMarker(name: string): string {
+  return `__vector_array__:${name}`;
+}
+
 export function stringNameMarker(name: string): string {
   return `__string__:${name}`;
 }
@@ -266,13 +270,23 @@ export function nullableNameMarker(name: string): string {
 
 export function translatedExpressionLooksVector(tsExpression: string): boolean {
   const trimmed = tsExpression.trim();
-  if (/^(?:Vec2\.|new Vec2\b)/.test(trimmed) && !/\.(?:length|toHeading)\(\)$/.test(trimmed)) {
+  if (/^(?:Vec2\.|new Vec2\b|projOrigin\()/.test(trimmed) && !/\.(?:length|toHeading)\(\)$/.test(trimmed)) {
+    return true;
+  }
+  if (/\bnew Vec2\b/.test(trimmed) && trimmed.includes('?')) {
     return true;
   }
   if (/\.(?:aim|pos|vel)$/.test(trimmed)) {
     return true;
   }
   return finalVectorMethodCall(trimmed);
+}
+
+export function translatedExpressionLooksVectorArray(tsExpression: string): boolean {
+  const trimmed = tsExpression.trim();
+  return /^\[.*(?:new Vec2\b|Vec2\.)/.test(trimmed)
+    || /^Array\.from\([\s\S]*=> [\s\S]*(?:new Vec2\b|Vec2\.)/.test(trimmed)
+    || /^Array\.from\([\s\S]*\)\.map\([\s\S]*=> [\s\S]*(?:new Vec2\b|Vec2\.)/.test(trimmed);
 }
 
 export function translateExpression(
@@ -613,6 +627,17 @@ export function translateExpression(
     return listComprehension.condition !== null && translatedItem === itemName
       ? filtered
       : `${filtered}.map((${itemName}) => ${translatedItem})`;
+  }
+
+  const listLiteral = /^\[([\s\S]*)\]$/.exec(trimmed);
+  if (listLiteral !== null) {
+    const items = splitTopLevelComma(listLiteral[1]).filter((item) => item.trim() !== '');
+    return `[${items.map((item) => {
+      const stripped = item.trim();
+      return stripped.startsWith('*')
+        ? `...${translateExpression(stripped.slice(1), nameMap, arrayNames, validatedTypeAliases, mapNames)}`
+        : translateExpression(stripped, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    }).join(', ')}]`;
   }
 
   const aggregateGenerator = translateAggregateGeneratorCall(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -2596,6 +2621,11 @@ function expressionIsKnownVector(
   const identifier = /^[A-Za-z_][A-Za-z0-9_]*$/.exec(trimmed);
   if (identifier !== null) {
     return arrayNames.has(vectorNameMarker(identifier[0])) || arrayNames.has(vectorNameMarker(translated));
+  }
+  const indexedIdentifier = /^([A-Za-z_][A-Za-z0-9_]*)\[.+\]$/.exec(trimmed);
+  if (indexedIdentifier !== null) {
+    const translatedBase = translateIdentifierName(indexedIdentifier[1], nameMap);
+    return arrayNames.has(vectorArrayNameMarker(indexedIdentifier[1])) || arrayNames.has(vectorArrayNameMarker(translatedBase));
   }
   return translatedExpressionLooksVector(trimmed);
 }

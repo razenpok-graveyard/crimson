@@ -376,6 +376,20 @@ export function inferPythonExpressionType(pythonExpression: string): string {
   if (/^(?:int|float)\(/.test(trimmed)) {
     return 'number';
   }
+  const listComprehension = /^\[(.+?) for [A-Za-z_][A-Za-z0-9_]* in .+\]$/.exec(trimmed);
+  if (listComprehension !== null) {
+    return `${inferPythonExpressionType(listComprehension[1])}[]`;
+  }
+  const listLiteral = /^\[(.*)\]$/.exec(trimmed);
+  if (listLiteral !== null) {
+    const itemTypes = listLiteral[1]
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item) => item !== '')
+      .map(inferPythonExpressionType);
+    const uniqueTypes = [...new Set(itemTypes.filter((type) => type !== 'any'))];
+    return `${uniqueTypes.length === 1 ? uniqueTypes[0] : 'any'}[]`;
+  }
   const enumCast = /^([A-Z][A-Za-z0-9_]*(?:Id|Mode|Type))\(.+\)$/.exec(trimmed);
   if (enumCast !== null) {
     return tsExportNameForPythonName(enumCast[1]);
@@ -386,8 +400,8 @@ export function inferPythonExpressionType(pythonExpression: string): string {
   if (/^(?:(?:r[dl]|wgl)\.)?(?:Color|makeColor)\(/.test(trimmed)) {
     return 'wgl.Color';
   }
-  if (/^(?:proj_origin|Vec2|rl\.Vector2)\(/.test(trimmed)) {
-    return '{ x: number; y: number }';
+  if (/^(?:proj_origin|Vec2|rl\.Vector2)\(/.test(trimmed) || /^Vec2\./.test(trimmed)) {
+    return 'Vec2';
   }
   if (!/["'`]/.test(trimmed) && /\s(?:%|\*|\/\/|\/|-)\s/.test(trimmed)) {
     return 'number';

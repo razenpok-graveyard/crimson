@@ -429,7 +429,13 @@ export function parseStructClass(
     if (field === null) {
       return null;
     }
-    const defaultValue = field[3] === undefined ? null : tsStructFieldDefaultValue(field[3]);
+    const defaultValueText = field[3] === undefined
+      ? null
+      : collectStructFieldDefaultValue(lines, nextIndex, field[3]);
+    if (defaultValueText === null && field[3] !== undefined) {
+      return null;
+    }
+    const defaultValue = defaultValueText === null ? null : tsStructFieldDefaultValue(defaultValueText.value);
     const fieldName = tsAttributeNameForPythonName(field[1]);
     const typeExpression = tsStructFieldType(field[2]);
     if (typeExpression.endsWith('[]')) {
@@ -446,7 +452,7 @@ export function parseStructClass(
       defaultValue,
       ...(parsedFieldLine.comment === null ? {} : { trailingComment: parsedFieldLine.comment }),
     });
-    nextIndex += 1;
+    nextIndex = defaultValueText?.nextIndex ?? nextIndex + 1;
   }
 
   return {
@@ -487,6 +493,57 @@ function splitInlineComment(line: string): { code: string; comment: string | nul
     }
   }
   return { code: line, comment: null };
+}
+
+function collectStructFieldDefaultValue(
+  lines: string[],
+  index: number,
+  initialValue: string,
+): { value: string; nextIndex: number } | null {
+  let parenBalance = topLevelParenBalance(initialValue);
+  if (parenBalance <= 0) {
+    return { value: initialValue, nextIndex: index + 1 };
+  }
+
+  const valueLines = [initialValue];
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length && parenBalance > 0) {
+    const line = lines[nextIndex] ?? '';
+    const trimmed = line.trim();
+    if (trimmed === '' || !line.startsWith('    ')) {
+      return null;
+    }
+    valueLines.push(trimmed);
+    parenBalance += topLevelParenBalance(trimmed);
+    nextIndex += 1;
+  }
+  return parenBalance === 0
+    ? { value: valueLines.join(' '), nextIndex }
+    : null;
+}
+
+function topLevelParenBalance(value: string): number {
+  let balance = 0;
+  let quote: string | null = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      if (char === quote && value[index - 1] !== '\\') {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '(') {
+      balance += 1;
+    } else if (char === ')') {
+      balance -= 1;
+    }
+  }
+  return balance;
 }
 
 function parseStructMethod(
@@ -760,7 +817,11 @@ function tsStructFieldType(pythonType: string): string {
 }
 
 function tsStructFieldDefaultValue(pythonValue: string): string | null {
-  const trimmed = pythonValue.trim();
+  const trimmed = pythonValue
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/\(\s+/g, '(')
+    .replace(/,\s*\)$/g, ')');
   const joinedPath = /^Path\("([^"]+)"\) \/ "([^"]+)"$/.exec(trimmed);
   if (joinedPath !== null) {
     return `'${joinedPath[1]}/${joinedPath[2]}'`;
@@ -801,7 +862,8 @@ function tsStructFieldDefaultValue(pythonValue: string): string | null {
 
   const factory = /^msgspec\.field\(default_factory=([A-Za-z_][A-Za-z0-9_]*)\)$/.exec(trimmed);
   if (factory !== null) {
-    return `new ${tsExportNameForPythonName(factory[1])}()`;
+    const factoryName = tsExportNameForPythonName(factory[1]);
+    return /^[A-Z]/.test(factoryName) ? `new ${factoryName}()` : `${factoryName}()`;
   }
 
   const zeroArgConstructor = /^([A-Z][A-Za-z0-9_]*)\(\)$/.exec(trimmed);
