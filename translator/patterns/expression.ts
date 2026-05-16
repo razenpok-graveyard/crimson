@@ -156,6 +156,10 @@ function translateCallCalleeExpression(
   arrayNames: Set<string>,
   validatedTypeAliases: ReadonlySet<string>,
 ): string {
+  const staticMethodCallee = translateStaticMethodCalleeIfKnown(pythonExpression, nameMap);
+  if (staticMethodCallee !== null) {
+    return staticMethodCallee;
+  }
   const builtinCallee = new Map([
     ['abs', 'Math.abs'],
     ['max', 'Math.max'],
@@ -291,6 +295,29 @@ export function numberArrayNameMarker(name: string): string {
 
 export function tupleElementArrayNameMarker(name: string): string {
   return `__tuple_element_array__:${name}`;
+}
+
+export function receiverTypeNameMarker(name: string): string {
+  return `__receiver_type__:${name}`;
+}
+
+export function staticClassMethodNameMarker(className: string, methodName: string): string {
+  return `__static_class_method__:${className}:${methodName}`;
+}
+
+function translateStaticMethodCalleeIfKnown(pythonCallee: string, nameMap: Map<string, string>): string | null {
+  const dotted = /^([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(pythonCallee);
+  if (dotted === null) {
+    return null;
+  }
+  const receiver = translateIdentifierName(dotted[1], nameMap);
+  const receiverType = nameMap.get(receiverTypeNameMarker(dotted[1])) ?? nameMap.get(receiverTypeNameMarker(receiver));
+  if (receiverType === undefined) {
+    return null;
+  }
+  const methodName = tsExportNameForPythonName(dotted[2]);
+  const staticMethod = nameMap.get(staticClassMethodNameMarker(receiverType, methodName));
+  return staticMethod === undefined ? null : `${receiverType}.${staticMethod}`;
 }
 
 export function translatedExpressionLooksVector(tsExpression: string): boolean {
@@ -2620,7 +2647,9 @@ function translateCallWithInlineRecordArgs(
     return null;
   }
   const optsArg = keywordParts.length === 0 ? [] : [`{ ${keywordParts.join(', ')} }`];
-  return `${translateExpression(call[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}(${[...positionalParts, ...optsArg].join(', ')})`;
+  const callee = translateStaticMethodCalleeIfKnown(call[1], nameMap)
+    ?? translateExpression(call[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  return `${callee}(${[...positionalParts, ...optsArg].join(', ')})`;
 }
 
 function topLevelColonIndex(value: string): number | null {
@@ -3144,7 +3173,8 @@ function translateMixedKeywordCall(
   if (keywordParts.length === 0) {
     return null;
   }
-  const callee = translateExpression(call[1], nameMap, arrayNames, validatedTypeAliases);
+  const callee = translateStaticMethodCalleeIfKnown(call[1], nameMap)
+    ?? translateExpression(call[1], nameMap, arrayNames, validatedTypeAliases);
   const callPrefix = /^[A-Z][A-Za-z0-9_]*$/.test(callee) ? `new ${callee}` : callee;
   if (positionalParts.length === 0) {
     return `${callPrefix}({ ${keywordParts.join(', ')} })`;

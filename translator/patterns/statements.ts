@@ -159,6 +159,23 @@ function translateConditionExpression(
 function parenthesizeAndConditionOperand(value: string): string {
   return value.includes(' || ') && matchingCloseParen(value, 0) !== value.length - 1 ? `(${value})` : value;
 }
+
+function appendTrailingCommentToResult<T extends { statements: string[]; nextIndex: number }>(
+  result: T,
+  comment: string | null,
+): T {
+  if (comment === null || result.statements.length === 0) {
+    return result;
+  }
+  const statements = [...result.statements];
+  if (statements.length === 1 && !statements[0].endsWith('{') && !statements[0].endsWith('}')) {
+    statements[0] = `${statements[0]} // ${comment}`;
+  } else {
+    statements.push(`// ${comment}`);
+  }
+  return { ...result, statements };
+}
+
 function caseBodyStops(statements: string[]): boolean {
   for (let index = statements.length - 1; index >= 0; index -= 1) {
     const trimmed = statements[index].trim();
@@ -359,15 +376,19 @@ export function translateStraightLineStatement(
   if (line === undefined || !line.startsWith(indent)) {
     return null;
   }
-  const statement = line.slice(indent.length);
-  if (statement.trim() === '' || statement.startsWith(' ')) {
+  const rawStatement = line.slice(indent.length);
+  if (rawStatement.trim() === '' || rawStatement.startsWith(' ')) {
     return null;
   }
 
-  if (statement.startsWith('#')) {
-    const comment = statement.replace(/^# ?/, '');
+  if (rawStatement.startsWith('#')) {
+    const comment = rawStatement.replace(/^# ?/, '');
     return { statements: [comment === '' ? '//' : `// ${comment}`], nextIndex: index + 1 };
   }
+
+  const parsedStatement = splitInlineComment(rawStatement);
+  const statement = parsedStatement.code;
+  const trailingComment = parsedStatement.comment;
 
   const globalStatement = /^global ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(statement);
   if (globalStatement !== null) {
@@ -1418,12 +1439,12 @@ export function translateStraightLineStatement(
         assignedRight = 'new Map()';
       }
     }
-    return {
+    return appendTrailingCommentToResult({
       statements: [
         `${reassignedNames.has(annotatedAssignment[1]) ? 'let' : 'const'} ${tsName}: ${typeExpression} = ${assignedRight};`,
       ],
       nextIndex: index + 1,
-    };
+    }, trailingComment);
   }
 
   const annotatedDeclaration = /^([A-Za-z_][A-Za-z0-9_]*): (.+)$/.exec(statement);
@@ -1453,7 +1474,7 @@ export function translateStraightLineStatement(
         mapNames,
       );
       if (popAssignment !== null) {
-        return popAssignment;
+        return appendTrailingCommentToResult(popAssignment, trailingComment);
       }
     }
 
@@ -1475,7 +1496,7 @@ export function translateStraightLineStatement(
       if (callExpression === null) {
         return null;
       }
-      return translateStraightLineAssignment(
+      return appendTrailingCommentToResult(translateStraightLineAssignment(
         assignment[1],
         assignment[2],
         callExpression.expression,
@@ -1486,7 +1507,7 @@ export function translateStraightLineStatement(
         arrayNames,
         validatedTypeAliases,
         mapNames,
-      );
+      ), trailingComment);
     }
     if (assignment[3] === '{') {
       const dictComprehension = parseMultilineDictComprehensionExpression(
@@ -1599,7 +1620,7 @@ export function translateStraightLineStatement(
       if (wrappedExpression === null) {
         return null;
       }
-      return translateStraightLineAssignment(
+      return appendTrailingCommentToResult(translateStraightLineAssignment(
         assignment[1],
         assignment[2],
         wrappedExpression.expression,
@@ -1610,9 +1631,9 @@ export function translateStraightLineStatement(
         arrayNames,
         validatedTypeAliases,
         mapNames,
-      );
+      ), trailingComment);
     }
-    return translateStraightLineAssignment(
+    return appendTrailingCommentToResult(translateStraightLineAssignment(
       assignment[1],
       assignment[2],
       translateExpression(assignment[3], nameMap, arrayNames, validatedTypeAliases, mapNames),
@@ -1623,7 +1644,7 @@ export function translateStraightLineStatement(
       arrayNames,
       validatedTypeAliases,
       mapNames,
-    );
+    ), trailingComment);
   }
 
   const multilineNestedCallStatement = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\(([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(statement);

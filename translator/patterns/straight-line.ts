@@ -42,7 +42,14 @@ import {
   stripTypeOnlyStatementSyntax,
 } from './common.js';
 import { parseStringEnumClass } from './enums.js';
-import { objectNameMarker, setNameMarker, stringNameMarker, translateExpression } from './expression.js';
+import {
+  objectNameMarker,
+  receiverTypeNameMarker,
+  setNameMarker,
+  staticClassMethodNameMarker,
+  stringNameMarker,
+  translateExpression,
+} from './expression.js';
 import {
   functionSignatureMarker,
   parseStraightLineFunctionHeader,
@@ -268,6 +275,12 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         relativePath,
         structConstructorFields,
       );
+      recordImportedStaticClassMethods(
+        modulePath,
+        [{ importedName, localName: aliasName }],
+        relativePath,
+        moduleNameMap,
+      );
       moduleNameMap.set(aliasedFromImport[3], aliasName);
       index += 1;
       continue;
@@ -322,6 +335,12 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         importBindings.map((binding) => ({ importedName: binding.importedName, localName: binding.importedName })),
         relativePath,
         structConstructorFields,
+      );
+      recordImportedStaticClassMethods(
+        modulePath,
+        importBindings.map((binding) => ({ importedName: binding.importedName, localName: binding.importedName })),
+        relativePath,
+        moduleNameMap,
       );
       for (const binding of importBindings) {
         if (binding.importedName !== binding.defaultName) {
@@ -567,6 +586,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
 
     const statements: string[] = [];
     const nameMap = new Map(moduleNameMap);
+    recordParameterReceiverTypes(nameMap, [...parameters, ...optsParams]);
     const declaredNames = new Set<string>(pythonParameterNames(header.parametersText));
     const docstring = parseIndentedDocstring(lines, index);
     if (docstring !== null) {
@@ -1139,6 +1159,20 @@ function recordImportedStructConstructorFields(
   }
 }
 
+function recordImportedStaticClassMethods(
+  modulePath: string,
+  names: { importedName: string; localName: string }[],
+  relativePath: string,
+  moduleNameMap: Map<string, string>,
+): void {
+  for (const name of names) {
+    const methodNames = importedStaticClassMethodNames(modulePath, name.importedName, relativePath);
+    for (const methodName of methodNames) {
+      moduleNameMap.set(staticClassMethodNameMarker(name.localName, methodName), methodName);
+    }
+  }
+}
+
 function importedStructConstructorFields(modulePath: string, className: string, relativePath: string): string[] | null {
   const sourcePath = tsSourcePathForImportPath(modulePath, relativePath);
   if (sourcePath === null || !fs.existsSync(sourcePath)) {
@@ -1161,6 +1195,46 @@ function importedStructConstructorFields(modulePath: string, className: string, 
   const fields = [...constructor[1].matchAll(/(?:^|[;\n])\s*([A-Za-z_$][A-Za-z0-9_$]*)\??:/g)]
     .map((match) => match[1]);
   return fields.length === 0 ? null : fields;
+}
+
+function importedStaticClassMethodNames(modulePath: string, className: string, relativePath: string): string[] {
+  const classSource = importedClassSource(modulePath, className, relativePath);
+  if (classSource === null) {
+    return [];
+  }
+  return [...classSource.matchAll(/^\s+static\s+(?:async\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*[<(]/gm)]
+    .map((match) => match[1]);
+}
+
+function importedClassSource(modulePath: string, className: string, relativePath: string): string | null {
+  const sourcePath = tsSourcePathForImportPath(modulePath, relativePath);
+  if (sourcePath === null || !fs.existsSync(sourcePath)) {
+    return null;
+  }
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const escapedName = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const classStart = source.search(new RegExp(`export\\s+class\\s+${escapedName}\\b`));
+  if (classStart === -1) {
+    return null;
+  }
+  const nextExport = source.slice(classStart + 1).search(/\nexport\s+/);
+  return nextExport === -1
+    ? source.slice(classStart)
+    : source.slice(classStart, classStart + 1 + nextExport);
+}
+
+function recordParameterReceiverTypes(nameMap: Map<string, string>, parameters: readonly FunctionParameter[]): void {
+  for (const parameter of parameters) {
+    const typeName = simpleClassTypeName(parameter.typeExpression);
+    if (typeName !== null) {
+      nameMap.set(receiverTypeNameMarker(parameter.name), typeName);
+    }
+  }
+}
+
+function simpleClassTypeName(typeExpression: string): string | null {
+  const typeName = /^([A-Z][A-Za-z0-9_$]*)$/.exec(typeExpression.trim());
+  return typeName?.[1] ?? null;
 }
 
 function rewriteStructConstructorCalls(

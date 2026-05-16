@@ -122,12 +122,81 @@ export function drawCircle(x: number, y: number, radius: number, color: Color): 
   ctx.endQuads();
 }
 
+export function drawCircleSector(
+  center: Vector2,
+  radius: number,
+  startAngle: number,
+  endAngle: number,
+  segments: number,
+  color: Color,
+): void {
+  const r = Math.max(0.0, radius);
+  const segmentCount = Math.max(3, Math.trunc(segments));
+  if (r <= 0.0) {
+    return;
+  }
+  const start = startAngle * Math.PI / 180.0;
+  const sweep = (endAngle - startAngle) * Math.PI / 180.0;
+  const step = sweep / segmentCount;
+
+  ctx.beginQuads(ctx.whiteTexture);
+  ctx.texCoord2f(0.5, 0.5);
+  ctx.color4f(color.r, color.g, color.b, color.a);
+  for (let i = 0; i < segmentCount; i += 1) {
+    const a0 = start + i * step;
+    const a1 = start + (i + 1) * step;
+    ctx.vertex2f(center.x, center.y);
+    ctx.vertex2f(center.x, center.y);
+    ctx.vertex2f(center.x + Math.cos(a0) * r, center.y + Math.sin(a0) * r);
+    ctx.vertex2f(center.x + Math.cos(a1) * r, center.y + Math.sin(a1) * r);
+  }
+  ctx.endQuads();
+}
+
+export function drawRing(
+  center: Vector2,
+  innerRadius: number,
+  outerRadius: number,
+  startAngle: number,
+  endAngle: number,
+  segments: number,
+  color: Color,
+): void {
+  const inner = Math.max(0.0, Math.min(innerRadius, outerRadius));
+  const outer = Math.max(inner, Math.max(innerRadius, outerRadius));
+  const segmentCount = Math.max(3, Math.trunc(segments));
+  if (outer <= 0.0 || outer <= inner) {
+    return;
+  }
+  const start = startAngle * Math.PI / 180.0;
+  const sweep = (endAngle - startAngle) * Math.PI / 180.0;
+  const step = sweep / segmentCount;
+
+  ctx.beginQuads(ctx.whiteTexture);
+  ctx.texCoord2f(0.5, 0.5);
+  ctx.color4f(color.r, color.g, color.b, color.a);
+  for (let i = 0; i < segmentCount; i += 1) {
+    const a0 = start + i * step;
+    const a1 = start + (i + 1) * step;
+    const cos0 = Math.cos(a0);
+    const sin0 = Math.sin(a0);
+    const cos1 = Math.cos(a1);
+    const sin1 = Math.sin(a1);
+    ctx.vertex2f(center.x + cos0 * inner, center.y + sin0 * inner);
+    ctx.vertex2f(center.x + cos0 * outer, center.y + sin0 * outer);
+    ctx.vertex2f(center.x + cos1 * outer, center.y + sin1 * outer);
+    ctx.vertex2f(center.x + cos1 * inner, center.y + sin1 * inner);
+  }
+  ctx.endQuads();
+}
+
 export function beginBlendMode(mode: BlendMode): void { ctx.setBlendMode(mode); }
 export function endBlendMode(): void { ctx.setBlendMode(BlendMode.ALPHA); }
 
 export function rlSetBlendFactors(src: number, dst: number, eq: number): void {
   ctx.setCustomBlendFactors(src, dst, eq);
 }
+export function rlSetTexture(_textureId: number): void { ctx.flush(); }
 export function rlSetBlendFactorsSeparate(
   srcRGB: number, dstRGB: number, eqRGB: number,
   srcA: number, dstA: number, eqA: number,
