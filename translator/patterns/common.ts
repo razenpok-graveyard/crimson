@@ -376,15 +376,21 @@ export function inferPythonExpressionType(pythonExpression: string): string {
   if (/^(?:int|float)\(/.test(trimmed)) {
     return 'number';
   }
-  if (!/["'`]/.test(trimmed) && /\s(?:%|\*|\/\/|\/|-)\s/.test(trimmed)) {
-    return 'number';
-  }
   const enumCast = /^([A-Z][A-Za-z0-9_]*(?:Id|Mode|Type))\(.+\)$/.exec(trimmed);
   if (enumCast !== null) {
     return tsExportNameForPythonName(enumCast[1]);
   }
+  if (/^(?:(?:r[dl]|wgl)\.)?(?:Rectangle|makeRectangle)\(/.test(trimmed)) {
+    return 'wgl.Rectangle';
+  }
+  if (/^(?:(?:r[dl]|wgl)\.)?(?:Color|makeColor)\(/.test(trimmed)) {
+    return 'wgl.Color';
+  }
   if (/^(?:proj_origin|Vec2|rl\.Vector2)\(/.test(trimmed)) {
     return '{ x: number; y: number }';
+  }
+  if (!/["'`]/.test(trimmed) && /\s(?:%|\*|\/\/|\/|-)\s/.test(trimmed)) {
+    return 'number';
   }
   const enumMember = /^([A-Z][A-Za-z0-9_]*(?:Id|Mode|Type))\.[A-Z0-9_]+$/.exec(trimmed);
   if (enumMember !== null) {

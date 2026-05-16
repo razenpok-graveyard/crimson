@@ -47,6 +47,22 @@ export function drawRectangle(x: number, y: number, w: number, h: number, color:
   ctx.drawRectangle(x, y, w, h, color.r, color.g, color.b, color.a);
 }
 
+export function drawLine(x1: number, y1: number, x2: number, y2: number, color: Color): void {
+  const ix1 = Math.trunc(x1);
+  const iy1 = Math.trunc(y1);
+  const ix2 = Math.trunc(x2);
+  const iy2 = Math.trunc(y2);
+  if (iy1 === iy2) {
+    drawRectangle(Math.min(ix1, ix2), iy1, Math.abs(ix2 - ix1), 1, color);
+    return;
+  }
+  if (ix1 === ix2) {
+    drawRectangle(ix1, Math.min(iy1, iy2), 1, Math.abs(iy2 - iy1), color);
+    return;
+  }
+  drawRectangle(ix1, iy1, ix2 - ix1, iy2 - iy1, color);
+}
+
 export function drawRectangleLines(x: number, y: number, w: number, h: number, color: Color): void {
   drawRectangle(x, y, w, 1, color);
   drawRectangle(x, y + h - 1, w, 1, color);
