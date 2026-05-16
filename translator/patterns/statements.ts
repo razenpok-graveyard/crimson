@@ -106,6 +106,26 @@ function pushImportDefinition(imports: ImportDefinition[], importDefinition: Imp
 function operatorIsAssignment(operator: string): boolean {
   return operator === '=';
 }
+function translateConditionExpression(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string {
+  const trimmed = pythonExpression.trim();
+  const bareIdentifier = /^[A-Za-z_][A-Za-z0-9_]*$/.exec(trimmed);
+  if (bareIdentifier !== null) {
+    const translated = translateExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (arrayNames.has(setNameMarker(trimmed)) || arrayNames.has(setNameMarker(translated))) {
+      return `${translated}.size > 0`;
+    }
+    if (arrayNames.has(trimmed) || arrayNames.has(translated)) {
+      return `${translated}.length > 0`;
+    }
+  }
+  return translateExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
+}
 function caseBodyStops(statements: string[]): boolean {
   for (let index = statements.length - 1; index >= 0; index -= 1) {
     const trimmed = statements[index].trim();
@@ -413,7 +433,7 @@ export function translateStraightLineStatement(
     let nextIndex = initialBranch.nextIndex;
     const statements = [
       ...branchDeclarations,
-      `if (${translateExpression(ifCondition, nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`,
+      `if (${translateConditionExpression(ifCondition, nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`,
       ...initialBranch.statements,
       '}',
     ];
@@ -426,7 +446,7 @@ export function translateStraightLineStatement(
       if (elifBranch === null) {
         return null;
       }
-      statements[statements.length - 1] = `} else if (${translateExpression(elifStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`;
+      statements[statements.length - 1] = `} else if (${translateConditionExpression(elifStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`;
       statements.push(...elifBranch.statements, '}');
       nextIndex = elifBranch.nextIndex;
     }
@@ -702,7 +722,7 @@ export function translateStraightLineStatement(
     }
     return {
       statements: [
-        `while (${translateExpression(whileStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`,
+        `while (${translateConditionExpression(whileStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`,
         ...innerStatements,
         '}',
       ],
