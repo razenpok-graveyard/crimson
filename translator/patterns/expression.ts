@@ -189,6 +189,41 @@ function attributeNameLooksLikeCallbackMethod(pythonName: string): boolean {
   return /^(?:apply|build|consume|create|draw|handle|on|play|process|registry|reset|sync|update)(?:_|$)/.test(normalized);
 }
 
+function translateInlineLambdaExpression(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  const lambda = /^lambda(?:\s+([^:]+))?:\s*(.+)$/.exec(pythonExpression);
+  if (lambda === null) {
+    return null;
+  }
+  const lambdaNameMap = new Map(nameMap);
+  const params: string[] = [];
+  const paramsText = lambda[1]?.trim() ?? '';
+  if (paramsText !== '') {
+    for (const paramText of splitTopLevelComma(paramsText)) {
+      const defaulted = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(paramText);
+      if (defaulted !== null) {
+        const tsName = tsExportNameForPythonName(defaulted[1]);
+        params.push(`${tsName} = ${translateExpression(defaulted[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
+        lambdaNameMap.set(defaulted[1], tsName);
+        continue;
+      }
+      const plain = /^([A-Za-z_][A-Za-z0-9_]*)$/.exec(paramText);
+      if (plain === null) {
+        return null;
+      }
+      const tsName = tsExportNameForPythonName(plain[1]);
+      params.push(tsName);
+      lambdaNameMap.set(plain[1], tsName);
+    }
+  }
+  return `(${params.join(', ')}) => ${translateExpression(lambda[2], lambdaNameMap, arrayNames, validatedTypeAliases, mapNames)}`;
+}
+
 export function vectorNameMarker(name: string): string {
   return `__vector__:${name}`;
 }
@@ -248,6 +283,10 @@ export function translateExpression(
   mapNames: ReadonlySet<string> = new Set(),
 ): string {
   const trimmed = pythonExpression.trim();
+  const lambdaExpression = translateInlineLambdaExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (lambdaExpression !== null) {
+    return lambdaExpression;
+  }
   const bytesLiteral = parseBytesLiteral(trimmed);
   if (bytesLiteral !== null) {
     return `new Uint8Array([${bytesLiteral.join(', ')}])`;
