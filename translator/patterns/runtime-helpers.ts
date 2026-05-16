@@ -27,6 +27,61 @@ export function concatBytesHelperStatements(): string[] {
   ];
 }
 
+export function bytesPrefixSuffixHelperStatements(): string[] {
+  return [
+    'function pythonStartsWith(value: string | Uint8Array, prefix: string | Uint8Array | (string | Uint8Array)[]): boolean {',
+    '  if (Array.isArray(prefix)) {',
+    '    return prefix.some((item) => pythonStartsWith(value, item));',
+    '  }',
+    "  if (typeof value === 'string' && typeof prefix === 'string') {",
+    '    return value.startsWith(prefix);',
+    '  }',
+    "  if (typeof value === 'string' || typeof prefix === 'string') {",
+    '    return false;',
+    '  }',
+    '  return value.byteLength >= prefix.byteLength && prefix.every((byte, index) => value[index] === byte);',
+    '}',
+    '',
+    'function pythonEndsWith(value: string | Uint8Array, suffix: string | Uint8Array | (string | Uint8Array)[]): boolean {',
+    '  if (Array.isArray(suffix)) {',
+    '    return suffix.some((item) => pythonEndsWith(value, item));',
+    '  }',
+    "  if (typeof value === 'string' && typeof suffix === 'string') {",
+    '    return value.endsWith(suffix);',
+    '  }',
+    "  if (typeof value === 'string' || typeof suffix === 'string') {",
+    '    return false;',
+    '  }',
+    '  const offset = value.byteLength - suffix.byteLength;',
+    '  return offset >= 0 && suffix.every((byte, index) => value[offset + index] === byte);',
+    '}',
+  ];
+}
+
+export function pythonStructFormatHelperStatements(): string[] {
+  return [
+    'interface PythonStructFormat {',
+    '  readonly size: number;',
+    '  unpackFrom(data: Uint8Array | ArrayBuffer | ArrayBufferView, offset?: number): number[];',
+    '}',
+    '',
+    ...bytesFromHelperStatements(),
+    '',
+    'function pythonStructFormat(format: string): PythonStructFormat {',
+    "  if (format === '<I') {",
+    '    return {',
+    '      size: 4,',
+    '      unpackFrom(data, offset = 0) {',
+    '        const bytes = bytesFrom(data);',
+    '        return [new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(offset, true)];',
+    '      },',
+    '    };',
+    '  }',
+    "  throw new Error(`unsupported struct format: ${format}`);",
+    '}',
+  ];
+}
+
 export function secretsTokenHexHelperStatements(): string[] {
   return [
     'function secretsTokenHex(byteLength: number): string {',
@@ -665,18 +720,36 @@ class MsgpackDecoder<T> {
 
   decode(blob: Uint8Array): T {
     const value = new MsgpackReader(blob).read();
+    const normalized = camelizeMsgpackValue(value);
     if (
       this._type !== undefined
-      && value !== null
-      && typeof value === 'object'
-      && !Array.isArray(value)
-      && !(value instanceof Uint8Array)
-      && !(value instanceof Map)
+      && normalized !== null
+      && typeof normalized === 'object'
+      && !Array.isArray(normalized)
+      && !(normalized instanceof Uint8Array)
+      && !(normalized instanceof Map)
     ) {
-      return new this._type(value);
+      return new this._type(normalized);
     }
-    return value as T;
+    return normalized as T;
   }
+}
+
+function camelizeMsgpackValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(camelizeMsgpackValue);
+  }
+  if (value instanceof Map) {
+    return new Map(Array.from(value.entries(), ([key, item]) => [key, camelizeMsgpackValue(item)]));
+  }
+  if (value !== null && typeof value === 'object' && !(value instanceof Uint8Array)) {
+    const output: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      output[key.replace(/_([a-z0-9])/g, (_match, letter: string) => letter.toUpperCase())] = camelizeMsgpackValue(item);
+    }
+    return output;
+  }
+  return value;
 }
 
 class MsgpackReader {

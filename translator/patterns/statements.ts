@@ -3657,6 +3657,20 @@ function translateStraightLineAssignment(
       nextIndex,
     };
   }
+  const singletonTupleAssignment = /^\(([A-Za-z_][A-Za-z0-9_]*),\)$/.exec(pythonLeft);
+  if (operator === '=' && singletonTupleAssignment !== null) {
+    const name = singletonTupleAssignment[1];
+    const tsName = tsExportNameForPythonName(name);
+    const declaration = declaredNames.has(name)
+      ? ''
+      : `${reassignedNames.has(name) ? 'let' : 'const'} `;
+    declaredNames.add(name);
+    return {
+      statements: [`${declaration}[${tsName}] = ${assignedRight};`],
+      nextIndex,
+    };
+  }
+
   const tupleAssignment = /^([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+)$/.exec(pythonLeft);
   if (operator === '=' && tupleAssignment !== null) {
     const names = tupleAssignment[1].split(', ');

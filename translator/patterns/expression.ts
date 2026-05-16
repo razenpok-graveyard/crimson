@@ -896,6 +896,16 @@ export function translateExpression(
     }
   }
 
+  const startsWithCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.startswith\((.*)\)$/.exec(trimmed);
+  if (startsWithCall !== null) {
+    return `pythonStartsWith(${translateExpression(startsWithCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(startsWithCall[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
+  const endsWithCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.endswith\((.*)\)$/.exec(trimmed);
+  if (endsWithCall !== null) {
+    return `pythonEndsWith(${translateExpression(endsWithCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(endsWithCall[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
   const mappingConstantSubscript = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[(.+)\]$/.exec(trimmed);
   if (mappingConstantSubscript !== null && looksLikeMappingConstantName(mappingConstantSubscript[1])) {
     const mapName = translateExpression(mappingConstantSubscript[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -1004,6 +1014,22 @@ export function translateExpression(
   const msgspecToBuiltinsCall = parseCallPrefix(trimmed, 'msgspec.to_builtins');
   if (msgspecToBuiltinsCall !== null && msgspecToBuiltinsCall.rest === '') {
     return `structuredClone(${translateExpression(msgspecToBuiltinsCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
+  const structFormatCall = parseCallPrefix(trimmed, 'struct.Struct');
+  if (structFormatCall !== null && structFormatCall.rest === '') {
+    return `pythonStructFormat(${translateExpression(structFormatCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
+  const structUnpackFromCall = parseCallPrefix(trimmed, 'struct.unpack_from');
+  if (structUnpackFromCall !== null && structUnpackFromCall.rest === '') {
+    const args = splitTopLevelComma(structUnpackFromCall.argsText);
+    if (args.length === 2 || args.length === 3) {
+      const format = translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const data = translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const offset = args[2] === undefined ? '' : `, ${translateExpression(args[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
+      return `pythonStructFormat(${format}).unpackFrom(${data}${offset})`;
+    }
   }
 
   const isinstanceCall = parseCallPrefix(trimmed, 'isinstance');

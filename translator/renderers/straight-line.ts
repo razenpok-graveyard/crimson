@@ -60,6 +60,7 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
 
   const leadingAssignments = partitionLeadingAssignmentsByEnumReference(module);
   const renderClassesBeforeLeadingAssignments = leadingAssignmentsReferenceClass(module);
+  const renderLeadingStatementsBeforeLeadingAssignments = leadingAssignmentsReferenceLeadingStatementClass(module);
   if (renderClassesBeforeLeadingAssignments) {
     renderStructClasses(lines, module.classes);
     if (module.classes.length > 0 && module.leadingAssignments.length + module.leadingStatements.length + module.enums.length + module.plainClasses.length + module.functions.length + module.assignments.length > 0) {
@@ -67,16 +68,23 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
     }
   }
 
+  if (renderLeadingStatementsBeforeLeadingAssignments) {
+    renderLeadingStatements(lines, module.leadingStatements);
+    if (module.leadingStatements.length > 0 && module.enums.length + module.leadingAssignments.length + (renderClassesBeforeLeadingAssignments ? 0 : module.classes.length) + module.plainClasses.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
+      lines.push('');
+    }
+  }
+
   renderStraightLineAssignments(lines, leadingAssignments.beforeEnums);
-  if (leadingAssignments.beforeEnums.length > 0 && module.leadingStatements.length + module.enums.length + leadingAssignments.afterEnums.length + (renderClassesBeforeLeadingAssignments ? 0 : module.classes.length) + module.plainClasses.length + module.functions.length + module.assignments.length > 0) {
+  if (leadingAssignments.beforeEnums.length > 0 && (renderLeadingStatementsBeforeLeadingAssignments ? 0 : module.leadingStatements.length) + module.enums.length + leadingAssignments.afterEnums.length + (renderClassesBeforeLeadingAssignments ? 0 : module.classes.length) + module.plainClasses.length + module.functions.length + module.assignments.length > 0) {
     lines.push('');
   }
 
-  for (const statement of module.leadingStatements) {
-    lines.push(statement);
-  }
-  if (module.leadingStatements.length > 0 && module.enums.length + leadingAssignments.afterEnums.length + module.classes.length + module.plainClasses.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
-    lines.push('');
+  if (!renderLeadingStatementsBeforeLeadingAssignments) {
+    renderLeadingStatements(lines, module.leadingStatements);
+    if (module.leadingStatements.length > 0 && module.enums.length + leadingAssignments.afterEnums.length + module.classes.length + module.plainClasses.length + module.functions.length + module.trailingStatements.length + module.assignments.length > 0) {
+      lines.push('');
+    }
   }
 
   for (let index = 0; index < module.enums.length; index += 1) {
@@ -169,8 +177,32 @@ function leadingAssignmentsReferenceClass(module: StraightLineModule): boolean {
   return module.classes.some((structClass) => identifierPattern(structClass.name).test(assignmentText));
 }
 
+function leadingAssignmentsReferenceLeadingStatementClass(module: StraightLineModule): boolean {
+  if (module.leadingStatements.length === 0 || module.leadingAssignments.length === 0) {
+    return false;
+  }
+  const classNames = new Set<string>();
+  for (const statement of module.leadingStatements) {
+    const classDeclaration = /^class ([A-Za-z_][A-Za-z0-9_]*)\b/.exec(statement);
+    if (classDeclaration !== null) {
+      classNames.add(classDeclaration[1]);
+    }
+  }
+  if (classNames.size === 0) {
+    return false;
+  }
+  const assignmentText = module.leadingAssignments.flatMap((assignment) => assignment.valueLines).join('\n');
+  return [...classNames].some((className) => identifierPattern(className).test(assignmentText));
+}
+
 function identifierPattern(identifier: string): RegExp {
   return new RegExp(`\\b${identifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+}
+
+function renderLeadingStatements(lines: string[], statements: string[]): void {
+  for (const statement of statements) {
+    lines.push(statement);
+  }
 }
 
 function renderTypeAliasValidator(lines: string[], alias: TypeAlias): void {

@@ -59,6 +59,7 @@ import { recordImportedInstanceMethodSignatures } from './imported-classes.js';
 import { parseFunctionParameterText, pythonParameterNames } from './parameters.js';
 import {
   bytesFromHelperStatements,
+  bytesPrefixSuffixHelperStatements,
   arrayRemoveHelperStatements,
   concatBytesHelperStatements,
   constructBinaryHelperStatements,
@@ -77,6 +78,7 @@ import {
   pythonReprHelperStatements,
   pythonRuntimeIntrospectionHelperStatements,
   pythonSplitlinesHelperStatements,
+  pythonStructFormatHelperStatements,
   pythonStringCountHelperStatements,
   pythonTruthyHelperStatements,
   secretsTokenHexHelperStatements,
@@ -949,6 +951,20 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     leadingStatements.unshift(...pathHelperStatements);
   }
+  if (moduleValueText.includes('pythonStartsWith(') || moduleValueText.includes('pythonEndsWith(')) {
+    const helperStatements = bytesPrefixSuffixHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
+  if (moduleValueText.includes('pythonStructFormat(')) {
+    const helperStatements = pythonStructFormatHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
   if (moduleValueText.includes('concatBytes(') && !moduleValueText.includes('constructStruct(')) {
     const helperStatements = concatBytesHelperStatements();
     if (leadingStatements.length > 0) {
@@ -962,7 +978,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       helperStatements.push('');
     }
     leadingStatements.unshift(...helperStatements);
-  } else if (moduleValueText.includes('bytesFrom(')) {
+  } else if (moduleValueText.includes('bytesFrom(') && !moduleValueText.includes('pythonStructFormat(')) {
     const helperStatements = bytesFromHelperStatements();
     if (leadingStatements.length > 0) {
       helperStatements.push('');
@@ -1025,7 +1041,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
 }
 
 function isStructFloatHelperAssignment(trimmedLine: string): boolean {
-  return /^_[A-Z0-9_]+ = struct\.Struct\("[^"]+"\)$/.test(trimmedLine)
+  return /^_[A-Z0-9_]+ = struct\.Struct\("<f"\)$/.test(trimmedLine)
     || /^_[A-Z0-9_]+ = _[A-Z0-9_]+\.(?:pack|unpack)$/.test(trimmedLine);
 }
 

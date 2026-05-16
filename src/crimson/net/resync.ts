@@ -196,18 +196,36 @@ class MsgpackDecoder<T> {
 
   decode(blob: Uint8Array): T {
     const value = new MsgpackReader(blob).read();
+    const normalized = camelizeMsgpackValue(value);
     if (
       this._type !== undefined
-      && value !== null
-      && typeof value === 'object'
-      && !Array.isArray(value)
-      && !(value instanceof Uint8Array)
-      && !(value instanceof Map)
+      && normalized !== null
+      && typeof normalized === 'object'
+      && !Array.isArray(normalized)
+      && !(normalized instanceof Uint8Array)
+      && !(normalized instanceof Map)
     ) {
-      return new this._type(value);
+      return new this._type(normalized);
     }
-    return value as T;
+    return normalized as T;
   }
+}
+
+function camelizeMsgpackValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(camelizeMsgpackValue);
+  }
+  if (value instanceof Map) {
+    return new Map(Array.from(value.entries(), ([key, item]) => [key, camelizeMsgpackValue(item)]));
+  }
+  if (value !== null && typeof value === 'object' && !(value instanceof Uint8Array)) {
+    const output: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      output[key.replace(/_([a-z0-9])/g, (_match, letter: string) => letter.toUpperCase())] = camelizeMsgpackValue(item);
+    }
+    return output;
+  }
+  return value;
 }
 
 class MsgpackReader {
