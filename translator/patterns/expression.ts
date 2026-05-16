@@ -32,6 +32,23 @@ import {
   raylibKeyboardKeyCode,
   raylibNamedColor,
 } from './expression/raylib.js';
+import {
+  delimitersBalanced,
+  matchingCloseParen,
+  parenthesizeForAdditive,
+  parenthesizeForLogicalAnd,
+  parenthesizeForLogicalOr,
+  parenthesizeForMultiplicative,
+  splitTopLevelAdditive,
+  splitTopLevelComparisonOperators,
+  splitTopLevelDivision,
+  splitTopLevelFloorDivision,
+  splitTopLevelLogicalOperator,
+  splitTopLevelModulo,
+  splitTopLevelMultiplicative,
+  splitTopLevelSpacedOperator,
+  stripBalancedOuterParens,
+} from './expression/scanners.js';
 
 export {
   arrayValueMapNameMarker,
@@ -59,6 +76,8 @@ export {
   vectorArrayNameMarker,
   vectorNameMarker,
 } from './expression/markers.js';
+
+export { splitTopLevelLogicalOperator } from './expression/scanners.js';
 
 export function tsRegExpExpression(pythonLiteral: string): string {
   const literal = /^([rRfF]{0,2})(["'])([\s\S]*)\2$/.exec(pythonLiteral);
@@ -3755,90 +3774,6 @@ function parseParenthesizedVectorMethodCall(value: string): { receiver: string; 
   };
 }
 
-function splitTopLevelMultiplicative(value: string): { left: string; right: string } | null {
-  let depth = 0;
-  let quote: string | null = null;
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index];
-    if (quote !== null) {
-      if (char === quote && value[index - 1] !== '\\') {
-        quote = null;
-      }
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      continue;
-    }
-    if (char === '(' || char === '[' || char === '{') {
-      depth += 1;
-      continue;
-    }
-    if (char === ')' || char === ']' || char === '}') {
-      depth -= 1;
-      continue;
-    }
-    if (
-      depth === 0
-      && char === '*'
-      && value[index - 1] === ' '
-      && value[index + 1] === ' '
-    ) {
-      return {
-        left: value.slice(0, index - 1).trim(),
-        right: value.slice(index + 2).trim(),
-      };
-    }
-  }
-  return null;
-}
-
-function splitTopLevelModulo(value: string): { left: string; right: string } | null {
-  return splitTopLevelSpacedOperator(value, '%');
-}
-
-function splitTopLevelDivision(value: string): { left: string; right: string } | null {
-  return splitTopLevelSpacedOperator(value, '/');
-}
-
-function splitTopLevelFloorDivision(value: string): { left: string; right: string } | null {
-  return splitTopLevelSpacedOperator(value, '//');
-}
-
-function splitTopLevelSpacedOperator(value: string, operator: string): { left: string; right: string } | null {
-  let depth = 0;
-  let quote: string | null = null;
-  const token = ` ${operator} `;
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index];
-    if (quote !== null) {
-      if (char === quote && value[index - 1] !== '\\') {
-        quote = null;
-      }
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      continue;
-    }
-    if (char === '(' || char === '[' || char === '{') {
-      depth += 1;
-      continue;
-    }
-    if (char === ')' || char === ']' || char === '}') {
-      depth -= 1;
-      continue;
-    }
-    if (depth === 0 && value.slice(index, index + token.length) === token) {
-      return {
-        left: value.slice(0, index).trim(),
-        right: value.slice(index + token.length).trim(),
-      };
-    }
-  }
-  return null;
-}
-
 function expressionLooksPathJoinPart(value: string): boolean {
   const trimmed = value.trim();
   return parsePythonStringExpression(trimmed) !== null
@@ -3888,118 +3823,6 @@ function splitTopLevelPathJoin(value: string): { parts: string[] } | null {
   return { parts };
 }
 
-function parenthesizeForLogicalAnd(value: string): string {
-  return value.includes(' || ') && matchingCloseParen(value, 0) !== value.length - 1 ? `(${value})` : value;
-}
-
-function parenthesizeForLogicalOr(value: string): string {
-  return value.includes(' && ') && matchingCloseParen(value, 0) !== value.length - 1 ? `(${value})` : value;
-}
-
-function parenthesizeForAdditive(value: string): string {
-  return value.includes(' ? ') ? `(${value})` : value;
-}
-
-export function splitTopLevelLogicalOperator(value: string, operator: 'and' | 'or'): string[] | null {
-  const parts: string[] = [];
-  let start = 0;
-  let depth = 0;
-  let quote: string | null = null;
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index];
-    if (quote !== null) {
-      if (char === quote && value[index - 1] !== '\\') {
-        quote = null;
-      }
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      continue;
-    }
-    if (char === '(' || char === '[' || char === '{') {
-      depth += 1;
-      continue;
-    }
-    if (char === ')' || char === ']' || char === '}') {
-      depth = Math.max(0, depth - 1);
-      continue;
-    }
-    const token = ` ${operator} `;
-    if (depth === 0 && value.slice(index, index + token.length) === token) {
-      parts.push(value.slice(start, index).trim());
-      start = index + token.length;
-      index += token.length - 1;
-    }
-  }
-  if (parts.length === 0) {
-    return null;
-  }
-  parts.push(value.slice(start).trim());
-  return parts;
-}
-
-function parenthesizeForMultiplicative(value: string): string {
-  return value.includes(' ? ') ? `(${value})` : value;
-}
-
-function stripBalancedOuterParens(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed.startsWith('(')) {
-    return trimmed;
-  }
-  const closeIndex = matchingCloseParen(trimmed, 0);
-  if (closeIndex !== trimmed.length - 1) {
-    return trimmed;
-  }
-  const inner = trimmed.slice(1, -1).trim();
-  return splitTopLevelComma(inner).length > 1 ? trimmed : inner;
-}
-
-function splitTopLevelAdditive(value: string): { parts: string[]; operators: string[] } | null {
-  const parts: string[] = [];
-  const operators: string[] = [];
-  let start = 0;
-  let depth = 0;
-  let quote: string | null = null;
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index];
-    if (quote !== null) {
-      if (char === quote && value[index - 1] !== '\\') {
-        quote = null;
-      }
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      continue;
-    }
-    if (char === '(' || char === '[' || char === '{') {
-      depth += 1;
-      continue;
-    }
-    if (char === ')' || char === ']' || char === '}') {
-      depth -= 1;
-      continue;
-    }
-    if (
-      depth === 0
-      && (char === '+' || char === '-')
-      && value[index - 1] === ' '
-      && value[index + 1] === ' '
-    ) {
-      parts.push(value.slice(start, index - 1).trim());
-      operators.push(char);
-      start = index + 2;
-    }
-  }
-  if (operators.length === 0) {
-    return null;
-  }
-  parts.push(value.slice(start).trim());
-  return { parts, operators };
-}
-
 function joinTranslatedAdditive(
   additive: { parts: string[]; operators: string[] },
   nameMap: Map<string, string>,
@@ -4012,129 +3835,6 @@ function joinTranslatedAdditive(
     output += ` ${additive.operators[index]} ${parenthesizeForAdditive(translateExpression(additive.parts[index + 1], nameMap, arrayNames, validatedTypeAliases, mapNames))}`;
   }
   return output;
-}
-
-function splitTopLevelComparisonOperators(value: string): { parts: string[]; operators: string[] } | null {
-  const parts: string[] = [];
-  const operators: string[] = [];
-  let start = 0;
-  let depth = 0;
-  let quote: string | null = null;
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index];
-    if (quote !== null) {
-      if (char === quote && value[index - 1] !== '\\') {
-        quote = null;
-      }
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      continue;
-    }
-    if (char === '(' || char === '[' || char === '{') {
-      depth += 1;
-      continue;
-    }
-    if (char === ')' || char === ']' || char === '}') {
-      depth -= 1;
-      continue;
-    }
-    if (depth !== 0 || value[index - 1] !== ' ') {
-      continue;
-    }
-
-    const twoCharOperator = value.slice(index, index + 2);
-    const operator = ['<=', '>=', '==', '!='].includes(twoCharOperator) && value[index + 2] === ' '
-      ? twoCharOperator
-      : (char === '<' || char === '>') && value[index + 1] === ' '
-        ? char
-        : null;
-    if (operator === null) {
-      continue;
-    }
-
-    const part = value.slice(start, index - 1).trim();
-    if (part === '') {
-      return null;
-    }
-    parts.push(part);
-    operators.push(operator);
-    start = index + operator.length + 1;
-    index = start - 1;
-  }
-
-  if (operators.length === 0) {
-    return null;
-  }
-  const finalPart = value.slice(start).trim();
-  if (finalPart === '') {
-    return null;
-  }
-  parts.push(finalPart);
-  return { parts, operators };
-}
-
-function matchingCloseParen(value: string, openIndex: number): number | null {
-  let depth = 0;
-  let quote: string | null = null;
-  for (let index = openIndex; index < value.length; index += 1) {
-    const char = value[index];
-    if (quote !== null) {
-      if (char === quote && value[index - 1] !== '\\') {
-        quote = null;
-      }
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      continue;
-    }
-    if (char === '(') {
-      depth += 1;
-      continue;
-    }
-    if (char === ')') {
-      depth -= 1;
-      if (depth === 0) {
-        return index;
-      }
-    }
-  }
-  return null;
-}
-
-function delimitersBalanced(value: string): boolean {
-  const stack: string[] = [];
-  let quote: string | null = null;
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index];
-    if (quote !== null) {
-      if (char === quote && value[index - 1] !== '\\') {
-        quote = null;
-      }
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      continue;
-    }
-    if (char === '(' || char === '[' || char === '{') {
-      stack.push(char);
-      continue;
-    }
-    if (char === ')' || char === ']' || char === '}') {
-      const open = stack.pop();
-      if (
-        (char === ')' && open !== '(')
-        || (char === ']' && open !== '[')
-        || (char === '}' && open !== '{')
-      ) {
-        return false;
-      }
-    }
-  }
-  return quote === null && stack.length === 0;
 }
 
 function translateMixedKeywordCall(
