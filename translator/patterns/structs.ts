@@ -590,6 +590,7 @@ export function parsePlainClass(
   const extendsName = header[2] === undefined
     ? undefined
     : moduleNameMap.get(header[2]) ?? tsExportNameForPythonName(header[2]);
+  const className = tsExportNameForPythonName(header[1]);
 
   let nextIndex = index + 1;
   const docstring = parseIndentedDocstring(lines, nextIndex);
@@ -680,6 +681,7 @@ export function parsePlainClass(
   }
 
   const methods: SimpleModuleFunction[] = [];
+  const staticMethodNames = new Set<string>();
   nextIndex = bodyIndex;
   while (nextIndex < lines.length) {
     const trimmed = lines[nextIndex].trim();
@@ -700,6 +702,16 @@ export function parsePlainClass(
         name: `get ${propertyMethod.method.name}`,
       });
       nextIndex = propertyMethod.nextIndex;
+      continue;
+    }
+    if (trimmed === '@staticmethod') {
+      const staticMethod = parsePlainClassMethod(lines, nextIndex + 1, fieldNameMap, moduleNameMap, true);
+      if (staticMethod === null) {
+        return null;
+      }
+      methods.push(staticMethod.method);
+      staticMethodNames.add(staticMethod.method.name);
+      nextIndex = staticMethod.nextIndex;
       continue;
     }
     const method = parsePlainClassMethod(lines, nextIndex, fieldNameMap, moduleNameMap);
@@ -723,10 +735,18 @@ export function parsePlainClass(
     ...field,
     readonly: !mutableFields.has(field.name),
   }));
+  const rewrittenMethods = methods.map((method) => (
+    method.static === true
+      ? method
+      : {
+        ...method,
+        statements: rewritePlainClassStaticMethodCalls(method.statements, className, staticMethodNames),
+      }
+  ));
 
   return {
     plainClass: {
-      name: tsExportNameForPythonName(header[1]),
+      name: className,
       ...(extendsName === undefined ? {} : { extendsName }),
       docstring: docstring?.value ?? null,
       fields,
@@ -735,15 +755,47 @@ export function parsePlainClass(
         optsParams: constructorParams.optsParams,
         statements: constructorStatements,
       },
-      methods,
+      methods: rewrittenMethods,
     },
     nextIndex,
   };
 }
 
+function rewritePlainClassStaticMethodCalls(
+  statements: string[],
+  className: string,
+  staticMethodNames: ReadonlySet<string>,
+): string[] {
+  if (staticMethodNames.size === 0) {
+    return statements;
+  }
+  return statements.map((statement) => {
+    let rewritten = statement;
+    for (const methodName of staticMethodNames) {
+      const pattern = new RegExp(`\\bthis\\.${escapeRegExp(methodName)}\\(`, 'g');
+      rewritten = rewritten.replace(pattern, `${className}.${methodName}(`);
+    }
+    return rewritten;
+  });
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function inferPlainClassFieldType(valueText: string, fieldTypes: ReadonlyMap<string, string>): string | null {
   if (/^Path\([A-Za-z_][A-Za-z0-9_]*\)$/.test(valueText)) {
     return 'string';
+  }
+  const nonNoneDefault = /^([A-Za-z_][A-Za-z0-9_]*) if \1 is not None else ([A-Z][A-Za-z0-9_]*)\(\)$/.exec(valueText.trim());
+  if (nonNoneDefault !== null) {
+    const directType = fieldTypes.get(tsExportNameForPythonName(nonNoneDefault[1]));
+    return directType === undefined
+      ? tsExportNameForPythonName(nonNoneDefault[2])
+      : directType
+        .split(' | ')
+        .filter((part) => part !== 'null' && part !== 'undefined')
+        .join(' | ');
   }
   if (/^-?\d+(?:\.\d+)?(?:\s*[+\-*/]\s*(?:-?\d+(?:\.\d+)?|(?:int|float)\(.+\)|[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?))*$/.test(valueText.trim())) {
     return 'number';
@@ -761,18 +813,22 @@ function parsePlainClassMethod(
   index: number,
   fieldNameMap: Map<string, string>,
   moduleNameMap: ReadonlyMap<string, string>,
+  staticMethod = false,
 ): { method: SimpleModuleFunction; nextIndex: number } | null {
   const header = parseIndentedFunctionHeader(lines, index, '    ');
   if (header === null || header.name === '__init__') {
     return null;
   }
   const parametersText = header.parametersText;
-  if (parametersText !== 'self' && !parametersText.startsWith('self, ')) {
+  if (!staticMethod && parametersText !== 'self' && !parametersText.startsWith('self, ')) {
     return null;
   }
+  const extraParameters = staticMethod
+    ? parametersText
+    : parametersText === 'self' ? '' : parametersText.slice('self, '.length);
   const arrayNames = new Set<string>();
   const parsedParams = parseFunctionParametersText(
-    parametersText === 'self' ? '' : parametersText.slice('self, '.length),
+    extraParameters,
     arrayNames,
   );
   if (parsedParams === null) {
@@ -780,9 +836,9 @@ function parsePlainClassMethod(
   }
 
   const statements: string[] = [];
-  const nameMap = new Map<string, string>([...moduleNameMap, ['self', 'this'], ...fieldNameMap]);
+  const nameMap = new Map<string, string>(staticMethod ? moduleNameMap : [...moduleNameMap, ['self', 'this'], ...fieldNameMap]);
   const declaredNames = new Set<string>(pythonParameterNames(
-    parametersText === 'self' ? '' : parametersText.slice('self, '.length),
+    extraParameters,
   ));
   const reassignedNames = reassignedLocalNames(lines, header.nextIndex);
   let nextIndex = header.nextIndex;
@@ -818,6 +874,7 @@ function parsePlainClassMethod(
     method: {
       name: tsAttributeNameForPythonName(header.name),
       exported: false,
+      static: staticMethod,
       async: statements.some((statement) => statement.includes('await ')),
       parameters: parsedParams.parameters,
       optsParams: parsedParams.optsParams,

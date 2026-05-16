@@ -121,10 +121,11 @@ export function renderStructClasses(lines: string[], classes: StructModule['clas
       }
       lines.push(`  ${method.static === true ? 'static ' : ''}${method.async === true ? 'async ' : ''}${method.name}${renderTypeParameters(method)}(${params.join(', ')}): ${renderFunctionReturnType(method)} {`);
       for (const param of method.optsParams) {
+        const declaration = functionBodyAssignsName(method.statements, param.name) ? 'let' : 'const';
         if (param.defaultValue === null) {
-          lines.push(`    const ${param.name} = opts.${param.name};`);
+          lines.push(`    ${declaration} ${param.name} = opts.${param.name};`);
         } else {
-          lines.push(`    const ${param.name} = opts.${param.name} ?? ${param.defaultValue};`);
+          lines.push(`    ${declaration} ${param.name} = opts.${param.name} ?? ${param.defaultValue};`);
         }
       }
       for (const statement of method.statements) {
@@ -182,10 +183,11 @@ export function renderPlainClasses(lines: string[], classes: StraightLineModule[
     if (shouldRenderConstructor) {
       lines.push(`  constructor(${constructorParams.join(', ')}) {`);
       for (const param of plainClass.constructorDefinition.optsParams) {
+        const declaration = functionBodyAssignsName(plainClass.constructorDefinition.statements, param.name) ? 'let' : 'const';
         if (param.defaultValue === null) {
-          lines.push(`    const ${param.name} = opts.${param.name};`);
+          lines.push(`    ${declaration} ${param.name} = opts.${param.name};`);
         } else {
-          lines.push(`    const ${param.name} = opts.${param.name} ?? ${param.defaultValue};`);
+          lines.push(`    ${declaration} ${param.name} = opts.${param.name} ?? ${param.defaultValue};`);
         }
       }
       for (const statement of plainClass.constructorDefinition.statements) {
@@ -205,10 +207,11 @@ export function renderPlainClasses(lines: string[], classes: StraightLineModule[
       }
       lines.push(`  ${method.static === true ? 'static ' : ''}${method.async === true ? 'async ' : ''}${method.name}(${params.join(', ')}): ${renderFunctionReturnType(method)} {`);
       for (const param of method.optsParams) {
+        const declaration = functionBodyAssignsName(method.statements, param.name) ? 'let' : 'const';
         if (param.defaultValue === null) {
-          lines.push(`    const ${param.name} = opts.${param.name};`);
+          lines.push(`    ${declaration} ${param.name} = opts.${param.name};`);
         } else {
-          lines.push(`    const ${param.name} = opts.${param.name} ?? ${param.defaultValue};`);
+          lines.push(`    ${declaration} ${param.name} = opts.${param.name} ?? ${param.defaultValue};`);
         }
       }
       for (const statement of method.statements) {

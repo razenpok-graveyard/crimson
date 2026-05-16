@@ -1,16 +1,16 @@
 // Port of crimson/sim/tick_runner.py
 
-import { TickResult } from './hooks.ts';
-import type { FrameContext, InputProvider } from './input-providers.ts';
-import { InputStatus, ResolvedTick } from './input-providers.ts';
-import type { GameCommand } from './input-providers.ts';
-import type { DeterministicSession } from './sessions.ts';
-import type { PlayerInput } from './input.ts';
+import { TickResult } from '@crimson/sim/hooks.ts';
+import type { FrameContext, InputProvider } from '@crimson/sim/input-providers.ts';
+import { InputStatus, ResolvedTick } from '@crimson/sim/input-providers.ts';
+import type { DeterministicSession } from '@crimson/sim/sessions.ts';
 
 export class TickRunnerConfig {
   readonly traceRng: boolean;
 
-  constructor(opts: { traceRng?: boolean } = {}) {
+  constructor(opts: {
+    traceRng?: boolean;
+  } = {}) {
     this.traceRng = opts.traceRng ?? false;
   }
 }
@@ -21,57 +21,50 @@ export class TickBatchResult {
   nextTickIndex: number;
   completedResults: TickResult[];
 
-  constructor(opts?: {
+  constructor(opts: {
     ticksCompleted?: number;
     batchStatus?: InputStatus;
     nextTickIndex?: number;
     completedResults?: TickResult[];
-  }) {
-    this.ticksCompleted = opts?.ticksCompleted ?? 0;
-    this.batchStatus = opts?.batchStatus ?? InputStatus.READY;
-    this.nextTickIndex = opts?.nextTickIndex ?? 0;
-    this.completedResults = Array.from(opts?.completedResults ?? []);
+  } = {}) {
+    this.ticksCompleted = opts.ticksCompleted ?? 0;
+    this.batchStatus = opts.batchStatus ?? InputStatus.READY;
+    this.nextTickIndex = opts.nextTickIndex ?? 0;
+    this.completedResults = opts.completedResults ?? [];
   }
 }
+
 export class TickRunner {
   private readonly _session: DeterministicSession;
   private readonly _inputProvider: InputProvider;
   private readonly _config: TickRunnerConfig;
 
-  constructor(opts: {
-    session: DeterministicSession;
-    inputProvider: InputProvider;
-    config?: TickRunnerConfig;
-  }) {
-    this._session = opts.session;
-    this._inputProvider = opts.inputProvider;
-    this._config = opts.config ?? new TickRunnerConfig();
+  constructor(opts: { session: DeterministicSession; inputProvider: InputProvider; config?: TickRunnerConfig | null }) {
+    const session = opts.session;
+    const inputProvider = opts.inputProvider;
+    const config = opts.config ?? null;
+    this._session = session;
+    this._inputProvider = inputProvider;
+    this._config = config !== null ? config : new TickRunnerConfig();
   }
 
   beginFrame(frameCtx: FrameContext): void {
     this._inputProvider.beginFrame(frameCtx);
   }
 
-  advanceTicks(opts: {
-    startTick: number;
-    ticksRequested: number;
-    tickDt: number;
-  }): TickBatchResult {
-    let startTick = int(opts.startTick);
-    let ticksRequested = Math.max(0, int(opts.ticksRequested));
-    const tickDt = Number(opts.tickDt);
+  advanceTicks(opts: { startTick: number; ticksRequested: number; tickDt: number }): TickBatchResult {
+    let startTick = opts.startTick;
+    let ticksRequested = opts.ticksRequested;
+    const tickDt = opts.tickDt;
+    startTick = int(startTick);
+    ticksRequested = Math.max(0, int(ticksRequested));
 
     if (tickDt <= 0.0) {
       throw new Error('tick_dt must be positive');
     }
 
     if (ticksRequested <= 0) {
-      return new TickBatchResult({
-        ticksCompleted: 0,
-        batchStatus: InputStatus.READY,
-        nextTickIndex: startTick,
-        completedResults: [],
-      });
+      return new TickBatchResult({ ticksCompleted: 0, batchStatus: InputStatus.READY, nextTickIndex: int(startTick), completedResults: [] });
     }
 
     let ticksCompleted = 0;
@@ -82,81 +75,48 @@ export class TickRunner {
       const tickIndex = int(startTick + tickOffset);
       const tickSupply = this._inputProvider.pullTick(tickIndex, tickDt);
       const status = tickSupply.status;
-
       if (status === InputStatus.STALLED) {
         if (tickSupply.tick !== null) {
-          throw new Error(
-            'stalled tick supply must not carry a resolved tick',
-          );
+          throw new Error('stalled tick supply must not carry a resolved tick');
         }
         batchStatus = InputStatus.STALLED;
         break;
       }
-
       if (status === InputStatus.EOS) {
         if (tickSupply.tick !== null) {
-          throw new Error(
-            'eos tick supply must not carry a resolved tick',
-          );
+          throw new Error('eos tick supply must not carry a resolved tick');
         }
         batchStatus = InputStatus.EOS;
         break;
       }
 
-      const sourceTick = TickRunner._validatedSourceTick({
-        tickSupply,
-        expectedTickIndex: tickIndex,
-      });
+      const sourceTick = TickRunner._validatedSourceTick({ tickSupply: tickSupply, expectedTickIndex: tickIndex });
+      const tickInputs = Array.from(sourceTick.inputs);
+      const commands = Array.from(sourceTick.commands);
 
-      const tickInputs: PlayerInput[] = [...sourceTick.inputs];
-      const commands: GameCommand[] = [...sourceTick.commands];
-
-      const tick = this._session.stepTick({
-        dt: sourceTick.dtSeconds,
-        inputs: tickInputs,
-        traceRng: this._config.traceRng,
-        commands,
-      });
-
-      const result = new TickResult({
-        sourceTick,
-        payload: tick,
-      });
+      const tick = this._session.stepTick({ dt: sourceTick.dtSeconds, inputs: tickInputs, traceRng: this._config.traceRng, commands: commands });
+      const result = new TickResult({ sourceTick: sourceTick, payload: tick });
       completedResults.push(result);
       ticksCompleted += 1;
     }
 
-    return new TickBatchResult({
-      ticksCompleted,
-      batchStatus,
-      nextTickIndex: int(startTick) + int(ticksCompleted),
-      completedResults,
-    });
+    return new TickBatchResult({ ticksCompleted: ticksCompleted, batchStatus: batchStatus, nextTickIndex: int(startTick) + int(ticksCompleted), completedResults: Array.from(completedResults) });
   }
 
-  private static _validatedSourceTick(opts: {
-    tickSupply: { status: InputStatus; tick: ResolvedTick | null };
-    expectedTickIndex: number;
-  }): ResolvedTick {
-    const { tickSupply, expectedTickIndex } = opts;
+  static _validatedSourceTick(opts: { tickSupply: any; expectedTickIndex: number }): ResolvedTick {
+    const tickSupply = opts.tickSupply;
+    const expectedTickIndex = opts.expectedTickIndex;
     const sourceTick = tickSupply.tick;
     if (sourceTick === null) {
       throw new Error('ready tick supply must carry a resolved tick');
     }
     if (int(sourceTick.tickIndex) !== int(expectedTickIndex)) {
-      throw new Error(
-        `resolved tick index mismatch: expected=${int(expectedTickIndex)} got=${int(sourceTick.tickIndex)}`,
-      );
+      throw new Error(`resolved tick index mismatch: expected=${int(expectedTickIndex)} got=${int(sourceTick.tickIndex)}`);
     }
-    const dtSeconds = Number(sourceTick.dtSeconds);
+    const dtSeconds = sourceTick.dtSeconds;
     if (dtSeconds <= 0.0) {
       throw new Error('resolved tick dt_seconds must be positive');
     }
-    return new ResolvedTick({
-      tickIndex: int(sourceTick.tickIndex),
-      dtSeconds,
-      inputs: [...sourceTick.inputs],
-      commands: [...sourceTick.commands],
-    });
+    return new ResolvedTick({ tickIndex: int(sourceTick.tickIndex), dtSeconds: dtSeconds, inputs: Array.from(sourceTick.inputs), commands: Array.from(sourceTick.commands) });
   }
 }
