@@ -251,7 +251,7 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
     }
     structConstructorFields.set(
       structClass.structClass.name,
-      structClass.structClass.fields.map((field) => field.name),
+      structConstructorFieldNames(structClass.structClass, structConstructorFields),
     );
     classes.push(rewriteStructClassConstructorCalls(structClass.structClass, structConstructorFields));
     index = structClass.nextIndex;
@@ -277,6 +277,28 @@ function rewriteStructClassConstructorCalls(
       statements: method.statements.map((statement) => rewriteStructPositionalConstructors(statement, structConstructorFields)),
     })),
   };
+}
+
+function structConstructorFieldNames(
+  structClass: StructModule['classes'][number],
+  structConstructorFields: ReadonlyMap<string, string[]>,
+): string[] {
+  const inheritedFields = structClass.extendsName === undefined
+    ? []
+    : structConstructorFields.get(structClass.extendsName) ?? [];
+  return uniqueNames([...inheritedFields, ...structClass.fields.map((field) => field.name)]);
+}
+
+function uniqueNames(names: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const name of names) {
+    if (!seen.has(name)) {
+      seen.add(name);
+      unique.push(name);
+    }
+  }
+  return unique;
 }
 
 function parseStructModuleFunction(
@@ -372,13 +394,15 @@ export function parseStructClass(
 ): { structClass: StructModule['classes'][number]; nextIndex: number } | null {
   const dataclass = /^@dataclass\((?<options>[^)]*)\)$/.exec(lines[index] ?? '');
   const classIndex = dataclass === null ? index : index + 1;
-  const header = dataclass === null
-    ? /^class ([A-Za-z_][A-Za-z0-9_]*)\(msgspec\.Struct(?<options>(?:, [^)]+)?)\):$/.exec(lines[classIndex] ?? '')
-    : /^class ([A-Za-z_][A-Za-z0-9_]*):$/.exec(lines[classIndex] ?? '');
-  if (header === null) {
+  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)(?:\((?<bases>[^)]*)\))?:$/.exec(lines[classIndex] ?? '');
+  if (header === null || (dataclass !== null && header.groups?.bases !== undefined)) {
     return null;
   }
-  const options = dataclass?.groups?.options ?? header.groups?.options ?? '';
+  const parsedBases = dataclass === null ? parseStructClassBases(header.groups?.bases ?? '', moduleNameMap) : { extendsName: undefined, options: dataclass.groups?.options ?? '' };
+  if (parsedBases === null) {
+    return null;
+  }
+  const options = dataclass?.groups?.options ?? parsedBases.options;
   const readonlyFields = options.includes('frozen=True');
   const tagString = /(?:^|, )tag=(["'])(.*?)\1/.exec(options);
   const tagged = options.includes('tag=True') || tagString !== null;
@@ -543,6 +567,7 @@ export function parseStructClass(
   return {
     structClass: {
       name: className,
+      ...(parsedBases.extendsName === undefined ? {} : { extendsName: parsedBases.extendsName }),
       docstring: docstring?.value ?? null,
       tagged,
       ...(tagString === null ? {} : { tagValue: tagString[2] }),
@@ -554,6 +579,30 @@ export function parseStructClass(
     },
     nextIndex,
   };
+}
+
+function parseStructClassBases(
+  basesText: string,
+  moduleNameMap: ReadonlyMap<string, string>,
+): { extendsName: string | undefined; options: string } | null {
+  const bases = splitTopLevelComma(basesText);
+  if (bases.length === 0) {
+    return null;
+  }
+  if (bases[0] === 'msgspec.Struct') {
+    return { extendsName: undefined, options: bases.slice(1).join(', ') };
+  }
+  if (!bases.slice(1).some(isMsgspecClassOption)) {
+    return null;
+  }
+  return {
+    extendsName: moduleNameMap.get(bases[0]) ?? tsExportNameForPythonName(bases[0]),
+    options: bases.slice(1).join(', '),
+  };
+}
+
+function isMsgspecClassOption(baseText: string): boolean {
+  return /^(?:tag|forbid_unknown_fields|frozen)=/.test(baseText.trim());
 }
 
 function splitInlineComment(line: string): { code: string; comment: string | null } {
@@ -1064,6 +1113,7 @@ function markStructTypeOnlyImports(
 ): void {
   const valueText = stripTypeOnlyStatementSyntax([
     ...classes.flatMap((structClass) => [
+      structClass.extendsName ?? '',
       ...structClass.fields.map((field) => field.defaultValue ?? ''),
       ...structClass.postInitStatements,
       ...structClass.methods.flatMap((method) => method.statements),
@@ -1134,6 +1184,7 @@ function markStructNamespaceImports(
   const usageText = [
     ...typeAliases.map((alias) => alias.typeExpression),
     ...classes.flatMap((structClass) => [
+      structClass.extendsName ?? '',
       ...structClass.fields.map((field) => field.typeExpression),
       ...structClass.fields.map((field) => field.defaultValue ?? ''),
       ...structClass.postInitStatements,

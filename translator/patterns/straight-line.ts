@@ -55,7 +55,7 @@ import {
   parseStraightLineFunctionHeader,
   tsFunctionReturnTypeExpression,
 } from './function-headers.js';
-import { recordImportedFunctionReturnTypes, recordImportedInstanceMethodSignatures } from './imported-classes.js';
+import { recordImportedFunctionReturnTypes, recordImportedInstanceMethodSignatures, recordImportedStructConstructorFields } from './imported-classes.js';
 import { parseFunctionParameterText, pythonParameterNames } from './parameters.js';
 import {
   bytesFromHelperStatements,
@@ -249,7 +249,10 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     const structClass = parseStructClass(lines, index, moduleNameMap, mapNames);
     if (structClass !== null) {
       classes.push(structClass.structClass);
-      structConstructorFields.set(structClass.structClass.name, structClass.structClass.fields.map((field) => field.name));
+      structConstructorFields.set(
+        structClass.structClass.name,
+        structConstructorFieldNames(structClass.structClass, structConstructorFields),
+      );
       recordStructMapConstructorFields(structMapConstructorFields, structClass.structClass);
       index = structClass.nextIndex;
       continue;
@@ -537,7 +540,10 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       const structClass = parseStructClass(lines, index, moduleNameMap, mapNames);
       if (structClass !== null) {
         classes.push(structClass.structClass);
-        structConstructorFields.set(structClass.structClass.name, structClass.structClass.fields.map((field) => field.name));
+        structConstructorFields.set(
+          structClass.structClass.name,
+          structConstructorFieldNames(structClass.structClass, structConstructorFields),
+        );
         recordStructMapConstructorFields(structMapConstructorFields, structClass.structClass);
         index = structClass.nextIndex;
         continue;
@@ -1219,6 +1225,7 @@ function moduleValueUsageText(
       alias.validation?.ge ?? '',
       alias.validation?.le ?? '',
     ]),
+    ...classes.map((structClass) => structClass.extendsName ?? ''),
     ...classes.flatMap((structClass) => structClass.fields.map((field) => field.defaultValue ?? '')),
     ...classes.flatMap((structClass) => structClass.postInitStatements),
     ...classes.flatMap((structClass) => structClass.methods.flatMap((method) => method.statements)),
@@ -1247,20 +1254,6 @@ function moduleValueUsageText(
   ].join('\n'));
 }
 
-function recordImportedStructConstructorFields(
-  modulePath: string,
-  names: { importedName: string; localName: string }[],
-  relativePath: string,
-  structConstructorFields: Map<string, string[]>,
-): void {
-  for (const name of names) {
-    const fields = importedStructConstructorFields(modulePath, name.importedName, relativePath);
-    if (fields !== null) {
-      structConstructorFields.set(name.localName, fields);
-    }
-  }
-}
-
 function recordImportedStaticClassMethods(
   modulePath: string,
   names: { importedName: string; localName: string }[],
@@ -1279,30 +1272,6 @@ function recordImportedStaticClassMethods(
   }
 }
 
-function importedStructConstructorFields(modulePath: string, className: string, relativePath: string): string[] | null {
-  const sourcePath = tsSourcePathForImportPath(modulePath, relativePath);
-  if (sourcePath === null || !fs.existsSync(sourcePath)) {
-    return null;
-  }
-  const source = fs.readFileSync(sourcePath, 'utf8');
-  const escapedName = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const classStart = source.search(new RegExp(`export\\s+class\\s+${escapedName}\\b`));
-  if (classStart === -1) {
-    return null;
-  }
-  const nextExport = source.slice(classStart + 1).search(/\nexport\s+/);
-  const classSource = nextExport === -1
-    ? source.slice(classStart)
-    : source.slice(classStart, classStart + 1 + nextExport);
-  const constructor = /constructor\(opts: \{([\s\S]*?)\}\s*=?.*?\)/.exec(classSource);
-  if (constructor === null) {
-    return null;
-  }
-  const fields = [...constructor[1].matchAll(/(?:^|[;\n])\s*([A-Za-z_$][A-Za-z0-9_$]*)\??:/g)]
-    .map((match) => match[1]);
-  return fields.length === 0 ? null : fields;
-}
-
 function importedStaticClassMethodNames(modulePath: string, className: string, relativePath: string): string[] {
   const classSource = importedClassSource(modulePath, className, relativePath);
   if (classSource === null) {
@@ -1310,6 +1279,28 @@ function importedStaticClassMethodNames(modulePath: string, className: string, r
   }
   return [...classSource.matchAll(/^\s+static\s+(?:async\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*[<(]/gm)]
     .map((match) => match[1]);
+}
+
+function structConstructorFieldNames(
+  structClass: StructModule['classes'][number],
+  structConstructorFields: ReadonlyMap<string, string[]>,
+): string[] {
+  const inheritedFields = structClass.extendsName === undefined
+    ? []
+    : structConstructorFields.get(structClass.extendsName) ?? [];
+  return uniqueNames([...inheritedFields, ...structClass.fields.map((field) => field.name)]);
+}
+
+function uniqueNames(names: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const name of names) {
+    if (!seen.has(name)) {
+      seen.add(name);
+      unique.push(name);
+    }
+  }
+  return unique;
 }
 
 function importedClassSource(modulePath: string, className: string, relativePath: string): string | null {
@@ -1869,6 +1860,7 @@ function markTypeOnlyImports(
       alias.validation?.ge ?? '',
       alias.validation?.le ?? '',
     ]),
+    ...classes.map((structClass) => structClass.extendsName ?? ''),
     ...classes.flatMap((structClass) => structClass.fields.map((field) => field.defaultValue ?? '')),
     ...classes.flatMap((structClass) => structClass.methods.flatMap((method) => method.statements)),
     ...protocols.flatMap((protocol) => protocol.methods.flatMap((method) => [

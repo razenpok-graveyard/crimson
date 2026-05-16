@@ -122,7 +122,8 @@ export function renderStructClasses(lines: string[], classes: StructModule['clas
     const typeParams = structClass.typeParams === undefined || structClass.typeParams.length === 0
       ? ''
       : `<${structClass.typeParams.join(', ')}>`;
-    lines.push(`export class ${structClass.name}${typeParams} {`);
+    const extendsClause = structClass.extendsName === undefined ? '' : ` extends ${structClass.extendsName}`;
+    lines.push(`export class ${structClass.name}${typeParams}${extendsClause} {`);
     if (structClass.tagged) {
       lines.push(`  readonly tag = '${structClass.tagValue ?? structClass.name}';`);
     }
@@ -140,12 +141,10 @@ export function renderStructClasses(lines: string[], classes: StructModule['clas
         lines.push('');
       }
       if (structClass.fields.length > 0) {
-        lines.push('  constructor(opts: {');
-        for (const field of structClass.fields) {
-          lines.push(`    ${field.name}${field.defaultValue === null ? '' : '?'}: ${field.typeExpression};`);
+        lines.push(`  constructor(opts: ${structConstructorOptsType(structClass)}${allStructFieldsHaveDefaults(structClass) ? ' = {}' : ''}) {`);
+        if (structClass.extendsName !== undefined) {
+          lines.push('    super(opts);');
         }
-        const allFieldsHaveDefaults = structClass.fields.every((field) => field.defaultValue !== null);
-        lines.push(`  }${allFieldsHaveDefaults ? ' = {}' : ''}) {`);
         for (const field of structClass.fields) {
           if (field.defaultValue === null) {
             lines.push(`    this.${field.name} = opts.${field.name};`);
@@ -157,6 +156,9 @@ export function renderStructClasses(lines: string[], classes: StructModule['clas
         }
       } else {
         lines.push('  constructor() {');
+        if (structClass.extendsName !== undefined) {
+          lines.push('    super();');
+        }
       }
       for (const statement of structClass.postInitStatements) {
         lines.push(statement === '' ? '' : `    ${statement}`);
@@ -204,6 +206,21 @@ function fieldsAssignedByPostInit(statements: readonly string[]): Set<string> {
     }
   }
   return fields;
+}
+
+function structConstructorOptsType(structClass: StructModule['classes'][number]): string {
+  const ownFields = [
+    '{',
+    ...structClass.fields.map((field) => `    ${field.name}${field.defaultValue === null ? '' : '?'}: ${field.typeExpression};`),
+    '  }',
+  ].join('\n');
+  return structClass.extendsName === undefined
+    ? ownFields
+    : `${ownFields} & ConstructorParameters<typeof ${structClass.extendsName}>[0]`;
+}
+
+function allStructFieldsHaveDefaults(structClass: StructModule['classes'][number]): boolean {
+  return structClass.fields.every((field) => field.defaultValue !== null);
 }
 
 function renderFunctionReturnType(fn: { async?: boolean; returnType: string }): string {

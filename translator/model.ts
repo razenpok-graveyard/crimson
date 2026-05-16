@@ -136,6 +136,7 @@ export interface StructModule {
 
 export interface StructClassDefinition {
   name: string;
+  extendsName?: string;
   docstring: string | null;
   tagged: boolean;
   tagValue?: string;

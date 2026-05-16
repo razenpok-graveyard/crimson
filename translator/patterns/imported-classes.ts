@@ -35,12 +35,7 @@ export function recordImportedStructConstructorFields(
     if (classSource === null) {
       continue;
     }
-    const constructor = /constructor\(opts: \{([\s\S]*?)\}\s*=?.*?\)/.exec(classSource);
-    if (constructor === null) {
-      continue;
-    }
-    const fields = [...constructor[1].matchAll(/(?:^|[;\n])\s*([A-Za-z_$][A-Za-z0-9_$]*)\??:/g)]
-      .map((match) => match[1]);
+    const fields = importedStructConstructorFields(modulePath, name.importedName, relativePath);
     if (fields.length > 0) {
       structConstructorFields.set(name.localName, fields);
     }
@@ -81,6 +76,99 @@ function importedInstanceMethodSignatures(classSource: string): { methodName: st
     });
   }
   return signatures;
+}
+
+function importedStructConstructorFields(
+  modulePath: string,
+  className: string,
+  relativePath: string,
+  seen: Set<string> = new Set(),
+): string[] {
+  const sourcePath = tsSourcePathForImportPath(modulePath, relativePath);
+  if (sourcePath === null || !fs.existsSync(sourcePath)) {
+    return [];
+  }
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  return structConstructorFieldsFromSource(source, sourcePath, className, seen);
+}
+
+function structConstructorFieldsFromSource(
+  source: string,
+  sourcePath: string,
+  className: string,
+  seen: Set<string>,
+): string[] {
+  const seenKey = `${sourcePath}:${className}`;
+  if (seen.has(seenKey)) {
+    return [];
+  }
+  seen.add(seenKey);
+
+  const classSource = exportedClassSource(source, className);
+  if (classSource === null) {
+    return [];
+  }
+
+  const inheritedFields = inheritedStructConstructorFields(source, sourcePath, classSource, seen);
+  const ownFields = structConstructorFieldsFromClassSource(classSource);
+  return uniqueFieldNames([...inheritedFields, ...ownFields]);
+}
+
+function structConstructorFieldsFromClassSource(classSource: string): string[] {
+  const constructor = /constructor\(opts: \{([\s\S]*?)\}\s*=?.*?\)/.exec(classSource);
+  if (constructor === null) {
+    return [];
+  }
+  return [...constructor[1].matchAll(/(?:^|[;\n])\s*([A-Za-z_$][A-Za-z0-9_$]*)\??:/g)]
+    .map((match) => match[1]);
+}
+
+function inheritedStructConstructorFields(
+  source: string,
+  sourcePath: string,
+  classSource: string,
+  seen: Set<string>,
+): string[] {
+  const inheritedClass = /^export\s+class\s+[A-Za-z_$][A-Za-z0-9_$]*(?:<[^>{]+>)?\s+extends\s+([A-Za-z_$][A-Za-z0-9_$]*)\b/m.exec(classSource);
+  if (inheritedClass === null) {
+    return [];
+  }
+
+  const baseName = inheritedClass[1];
+  const importedBase = importedClassBinding(source, baseName);
+  if (importedBase !== null) {
+    return importedStructConstructorFields(
+      importedBase.modulePath,
+      importedBase.importedName,
+      path.relative(tsTargetRoot, sourcePath),
+      seen,
+    );
+  }
+  return structConstructorFieldsFromSource(source, sourcePath, baseName, seen);
+}
+
+function importedClassBinding(source: string, localName: string): { importedName: string; modulePath: string } | null {
+  for (const match of source.matchAll(/import(?:\s+type)?\s+\{([\s\S]*?)\}\s+from\s+'([^']+)'/g)) {
+    for (const part of splitTopLevelComma(match[1])) {
+      const binding = /^([A-Za-z_$][A-Za-z0-9_$]*)(?:\s+as\s+([A-Za-z_$][A-Za-z0-9_$]*))?$/.exec(part.trim());
+      if (binding !== null && (binding[2] ?? binding[1]) === localName) {
+        return { importedName: binding[1], modulePath: match[2] };
+      }
+    }
+  }
+  return null;
+}
+
+function uniqueFieldNames(fields: string[]): string[] {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const field of fields) {
+    if (!seen.has(field)) {
+      seen.add(field);
+      unique.push(field);
+    }
+  }
+  return unique;
 }
 
 function importedFunctionReturnType(modulePath: string, functionName: string, relativePath: string): string | null {
@@ -138,6 +226,10 @@ function importedClassSource(modulePath: string, className: string, relativePath
     return null;
   }
   const source = fs.readFileSync(sourcePath, 'utf8');
+  return exportedClassSource(source, className);
+}
+
+function exportedClassSource(source: string, className: string): string | null {
   const escapedName = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const classStart = source.search(new RegExp(`export\\s+class\\s+${escapedName}\\b`));
   if (classStart === -1) {
