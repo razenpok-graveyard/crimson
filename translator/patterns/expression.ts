@@ -313,6 +313,36 @@ export function instanceMethodSignatureMarker(className: string, methodName: str
   return `__instance_method_signature__:${className}:${methodName}`;
 }
 
+function translateConditionalTestExpression(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string {
+  const trimmed = pythonExpression.trim();
+  const translated = translateExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (mapNames.has(translated)) {
+    return `${translated}.size > 0`;
+  }
+  if (arrayNames.has(setNameMarker(trimmed)) || arrayNames.has(setNameMarker(translated))) {
+    return arrayNames.has(nullableNameMarker(trimmed)) || arrayNames.has(nullableNameMarker(translated))
+      ? `${translated} !== null && ${translated}.size > 0`
+      : `${translated}.size > 0`;
+  }
+  if (arrayNames.has(objectNameMarker(trimmed)) || arrayNames.has(objectNameMarker(translated))) {
+    return arrayNames.has(nullableNameMarker(trimmed)) || arrayNames.has(nullableNameMarker(translated))
+      ? `${translated} !== null && Object.keys(${translated}).length > 0`
+      : `Object.keys(${translated}).length > 0`;
+  }
+  if (arrayNames.has(trimmed) || arrayNames.has(translated) || arrayNames.has(stringNameMarker(trimmed)) || arrayNames.has(stringNameMarker(translated))) {
+    return arrayNames.has(nullableNameMarker(trimmed)) || arrayNames.has(nullableNameMarker(translated))
+      ? `${translated} !== null && ${translated}.length > 0`
+      : `${translated}.length > 0`;
+  }
+  return translated;
+}
+
 type FunctionCallSignature = {
   positional: string[];
 };
@@ -654,7 +684,7 @@ export function translateExpression(
   const enumModeConditionalForLater = /^(.+) if isinstance\((.+), ([A-Z][A-Za-z0-9_]*Mode)\) else ([A-Z][A-Za-z0-9_]*Mode)\((.+)\)$/.exec(trimmed);
   if (earlyConditionalExpression !== null && enumModeConditionalForLater === null) {
     return [
-      translateExpression(earlyConditionalExpression.condition, nameMap, arrayNames, validatedTypeAliases, mapNames),
+      translateConditionalTestExpression(earlyConditionalExpression.condition, nameMap, arrayNames, validatedTypeAliases, mapNames),
       '?',
       translateExpression(earlyConditionalExpression.trueExpression, nameMap, arrayNames, validatedTypeAliases, mapNames),
       ':',
@@ -883,7 +913,7 @@ export function translateExpression(
   const typeNameAttribute = /^type\((.+)\)\.__name__$/.exec(trimmed);
   if (typeNameAttribute !== null) {
     const value = translateExpression(typeNameAttribute[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
-    return `((valueForType: unknown) => valueForType === null ? 'NoneType' : Array.isArray(valueForType) ? 'list' : valueForType instanceof Map ? 'dict' : typeof valueForType === 'boolean' ? 'bool' : typeof valueForType === 'number' ? Number.isInteger(valueForType) ? 'int' : 'float' : typeof valueForType === 'string' ? 'str' : typeof valueForType === 'object' ? 'dict' : typeof valueForType)(${value})`;
+    return `((valueForType: unknown) => valueForType === null ? 'NoneType' : Array.isArray(valueForType) ? 'list' : valueForType instanceof Map ? 'dict' : typeof valueForType === 'boolean' ? 'bool' : typeof valueForType === 'number' ? Number.isInteger(valueForType) ? 'int' : 'float' : typeof valueForType === 'string' ? 'str' : typeof valueForType === 'object' ? ((valueForType as { constructor?: { name?: string } }).constructor?.name && (valueForType as { constructor?: { name?: string } }).constructor?.name !== 'Object' ? (valueForType as { constructor: { name: string } }).constructor.name : 'dict') : typeof valueForType)(${value})`;
   }
 
   const structUnpackPackedFloat = /^struct\.unpack\("<f", struct\.pack\("<I", (.+)\)\)\[0\]$/.exec(trimmed);
@@ -1078,6 +1108,8 @@ export function translateExpression(
     if (arrayNames.has(stringNameMarker(lenCall.argsText)) || arrayNames.has(stringNameMarker(value))) {
       return `Array.from(${value}).length`;
     }
+    arrayNames.add(lenCall.argsText.trim());
+    arrayNames.add(value);
     return `${value}.length`;
   }
 
@@ -1460,7 +1492,7 @@ export function translateExpression(
   const conditionalExpression = parseTopLevelConditionalExpression(trimmed);
   if (conditionalExpression !== null) {
     return [
-      translateExpression(conditionalExpression.condition, nameMap, arrayNames, validatedTypeAliases, mapNames),
+      translateConditionalTestExpression(conditionalExpression.condition, nameMap, arrayNames, validatedTypeAliases, mapNames),
       '?',
       translateExpression(conditionalExpression.trueExpression, nameMap, arrayNames, validatedTypeAliases, mapNames),
       ':',

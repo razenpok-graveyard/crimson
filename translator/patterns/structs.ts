@@ -35,7 +35,7 @@ import {
   functionSignatureMarker,
   parseStraightLineFunctionHeader,
 } from './function-headers.js';
-import { recordImportedInstanceMethodSignatures } from './imported-classes.js';
+import { recordImportedInstanceMethodSignatures, recordImportedStructConstructorFields } from './imported-classes.js';
 import { parseFunctionParameterText, parseFunctionParametersText, pythonParameterNames } from './parameters.js';
 import {
   reassignedLocalNames,
@@ -151,6 +151,12 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       names.map((name) => ({ importedName: name, localName: name })),
       relativePath,
       moduleNameMap,
+    );
+    recordImportedStructConstructorFields(
+      modulePath,
+      names.map((name) => ({ importedName: name, localName: name })),
+      relativePath,
+      structConstructorFields,
     );
     if (modulePath === '@crimson/bonuses/hud.ts') {
       for (const name of fromImport[2].split(', ')) {

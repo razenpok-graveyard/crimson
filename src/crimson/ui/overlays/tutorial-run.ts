@@ -28,7 +28,7 @@ export function tutorialPromptPanelRect(text: string, opts: { measureTextWidth: 
   const measureLineHeight = opts.measureLineHeight;
   const pos = opts.pos;
   const scale = opts.scale;
-  const lines = text ? pythonSplitlines(text) : [''];
+  const lines = text.length > 0 ? pythonSplitlines(text) : [''];
   const lineH = measureLineHeight(scale);
   let maxW = 0.0;
   for (const line of lines) {

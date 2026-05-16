@@ -24,6 +24,29 @@ export function recordImportedInstanceMethodSignatures(
   }
 }
 
+export function recordImportedStructConstructorFields(
+  modulePath: string,
+  names: { importedName: string; localName: string }[],
+  relativePath: string,
+  structConstructorFields: Map<string, string[]>,
+): void {
+  for (const name of names) {
+    const classSource = importedClassSource(modulePath, name.importedName, relativePath);
+    if (classSource === null) {
+      continue;
+    }
+    const constructor = /constructor\(opts: \{([\s\S]*?)\}\s*=?.*?\)/.exec(classSource);
+    if (constructor === null) {
+      continue;
+    }
+    const fields = [...constructor[1].matchAll(/(?:^|[;\n])\s*([A-Za-z_$][A-Za-z0-9_$]*)\??:/g)]
+      .map((match) => match[1]);
+    if (fields.length > 0) {
+      structConstructorFields.set(name.localName, fields);
+    }
+  }
+}
+
 function importedInstanceMethodSignatures(classSource: string): { methodName: string; positional: string[] }[] {
   const signatures: { methodName: string; positional: string[] }[] = [];
   const methodStart = /^\s+(?!(?:constructor|static|get|set)\b)(?:(?:public|private|protected)\s+)?(?:async\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:<[^>\n]+>)?\(/gm;

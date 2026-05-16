@@ -188,6 +188,176 @@ function caseBodyStops(statements: string[]): boolean {
   }
   return false;
 }
+
+type ClassPatternBranch = {
+  condition: string | null;
+  comment: string | null;
+  statements: string[];
+};
+
+function parseClassPatternCase(
+  pattern: string,
+  subject: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): { condition: string; captures: string[]; nameMap: Map<string, string>; declaredNames: Set<string> } | null {
+  const classPattern = /^([A-Z][A-Za-z0-9_]*)\((.*)\)$/.exec(pattern);
+  if (classPattern === null) {
+    return null;
+  }
+  const className = translateExpression(classPattern[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const branchNameMap = new Map(nameMap);
+  const branchDeclaredNames = new Set<string>();
+  const captures: string[] = [];
+  const argsText = classPattern[2].trim();
+  if (argsText !== '') {
+    for (const arg of splitTopLevelComma(argsText)) {
+      const keywordCapture = /^([A-Za-z_][A-Za-z0-9_]*)=([A-Za-z_][A-Za-z0-9_]*)$/.exec(arg.trim());
+      if (keywordCapture === null) {
+        return null;
+      }
+      const propertyName = tsAttributeNameForPythonName(keywordCapture[1]);
+      const localName = tsExportNameForPythonName(keywordCapture[2]);
+      branchNameMap.set(keywordCapture[2], localName);
+      branchDeclaredNames.add(keywordCapture[2]);
+      captures.push(`const ${localName} = ${subject}.${propertyName};`);
+    }
+  }
+  return {
+    condition: `${subject} instanceof ${className}`,
+    captures,
+    nameMap: branchNameMap,
+    declaredNames: branchDeclaredNames,
+  };
+}
+
+function translateClassPatternMatchStatement(
+  lines: string[],
+  index: number,
+  indent: string,
+  subjectExpression: string,
+  nameMap: Map<string, string>,
+  declaredNames: Set<string>,
+  reassignedNames: Set<string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  relativePath: string | null,
+  mapNames: ReadonlySet<string>,
+  imports: ImportDefinition[] | null,
+): { statements: string[]; nextIndex: number } | null {
+  const subject = translateExpression(subjectExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const caseIndent = `${indent}    `;
+  const bodyIndent = `${caseIndent}    `;
+  const branches: ClassPatternBranch[] = [];
+  let nextIndex = index + 1;
+  let sawClassPattern = false;
+
+  while (nextIndex < lines.length) {
+    const line = lines[nextIndex] ?? '';
+    if (line.trim() === '') {
+      nextIndex += 1;
+      continue;
+    }
+    if (!line.startsWith(caseIndent)) {
+      break;
+    }
+
+    const parsedCaseLine = splitInlineComment(line.slice(caseIndent.length));
+    const caseStatement = /^case (.+):$/.exec(parsedCaseLine.code);
+    if (caseStatement === null) {
+      return null;
+    }
+
+    let condition: string | null = null;
+    let captures: string[] = [];
+    let branchNameMap = nameMap;
+    let branchDeclaredNames = declaredNames;
+    if (caseStatement[1] !== '_') {
+      const parsedClassPattern = parseClassPatternCase(
+        caseStatement[1],
+        subject,
+        nameMap,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+      );
+      if (parsedClassPattern === null) {
+        return null;
+      }
+      sawClassPattern = true;
+      condition = parsedClassPattern.condition;
+      captures = parsedClassPattern.captures;
+      branchNameMap = parsedClassPattern.nameMap;
+      branchDeclaredNames = new Set([...declaredNames, ...parsedClassPattern.declaredNames]);
+    }
+
+    const bodyStartIndex = nextIndex + 1;
+    const bodyStatements: string[] = [];
+    nextIndex = bodyStartIndex;
+    let caseHadPass = false;
+    while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, bodyIndent)) {
+      if (lines[nextIndex].trim() === '') {
+        bodyStatements.push('');
+        nextIndex += 1;
+        continue;
+      }
+      if (lines[nextIndex].trim() === 'pass') {
+        caseHadPass = true;
+      }
+      const innerStatement = translateStraightLineStatement(
+        lines,
+        nextIndex,
+        bodyIndent,
+        branchNameMap,
+        branchDeclaredNames,
+        reassignedNames,
+        arrayNames,
+        validatedTypeAliases,
+        relativePath,
+        mapNames,
+        imports,
+      );
+      if (innerStatement === null) {
+        return null;
+      }
+      bodyStatements.push(...innerStatement.statements);
+      nextIndex = innerStatement.nextIndex;
+    }
+    if (!caseHadPass && bodyStatements.length === 0) {
+      return null;
+    }
+    branches.push({
+      condition,
+      comment: parsedCaseLine.comment,
+      statements: [
+        ...captures,
+        ...bodyStatements,
+      ],
+    });
+  }
+
+  if (!sawClassPattern || branches.length === 0) {
+    return null;
+  }
+
+  const statements: string[] = [];
+  for (let branchIndex = 0; branchIndex < branches.length; branchIndex += 1) {
+    const item = branches[branchIndex];
+    const header = branchIndex === 0
+      ? `if (${item.condition}) {`
+      : item.condition === null
+        ? '} else {'
+        : `} else if (${item.condition}) {`;
+    statements.push(`${header}${item.comment === null ? '' : ` // ${item.comment}`}`);
+    statements.push(...item.statements.map(indentStatementLine));
+  }
+  statements.push('}');
+
+  return { statements, nextIndex };
+}
+
 function predeclareIfBranchAssignments(
   lines: string[],
   index: number,
@@ -802,6 +972,24 @@ export function translateStraightLineStatement(
 
   const matchStatement = /^match (.+):$/.exec(statement);
   if (matchStatement !== null) {
+    const classPatternMatch = translateClassPatternMatchStatement(
+      lines,
+      index,
+      indent,
+      matchStatement[1],
+      nameMap,
+      declaredNames,
+      reassignedNames,
+      arrayNames,
+      validatedTypeAliases,
+      relativePath,
+      mapNames,
+      imports,
+    );
+    if (classPatternMatch !== null) {
+      return classPatternMatch;
+    }
+
     const caseIndent = `${indent}    `;
     const bodyIndent = `${caseIndent}    `;
     const statements = [`switch (${translateExpression(matchStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`];
@@ -2627,6 +2815,21 @@ function parseMultilineCallExpression(
     return null;
   }
 
+  const msgspecStructsReplace = translateMultilineMsgspecStructsReplace(
+    pythonCallee,
+    callParts,
+    nameMap,
+    arrayNames,
+    validatedTypeAliases,
+    mapNames,
+  );
+  if (msgspecStructsReplace !== null) {
+    return {
+      expression: msgspecStructsReplace,
+      nextIndex: callParts.nextIndex,
+    };
+  }
+
   const callee = translateExpression(pythonCallee, nameMap, arrayNames, validatedTypeAliases);
   const callPrefix = /^[A-Z][A-Za-z0-9_]*$/.test(callee) ? `new ${callee}` : callee;
   const sequenceGenerator = translateMultilineSequenceGenerator(
@@ -2677,6 +2880,29 @@ function parseMultilineCallExpression(
     ].join(', ')})`,
     nextIndex: callParts.nextIndex,
   };
+}
+
+function translateMultilineMsgspecStructsReplace(
+  pythonCallee: string,
+  callParts: MultilineCallParts,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  if (
+    pythonCallee !== 'msgspec.structs.replace'
+    || callParts.positionalParts.length !== 1
+    || callParts.keywordArgParts.length === 0
+  ) {
+    return null;
+  }
+  const value = translateExpression(callParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const updates = callParts.keywordArgParts.map((part) => {
+    const name = tsExportNameForPythonName(part.pythonName);
+    return name === part.expression ? name : `${name}: ${part.expression}`;
+  });
+  return `(() => { const value = ${value}; return new (value.constructor as new (opts: typeof value) => typeof value)({ ...value, ${updates.join(', ')} }); })()`;
 }
 
 function translateMultilineCallWithLocalSignature(
@@ -3738,6 +3964,15 @@ export function rewriteStructPositionalConstructors(
       index = closeIndex + 1;
       continue;
     }
+    if (args.length === 1 && args[0]?.trim().startsWith('{') === true) {
+      const rewrittenObjectConstructor = rewriteObjectConstructorWithExtraFields(match[1], args[0], fields);
+      if (rewrittenObjectConstructor !== null) {
+        output += statement.slice(index, match.index);
+        output += rewrittenObjectConstructor;
+        index = closeIndex + 1;
+        continue;
+      }
+    }
     if (args.length > fields.length || args[0]?.trim().startsWith('{') === true) {
       output += statement.slice(index, closeIndex + 1);
       index = closeIndex + 1;
@@ -3765,6 +4000,51 @@ export function rewriteStructPositionalConstructors(
     index = closeIndex + 1;
   }
   return output;
+}
+
+function rewriteObjectConstructorWithExtraFields(
+  className: string,
+  objectArg: string,
+  constructorFields: string[],
+): string | null {
+  const objectLiteral = /^\{ (.*) \}$/.exec(objectArg.trim());
+  if (objectLiteral === null) {
+    return null;
+  }
+  const properties = splitTopLevelComma(objectLiteral[1])
+    .map((part) => parseObjectConstructorProperty(part.trim()));
+  if (properties.some((property) => property === null)) {
+    return null;
+  }
+  const parsedProperties = properties.filter((property): property is { name: string; value: string } => property !== null);
+  const constructorFieldSet = new Set(constructorFields);
+  const constructorProperties = parsedProperties.filter((property) => constructorFieldSet.has(property.name));
+  const extraProperties = parsedProperties.filter((property) => !constructorFieldSet.has(property.name));
+  if (
+    extraProperties.length === 0
+    || constructorProperties.length !== constructorFields.length
+  ) {
+    return null;
+  }
+  const constructorText = constructorProperties
+    .map((property) => `${property.name}: ${property.value}`)
+    .join(', ');
+  const assignments = extraProperties
+    .map((property) => `value.${property.name} = ${property.value};`)
+    .join(' ');
+  return `(() => { const value = new ${className}({ ${constructorText} }); ${assignments} return value; })()`;
+}
+
+function parseObjectConstructorProperty(part: string): { name: string; value: string } | null {
+  const explicit = /^([A-Za-z_$][A-Za-z0-9_$]*): (.+)$/.exec(part);
+  if (explicit !== null) {
+    return { name: explicit[1], value: explicit[2] };
+  }
+  const shorthand = /^([A-Za-z_$][A-Za-z0-9_$]*)$/.exec(part);
+  if (shorthand !== null) {
+    return { name: shorthand[1], value: shorthand[1] };
+  }
+  return null;
 }
 
 function maybeAwaitAsyncCall(tsExpression: string): string {

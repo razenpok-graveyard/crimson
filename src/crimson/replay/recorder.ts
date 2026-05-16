@@ -84,7 +84,7 @@ export class ReplayRecorder {
     }
 
     const tickIndex = this._tickIndex;
-    this._ticks.push(new ReplayTick({ dt: tickDt, inputs: packed, commands: commands ? Array.from(commands) : [] }));
+    this._ticks.push(new ReplayTick({ dt: tickDt, inputs: packed, commands: commands !== null && commands.length > 0 ? Array.from(commands) : [] }));
     this._tickIndex += 1;
     return tickIndex;
   }
