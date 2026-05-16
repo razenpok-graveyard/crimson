@@ -3084,6 +3084,49 @@ export function parseTopLevelAssignment(
     return null;
   }
 
+  if (value === '[') {
+    const valueLines = ['['];
+    let nextIndex = index + 1;
+    while (nextIndex < lines.length) {
+      const trimmed = lines[nextIndex].trim();
+      if (trimmed === ']') {
+        valueLines.push(']');
+        return {
+          assignment: { ...baseAssignment, valueLines },
+          nextIndex: nextIndex + 1,
+        };
+      }
+      if (trimmed === '') {
+        nextIndex += 1;
+        continue;
+      }
+      if (trimmed.startsWith('#')) {
+        valueLines.push(`  // ${trimmed.replace(/^# ?/, '')}`);
+        nextIndex += 1;
+        continue;
+      }
+
+      const callItem = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(trimmed);
+      if (callItem !== null) {
+        const callValue = parseMultilineKeywordCallValueLines(lines, nextIndex + 1, callItem[1], nameMap);
+        if (callValue === null) {
+          return null;
+        }
+        valueLines.push(...callValue.valueLines.map((line) => `  ${line}`));
+        nextIndex = callValue.nextIndex;
+        continue;
+      }
+
+      const listItem = /^(.+),$/.exec(trimmed);
+      if (listItem === null) {
+        return null;
+      }
+      valueLines.push(`  ${translateExpression(listItem[1], nameMap)},`);
+      nextIndex += 1;
+    }
+    return null;
+  }
+
   if (value === '{') {
     const dictComprehension = parseMultilineDictComprehension(lines, index + 1, annotatedType);
     if (dictComprehension !== null) {
@@ -3294,6 +3337,44 @@ export function parseTopLevelAssignment(
     nextIndex += 1;
   }
 
+  return null;
+}
+
+function parseMultilineKeywordCallValueLines(
+  lines: string[],
+  startIndex: number,
+  pythonCallee: string,
+  nameMap: Map<string, string>,
+): { valueLines: string[]; nextIndex: number } | null {
+  const callee = translateExpression(pythonCallee, nameMap);
+  const callPrefix = /^[A-Z][A-Za-z0-9_]*$/.test(callee) ? `new ${callee}` : callee;
+  const valueLines = [`${callPrefix}({`];
+  let nextIndex = startIndex;
+  while (nextIndex < lines.length) {
+    const trimmed = lines[nextIndex].trim();
+    if (trimmed === '),' || trimmed === ')') {
+      valueLines.push('}),');
+      return {
+        valueLines,
+        nextIndex: nextIndex + 1,
+      };
+    }
+    if (trimmed === '') {
+      nextIndex += 1;
+      continue;
+    }
+    if (trimmed.startsWith('#')) {
+      valueLines.push(`  // ${trimmed.replace(/^# ?/, '')}`);
+      nextIndex += 1;
+      continue;
+    }
+    const keywordArg = /^([A-Za-z_][A-Za-z0-9_]*)=(.+),$/.exec(trimmed);
+    if (keywordArg === null) {
+      return null;
+    }
+    valueLines.push(`  ${tsExportNameForPythonName(keywordArg[1])}: ${translateExpression(keywordArg[2], nameMap)},`);
+    nextIndex += 1;
+  }
   return null;
 }
 

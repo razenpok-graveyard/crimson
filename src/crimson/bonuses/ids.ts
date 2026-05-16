@@ -2,24 +2,6 @@
 
 // Bonus ids extracted from bonus_metadata_init (bonus_meta_label).
 
-export enum BonusId {
-  UNUSED = 0,
-  POINTS = 1,
-  ENERGIZER = 2,
-  WEAPON = 3,
-  WEAPON_POWER_UP = 4,
-  NUKE = 5,
-  DOUBLE_EXPERIENCE = 6,
-  SHOCK_CHAIN = 7,
-  FIREBLAST = 8,
-  REFLEX_BOOST = 9,
-  SHIELD = 10,
-  FREEZE = 11,
-  MEDIKIT = 12,
-  SPEED = 13,
-  FIRE_BULLETS = 14,
-}
-
 export class BonusMeta {
   readonly bonusId: BonusId;
   readonly name: string;
@@ -48,7 +30,25 @@ export class BonusMeta {
   }
 }
 
-export const BONUS_TABLE: readonly BonusMeta[] = [
+export enum BonusId {
+  UNUSED = 0,
+  POINTS = 1,
+  ENERGIZER = 2,
+  WEAPON = 3,
+  WEAPON_POWER_UP = 4,
+  NUKE = 5,
+  DOUBLE_EXPERIENCE = 6,
+  SHOCK_CHAIN = 7,
+  FIREBLAST = 8,
+  REFLEX_BOOST = 9,
+  SHIELD = 10,
+  FREEZE = 11,
+  MEDIKIT = 12,
+  SPEED = 13,
+  FIRE_BULLETS = 14,
+}
+
+export const BONUS_TABLE = [
   new BonusMeta({
     bonusId: BonusId.UNUSED,
     name: '(unused)',
@@ -174,43 +174,48 @@ export const BONUS_TABLE: readonly BonusMeta[] = [
     notes: '`bonus_apply` updates `player_fire_bullets_timer` (`DAT_00490bcc`) (fixed +5 seconds, scaled by Bonus Economist). While active, `projectile_spawn` overrides player-owned projectiles to type `0x2d` (pellet count from `weapon_projectile_pellet_count[weapon_id]`).',
   }),
 ];
-
-export const BONUS_BY_ID: Map<BonusId, BonusMeta> = new Map(
-  BONUS_TABLE.map((e) => [e.bonusId, e]),
-);
-
+export const BONUS_BY_ID = new Map(Array.from(BONUS_TABLE, (entry) => [entry.bonusId, entry] as const));
 const _BONUS_FIXED_NAMES: Map<BonusId, string> = new Map();
-
-const _BONUS_FIXED_DESCRIPTIONS: Map<BonusId, string> = new Map([
+const _BONUS_FIXED_DESCRIPTIONS = new Map([
   [BonusId.WEAPON_POWER_UP, 'Your fire rate and load time increase for a short period.'],
   [BonusId.FIRE_BULLETS, 'For a few seconds -- make them count.'],
 ]);
 
 export function bonusDisplayName(bonusId: BonusId, opts: { preserveBugs?: boolean } = {}): string {
   const preserveBugs = opts.preserveBugs ?? false;
-  const entry = BONUS_BY_ID.get(bonusId);
-  if (entry === undefined) return 'unknown';
+  const entry = BONUS_BY_ID.get(bonusId) ?? null;
+  if (entry === null) {
+    return 'unknown';
+  }
   if (!preserveBugs) {
-    const fixed = _BONUS_FIXED_NAMES.get(bonusId);
-    if (fixed !== undefined) return fixed;
+    const fixed = _BONUS_FIXED_NAMES.get(bonusId) ?? null;
+    if (fixed !== null) {
+      return fixed;
+    }
   }
   return entry.name;
 }
 
 export function bonusDisplayDescription(bonusId: BonusId, opts: { preserveBugs?: boolean } = {}): string | null {
   const preserveBugs = opts.preserveBugs ?? false;
-  const entry = BONUS_BY_ID.get(bonusId);
-  if (entry === undefined) return null;
+  const entry = BONUS_BY_ID.get(bonusId) ?? null;
+  if (entry === null) {
+    return null;
+  }
   if (!preserveBugs) {
-    const fixed = _BONUS_FIXED_DESCRIPTIONS.get(bonusId);
-    if (fixed !== undefined) return fixed;
+    const fixed = _BONUS_FIXED_DESCRIPTIONS.get(bonusId) ?? null;
+    if (fixed !== null) {
+      return fixed;
+    }
   }
   return entry.description;
 }
 
 export function bonusLabel(bonusId: BonusId, opts: { preserveBugs?: boolean } = {}): string {
   const preserveBugs = opts.preserveBugs ?? false;
-  const entry = BONUS_BY_ID.get(bonusId);
-  if (entry === undefined) return 'unknown';
-  return bonusDisplayName(entry.bonusId, { preserveBugs });
+  const entry = BONUS_BY_ID.get(bonusId) ?? null;
+  if (entry === null) {
+    return 'unknown';
+  }
+  return bonusDisplayName(entry.bonusId, { preserveBugs: preserveBugs });
 }

@@ -111,6 +111,11 @@ export async function translateFile(job: TranslationJob): Promise<string> {
     return renderQuestLevelModule(job.relativePath);
   }
 
+  const existingExcludedRuntimePort = await readExistingExcludedRuntimePort(futureStripped, job.targetPath);
+  if (existingExcludedRuntimePort !== null) {
+    return existingExcludedRuntimePort;
+  }
+
   const simpleExportModule = parseSimpleExportModule(futureStripped, job.relativePath);
   if (simpleExportModule !== null) {
     return renderSimpleExportModule(job.relativePath, simpleExportModule);
@@ -134,11 +139,6 @@ export async function translateFile(job: TranslationJob): Promise<string> {
   const functionsModule = parseFunctionsModule(futureStripped);
   if (functionsModule !== null) {
     return renderFunctionsModule(job.relativePath, functionsModule);
-  }
-
-  const existingExcludedRuntimePort = await readExistingExcludedRuntimePort(futureStripped, job.targetPath);
-  if (existingExcludedRuntimePort !== null) {
-    return existingExcludedRuntimePort;
   }
 
   const trimmed = stripIgnorablePythonLines(job.python).trim();

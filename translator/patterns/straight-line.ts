@@ -888,7 +888,7 @@ function isEnumOnlyImport(trimmedLine: string): boolean {
   if (enumImport === null) {
     return false;
   }
-  return enumImport[1].split(', ').every((name) => ['Enum', 'IntEnum', 'IntFlag'].includes(name));
+  return enumImport[1].split(', ').every((name) => ['Enum', 'IntEnum', 'IntFlag', 'unique'].includes(name));
 }
 
 function parseTypeVarAssignment(trimmedLine: string): string | null {

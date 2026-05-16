@@ -7,6 +7,9 @@ export function isTypeAliasExpression(pythonExpression: string): boolean {
   if (/^(?:True|False|None|-?\d+(?:\.\d+)?|["'])/.test(trimmed)) {
     return false;
   }
+  if (!hasBalancedSquareBrackets(trimmed)) {
+    return false;
+  }
   if (trimmed.includes('(') || trimmed.includes('{')) {
     return false;
   }
@@ -21,10 +24,42 @@ export function isBareTypeAliasExpression(pythonExpression: string): boolean {
   if (/^[A-Z][A-Z0-9_]*(?: \| [A-Z][A-Z0-9_]*)+$/.test(trimmed)) {
     return false;
   }
+  if (!hasBalancedSquareBrackets(trimmed)) {
+    return false;
+  }
   if (trimmed.includes('(') || trimmed.includes('{')) {
     return false;
   }
   return /[\[\]|]/.test(trimmed) || /^(?:Callable|Literal|Sequence|dict|list|tuple)\b/.test(trimmed);
+}
+
+function hasBalancedSquareBrackets(value: string): boolean {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      if (char === quote && value[index - 1] !== '\\') {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '[') {
+      depth += 1;
+      continue;
+    }
+    if (char === ']') {
+      depth -= 1;
+      if (depth < 0) {
+        return false;
+      }
+    }
+  }
+  return depth === 0;
 }
 
 export function isCollectionsAbcTypeImport(trimmedLine: string): boolean {

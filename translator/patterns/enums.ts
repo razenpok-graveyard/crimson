@@ -135,13 +135,14 @@ export function parseStringEnumClass(
   lines: string[],
   index: number,
 ): { enumDefinition: EnumDefinition; nextIndex: number } | null {
-  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\((str, Enum|IntEnum|IntFlag)\):$/.exec(lines[index] ?? '');
+  const classIndex = (lines[index] ?? '').trim() === '@unique' ? index + 1 : index;
+  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)\((str, Enum|IntEnum|IntFlag)\):$/.exec(lines[classIndex] ?? '');
   if (header === null) {
     return null;
   }
   const stringValued = header[2] === 'str, Enum';
 
-  let nextIndex = index + 1;
+  let nextIndex = classIndex + 1;
   let docstring: string | null = null;
   const members: EnumDefinition['members'] = [];
   const pendingMemberComments: string[] = [];
