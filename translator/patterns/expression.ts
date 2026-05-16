@@ -985,6 +985,15 @@ export function translateExpression(
     return `${mapName}.get(${key})!`;
   }
 
+  const mappingSubscriptAttribute = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[(.+)\]\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);
+  if (mappingSubscriptAttribute !== null) {
+    const mapName = translateExpression(mappingSubscriptAttribute[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (mapNames.has(mapName) || looksLikeMappingConstantName(mappingSubscriptAttribute[1])) {
+      const key = translateMapKeyExpression(mapName, translateExpression(mappingSubscriptAttribute[2], nameMap, arrayNames, validatedTypeAliases, mapNames), mapNames);
+      return `${mapName}.get(${key})!.${tsExportNameForPythonName(mappingSubscriptAttribute[3])}`;
+    }
+  }
+
   const mapSubscript = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[(.+)\]$/.exec(trimmed);
   if (mapSubscript !== null) {
     const mapName = translateExpression(mapSubscript[1], nameMap, arrayNames, validatedTypeAliases, mapNames);

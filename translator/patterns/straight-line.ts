@@ -303,6 +303,12 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         relativePath,
         moduleNameMap,
       );
+      recordImportedMapNames(
+        modulePath,
+        [{ importedName, localName: aliasName }],
+        relativePath,
+        mapNames,
+      );
       moduleNameMap.set(aliasedFromImport[3], aliasName);
       index += 1;
       continue;
@@ -383,6 +389,12 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         importBindings.map((binding) => ({ importedName: binding.importedName, localName: binding.importedName })),
         relativePath,
         moduleNameMap,
+      );
+      recordImportedMapNames(
+        modulePath,
+        importBindings.map((binding) => ({ importedName: binding.importedName, localName: binding.importedName })),
+        relativePath,
+        mapNames,
       );
       for (const binding of importBindings) {
         if (binding.importedName !== binding.defaultName) {
@@ -1297,6 +1309,19 @@ function recordImportedStaticClassMethods(
   }
 }
 
+function recordImportedMapNames(
+  modulePath: string,
+  names: { importedName: string; localName: string }[],
+  relativePath: string,
+  mapNames: Set<string>,
+): void {
+  for (const name of names) {
+    if (importedExportIsMap(modulePath, name.importedName, relativePath)) {
+      mapNames.add(name.localName);
+    }
+  }
+}
+
 function importedStaticClassMethodNames(modulePath: string, className: string, relativePath: string): string[] {
   const classSource = importedClassSource(modulePath, className, relativePath);
   if (classSource === null) {
@@ -1343,6 +1368,43 @@ function importedClassSource(modulePath: string, className: string, relativePath
   return nextExport === -1
     ? source.slice(classStart)
     : source.slice(classStart, classStart + 1 + nextExport);
+}
+
+function importedExportIsMap(modulePath: string, exportName: string, relativePath: string): boolean {
+  const sourcePath = tsSourcePathForImportPath(modulePath, relativePath);
+  return sourcePath !== null && sourceExportIsMap(sourcePath, exportName, new Set());
+}
+
+function sourceExportIsMap(sourcePath: string, exportName: string, seen: Set<string>): boolean {
+  const resolvedPath = path.resolve(sourcePath);
+  if (seen.has(resolvedPath) || !fs.existsSync(resolvedPath)) {
+    return false;
+  }
+  seen.add(resolvedPath);
+  const source = fs.readFileSync(resolvedPath, 'utf8');
+  const escapedName = exportName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (new RegExp(`^export\\s+const\\s+${escapedName}\\s*(?::\\s*(?:Readonly)?Map\\b|=\\s*new\\s+Map\\b)`, 'm').test(source)) {
+    return true;
+  }
+  for (const reexport of source.matchAll(/^export\s+\{([^}]+)\}\s+from\s+['"](.+)['"];?$/gm)) {
+    const exportedNames = splitTopLevelComma(reexport[1]).map((part) => part.trim());
+    const forwardedName = exportedNames.flatMap((part) => {
+      const alias = /^([A-Za-z_$][A-Za-z0-9_$]*)\s+as\s+([A-Za-z_$][A-Za-z0-9_$]*)$/.exec(part);
+      if (alias !== null && alias[2] === exportName) {
+        return [alias[1]];
+      }
+      return part === exportName ? [part] : [];
+    })[0];
+    if (forwardedName !== undefined && sourceExportIsMap(path.resolve(path.dirname(resolvedPath), reexport[2]), forwardedName, seen)) {
+      return true;
+    }
+  }
+  for (const reexportAll of source.matchAll(/^export\s+\*\s+from\s+['"](.+)['"];?$/gm)) {
+    if (sourceExportIsMap(path.resolve(path.dirname(resolvedPath), reexportAll[1]), exportName, seen)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function recordParameterReceiverTypes(
