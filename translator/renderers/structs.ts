@@ -3,6 +3,7 @@ import type {
   SimpleModuleFunction,
   StructModule,
 } from '../model.js';
+import { pythonRoundHelperStatements } from '../patterns/runtime-helpers.js';
 import { isCallableProtocol, renderProtocolDefinition } from './protocols.js';
 
 export { renderPlainClasses } from './plain-classes.js';
@@ -46,6 +47,13 @@ export function renderMsgspecStructModule(relativePath: string, module: StructMo
     lines.push('');
   }
 
+  if (structModuleUsesPyRound(module)) {
+    lines.push(...pythonRoundHelperStatements());
+    if (module.functions.length + module.classes.length + interfaceProtocols.length > 0) {
+      lines.push('');
+    }
+  }
+
   renderSimpleModuleFunctions(lines, module.functions, module.classes.length + interfaceProtocols.length > 0);
 
   renderStructClasses(lines, module.classes);
@@ -62,6 +70,14 @@ export function renderMsgspecStructModule(relativePath: string, module: StructMo
   lines.push('');
   return lines.join('\n');
 }
+
+function structModuleUsesPyRound(module: StructModule): boolean {
+  return JSON.stringify({
+    functions: module.functions,
+    classes: module.classes,
+  }).includes('pyRound(');
+}
+
 export function renderStructClasses(lines: string[], classes: StructModule['classes']): void {
   for (let index = 0; index < classes.length; index += 1) {
     const structClass = classes[index];

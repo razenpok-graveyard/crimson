@@ -62,6 +62,7 @@ import {
   pathJoinHelperStatements,
   pythonEqualsHelperStatements,
   pythonJsonDumpsHelperStatements,
+  pythonRoundHelperStatements,
   pythonReprHelperStatements,
   pythonSplitlinesHelperStatements,
   pythonStringCountHelperStatements,
@@ -762,6 +763,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   }
   if (moduleValueText.includes('pythonStringCount(')) {
     const helperStatements = pythonStringCountHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
+  if (moduleValueText.includes('pyRound(')) {
+    const helperStatements = pythonRoundHelperStatements();
     if (leadingStatements.length > 0) {
       helperStatements.push('');
     }

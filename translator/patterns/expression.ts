@@ -156,6 +156,15 @@ function translateCallCalleeExpression(
   arrayNames: Set<string>,
   validatedTypeAliases: ReadonlySet<string>,
 ): string {
+  const builtinCallee = new Map([
+    ['abs', 'Math.abs'],
+    ['max', 'Math.max'],
+    ['min', 'Math.min'],
+    ['round', 'pyRound'],
+  ]).get(pythonExpression);
+  if (builtinCallee !== undefined) {
+    return builtinCallee;
+  }
   return translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases)
     .replace(/\.append$/, '.push')
     .replace(/\.extend$/, '.push');
@@ -963,6 +972,24 @@ export function translateExpression(
     return `int(${translateExpression(intCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
+  const roundCall = parseCallPrefix(trimmed, 'round');
+  if (roundCall !== null && roundCall.rest === '') {
+    const args = splitTopLevelComma(roundCall.argsText);
+    if (args.length === 1) {
+      return `pyRound(${translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
+  }
+
+  for (const [pythonName, tsName] of [['max', 'Math.max'], ['min', 'Math.min'], ['abs', 'Math.abs']] as const) {
+    const builtinCall = parseCallPrefix(trimmed, pythonName);
+    if (builtinCall !== null && builtinCall.rest === '') {
+      const args = splitTopLevelComma(builtinCall.argsText);
+      if (args.length > 0 && args.every((arg) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(arg) && parseSimpleGeneratorExpression(arg) === null)) {
+        return `${tsName}(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')})`;
+      }
+    }
+  }
+
   for (const primitiveName of ['float']) {
     const primitiveCall = parseCallPrefix(trimmed, primitiveName);
     if (primitiveCall !== null && primitiveCall.rest === '') {
@@ -1115,6 +1142,13 @@ export function translateExpression(
   const zeroArgConstructor = /^([A-Z][A-Za-z0-9_]*)\(\)$/.exec(trimmed);
   if (zeroArgConstructor !== null) {
     return `new ${tsExportNameForPythonName(zeroArgConstructor[1])}()`;
+  }
+  const zeroArgTranslatedConstructor = /^([A-Za-z_][A-Za-z0-9_]*)\(\)$/.exec(trimmed);
+  if (zeroArgTranslatedConstructor !== null) {
+    const translatedCallee = translateIdentifierName(zeroArgTranslatedConstructor[1], nameMap);
+    if (/^[A-Z][A-Za-z0-9_$]*$/.test(translatedCallee)) {
+      return `new ${translatedCallee}()`;
+    }
   }
 
   const dictGet = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*|\{[\s\S]+\})\.get\((.*)\)$/.exec(trimmed);

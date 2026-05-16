@@ -266,6 +266,22 @@ export function pythonStringCountHelperStatements(): string[] {
   ];
 }
 
+export function pythonRoundHelperStatements(): string[] {
+  return [
+    'function pyRound(value: number): number {',
+    '  const floorValue = Math.floor(value);',
+    '  const frac = value - floorValue;',
+    '  if (frac < 0.5) {',
+    '    return floorValue;',
+    '  }',
+    '  if (frac > 0.5) {',
+    '    return floorValue + 1;',
+    '  }',
+    '  return floorValue % 2 === 0 ? floorValue : floorValue + 1;',
+    '}',
+  ];
+}
+
 export function pythonSplitlinesHelperStatements(): string[] {
   return [
     'function pythonSplitlines(text: string): string[] {',
