@@ -1,121 +1,101 @@
 // Port of crimson/modes/typo_mode.py
 
-import { TextureId, getTexture } from '@grim/assets.ts';
-import { type AudioState } from '@grim/audio.ts';
-import { type CrimsonConfig } from '@grim/config.ts';
-import { type ConsoleState } from '@grim/console.ts';
-import { Vec2 } from '@grim/geom.ts';
+import { TextureId } from '@grim/assets.ts';
+import type { AudioState } from '@grim/audio.ts';
+import type { CrimsonConfig } from '@grim/config.ts';
+import type { ConsoleState } from '@grim/console.ts';
+import type { Crand } from '@grim/rand.ts';
 import { InputState } from '@grim/input.ts';
-import { Crand } from '@grim/rand.ts';
-import * as wgl from '@wgl';
+import type { ViewContext } from '@grim/view.ts';
 import { GameMode } from '@crimson/game-modes.ts';
+import { scoresPathForMode } from '@crimson/persistence/highscores.ts';
+import { GameStatusData } from '@crimson/persistence/save-status.ts';
+import type { Replay } from '@crimson/replay/index.ts';
+import { ReplayHeader, ReplayRecorder } from '@crimson/replay/index.ts';
+import { DEFAULT_CHECKPOINT_SAMPLE_RATE } from '@crimson/replay/checkpoints.ts';
 import { advanceUnlockTerrain } from '@crimson/sim/bootstrap.ts';
-import { PlayerInput } from '@crimson/sim/input.ts';
-import { TypoCharCommand, TypoBackspaceCommand, TypoSubmitCommand } from '@crimson/sim/input-providers.ts';
+import type { PlayerInput } from '@crimson/sim/input.ts';
+import { TypoBackspaceCommand, TypoCharCommand, TypoSubmitCommand } from '@crimson/sim/input-providers.ts';
 import { buildTypoSession } from '@crimson/sim/session-builders.ts';
-import { DeterministicSession, type DeterministicSessionTick } from '@crimson/sim/sessions.ts';
+import type { DeterministicSession } from '@crimson/sim/sessions.ts';
+import { loadTypoDictionary, loadTypoHighscoreNames } from '@crimson/typo/names.ts';
 import { buildTypoPlayerInput } from '@crimson/typo/player.ts';
 import { typoShotCounts } from '@crimson/typo/state.ts';
 import { drawMenuCursor } from '@crimson/ui/cursor.ts';
-import { drawHudOverlay, HudRenderContext, hudFlagsForGameMode } from '@crimson/ui/hud.ts';
+import { HudRenderContext, drawHudOverlay, hudFlagsForGameMode } from '@crimson/ui/hud.ts';
 import { drawTypingBox, drawTypoNameLabels } from '@crimson/ui/overlays/typo-run.ts';
-import { BaseGameplayMode } from './base-gameplay-mode.ts';
-import { buildHighscoreRecordForGameOver } from './components/highscore-record-builder.ts';
+import { BaseGameplayMode } from '@crimson/modes/base-gameplay-mode.ts';
+import { buildHighscoreRecordForGameOver } from '@crimson/modes/components/highscore-record-builder.ts';
+import { existsSync, statSync } from 'node:fs';
 
-const WORLD_SIZE = 1024.0;
-const KEY_ENTER = 13;
-const KEY_KP_ENTER = 335;
-const KEY_BACKSPACE = 8;
-const KEY_TAB = 9;
-const KEY_ESCAPE = 27;
+export const WORLD_SIZE = 1024.0;
+
+function _pathJoin(...parts: Array<string | number>): string {
+  const cleaned = parts.map((part, idx) => {
+    const text = String(part);
+    if (idx === 0) {
+      const stripped = text.replace(/\/+$/g, '');
+      if (stripped === '.') {
+        return '';
+      }
+      return text === '/' ? '/' : stripped;
+    }
+    return text.replace(/^\/+|\/+$/g, '');
+  }).filter((part) => part.length > 0);
+  if (cleaned.length === 0) {
+    return '';
+  }
+  if (cleaned[0] === '/') {
+    return `/${cleaned.slice(1).join('/')}`;
+  }
+  return cleaned.join('/');
+}
 
 export class TypoShooterMode extends BaseGameplayMode {
-  constructor(opts: {
-    assetsUrl?: string;
-    baseDir?: string;
-    preserveBugs?: boolean;
-    config: CrimsonConfig;
-    console?: ConsoleState | null;
-    audio?: AudioState | null;
-    audioRng: Crand;
-  }) {
-    super({
-      worldSize: WORLD_SIZE,
-      defaultGameModeId: GameMode.TYPO,
-      demoModeActive: false,
-      questFailRetryCount: 0,
-      hardcore: false,
-      assetsUrl: opts.assetsUrl,
-      baseDir: opts.baseDir,
-      preserveBugs: opts.preserveBugs ?? false,
-      config: opts.config,
-      console: opts.console ?? null,
-      audio: opts.audio ?? null,
-      audioRng: opts.audioRng,
-    });
+
+  constructor(ctx: ViewContext, opts: { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand }) {
+    const config = opts.config;
+    const console = opts.console ?? null;
+    const audio = opts.audio ?? null;
+    const audioRng = opts.audioRng;
+    super(ctx, { worldSize: WORLD_SIZE, defaultGameModeId: GameMode.TYPO, demoModeActive: false, questFailRetryCount: 0, hardcore: false, config: config, console: console, audio: audio, audioRng: audioRng });
     this._simSession = this._newSimSession();
   }
 
-  private _newSimSession(): DeterministicSession {
-    const typo = this.state.typo;
-    return buildTypoSession({
-      world: this.simWorld.worldState,
-      worldSize: this.worldSize,
-      damageScaleByType: this.simWorld.damageScaleByType,
-      detailPreset: 5,
-      violenceDisabled: 0,
-      gameTuneStarted: this.simWorld.gameTuneStarted,
-      dictionaryWords: typo.dictionaryWords,
-      highscoreNames: typo.highscoreNames,
-    });
-  }
-
-  protected _runtimePlayerCount(): number {
-    return 1;
-  }
-
-  protected _replayCheckpointElapsedMs(): number {
-    return this._sessionElapsedMs();
-  }
-
-  protected _replayClaimedStatsComplete(): boolean {
-    return this._gameOverActive;
-  }
-
-  protected _replayClaimedStatsElapsedMs(): number {
-    return int(this._sessionElapsedMs());
-  }
-
-  protected _replayClaimedShots(): [number, number] {
-    return typoShotCounts(this.state.typo);
-  }
-
-  protected _replayOutputBasename(opts: { stamp: string; replay: object }): string {
-    const stamp = opts.stamp;
-    const score = int(this.player.experience);
-    return `typo_${stamp}_score${score}`;
+  _newSimSession(): DeterministicSession {
+    return buildTypoSession({ world: this.simWorld.worldState, worldSize: this.worldSize, damageScaleByType: this.simWorld.damageScaleByType, detailPreset: 5, violenceDisabled: 0, gameTuneStarted: this.simWorld.gameTuneStarted, dictionaryWords: this.state.typo.dictionaryWords, highscoreNames: this.state.typo.highscoreNames });
   }
 
   open(): void {
     super.open();
-
-    // In the WebGL port, typo dictionary and highscore names are loaded
-    // externally and set on state.typo before open() is called, or are
-    // empty tuples if not available.  The native code loads from disk here;
-    // we skip the file I/O and rely on the pre-populated state.
+    const dictionaryPath = _pathJoin(this._baseDir, 'typo_dictionary.txt');
+    let dictionaryWords: readonly string[] = [];
+    if ((existsSync(String(dictionaryPath)) && statSync(String(dictionaryPath)).isFile())) {
+      dictionaryWords = Array.from(loadTypoDictionary(dictionaryPath));
+    }
+    const highscoreNames = Array.from(loadTypoHighscoreNames(scoresPathForMode(this._baseDir, GameMode.TYPO)));
 
     const status = this.state.status;
-    const questUnlockIndex = status !== null ? int(status.questUnlockIndex) : 0;
-
-    const terrain = advanceUnlockTerrain(
-      this.state.rng,
-      { unlockIndex: questUnlockIndex, width: int(this.worldSize), height: int(this.worldSize) },
-    );
-    this.applyTerrainSetup({ terrainSlots: terrain.terrainSlots, seed: terrain.terrainSeed });
+    const terrain = advanceUnlockTerrain(this.state.rng, { unlockIndex: status !== null ? int(status.questUnlockIndex) : 0, width: int(this.worldSize), height: int(this.worldSize) });
+    this.applyTerrainSetup({
+      terrainSlots: terrain.terrainSlots,
+      seed: int(terrain.terrainSeed),
+    });
     this.simWorld.state.rng.srand(int(this.state.rng.state));
-
+    this.state.typo.dictionaryWords = dictionaryWords;
+    this.state.typo.highscoreNames = highscoreNames;
     this._simSession = this._newSimSession();
-    this._replayRecorder = null; // WebGL: no file-based replay recording
+
+    this._replayRecorder = new ReplayRecorder(new ReplayHeader({ gameModeId: GameMode.TYPO, seed: int(this._runResetSeed), tickRate: int(this._gameplayTickRate()), questFailRetryCount: int(this.questFailRetryCount), hardcore: this.hardcore, preserveBugs: this.state.preserveBugs, detailPreset: int(this._deterministicDetailPreset()), violenceDisabled: int(this._deterministicViolenceDisabled()), worldSize: this.worldSize, playerCount: 1, status: status === null ? new GameStatusData() : status.asData(), typoDictionaryWords: Array.from(dictionaryWords), typoHighscoreNames: Array.from(highscoreNames) }));
+    this._replayCheckpointsSampleRate = int(DEFAULT_CHECKPOINT_SAMPLE_RATE);
+    ((target: unknown) => {
+      if (target !== null && typeof target === 'object' && typeof (target as { clear?: unknown }).clear === 'function') {
+        (target as { clear: () => void }).clear();
+      } else if (target !== null && typeof target === 'object' && 'length' in target) {
+        (target as { length: number }).length = 0;
+      }
+    })(this._replayCheckpoints);
+    this._replayCheckpointsLastTick = null;
   }
 
   close(): void {
@@ -123,38 +103,55 @@ export class TypoShooterMode extends BaseGameplayMode {
     super.close();
   }
 
-  protected _handleInput(): void {
+  _runtimePlayerCount(): number {
+    return 1;
+  }
+
+  _buildLocalInputs(opts: { dt: number }): PlayerInput[] {
+    const dt = opts.dt;
+    const _ = dt;
+    return [
+      buildTypoPlayerInput({ aim: this.screenToWorld(this._uiMouse), fireRequested: false, reloadRequested: false }),
+    ];
+  }
+
+  _handleInput(): void {
     if (this._gameOverActive) {
-      if (InputState.wasKeyPressed(KEY_ESCAPE)) {
+      if (InputState.wasKeyPressed(27)) {
         this._action = 'back_to_menu';
         this.closeRequested = true;
       }
       return;
     }
 
-    if (InputState.wasKeyPressed(KEY_TAB)) {
+    if (InputState.wasKeyPressed(9)) {
       this._paused = !this._paused;
     }
 
-    if (InputState.wasKeyPressed(KEY_ESCAPE)) {
+    if (InputState.wasKeyPressed(27)) {
       this._action = 'open_pause_menu';
       return;
     }
   }
 
-  private _enqueueTypingCommands(): void {
-    const enterPressed = InputState.wasKeyPressed(KEY_ENTER) || InputState.wasKeyPressed(KEY_KP_ENTER);
+  _enqueueTypingCommands(): void {
+    const enterPressed = InputState.wasKeyPressed(13) || InputState.wasKeyPressed(335);
     if (enterPressed && this.state.typo.typing.text) {
       this.enqueueInputCommand(new TypoSubmitCommand({ playerIndex: 0 }));
     }
 
     // Native processes at most one keychar per frame via `console_input_poll`.
-    if (InputState.wasKeyPressed(KEY_BACKSPACE) || InputState.wasKeyPressedRepeat(KEY_BACKSPACE)) {
+    if (InputState.wasKeyPressed(8) || InputState.wasKeyPressedRepeat(8)) {
       this.enqueueInputCommand(new TypoBackspaceCommand({ playerIndex: 0 }));
     } else {
-      const codepoint = InputState.getCharPressed();
-      if (codepoint !== KEY_ENTER && codepoint !== KEY_BACKSPACE && codepoint >= 0x20 && codepoint <= 0xFF) {
-        const ch = String.fromCharCode(codepoint);
+      const codepoint = int(InputState.getCharPressed());
+      if (codepoint !== 13 && codepoint !== 8 && 0x20 <= codepoint && codepoint <= 0xFF) {
+        let ch: ReturnType<typeof String.fromCodePoint>;
+        try {
+          ch = String.fromCodePoint(codepoint);
+        } catch (exc) {
+          ch = '';
+        }
         if (ch) {
           this.enqueueInputCommand(new TypoCharCommand({ playerIndex: 0, ch: ch[0] }));
         }
@@ -162,20 +159,13 @@ export class TypoShooterMode extends BaseGameplayMode {
     }
   }
 
-  protected _enterGameOver(): void {
-    if (this._gameOverActive) return;
+  _enterGameOver(): void {
+    if (this._gameOverActive) {
+      return;
+    }
 
     const [shotsFired, shotsHit] = typoShotCounts(this.state.typo);
-    const record = buildHighscoreRecordForGameOver({
-      state: this.state,
-      player: this.player,
-      survivalElapsedMs: int(this._sessionElapsedMs()),
-      creatureKillCount: int(this.creatures.killCount),
-      gameModeId: GameMode.TYPO,
-      shotsFired,
-      shotsHit,
-      clampShotsHit: false,
-    });
+    const record = buildHighscoreRecordForGameOver({ state: this.state, player: this.player, survivalElapsedMs: int(this._sessionElapsedMs()), creatureKillCount: int(this.creatures.killCount), gameModeId: GameMode.TYPO, shotsFired: int(shotsFired), shotsHit: int(shotsHit), clampShotsHit: false });
 
     this._gameOverRecord = record;
     this._gameOverUi.open();
@@ -183,24 +173,45 @@ export class TypoShooterMode extends BaseGameplayMode {
     this._saveReplay();
   }
 
-  protected _buildLocalInputs(_opts: { dt: number }): PlayerInput[] {
-    const aim = this.screenToWorld(this._uiMouse);
-    return [buildTypoPlayerInput({ aim, fireRequested: false, reloadRequested: false })];
+  _replayCheckpointElapsedMs(): number {
+    return this._sessionElapsedMs();
+  }
+
+  _replayClaimedStatsComplete(): boolean {
+    return this._gameOverActive;
+  }
+
+  _replayClaimedStatsElapsedMs(): number {
+    return int(this._sessionElapsedMs());
+  }
+
+  _replayClaimedShots(): [number, number] {
+    return typoShotCounts(this.state.typo);
+  }
+
+  _replayOutputBasename(opts: { stamp: string; replay: Replay }): string {
+    const stamp = opts.stamp;
+    const replay = opts.replay;
+    const _ = replay;
+    const score = int(this.player.experience);
+    return `typo_${stamp}_score${score}`;
   }
 
   update(dt: number): void {
     this._updateAudio(dt);
 
-    const [frameDt] = this._tickFrame(dt);
+    dt = this._tickFrame(dt)[0];
     this._handleInput();
-    if (this._action === 'open_pause_menu') return;
-
-    if (this._gameOverActive) {
-      this._updateGameOverUi(frameDt);
+    if (this._action === 'open_pause_menu') {
       return;
     }
 
-    const dtWorld = this._paused ? 0.0 : frameDt;
+    if (this._gameOverActive) {
+      this._updateGameOverUi(dt);
+      return;
+    }
+
+    const dtWorld = this._paused ? 0.0 : dt;
 
     // Native: delay game-over transition until the trooper death animation finishes
     // (checks `death_timer < 0.0` in the main gameplay loop).
@@ -210,7 +221,7 @@ export class TypoShooterMode extends BaseGameplayMode {
       }
       if (this.player.deathTimer < 0.0) {
         this._enterGameOver();
-        this._updateGameOverUi(frameDt);
+        this._updateGameOverUi(dt);
         return;
       }
       return;
@@ -220,32 +231,65 @@ export class TypoShooterMode extends BaseGameplayMode {
       this._enqueueTypingCommands();
     }
 
-    if (dtWorld <= 0.0) return;
+    if (dtWorld <= 0.0) {
+      return;
+    }
 
     const session = this._simSession;
-    if (session === null) return;
+    if (session === null) {
+      return;
+    }
+
+    const _onCheckpoint = (tickIndex: number, tick: any): void => {
+      this._recordReplayCheckpointFromTick({
+        tickIndex: int(tickIndex),
+        tick: tick,
+      });
+    };
 
     this._runDeterministicSessionTicks({
       dtFrame: dtWorld,
-      session,
+      session: session,
       recorder: this._replayRecorder,
-      onTick: (_tick: DeterministicSessionTick, _tickIndex: number | null) => false,
-      onCheckpoint: (tickIndex: number, tick: DeterministicSessionTick) => {
-        this._recordReplayCheckpointFromTick({ tickIndex, tick });
-      },
+      onTick: (tick, tickIndex) => false,
+      onCheckpoint: _onCheckpoint,
     });
     // Death/game-over flow is handled at the start of the next frame so the
     // trooper death animation can play before the UI slides in.
+  }
+
+  _drawGameCursor(): void {
+    const resources = this.renderResources.resources;
+    const mousePos = this._uiMouse;
+    drawMenuCursor(
+      resources.texture(TextureId.PARTICLES),
+      resources.texture(TextureId.UI_CURSOR),
+      { pos: mousePos, pulseTime: this._cursorPulseTime },
+    );
+  }
+
+  _drawNameLabels(): void {
+    drawTypoNameLabels({
+      creatures: this.creatures.entries,
+      names: this.state.typo.names.names,
+      worldToScreen: this.worldToScreen,
+      drawText: (text, pos, color, scale) => this._drawUiText(text, pos, color, scale),
+      measureTextWidth: (text, scale) => this._uiTextWidth(text, scale),
+    });
+  }
+
+  _drawTypingBox(): void {
+    drawTypingBox(
+      this.renderResources.resources.texture(TextureId.UI_IND_PANEL),
+      { text: this.state.typo.typing.text, cursorPulseTime: this._cursorPulseTime, drawText: (text, pos, color, scale) => this._drawUiText(text, pos, color, scale), measureTextWidth: (text, scale) => this._uiTextWidth(text, scale) },
+    );
   }
 
   draw(): void {
     const alive = this.player.health > 0.0;
     const showGameplayUi = alive && !this._gameOverActive;
 
-    this._drawWorld({
-      drawAimIndicators: showGameplayUi,
-      entityAlpha: this._worldEntityAlpha(),
-    });
+    this._drawWorld({ drawAimIndicators: showGameplayUi, entityAlpha: this._worldEntityAlpha() });
     this._drawScreenFade();
 
     if (showGameplayUi) {
@@ -255,24 +299,10 @@ export class TypoShooterMode extends BaseGameplayMode {
     if (showGameplayUi) {
       const hudFlags = hudFlagsForGameMode(this._configGameModeId());
       this._drawTargetHealthBar();
-      drawHudOverlay(new HudRenderContext({
-        resources: this.renderResources.resources,
-        state: this._hudState,
-        font: this._small,
-        alpha: 1.0,
-        showHealth: hudFlags.showHealth,
-        showWeapon: hudFlags.showWeapon,
-        showXp: hudFlags.showXp,
-        showTime: hudFlags.showTime,
-        showQuestHud: hudFlags.showQuestHud,
-        smallIndicators: this._hudSmallIndicators(),
-      }), {
-        player: this.player,
-        players: this.simWorld.players,
-        bonusHud: this.state.bonusHud,
-        elapsedMs: this._sessionElapsedMs(),
-        frameDtMs: this._lastDtMs,
-      });
+      drawHudOverlay(
+        new HudRenderContext({ resources: this.renderResources.resources, state: this._hudState, font: this._small, showHealth: hudFlags.showHealth, showWeapon: hudFlags.showWeapon, showXp: hudFlags.showXp, showTime: hudFlags.showTime, showQuestHud: hudFlags.showQuestHud, smallIndicators: this._hudSmallIndicators() }),
+        { player: this.player, players: this.simWorld.players, bonusHud: this.state.bonusHud, elapsedMs: this._sessionElapsedMs(), frameDtMs: this._lastDtMs },
+      );
     }
 
     if (showGameplayUi) {
@@ -290,41 +320,5 @@ export class TypoShooterMode extends BaseGameplayMode {
         });
       }
     }
-  }
-
-  private _drawGameCursor(): void {
-    const resources = this.renderResources.resources;
-    const mousePos = this._uiMouse;
-    drawMenuCursor(
-      getTexture(resources, TextureId.PARTICLES),
-      getTexture(resources, TextureId.UI_CURSOR),
-      { pos: mousePos, pulseTime: this._cursorPulseTime },
-    );
-  }
-
-  private _drawNameLabels(): void {
-    drawTypoNameLabels({
-      creatures: this.creatures.entries,
-      names: this.state.typo.names.names,
-      worldToScreen: (worldPos: Vec2) => this.worldToScreen(worldPos),
-      drawText: (text: string, pos: Vec2, color: wgl.Color, scale: number) =>
-        this._drawUiText(text, pos, color, scale),
-      measureTextWidth: (text: string, scale: number) => this._uiTextWidth(text, scale),
-    });
-  }
-
-  private _drawTypingBox(): void {
-    const panelTexture = getTexture(this.renderResources.resources, TextureId.UI_IND_PANEL);
-    if (panelTexture === null) return;
-    drawTypingBox(
-      panelTexture,
-      {
-        text: this.state.typo.typing.text,
-        cursorPulseTime: this._cursorPulseTime,
-        drawText: (text: string, pos: Vec2, color: wgl.Color, scale: number) =>
-          this._drawUiText(text, pos, color, scale),
-        measureTextWidth: (text: string, scale: number) => this._uiTextWidth(text, scale),
-      },
-    );
   }
 }

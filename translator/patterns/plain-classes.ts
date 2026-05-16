@@ -15,6 +15,7 @@ import {
 } from './common.js';
 import {
   arrayValueMapNameMarker,
+  classBaseTypeMarker,
   classFieldTypeMarker,
   functionReturnTypeMarker,
   instanceMethodSignatureMarker,
@@ -166,7 +167,9 @@ export function parsePlainClass(
     }
     fieldNameMap.set(classField.pythonName, classField.field.name);
     recordPlainClassFieldMarkers(classField.pythonName, classField.field.name, classField.field.typeExpression, fieldArrayNames, fieldMapNames);
-    fieldMap.set(classField.field.name, classField.field);
+    if (!plainClassBaseDeclaresField(extendsName, classField.field.name, moduleNameMap)) {
+      fieldMap.set(classField.field.name, classField.field);
+    }
     nextIndex = classField.nextIndex;
     while (nextIndex < lines.length && lines[nextIndex].trim() === '') {
       nextIndex += 1;
@@ -246,12 +249,14 @@ export function parsePlainClass(
         if (multilineConstructorCall !== null) {
           recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, fieldArrayNames, fieldMapNames);
           recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, constructorArrayNames, constructorMapNames);
-          fieldMap.set(fieldName, {
-            name: fieldName,
-            typeExpression,
-            readonly: false,
-            private: plainClassFieldIsPrivate(pythonFieldName),
-          });
+          if (!plainClassBaseDeclaresField(extendsName, fieldName, moduleNameMap)) {
+            fieldMap.set(fieldName, {
+              name: fieldName,
+              typeExpression,
+              readonly: false,
+              private: plainClassFieldIsPrivate(pythonFieldName),
+            });
+          }
           constructorNameMap.set(pythonFieldName, fieldName);
           const translated = translateStraightLineStatement(
             lines,
@@ -278,12 +283,14 @@ export function parsePlainClass(
           : translateExpression(valueText, constructorNameMap, constructorArrayNames, new Set(), constructorMapNames);
         recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, fieldArrayNames, fieldMapNames);
         recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, constructorArrayNames, constructorMapNames);
-        fieldMap.set(fieldName, {
-          name: fieldName,
-          typeExpression,
-          readonly: false,
-          private: plainClassFieldIsPrivate(pythonFieldName),
-        });
+        if (!plainClassBaseDeclaresField(extendsName, fieldName, moduleNameMap)) {
+          fieldMap.set(fieldName, {
+            name: fieldName,
+            typeExpression,
+            readonly: false,
+            private: plainClassFieldIsPrivate(pythonFieldName),
+          });
+        }
         constructorStatements.push(`this.${fieldName} = ${value};`);
         constructorNameMap.set(pythonFieldName, fieldName);
         bodyIndex += 1;
@@ -315,6 +322,9 @@ export function parsePlainClass(
   const classNameMap = new Map(moduleNameMap);
   classNameMap.set(receiverTypeNameMarker('self'), className);
   classNameMap.set(receiverTypeNameMarker('this'), className);
+  if (extendsName !== undefined) {
+    classNameMap.set(classBaseTypeMarker(className), extendsName);
+  }
   recordPlainClassFieldTypes(classNameMap, className, fieldMap);
   recordPlainClassMethodHeaders(lines, bodyIndex, className, classNameMap);
   const pendingMethodComments: string[] = [];
@@ -470,6 +480,14 @@ export function parsePlainClass(
 
 function plainClassFieldIsPrivate(pythonName: string): boolean {
   return pythonName.startsWith('_') && pythonName !== '_timeline_ms';
+}
+
+function plainClassBaseDeclaresField(
+  extendsName: string | undefined,
+  fieldName: string,
+  nameMap: ReadonlyMap<string, string>,
+): boolean {
+  return extendsName !== undefined && nameMap.has(classFieldTypeMarker(extendsName, fieldName));
 }
 
 function recordPlainClassFieldTypes(

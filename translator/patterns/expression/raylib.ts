@@ -101,7 +101,7 @@ export function raylibKeyboardKeyCode(name: string): number | null {
     KEY_KP_MULTIPLY: 106,
     KEY_KP_SUBTRACT: 109,
     KEY_KP_ADD: 107,
-    KEY_KP_ENTER: 13,
+    KEY_KP_ENTER: 335,
     KEY_KP_EQUAL: 187,
   };
   return keyCodes[name] ?? null;

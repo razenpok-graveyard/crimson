@@ -1121,6 +1121,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     || moduleValueText.includes('writeFileSync(')
     || moduleValueText.includes('appendFileSync(')
     || moduleValueText.includes('existsSync(')
+    || moduleValueText.includes('statSync(')
     || moduleValueText.includes('_openTextFile(')
     || moduleValueText.includes('_mkdirParents(')
     || moduleValueText.includes('_globPath(')
@@ -1132,6 +1133,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         ...(moduleValueText.includes('writeFileSync(') || moduleValueText.includes('_openTextFile(') ? ['writeFileSync'] : []),
         ...(moduleValueText.includes('appendFileSync(') || moduleValueText.includes('_openTextFile(') ? ['appendFileSync'] : []),
         ...(moduleValueText.includes('existsSync(') ? ['existsSync'] : []),
+        ...(moduleValueText.includes('statSync(') ? ['statSync'] : []),
         ...(moduleValueText.includes('_mkdirParents(') ? ['mkdirSync'] : []),
         ...(moduleValueText.includes('_globPath(') ? ['readdirSync'] : []),
       ],

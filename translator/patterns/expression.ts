@@ -6,6 +6,7 @@ import {
   tsStringLiteral,
 } from './common.js';
 import {
+  classBaseTypeMarker,
   classFieldTypeMarker,
   colorNameMarker,
   dateNameMarker,
@@ -64,6 +65,7 @@ import {
 
 export {
   arrayValueMapNameMarker,
+  classBaseTypeMarker,
   classFieldTypeMarker,
   colorNameMarker,
   dateNameMarker,
@@ -452,6 +454,21 @@ function parseFunctionCallSignature(signatureText: string | undefined): Function
   }
 }
 
+function parseRaylibMethodCall(
+  pythonExpression: string,
+  methodNames: readonly string[],
+): { method: string; argsText: string } | null {
+  for (const namespace of ['rl', 'rd', 'wgl']) {
+    for (const methodName of methodNames) {
+      const call = parseCallPrefix(pythonExpression, `${namespace}.${methodName}`);
+      if (call !== null && call.rest === '') {
+        return { method: methodName, argsText: call.argsText };
+      }
+    }
+  }
+  return null;
+}
+
 function translateStaticMethodCalleeIfKnown(pythonCallee: string, nameMap: Map<string, string>): string | null {
   const dotted = /^([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(pythonCallee);
   if (dotted === null) {
@@ -635,12 +652,12 @@ export function translateExpression(
       : 'InputState.getKeyPressed()';
   }
 
-  const raylibKeyInputCall = /^(?:r[dl]|wgl)\.(is_key_pressed|isKeyPressed|is_key_pressed_repeat|isKeyPressedRepeat|is_key_down|isKeyDown)\((.*)\)$/.exec(trimmed);
+  const raylibKeyInputCall = parseRaylibMethodCall(trimmed, ['is_key_pressed', 'isKeyPressed', 'is_key_pressed_repeat', 'isKeyPressedRepeat', 'is_key_down', 'isKeyDown']);
   if (raylibKeyInputCall !== null) {
-    const method = raylibKeyInputCall[1].includes('repeat') || raylibKeyInputCall[1].includes('Repeat')
+    const method = raylibKeyInputCall.method.includes('repeat') || raylibKeyInputCall.method.includes('Repeat')
       ? 'wasKeyPressedRepeat'
-      : raylibKeyInputCall[1].includes('down') || raylibKeyInputCall[1].includes('Down') ? 'isKeyDown' : 'wasKeyPressed';
-    return `InputState.${method}(${translateExpression(raylibKeyInputCall[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+      : raylibKeyInputCall.method.includes('down') || raylibKeyInputCall.method.includes('Down') ? 'isKeyDown' : 'wasKeyPressed';
+    return `InputState.${method}(${translateExpression(raylibKeyInputCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
   const raylibGetMousePositionCall = /^(?:r[dl]|wgl)\.(?:get_mouse_position|getMousePosition)\(\)$/.exec(trimmed);
@@ -653,12 +670,12 @@ export function translateExpression(
     return 'InputState.mouseWheelDelta()';
   }
 
-  const raylibMouseInputCall = /^(?:r[dl]|wgl)\.(is_mouse_button_pressed|isMouseButtonPressed|is_mouse_button_down|isMouseButtonDown)\((.*)\)$/.exec(trimmed);
+  const raylibMouseInputCall = parseRaylibMethodCall(trimmed, ['is_mouse_button_pressed', 'isMouseButtonPressed', 'is_mouse_button_down', 'isMouseButtonDown']);
   if (raylibMouseInputCall !== null) {
-    const method = raylibMouseInputCall[1].includes('down') || raylibMouseInputCall[1].includes('Down')
+    const method = raylibMouseInputCall.method.includes('down') || raylibMouseInputCall.method.includes('Down')
       ? 'isMouseButtonDown'
       : 'wasMouseButtonPressed';
-    return `InputState.${method}(${translateExpression(raylibMouseInputCall[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    return `InputState.${method}(${translateExpression(raylibMouseInputCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
   const raylibMouseButton = /^(?:r[dl]|wgl)\.MouseButton\.(MOUSE_BUTTON_[A-Z_]+)$/.exec(trimmed);
@@ -744,6 +761,15 @@ export function translateExpression(
     const receiver = translateExpression(pathExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (pathExistsCall[1] !== undefined || arrayNames.has(pathNameMarker(pathExpression)) || arrayNames.has(pathNameMarker(receiver))) {
       return `existsSync(String(${receiver}))`;
+    }
+  }
+
+  const pathIsFileCall = /^(?:Path\((.+)\)|(.+))\.is_file\(\)$/.exec(trimmed);
+  if (pathIsFileCall !== null) {
+    const pathExpression = pathIsFileCall[1] ?? pathIsFileCall[2];
+    const receiver = translateExpression(pathExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (pathIsFileCall[1] !== undefined || arrayNames.has(pathNameMarker(pathExpression)) || arrayNames.has(pathNameMarker(receiver))) {
+      return `(existsSync(String(${receiver})) && statSync(String(${receiver})).isFile())`;
     }
   }
 
@@ -2525,6 +2551,15 @@ function translatedMemberNameForReceiver(
     : null;
   const directMember = tsMemberNameForPythonName(pythonMember);
   const receiverType = nameMap.get(receiverTypeNameMarker(pythonReceiver)) ?? nameMap.get(receiverTypeNameMarker(tsReceiver));
+  const ownReceiver = pythonReceiver === 'self' || tsReceiver === 'this';
+  if (
+    publicMember !== null
+    && receiverType !== undefined
+    && !ownReceiver
+    && nameMap.has(classFieldTypeMarker(receiverType, publicMember))
+  ) {
+    return publicMember;
+  }
   if (
     receiverType !== undefined
     && nameMap.has(classFieldTypeMarker(receiverType, directMember))
@@ -3985,7 +4020,12 @@ function translateMixedKeywordCallWithKnownInstanceSignature(
   for (const positionalName of knownMethod.signature.positional.slice(args.length)) {
     const keywordPart = keywordParts.find((part) => (
       !consumedKeywords.has(part.pythonName)
-      && (part.pythonName === positionalName || part.tsName === positionalName)
+      && (
+        part.pythonName === positionalName
+        || part.tsName === positionalName
+        || `_${part.pythonName}` === positionalName
+        || `_${part.tsName}` === positionalName
+      )
     ));
     if (keywordPart === undefined) {
       break;
@@ -4021,10 +4061,28 @@ function knownInstanceMethodCall(
     return null;
   }
   const methodName = tsMemberNameForPythonName(dotted[2]);
-  const signature = parseFunctionCallSignature(nameMap.get(instanceMethodSignatureMarker(receiverType, methodName)));
+  const signature = parseFunctionCallSignature(inheritedInstanceMethodSignature(receiverType, methodName, nameMap));
   return signature === null
     ? null
     : { callee: `${receiver}.${methodName}`, signature };
+}
+
+function inheritedInstanceMethodSignature(
+  receiverType: string,
+  methodName: string,
+  nameMap: Map<string, string>,
+): string | undefined {
+  let currentType: string | undefined = receiverType;
+  const seen = new Set<string>();
+  while (currentType !== undefined && !seen.has(currentType)) {
+    seen.add(currentType);
+    const signature = nameMap.get(instanceMethodSignatureMarker(currentType, methodName));
+    if (signature !== undefined) {
+      return signature;
+    }
+    currentType = nameMap.get(classBaseTypeMarker(currentType));
+  }
+  return undefined;
 }
 
 function translateMixedKeywordCallWithRest(

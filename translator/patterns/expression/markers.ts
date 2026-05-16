@@ -82,6 +82,10 @@ export function classFieldTypeMarker(className: string, fieldName: string): stri
   return `__class_field_type__:${className}:${fieldName}`;
 }
 
+export function classBaseTypeMarker(className: string): string {
+  return `__class_base_type__:${className}`;
+}
+
 export function functionReturnTypeMarker(functionName: string): string {
   return `__function_return_type__:${functionName}`;
 }
