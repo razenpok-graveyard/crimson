@@ -117,6 +117,18 @@ export function translatePositionalCallExpression(
   if (pythonCallee.endsWith('.extend') && args.length === 1) {
     return `${callee}(...${args[0]})`;
   }
+  const drawRectangleRec = /^(r[dl]|wgl)\.drawRectangleRec$/.exec(callee);
+  if (drawRectangleRec !== null && positionalParts.length === 2) {
+    const rectangleCall = /^(?:r[dl]\.)?Rectangle\((.*)\)$/.exec(positionalParts[0].trim());
+    if (rectangleCall !== null) {
+      const rectArgs = splitTopLevelComma(rectangleCall[1]);
+      if (rectArgs.length === 4) {
+        return `${drawRectangleRec[1]}.drawRectangle(${rectArgs.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')}, ${args[1]})`;
+      }
+    }
+    const rect = translateExpression(positionalParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return `${drawRectangleRec[1]}.drawRectangle(${rect}.x, ${rect}.y, ${rect}.w, ${rect}.h, ${args[1]})`;
+  }
   const reorderedArgs = (callee === 'rl.rlSetBlendFactorsSeparate' || callee === 'wgl.rlSetBlendFactorsSeparate') && args.length === 6
     ? [args[0], args[1], args[4], args[2], args[3], args[5]]
     : args;
