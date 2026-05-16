@@ -5,6 +5,50 @@ import {
   splitTopLevelComma,
   tsStringLiteral,
 } from './common.js';
+import {
+  colorNameMarker,
+  dateNameMarker,
+  instanceMethodSignatureMarker,
+  nullableNameMarker,
+  objectNameMarker,
+  pathNameMarker,
+  pythonMappingNameMarker,
+  receiverTypeNameMarker,
+  rectangleNameMarker,
+  setNameMarker,
+  staticClassMethodNameMarker,
+  stringNameMarker,
+  tupleElementArrayNameMarker,
+  tupleKeyMapNameMarker,
+  vectorArrayNameMarker,
+  vectorNameMarker,
+} from './expression/markers.js';
+import {
+  raylibKeyboardKeyCode,
+  raylibNamedColor,
+} from './expression/raylib.js';
+
+export {
+  arrayValueMapNameMarker,
+  colorNameMarker,
+  dateNameMarker,
+  instanceMethodSignatureMarker,
+  nullableNameMarker,
+  numberArrayNameMarker,
+  objectNameMarker,
+  pathArrayNameMarker,
+  pathNameMarker,
+  pythonMappingNameMarker,
+  receiverTypeNameMarker,
+  rectangleNameMarker,
+  setNameMarker,
+  staticClassMethodNameMarker,
+  stringNameMarker,
+  tupleElementArrayNameMarker,
+  tupleKeyMapNameMarker,
+  vectorArrayNameMarker,
+  vectorNameMarker,
+} from './expression/markers.js';
 
 export function tsRegExpExpression(pythonLiteral: string): string {
   const literal = /^([rRfF]{0,2})(["'])([\s\S]*)\2$/.exec(pythonLiteral);
@@ -246,82 +290,6 @@ function translateInlineLambdaExpression(
     }
   }
   return `(${params.join(', ')}) => ${translateExpression(lambda[2], lambdaNameMap, arrayNames, validatedTypeAliases, mapNames)}`;
-}
-
-export function vectorNameMarker(name: string): string {
-  return `__vector__:${name}`;
-}
-
-export function vectorArrayNameMarker(name: string): string {
-  return `__vector_array__:${name}`;
-}
-
-export function stringNameMarker(name: string): string {
-  return `__string__:${name}`;
-}
-
-export function colorNameMarker(name: string): string {
-  return `__color__:${name}`;
-}
-
-export function rectangleNameMarker(name: string): string {
-  return `__rectangle__:${name}`;
-}
-
-export function setNameMarker(name: string): string {
-  return `__set__:${name}`;
-}
-
-export function objectNameMarker(name: string): string {
-  return `__object__:${name}`;
-}
-
-export function pythonMappingNameMarker(name: string): string {
-  return `__python_mapping__:${name}`;
-}
-
-export function dateNameMarker(name: string): string {
-  return `__date__:${name}`;
-}
-
-export function pathNameMarker(name: string): string {
-  return `__path__:${name}`;
-}
-
-export function pathArrayNameMarker(name: string): string {
-  return `__path_array__:${name}`;
-}
-
-export function nullableNameMarker(name: string): string {
-  return `__nullable__:${name}`;
-}
-
-export function tupleKeyMapNameMarker(name: string): string {
-  return `__tuple_key_map__:${name}`;
-}
-
-export function arrayValueMapNameMarker(name: string): string {
-  return `__array_value_map__:${name}`;
-}
-
-export function numberArrayNameMarker(name: string): string {
-  return `__number_array__:${name}`;
-}
-
-export function tupleElementArrayNameMarker(name: string): string {
-  return `__tuple_element_array__:${name}`;
-}
-
-export function receiverTypeNameMarker(name: string): string {
-  return `__receiver_type__:${name}`;
-}
-
-export function staticClassMethodNameMarker(className: string, methodName: string): string {
-  return `__static_class_method__:${className}:${methodName}`;
-}
-
-export function instanceMethodSignatureMarker(className: string, methodName: string): string {
-  return `__instance_method_signature__:${className}:${methodName}`;
 }
 
 function translateConditionalTestExpression(
@@ -2013,147 +1981,6 @@ function replaceKnownRectangleDimensions(tsExpression: string, arrayNames: Set<s
 function looksLikeMappingConstantName(pythonName: string): boolean {
   const finalName = pythonName.split('.').at(-1) ?? pythonName;
   return /^[A-Z][A-Z0-9_]*_BY_[A-Z0-9_]+$/.test(finalName);
-}
-
-function raylibKeyboardKeyCode(name: string): number | null {
-  const keyCodes: Record<string, number> = {
-    KEY_NULL: 0,
-    KEY_SPACE: 32,
-    KEY_APOSTROPHE: 222,
-    KEY_COMMA: 188,
-    KEY_MINUS: 189,
-    KEY_PERIOD: 190,
-    KEY_SLASH: 191,
-    KEY_ZERO: 48,
-    KEY_ONE: 49,
-    KEY_TWO: 50,
-    KEY_THREE: 51,
-    KEY_FOUR: 52,
-    KEY_FIVE: 53,
-    KEY_SIX: 54,
-    KEY_SEVEN: 55,
-    KEY_EIGHT: 56,
-    KEY_NINE: 57,
-    KEY_SEMICOLON: 186,
-    KEY_EQUAL: 187,
-    KEY_A: 65,
-    KEY_B: 66,
-    KEY_C: 67,
-    KEY_D: 68,
-    KEY_E: 69,
-    KEY_F: 70,
-    KEY_G: 71,
-    KEY_H: 72,
-    KEY_I: 73,
-    KEY_J: 74,
-    KEY_K: 75,
-    KEY_L: 76,
-    KEY_M: 77,
-    KEY_N: 78,
-    KEY_O: 79,
-    KEY_P: 80,
-    KEY_Q: 81,
-    KEY_R: 82,
-    KEY_S: 83,
-    KEY_T: 84,
-    KEY_U: 85,
-    KEY_V: 86,
-    KEY_W: 87,
-    KEY_X: 88,
-    KEY_Y: 89,
-    KEY_Z: 90,
-    KEY_LEFT_BRACKET: 219,
-    KEY_BACKSLASH: 220,
-    KEY_RIGHT_BRACKET: 221,
-    KEY_GRAVE: 192,
-    KEY_ESCAPE: 27,
-    KEY_ENTER: 13,
-    KEY_TAB: 9,
-    KEY_BACKSPACE: 8,
-    KEY_INSERT: 45,
-    KEY_DELETE: 46,
-    KEY_RIGHT: 39,
-    KEY_LEFT: 37,
-    KEY_DOWN: 40,
-    KEY_UP: 38,
-    KEY_PAGE_UP: 33,
-    KEY_PAGE_DOWN: 34,
-    KEY_HOME: 36,
-    KEY_END: 35,
-    KEY_CAPS_LOCK: 20,
-    KEY_SCROLL_LOCK: 145,
-    KEY_NUM_LOCK: 144,
-    KEY_PRINT_SCREEN: 44,
-    KEY_PAUSE: 19,
-    KEY_F1: 112,
-    KEY_F2: 113,
-    KEY_F3: 114,
-    KEY_F4: 115,
-    KEY_F5: 116,
-    KEY_F6: 117,
-    KEY_F7: 118,
-    KEY_F8: 119,
-    KEY_F9: 120,
-    KEY_F10: 121,
-    KEY_F11: 122,
-    KEY_F12: 123,
-    KEY_LEFT_SHIFT: 16,
-    KEY_LEFT_CONTROL: 17,
-    KEY_LEFT_ALT: 18,
-    KEY_RIGHT_SHIFT: 16,
-    KEY_RIGHT_CONTROL: 17,
-    KEY_RIGHT_ALT: 18,
-    KEY_KP_0: 96,
-    KEY_KP_1: 97,
-    KEY_KP_2: 98,
-    KEY_KP_3: 99,
-    KEY_KP_4: 100,
-    KEY_KP_5: 101,
-    KEY_KP_6: 102,
-    KEY_KP_7: 103,
-    KEY_KP_8: 104,
-    KEY_KP_9: 105,
-    KEY_KP_DECIMAL: 110,
-    KEY_KP_DIVIDE: 111,
-    KEY_KP_MULTIPLY: 106,
-    KEY_KP_SUBTRACT: 109,
-    KEY_KP_ADD: 107,
-    KEY_KP_ENTER: 13,
-    KEY_KP_EQUAL: 187,
-  };
-  return keyCodes[name] ?? null;
-}
-
-function raylibNamedColor(name: string): [number, number, number, number] | null {
-  const colors: Record<string, [number, number, number, number]> = {
-    LIGHTGRAY: [200 / 255, 200 / 255, 200 / 255, 1],
-    GRAY: [130 / 255, 130 / 255, 130 / 255, 1],
-    DARKGRAY: [80 / 255, 80 / 255, 80 / 255, 1],
-    YELLOW: [253 / 255, 249 / 255, 0, 1],
-    GOLD: [1, 203 / 255, 0, 1],
-    ORANGE: [1, 161 / 255, 0, 1],
-    PINK: [1, 109 / 255, 194 / 255, 1],
-    RED: [230 / 255, 41 / 255, 55 / 255, 1],
-    MAROON: [190 / 255, 33 / 255, 55 / 255, 1],
-    GREEN: [0, 228 / 255, 48 / 255, 1],
-    LIME: [0, 158 / 255, 47 / 255, 1],
-    DARKGREEN: [0, 117 / 255, 44 / 255, 1],
-    SKYBLUE: [102 / 255, 191 / 255, 1, 1],
-    BLUE: [0, 121 / 255, 241 / 255, 1],
-    DARKBLUE: [0, 82 / 255, 172 / 255, 1],
-    PURPLE: [200 / 255, 122 / 255, 1, 1],
-    VIOLET: [135 / 255, 60 / 255, 190 / 255, 1],
-    DARKPURPLE: [112 / 255, 31 / 255, 126 / 255, 1],
-    BEIGE: [211 / 255, 176 / 255, 131 / 255, 1],
-    BROWN: [127 / 255, 106 / 255, 79 / 255, 1],
-    DARKBROWN: [76 / 255, 63 / 255, 47 / 255, 1],
-    WHITE: [1, 1, 1, 1],
-    BLACK: [0, 0, 0, 1],
-    BLANK: [0, 0, 0, 0],
-    MAGENTA: [1, 0, 1, 1],
-    RAYWHITE: [245 / 255, 245 / 255, 245 / 255, 1],
-  };
-  return colors[name] ?? null;
 }
 
 function shouldPreservePrivateDottedName(pythonName: string): boolean {
