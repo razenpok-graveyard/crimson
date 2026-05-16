@@ -56,9 +56,12 @@ export function tsFStringTemplateContent(
           : baseExpression === 'exc'
             ? 'exc instanceof Error ? exc.message : String(exc)'
             : baseExpression;
-        const zeroPaddedInteger = format === null ? null : /^0(\d+)d$/.exec(format);
+        const zeroPaddedInteger = format === null ? null : /^0(\d+)([dx])$/.exec(format);
         if (zeroPaddedInteger !== null) {
-          translated += `\${String(${translatedExpression}).padStart(${zeroPaddedInteger[1]}, '0')}`;
+          const formatted = zeroPaddedInteger[2] === 'x'
+            ? `Math.trunc(${translatedExpression}).toString(16)`
+            : `String(${translatedExpression})`;
+          translated += `\${${formatted}.padStart(${zeroPaddedInteger[1]}, '0')}`;
         } else {
           translated += `\${${translatedExpression}}`;
         }
@@ -620,6 +623,13 @@ export function translateExpression(
     return translateBooleanCast(boolCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames);
   }
 
+  if (trimmed.startsWith('(') && matchingCloseParen(trimmed, 0) === trimmed.length - 1) {
+    const inner = trimmed.slice(1, -1).trim();
+    if (inner.includes('len(') && splitTopLevelComma(inner).length === 1) {
+      return `(${translateExpression(inner, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
+  }
+
   const lengthComparison = /^(.+?) (<=|>=|<|>|==|!=) (.+)$/.exec(trimmed);
   if (
     lengthComparison !== null
@@ -836,12 +846,16 @@ export function translateExpression(
       if (argsText === '') {
         return '[]';
       }
-      const generator = /^(.+?)(?:,)? for ([A-Za-z_][A-Za-z0-9_]*) in (.+)$/.exec(argsText);
+      const generator = parseSimpleGeneratorExpression(argsText);
       if (generator !== null) {
-        const itemName = tsExportNameForPythonName(generator[2]);
+        const itemName = tsExportNameForPythonName(generator.itemName);
         const itemNameMap = new Map(nameMap);
-        itemNameMap.set(generator[2], itemName);
-        return `${translateExpression(generator[3], nameMap, arrayNames, validatedTypeAliases, mapNames)}.map((${itemName}) => ${translateExpression(generator[1], itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+        itemNameMap.set(generator.itemName, itemName);
+        const iterable = iterableExpressionForIteration(generator.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames);
+        const filtered = generator.condition === null
+          ? iterable
+          : `${iterable}.filter((${itemName}) => ${translateExpression(generator.condition!, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+        return `${filtered}.map((${itemName}) => ${translateExpression(generator.expression, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
       }
       return `Array.from(${translateExpression(argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
     }
@@ -1058,7 +1072,8 @@ export function translateExpression(
       return 'new Set()';
     }
     if (args.length === 1) {
-      return `new Set(${translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+      const iterable = translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      return mapNames.has(iterable) ? `new Set(${iterable}.keys())` : `new Set(${iterable})`;
     }
   }
 
@@ -1644,6 +1659,20 @@ export function translateExpression(
       true,
     );
   }
+  if (
+    simplePositionalCall !== null
+    && simplePositionalCall.args.every((arg) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(arg))
+    && !(simplePositionalCall.args.length === 0 && simplePositionalCall.callee.includes('.'))
+  ) {
+    return translatePositionalCallExpression(
+      simplePositionalCall.callee,
+      simplePositionalCall.args,
+      nameMap,
+      arrayNames,
+      validatedTypeAliases,
+      mapNames,
+    );
+  }
 
   const withoutPrimitiveWrappers = stripPrimitiveCallWrappers(trimmed);
   if (withoutPrimitiveWrappers !== trimmed) {
@@ -2036,10 +2065,14 @@ function tsComparisonOperator(operator: string): string {
 }
 
 function comparisonNeedsPythonEquality(left: string, right: string, arrayNames: ReadonlySet<string>): boolean {
+  const leftSubscript = /^([A-Za-z_$][A-Za-z0-9_.$]*)\[.+\]$/.exec(left);
+  const rightSubscript = /^([A-Za-z_$][A-Za-z0-9_.$]*)\[.+\]$/.exec(right);
   return /\bnew [A-Z][A-Za-z0-9_$]*\(/.test(left)
     || /\bnew [A-Z][A-Za-z0-9_$]*\(/.test(right)
     || arrayNames.has(left)
     || arrayNames.has(right)
+    || (leftSubscript !== null && arrayNames.has(tupleElementArrayNameMarker(leftSubscript[1])))
+    || (rightSubscript !== null && arrayNames.has(tupleElementArrayNameMarker(rightSubscript[1])))
     || arrayNames.has(objectNameMarker(left))
     || arrayNames.has(objectNameMarker(right));
 }
@@ -2144,9 +2177,9 @@ function findTopLevelToken(value: string, token: string, startIndex = 0): number
   return null;
 }
 
-function parseSimpleGeneratorExpression(pythonExpression: string): { expression: string; itemName: string; iterable: string } | null {
+function parseSimpleGeneratorExpression(pythonExpression: string): { expression: string; itemName: string; iterable: string; condition: string | null } | null {
   const trimmed = stripBalancedOuterParens(pythonExpression.trim());
-  const generator = /^(.+?)(?:,)? for ([A-Za-z_][A-Za-z0-9_]*) in (.+)$/.exec(trimmed);
+  const generator = /^(.+?)(?:,)? for ([A-Za-z_][A-Za-z0-9_]*) in (.+?)(?: if (.+))?$/.exec(trimmed);
   if (generator === null) {
     return null;
   }
@@ -2154,6 +2187,7 @@ function parseSimpleGeneratorExpression(pythonExpression: string): { expression:
     expression: generator[1],
     itemName: generator[2],
     iterable: generator[3],
+    condition: generator[4] ?? null,
   };
 }
 
@@ -2282,6 +2316,28 @@ function sortedIterableExpression(
   validatedTypeAliases: ReadonlySet<string>,
   mapNames: ReadonlySet<string>,
 ): string {
+  const generator = parseSimpleGeneratorExpression(pythonExpression);
+  if (generator !== null) {
+    const itemName = tsExportNameForPythonName(generator.itemName);
+    const itemNameMap = new Map(nameMap);
+    itemNameMap.set(generator.itemName, itemName);
+    const iterable = iterableExpressionForIteration(generator.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const filtered = generator.condition === null
+      ? iterable
+      : `${iterable}.filter((${itemName}) => ${translateExpression(generator.condition!, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    const itemExpression = translateExpression(generator.expression, itemNameMap, arrayNames, validatedTypeAliases, mapNames);
+    return itemExpression === itemName ? filtered : `${filtered}.map((${itemName}) => ${itemExpression})`;
+  }
+  const setIntersection = topLevelSetIntersection(pythonExpression);
+  if (setIntersection !== null) {
+    const left = translateExpression(setIntersection.left, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const right = translateExpression(setIntersection.right, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const leftSet = /^new Set\((.+)\)$/.exec(left);
+    const rightMapKeysSet = /^new Set\(([A-Za-z_$][A-Za-z0-9_.$]*)\.keys\(\)\)$/.exec(right);
+    const source = leftSet?.[1] ?? left;
+    const membership = rightMapKeysSet === null ? `${right}.has(item)` : `${rightMapKeysSet[1]}.has(item)`;
+    return `Array.from(${source}).filter((item) => ${membership})`;
+  }
   const setDifference = topLevelSetDifference(pythonExpression);
   if (setDifference !== null) {
     const left = translateExpression(setDifference.left, nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -2296,6 +2352,30 @@ function sortedIterableExpression(
     return `Object.keys(${iterable})`;
   }
   return `Array.from(${iterable})`;
+}
+
+function iterableExpressionForIteration(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string {
+  const iterable = translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (mapNames.has(iterable)) {
+    return `Array.from(${iterable}.keys())`;
+  }
+  if (arrayNames.has(objectNameMarker(pythonExpression)) || arrayNames.has(objectNameMarker(iterable))) {
+    return `Object.keys(${iterable})`;
+  }
+  if (arrayNames.has(setNameMarker(pythonExpression)) || arrayNames.has(setNameMarker(iterable))) {
+    return `Array.from(${iterable})`;
+  }
+  return iterable;
+}
+
+function topLevelSetIntersection(pythonExpression: string): { left: string; right: string } | null {
+  return splitTopLevelSpacedOperator(pythonExpression, '&');
 }
 
 function topLevelSetDifference(pythonExpression: string): { left: string; right: string } | null {

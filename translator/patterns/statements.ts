@@ -69,7 +69,7 @@ type WithItem = {
   close: false;
 };
 
-type FunctionReturnMarker = 'array' | 'object' | 'rectangle' | 'set' | 'string';
+type FunctionReturnMarker = 'array' | 'map' | 'object' | 'rectangle' | 'set' | 'string';
 
 type FunctionCallSignature = {
   positional: string[];
@@ -1318,6 +1318,28 @@ export function translateStraightLineStatement(
     return null;
   }
 
+  const multilineReturnTupleCall = /^return (.+), ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(statement);
+  if (multilineReturnTupleCall !== null) {
+    const callExpression = parseMultilineCallExpression(
+      lines,
+      index + 1,
+      multilineReturnTupleCall[2],
+      nameMap,
+      arrayNames,
+      validatedTypeAliases,
+      mapNames,
+    );
+    if (callExpression === null) {
+      return null;
+    }
+    const leadingParts = splitTopLevelComma(multilineReturnTupleCall[1])
+      .map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
+    return {
+      statements: [`return [${[...leadingParts, callExpression.expression].join(', ')}];`],
+      nextIndex: callExpression.nextIndex,
+    };
+  }
+
   const multilineReturnCall = /^return ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(statement);
   if (multilineReturnCall !== null) {
     const callExpression = parseMultilineCallExpression(
@@ -1407,6 +1429,14 @@ export function translateStraightLineStatement(
         arrayNames.add(numberArrayNameMarker(annotatedAssignment[1]));
         arrayNames.add(numberArrayNameMarker(tsName));
       }
+    }
+    if (assignedRight.startsWith('[')) {
+      arrayNames.add(annotatedAssignment[1]);
+      arrayNames.add(tsName);
+    }
+    if (assignedRight === '{}' && !typeExpression.startsWith('Map<')) {
+      arrayNames.add(objectNameMarker(annotatedAssignment[1]));
+      arrayNames.add(objectNameMarker(tsName));
     }
     if (annotation === 'Path') {
       arrayNames.add(pathNameMarker(annotatedAssignment[1]));
@@ -1557,6 +1587,39 @@ export function translateStraightLineStatement(
       );
     }
     if (assignment[3] === '[') {
+      const listComprehension = parseMultilineListComprehension(
+        lines,
+        index + 1,
+        indent,
+        nameMap,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+      );
+      if (listComprehension !== null) {
+        const localName = /^([A-Za-z_][A-Za-z0-9_]*)$/.exec(assignment[1]);
+        if (localName !== null) {
+          const tsName = tsExportNameForPythonName(localName[1]);
+          arrayNames.add(localName[1]);
+          arrayNames.add(tsName);
+          if (listComprehension.tupleElements) {
+            arrayNames.add(tupleElementArrayNameMarker(localName[1]));
+            arrayNames.add(tupleElementArrayNameMarker(tsName));
+          }
+        }
+        return translateStraightLineAssignment(
+          assignment[1],
+          assignment[2],
+          listComprehension.expression,
+          listComprehension.nextIndex,
+          nameMap,
+          declaredNames,
+          reassignedNames,
+          arrayNames,
+          validatedTypeAliases,
+          mapNames,
+        );
+      }
       const listLiteral = collectMultilineListLiteral(
         lines,
         index + 1,
@@ -2086,17 +2149,43 @@ function parseMultilineListComprehension(
   arrayNames: Set<string>,
   validatedTypeAliases: ReadonlySet<string>,
   mapNames: ReadonlySet<string>,
-): { expression: string; nextIndex: number } | null {
+): { expression: string; nextIndex: number; tupleElements: boolean } | null {
   const innerIndent = `${indent}    `;
   const firstLine = lines[startIndex] ?? '';
   if (!firstLine.startsWith(innerIndent)) {
     return null;
   }
   const firstExpression = firstLine.trim().replace(/,$/, '');
-  let itemExpression: string;
+  let itemExpression = '';
   let nextIndex: number;
+  let tupleElements = false;
   const multilineCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(firstExpression);
-  if (multilineCall !== null) {
+  if (firstExpression === '(') {
+    const tupleItems: string[] = [];
+    nextIndex = startIndex + 1;
+    while (nextIndex < lines.length) {
+      const line = lines[nextIndex] ?? '';
+      const trimmed = line.trim();
+      if (line.startsWith(innerIndent) && (trimmed === ')' || trimmed === '),')) {
+        itemExpression = `[${tupleItems.join(', ')}]`;
+        tupleElements = true;
+        nextIndex += 1;
+        break;
+      }
+      if (trimmed === '') {
+        nextIndex += 1;
+        continue;
+      }
+      if (!line.startsWith(`${innerIndent}    `) || !trimmed.endsWith(',')) {
+        return null;
+      }
+      tupleItems.push(translateExpression(trimmed.slice(0, -1), nameMap, arrayNames, validatedTypeAliases, mapNames));
+      nextIndex += 1;
+    }
+    if (!tupleElements) {
+      return null;
+    }
+  } else if (multilineCall !== null) {
     const callExpression = parseMultilineCallExpression(
       lines,
       startIndex + 1,
@@ -2124,16 +2213,49 @@ function parseMultilineListComprehension(
   if (forClause === null) {
     return null;
   }
-  const closeLine = lines[nextIndex + 1] ?? '';
+  let closeIndex = nextIndex + 1;
+  let filterExpression: string | null = null;
+  const ifClause = /^if (.+)$/.exec((lines[closeIndex] ?? '').trim());
+  if (ifClause !== null) {
+    filterExpression = ifClause[1];
+    closeIndex += 1;
+  }
+  const closeLine = lines[closeIndex] ?? '';
   if (!closeLine.startsWith(indent) || closeLine.trim() !== ']') {
     return null;
   }
   const itemName = tsExportNameForPythonName(forClause[1]);
-  const iterable = translateExpression(forClause[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const itemNameMap = new Map(nameMap);
+  itemNameMap.set(forClause[1], itemName);
+  const iterable = iterableExpressionForIteration(forClause[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const filtered = filterExpression === null
+    ? iterable
+    : `${iterable}.filter((${itemName}) => ${translateExpression(filterExpression, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   return {
-    expression: `${iterable}.map((${itemName}) => ${itemExpression})`,
-    nextIndex: nextIndex + 2,
+    expression: `${filtered}.map((${itemName}) => ${itemExpression})`,
+    nextIndex: closeIndex + 1,
+    tupleElements,
   };
+}
+
+function iterableExpressionForIteration(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string {
+  const iterable = translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (mapNames.has(iterable)) {
+    return `Array.from(${iterable}.keys())`;
+  }
+  if (arrayNames.has(objectNameMarker(pythonExpression)) || arrayNames.has(objectNameMarker(iterable))) {
+    return `Object.keys(${iterable})`;
+  }
+  if (arrayNames.has(setNameMarker(pythonExpression)) || arrayNames.has(setNameMarker(iterable))) {
+    return `Array.from(${iterable})`;
+  }
+  return iterable;
 }
 
 function collectMultilineListLiteral(
@@ -2584,7 +2706,7 @@ function parseLocalFunctionCallSignature(
       parsed.returnTupleMarkers !== undefined
       && (
         !Array.isArray(parsed.returnTupleMarkers)
-        || !parsed.returnTupleMarkers.every((marker) => marker === null || marker === 'array' || marker === 'object' || marker === 'rectangle' || marker === 'set' || marker === 'string')
+        || !parsed.returnTupleMarkers.every((marker) => marker === null || marker === 'array' || marker === 'map' || marker === 'object' || marker === 'rectangle' || marker === 'set' || marker === 'string')
       )
     ) {
       return null;
@@ -2603,6 +2725,7 @@ function applyTupleAssignmentReturnMarkers(
   assignedRight: string,
   nameMap: Map<string, string>,
   arrayNames: Set<string>,
+  mapNames: ReadonlySet<string>,
 ): void {
   const call = /^([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)?)\(/.exec(assignedRight.trim());
   if (call === null) {
@@ -2625,6 +2748,9 @@ function applyTupleAssignmentReturnMarkers(
     if (marker === 'array') {
       arrayNames.add(pythonName);
       arrayNames.add(tsName);
+    } else if (marker === 'map') {
+      addMutableName(mapNames, pythonName);
+      addMutableName(mapNames, tsName);
     } else if (marker === 'object') {
       arrayNames.add(objectNameMarker(pythonName));
       arrayNames.add(objectNameMarker(tsName));
@@ -3101,7 +3227,7 @@ function translateStraightLineAssignment(
         declaredNames.add(name);
       }
     }
-    applyTupleAssignmentReturnMarkers(names, assignedRight, nameMap, arrayNames);
+    applyTupleAssignmentReturnMarkers(names, assignedRight, nameMap, arrayNames, mapNames);
     return {
       statements: [
         ...preDeclarations,
@@ -3188,6 +3314,10 @@ function recordLocalAssignmentMarkers(
     addMutableName(mapNames, tsName);
   }
   const mapGetAssignment = /^([A-Za-z_$][A-Za-z0-9_.$]*)\.get\(.*\)(?: \?\? null)?$/.exec(assignedRight);
+  if (/^[A-Za-z_$][A-Za-z0-9_.$]*\.get\(.*\)!$/.test(assignedRight)) {
+    arrayNames.add(objectNameMarker(pythonName));
+    arrayNames.add(objectNameMarker(tsName));
+  }
   if (mapGetAssignment !== null && mapNames.has(arrayValueMapNameMarker(mapGetAssignment[1]))) {
     arrayNames.add(pythonName);
     arrayNames.add(tsName);

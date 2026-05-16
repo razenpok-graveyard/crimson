@@ -586,7 +586,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
 
     const statements: string[] = [];
     const nameMap = new Map(moduleNameMap);
-    recordParameterReceiverTypes(nameMap, [...parameters, ...optsParams]);
+    recordParameterReceiverTypes(nameMap, arrayNames, [...parameters, ...optsParams]);
     const declaredNames = new Set<string>(pythonParameterNames(header.parametersText));
     const docstring = parseIndentedDocstring(lines, index);
     if (docstring !== null) {
@@ -1034,7 +1034,7 @@ function markIteratedLocalNames(
 
 function returnTupleMarkersForType(
   pythonReturnType: string,
-): ('array' | 'object' | 'rectangle' | 'set' | 'string' | null)[] | undefined {
+): ('array' | 'map' | 'object' | 'rectangle' | 'set' | 'string' | null)[] | undefined {
   const tupleReturn = /^tuple\[(.+)\]$/.exec(pythonReturnType.trim());
   if (tupleReturn === null) {
     return undefined;
@@ -1042,7 +1042,7 @@ function returnTupleMarkersForType(
   return splitTopLevelComma(tupleReturn[1]).map(returnMarkerForType);
 }
 
-function returnMarkerForType(pythonType: string): 'array' | 'object' | 'rectangle' | 'set' | 'string' | null {
+function returnMarkerForType(pythonType: string): 'array' | 'map' | 'object' | 'rectangle' | 'set' | 'string' | null {
   const trimmed = pythonType.trim();
   if (/^(?:r[dl]\.|wgl\.)?Rectangle$/.test(trimmed)) {
     return 'rectangle';
@@ -1056,7 +1056,10 @@ function returnMarkerForType(pythonType: string): 'array' | 'object' | 'rectangl
   if (/^(?:set|frozenset)\[/.test(trimmed)) {
     return 'set';
   }
-  if (/^dict\[/.test(trimmed) || trimmed === 'object') {
+  if (/^dict\[/.test(trimmed)) {
+    return 'map';
+  }
+  if (trimmed === 'object') {
     return 'object';
   }
   return null;
@@ -1166,6 +1169,9 @@ function recordImportedStaticClassMethods(
   moduleNameMap: Map<string, string>,
 ): void {
   for (const name of names) {
+    if (importedClassSource(modulePath, name.importedName, relativePath) !== null) {
+      moduleNameMap.set(importedClassNameMarker(name.localName), 'true');
+    }
     const methodNames = importedStaticClassMethodNames(modulePath, name.importedName, relativePath);
     for (const methodName of methodNames) {
       moduleNameMap.set(staticClassMethodNameMarker(name.localName, methodName), methodName);
@@ -1223,11 +1229,19 @@ function importedClassSource(modulePath: string, className: string, relativePath
     : source.slice(classStart, classStart + 1 + nextExport);
 }
 
-function recordParameterReceiverTypes(nameMap: Map<string, string>, parameters: readonly FunctionParameter[]): void {
+function recordParameterReceiverTypes(
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  parameters: readonly FunctionParameter[],
+): void {
   for (const parameter of parameters) {
     const typeName = simpleClassTypeName(parameter.typeExpression);
     if (typeName !== null) {
       nameMap.set(receiverTypeNameMarker(parameter.name), typeName);
+      if (nameMap.has(importedClassNameMarker(typeName))) {
+        arrayNames.add(objectNameMarker(parameter.name));
+        arrayNames.add(objectNameMarker(tsExportNameForPythonName(parameter.name)));
+      }
     }
   }
 }
@@ -1235,6 +1249,10 @@ function recordParameterReceiverTypes(nameMap: Map<string, string>, parameters: 
 function simpleClassTypeName(typeExpression: string): string | null {
   const typeName = /^([A-Z][A-Za-z0-9_$]*)$/.exec(typeExpression.trim());
   return typeName?.[1] ?? null;
+}
+
+function importedClassNameMarker(className: string): string {
+  return `__imported_class__:${className}`;
 }
 
 function rewriteStructConstructorCalls(
