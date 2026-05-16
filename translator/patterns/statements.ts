@@ -38,7 +38,6 @@ import {
   rectangleNameMarker,
   receiverTypeNameMarker,
   setNameMarker,
-  splitTopLevelLogicalOperator,
   stringNameMarker,
   translatedExpressionLooksVectorArray,
   translatedExpressionLooksVector,
@@ -57,6 +56,14 @@ import {
   parseFunctionParametersText,
   pythonParameterNames,
 } from './parameters.js';
+import {
+  isSimpleReferenceExpression,
+  translateConditionExpression,
+} from './statements/conditions.js';
+import {
+  parseExceptClause,
+  tsExceptGuardExpression,
+} from './statements/exceptions.js';
 import { reassignedLocalNames } from './statements/reassigned-locals.js';
 
 export {
@@ -123,53 +130,6 @@ function tsLocalFunctionNameForPythonName(pythonName: string): string {
 
 function tsLocalImportNameForPythonName(pythonName: string): string {
   return pythonName === '__version__' ? 'VERSION' : tsExportNameForPythonName(pythonName);
-}
-
-function isSimpleReferenceExpression(value: string): boolean {
-  return /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(value);
-}
-
-function translateConditionExpression(
-  pythonExpression: string,
-  nameMap: Map<string, string>,
-  arrayNames: Set<string>,
-  validatedTypeAliases: ReadonlySet<string>,
-  mapNames: ReadonlySet<string>,
-): string {
-  const trimmed = pythonExpression.trim();
-  const topLevelOrParts = splitTopLevelLogicalOperator(trimmed, 'or');
-  if (topLevelOrParts !== null) {
-    return topLevelOrParts
-      .map((part) => translateConditionExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames))
-      .join(' || ');
-  }
-  const topLevelAndParts = splitTopLevelLogicalOperator(trimmed, 'and');
-  if (topLevelAndParts !== null) {
-    return topLevelAndParts
-      .map((part) => parenthesizeAndConditionOperand(translateConditionExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)))
-      .join(' && ');
-  }
-  if (isSimpleReferenceExpression(trimmed)) {
-    const translated = translateExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
-    if (mapNames.has(translated)) {
-      return `${translated}.size > 0`;
-    }
-    if (arrayNames.has(setNameMarker(trimmed)) || arrayNames.has(setNameMarker(translated))) {
-      return arrayNames.has(nullableNameMarker(trimmed)) || arrayNames.has(nullableNameMarker(translated))
-        ? `${translated} !== null && ${translated}.size > 0`
-        : `${translated}.size > 0`;
-    }
-    if (arrayNames.has(trimmed) || arrayNames.has(translated)) {
-      return arrayNames.has(nullableNameMarker(trimmed)) || arrayNames.has(nullableNameMarker(translated))
-        ? `${translated} !== null && ${translated}.length > 0`
-        : `${translated}.length > 0`;
-    }
-  }
-  return translateExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
-}
-
-function parenthesizeAndConditionOperand(value: string): string {
-  return value.includes(' || ') && matchingCloseParen(value, 0) !== value.length - 1 ? `(${value})` : value;
 }
 
 function appendTrailingCommentToResult<T extends { statements: string[]; nextIndex: number }>(
@@ -4255,45 +4215,6 @@ function translateRaiseExpression(
     return `new Error(${message})`;
   }
   return `new ${translatedCallee}(${message})`;
-}
-
-function parseExceptClause(statement: string): { name: string | null; types: string[] } | null {
-  const typeNamePattern = '[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*';
-  const identifierNamePattern = '[A-Za-z_][A-Za-z0-9_]*';
-  const clause = new RegExp(`^except (?:(` + typeNamePattern + `)|\\((${typeNamePattern}(?:, ${typeNamePattern})+),?\\))(?: as (${identifierNamePattern}))?:$`).exec(statement);
-  if (clause === null) {
-    return null;
-  }
-  return {
-    name: clause[3] ?? null,
-    types: (clause[1] ?? clause[2]).split(',').map((typeName) => typeName.trim()),
-  };
-}
-
-function tsExceptGuardExpression(
-  pythonTypes: string[],
-  catchName: string,
-  nameMap: Map<string, string>,
-  arrayNames: Set<string>,
-  validatedTypeAliases: ReadonlySet<string>,
-  mapNames: ReadonlySet<string>,
-): string | null {
-  const guards: string[] = [];
-  for (const pythonType of pythonTypes) {
-    const translatedType = translateExpression(pythonType, nameMap, arrayNames, validatedTypeAliases, mapNames);
-    if (!tsExceptionTypeIsGuardable(translatedType)) {
-      return null;
-    }
-    guards.push(`${catchName} instanceof ${translatedType}`);
-  }
-  return guards.length === 0 ? null : guards.join(' || ');
-}
-
-function tsExceptionTypeIsGuardable(tsType: string): boolean {
-  if (!/^[A-Z][A-Za-z0-9_$]*$/.test(tsType)) {
-    return false;
-  }
-  return !new Set(['Exception', 'RuntimeError', 'ValueError', 'KeyError', 'OSError', 'FileNotFoundError']).has(tsType);
 }
 
 function translateKeyErrorLookupStatement(
