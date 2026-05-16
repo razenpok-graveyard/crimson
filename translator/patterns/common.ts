@@ -338,8 +338,16 @@ export function inferPythonExpressionType(pythonExpression: string): string {
   if (/^(?:int|float)\(.+\)$/.test(trimmed)) {
     return 'number';
   }
+  const enumCast = /^([A-Z][A-Za-z0-9_]*(?:Id|Mode|Type))\(.+\)$/.exec(trimmed);
+  if (enumCast !== null) {
+    return tsExportNameForPythonName(enumCast[1]);
+  }
   if (/^(?:proj_origin|Vec2|rl\.Vector2)\(/.test(trimmed)) {
     return '{ x: number; y: number }';
+  }
+  const enumMember = /^([A-Z][A-Za-z0-9_]*(?:Id|Mode|Type))\.[A-Z0-9_]+$/.exec(trimmed);
+  if (enumMember !== null) {
+    return tsExportNameForPythonName(enumMember[1]);
   }
   if (/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+$/.test(trimmed)) {
     return `typeof ${trimmed.split('.').map(tsExportNameForPythonName).join('.')}`;

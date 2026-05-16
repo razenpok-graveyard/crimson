@@ -375,7 +375,27 @@ export function translateStraightLineStatement(
 
   const oneLineIfStatement = /^if (.+):$/.exec(statement);
   let ifCondition: string | null = oneLineIfStatement?.[1] ?? null;
+  let translatedIfCondition: string | null = null;
   let ifBodyStartIndex = index + 1;
+  if (ifCondition === null) {
+    const multilineIfCall = /^if ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(statement);
+    if (multilineIfCall !== null) {
+      const callExpression = parseMultilineCallExpressionWithColonClose(
+        lines,
+        index + 1,
+        multilineIfCall[1],
+        nameMap,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+      );
+      if (callExpression === null) {
+        return null;
+      }
+      translatedIfCondition = callExpression.expression;
+      ifBodyStartIndex = callExpression.nextIndex;
+    }
+  }
   if (ifCondition === null && statement === 'if (') {
     const conditionLines: string[] = [];
     let conditionIndex = index + 1;
@@ -404,7 +424,7 @@ export function translateStraightLineStatement(
       return null;
     }
   }
-  if (ifCondition !== null) {
+  if (ifCondition !== null || translatedIfCondition !== null) {
     const innerIndent = `${indent}    `;
     const translateBranch = (startIndex: number): { statements: string[]; nextIndex: number } | null => {
       const branchStatements: string[] = [];
@@ -445,7 +465,7 @@ export function translateStraightLineStatement(
     let nextIndex = initialBranch.nextIndex;
     const statements = [
       ...branchDeclarations,
-      `if (${translateConditionExpression(ifCondition, nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`,
+      `if (${translatedIfCondition ?? translateConditionExpression(ifCondition ?? '', nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`,
       ...initialBranch.statements,
       '}',
     ];
@@ -1958,6 +1978,37 @@ function parseMultilineCallExpressionWithOuterClose(
   return expression;
 }
 
+function parseMultilineCallExpressionWithColonClose(
+  lines: string[],
+  startIndex: number,
+  pythonCallee: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string> = new Set(),
+  mapNames: ReadonlySet<string> = new Set(),
+): { expression: string; nextIndex: number } | null {
+  const closeIndex = findMultilineCallColonClose(lines, startIndex);
+  if (closeIndex === null) {
+    return null;
+  }
+
+  const patchedLines = [...lines];
+  patchedLines[closeIndex] = (patchedLines[closeIndex] ?? '').replace(/\):\s*$/, ')');
+  const expression = parseMultilineCallExpression(
+    patchedLines,
+    startIndex,
+    pythonCallee,
+    nameMap,
+    arrayNames,
+    validatedTypeAliases,
+    mapNames,
+  );
+  if (expression === null || expression.nextIndex !== closeIndex + 1) {
+    return null;
+  }
+  return expression;
+}
+
 function findNestedCallOuterClose(lines: string[], startIndex: number): number | null {
   let depth = 1;
   for (let nextIndex = startIndex; nextIndex < lines.length; nextIndex += 1) {
@@ -1972,6 +2023,41 @@ function findNestedCallOuterClose(lines: string[], startIndex: number): number |
         depth -= 1;
         if (depth < 0) {
           return nextIndex;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function findMultilineCallColonClose(lines: string[], startIndex: number): number | null {
+  let depth = 1;
+  for (let nextIndex = startIndex; nextIndex < lines.length; nextIndex += 1) {
+    const trimmed = lines[nextIndex].trim();
+    if (trimmed === '') {
+      continue;
+    }
+    let quote: string | null = null;
+    for (let charIndex = 0; charIndex < trimmed.length; charIndex += 1) {
+      const char = trimmed[charIndex];
+      if (quote !== null) {
+        if (char === quote && trimmed[charIndex - 1] !== '\\') {
+          quote = null;
+        }
+        continue;
+      }
+      if (char === '"' || char === "'") {
+        quote = char;
+        continue;
+      }
+      if (char === '(') {
+        depth += 1;
+        continue;
+      }
+      if (char === ')') {
+        depth -= 1;
+        if (depth === 0) {
+          return trimmed.slice(charIndex + 1).trim() === ':' ? nextIndex : null;
         }
       }
     }
