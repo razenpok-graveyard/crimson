@@ -27,6 +27,7 @@ import {
 } from './common.js';
 import {
   arrayValueMapNameMarker,
+  classFieldTypeMarker,
   functionReturnTypeMarker,
   mapValueMapNameMarker,
   mapValueTypeMarker,
@@ -562,6 +563,7 @@ export function parseStructClass(
     const defaultValue = defaultValueText === null ? null : tsStructFieldDefaultValue(defaultValueText.value);
     const fieldName = tsAttributeNameForPythonName(field[1]);
     const typeExpression = tsStructFieldType(field[2], tupleTypeAliases);
+    classNameMap.set(classFieldTypeMarker(className, fieldName), typeExpression);
     const fieldTypeName = simpleClassTypeName(typeExpression);
     if (fieldTypeName !== null) {
       classNameMap.set(receiverTypeNameMarker(`self.${field[1]}`), fieldTypeName);

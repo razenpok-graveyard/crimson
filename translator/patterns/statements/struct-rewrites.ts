@@ -106,7 +106,7 @@ function rewriteObjectConstructorMapFields(
     .filter((property): property is { name: string; value: string } => property !== null)
     .map((property) => {
       const value = mapFields.has(property.name)
-        ? mapFromObjectFromEntriesExpression(property.value) ?? property.value
+        ? mapConstructorFieldValue(property.value)
         : property.value;
       if (value !== property.value) {
         changed = true;
@@ -114,6 +114,13 @@ function rewriteObjectConstructorMapFields(
       return property.name === value ? property.name : `${property.name}: ${value}`;
     });
   return changed ? `new ${className}({ ${propertyText.join(', ')} })` : null;
+}
+
+function mapConstructorFieldValue(value: string): string {
+  if (value === '{}') {
+    return 'new Map()';
+  }
+  return mapFromObjectFromEntriesExpression(value) ?? value;
 }
 
 function mapFromObjectFromEntriesExpression(value: string): string | null {

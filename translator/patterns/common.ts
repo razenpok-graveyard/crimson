@@ -39,7 +39,7 @@ function hasBalancedSquareBrackets(value: string): boolean {
   for (let index = 0; index < value.length; index += 1) {
     const char = value[index];
     if (quote !== null) {
-      if (char === quote && value[index - 1] !== '\\') {
+      if (char === quote && !characterIsEscaped(value, index)) {
         quote = null;
       }
       continue;
@@ -455,7 +455,7 @@ export function matchingCloseParen(value: string, openIndex: number): number | n
   for (let index = openIndex; index < value.length; index += 1) {
     const char = value[index];
     if (quote !== null) {
-      if (char === quote && value[index - 1] !== '\\') {
+      if (char === quote && !characterIsEscaped(value, index)) {
         quote = null;
       }
       continue;
@@ -485,7 +485,7 @@ export function splitTopLevelComma(value: string): string[] {
   for (let index = 0; index < value.length; index += 1) {
     const char = value[index];
     if (quote !== null) {
-      if (char === quote && value[index - 1] !== '\\') {
+      if (char === quote && !characterIsEscaped(value, index)) {
         quote = null;
       }
       continue;
@@ -509,6 +509,14 @@ export function splitTopLevelComma(value: string): string[] {
   }
   parts.push(value.slice(start).trim());
   return parts.filter((part) => part !== '');
+}
+
+function characterIsEscaped(value: string, index: number): boolean {
+  let slashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && value[cursor] === '\\'; cursor -= 1) {
+    slashCount += 1;
+  }
+  return slashCount % 2 === 1;
 }
 
 export function tsStringLiteral(pythonLiteral: string): string {

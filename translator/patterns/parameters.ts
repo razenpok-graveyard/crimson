@@ -10,6 +10,7 @@ import {
   dateNameMarker,
   objectNameMarker,
   nullableNameMarker,
+  pathNameMarker,
   rectangleNameMarker,
   stringNameMarker,
   translateExpression,
@@ -78,6 +79,10 @@ export function parseFunctionParameterText(
     if (typeExpression === 'string') {
       arrayNames.add(stringNameMarker(typedParameter[1]));
       arrayNames.add(stringNameMarker(parameterName));
+    }
+    if (typedParameter[2].trim() === 'Path') {
+      arrayNames.add(pathNameMarker(typedParameter[1]));
+      arrayNames.add(pathNameMarker(parameterName));
     }
     if (/^(?:r[dl]|wgl)\.Color$/.test(typeExpression)) {
       arrayNames.add(colorNameMarker(typedParameter[1]));

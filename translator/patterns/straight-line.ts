@@ -43,6 +43,7 @@ import {
 } from './common.js';
 import { parseStringEnumClass } from './enums.js';
 import {
+  classFieldTypeMarker,
   functionReturnTypeMarker,
   objectNameMarker,
   receiverTypeNameMarker,
@@ -77,9 +78,11 @@ import {
   msgpackCodecHelperStatements,
   openTextFileHelperStatements,
   pathBasenameHelperStatements,
+  pathExtnameHelperStatements,
   pathFsHelperStatements,
   pathJoinHelperStatements,
   pythonEqualsHelperStatements,
+  pythonIdHelperStatements,
   pythonJsonDumpsHelperStatements,
   pythonRoundHelperStatements,
   pythonReprHelperStatements,
@@ -224,7 +227,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       index = typeCheckingImports.nextIndex;
       continue;
     }
-    if (isStructFloatHelperAssignment(trimmed)) {
+    if (isStructFloatHelperAssignment(trimmed) || isExceptionAliasAssignment(trimmed)) {
       index += 1;
       continue;
     }
@@ -268,6 +271,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         structConstructorFieldNames(structClass.structClass, structConstructorFields),
       );
       recordStructMapConstructorFields(structMapConstructorFields, structClass.structClass);
+      recordStructClassFieldTypes(moduleNameMap, structClass.structClass);
       index = structClass.nextIndex;
       continue;
     }
@@ -541,7 +545,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       index = typeCheckingImports.nextIndex;
       continue;
     }
-    if (isStructFloatHelperAssignment((lines[index] ?? '').trim())) {
+    if (isStructFloatHelperAssignment((lines[index] ?? '').trim()) || isExceptionAliasAssignment((lines[index] ?? '').trim())) {
       pendingAssignmentComments.length = 0;
       index += 1;
       continue;
@@ -604,6 +608,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
           structConstructorFieldNames(structClass.structClass, structConstructorFields),
         );
         recordStructMapConstructorFields(structMapConstructorFields, structClass.structClass);
+        recordStructClassFieldTypes(moduleNameMap, structClass.structClass);
         index = structClass.nextIndex;
         continue;
       }
@@ -799,7 +804,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       index = typeCheckingImports.nextIndex;
       continue;
     }
-    if (isStructFloatHelperAssignment(trimmed)) {
+    if (isStructFloatHelperAssignment(trimmed) || isExceptionAliasAssignment(trimmed)) {
       pendingAssignmentComments.length = 0;
       index += 1;
       continue;
@@ -956,6 +961,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     leadingStatements.unshift(...helperStatements);
   }
+  if (moduleValueText.includes('pythonId(')) {
+    const helperStatements = pythonIdHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
   if (
     moduleValueText.includes('MsgpackEncoder(')
     || moduleValueText.includes('MsgpackEncoder<')
@@ -1006,11 +1018,17 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     pathHelperStatements.push(...pathJoinHelperStatements());
   }
-  if (moduleValueText.includes('_basename(')) {
+  if (moduleValueText.includes('_basename(') || moduleValueText.includes('_pathExtname(')) {
     if (pathHelperStatements.length > 0) {
       pathHelperStatements.push('');
     }
     pathHelperStatements.push(...pathBasenameHelperStatements());
+  }
+  if (moduleValueText.includes('_pathExtname(')) {
+    if (pathHelperStatements.length > 0) {
+      pathHelperStatements.push('');
+    }
+    pathHelperStatements.push(...pathExtnameHelperStatements());
   }
   if (moduleValueText.includes('_dirname(') || moduleValueText.includes('_mkdirParents(')) {
     if (pathHelperStatements.length > 0) {
@@ -1081,6 +1099,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     moduleValueText.includes('readFileSync(')
     || moduleValueText.includes('writeFileSync(')
     || moduleValueText.includes('appendFileSync(')
+    || moduleValueText.includes('existsSync(')
     || moduleValueText.includes('_openTextFile(')
     || moduleValueText.includes('_mkdirParents(')
     || moduleValueText.includes('_globPath(')
@@ -1091,6 +1110,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         ...(moduleValueText.includes('readFileSync(') ? ['readFileSync'] : []),
         ...(moduleValueText.includes('writeFileSync(') || moduleValueText.includes('_openTextFile(') ? ['writeFileSync'] : []),
         ...(moduleValueText.includes('appendFileSync(') || moduleValueText.includes('_openTextFile(') ? ['appendFileSync'] : []),
+        ...(moduleValueText.includes('existsSync(') ? ['existsSync'] : []),
         ...(moduleValueText.includes('_mkdirParents(') ? ['mkdirSync'] : []),
         ...(moduleValueText.includes('_globPath(') ? ['readdirSync'] : []),
       ],
@@ -1151,6 +1171,21 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
 function isStructFloatHelperAssignment(trimmedLine: string): boolean {
   return /^_[A-Z0-9_]+ = struct\.Struct\("<f"\)$/.test(trimmedLine)
     || /^_[A-Z0-9_]+ = _[A-Z0-9_]+\.(?:pack|unpack)$/.test(trimmedLine);
+}
+
+function isExceptionAliasAssignment(trimmedLine: string): boolean {
+  const assignment = /^_[A-Z0-9_]+ = (.+)$/.exec(trimmedLine);
+  if (assignment === null) {
+    return false;
+  }
+  return exceptionAliasExpression(assignment[1]);
+}
+
+function exceptionAliasExpression(expression: string): boolean {
+  const exceptionName = '(?:Exception|RuntimeError|ValueError|KeyError|OSError|FileNotFoundError|AttributeError|TypeError)';
+  const exceptionTuple = new RegExp(`^\\(${exceptionName}(?:, ${exceptionName})*,?\\)$`);
+  const exceptionAliasTupleConcat = new RegExp(`^_[A-Z0-9_]+ \\+ \\(${exceptionName}(?:, ${exceptionName})*,?\\)$`);
+  return exceptionTuple.test(expression) || exceptionAliasTupleConcat.test(expression);
 }
 
 function isEnumOnlyImport(trimmedLine: string): boolean {
@@ -1511,6 +1546,15 @@ function recordStructMapConstructorFields(
     .map((field) => field.name);
   if (mapFields.length > 0) {
     structMapConstructorFields.set(structClass.name, new Set(mapFields));
+  }
+}
+
+function recordStructClassFieldTypes(
+  moduleNameMap: Map<string, string>,
+  structClass: StructModule['classes'][number],
+): void {
+  for (const field of structClass.fields) {
+    moduleNameMap.set(classFieldTypeMarker(structClass.name, field.name), field.typeExpression);
   }
 }
 

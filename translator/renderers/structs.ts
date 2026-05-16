@@ -167,6 +167,7 @@ export function renderStructClasses(lines: string[], classes: StructModule['clas
     }
     for (const method of structClass.methods) {
       lines.push('');
+      const generator = method.statements.some((statement) => /^\s*yield\*? /.test(statement));
       const params = method.parameters.map(renderParameter);
       if (method.optsParams.length > 0) {
         const optsType = method.optsParams
@@ -176,7 +177,7 @@ export function renderStructClasses(lines: string[], classes: StructModule['clas
         params.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
       }
       const returnType = method.name.startsWith('set ') ? '' : `: ${renderFunctionReturnType(method)}`;
-      lines.push(`  ${method.static === true ? 'static ' : ''}${method.async === true ? 'async ' : ''}${method.name}${renderTypeParameters(method)}(${params.join(', ')})${returnType} {`);
+      lines.push(`  ${method.static === true ? 'static ' : ''}${method.async === true ? 'async ' : ''}${generator ? '*' : ''}${method.name}${renderTypeParameters(method)}(${params.join(', ')})${returnType} {`);
       for (const param of method.optsParams) {
         const declaration = functionBodyAssignsName(method.statements, param.name) ? 'let' : 'const';
         if (param.defaultValue === null) {

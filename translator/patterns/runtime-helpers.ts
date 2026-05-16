@@ -973,6 +973,38 @@ export function pythonEqualsHelperStatements(): string[] {
   ];
 }
 
+export function pythonIdHelperStatements(): string[] {
+  return [
+    'const _pythonObjectIds = new WeakMap<object, number>();',
+    'let _pythonNextObjectId = 1;',
+    '',
+    'function pythonId(value: unknown): number {',
+    "  if ((typeof value !== 'object' && typeof value !== 'function') || value === null) {",
+    "    if (typeof value === 'number') {",
+    '      return value;',
+    '    }',
+    "    if (typeof value === 'boolean') {",
+    '      return value ? 1 : 0;',
+    '    }',
+    "    const text = `${typeof value}:${String(value)}`;",
+    '    let hash = 0;',
+    '    for (let index = 0; index < text.length; index += 1) {',
+    '      hash = Math.imul(hash, 31) + text.charCodeAt(index) | 0;',
+    '    }',
+    '    return hash;',
+    '  }',
+    '  const objectValue = value as object;',
+    '  let objectId = _pythonObjectIds.get(objectValue);',
+    '  if (objectId === undefined) {',
+    '    objectId = _pythonNextObjectId;',
+    '    _pythonNextObjectId += 1;',
+    '    _pythonObjectIds.set(objectValue, objectId);',
+    '  }',
+    '  return objectId;',
+    '}',
+  ];
+}
+
 export function strftimeUtcNowHelperStatements(): string[] {
   return [
     'function _strftimeUtcNow(): string {',
@@ -1020,6 +1052,19 @@ export function pathBasenameHelperStatements(): string[] {
     "  const normalized = path.replace(/\\/+$/g, '');",
     "  const idx = normalized.lastIndexOf('/');",
     '  return idx < 0 ? normalized : normalized.slice(idx + 1);',
+    '}',
+  ];
+}
+
+export function pathExtnameHelperStatements(): string[] {
+  return [
+    'function _pathExtname(path: string): string {',
+    "  const base = _basename(path);",
+    "  if (base === '' || base === '.' || base === '..') {",
+    "    return '';",
+    '  }',
+    "  const dot = base.lastIndexOf('.');",
+    "  return dot <= 0 ? '' : base.slice(dot);",
     '}',
   ];
 }

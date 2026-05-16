@@ -22,6 +22,74 @@ export interface Texture {
 
 export function makeTexture(id: WebGLTexture, width: number, height: number): Texture { return { id, width, height }; }
 
+export interface Wave {
+  fileType: string;
+  data: Uint8Array;
+}
+
+export interface Sound {
+  wave: Wave;
+  playing: boolean;
+  pitch: number;
+  volume: number;
+}
+
+let audioReady = false;
+
+export function initAudioDevice(): void {
+  audioReady = true;
+}
+
+export function isAudioDeviceReady(): boolean {
+  return audioReady;
+}
+
+export function closeAudioDevice(): void {
+  audioReady = false;
+}
+
+export function loadWaveFromMemory(fileType: string, fileData: Uint8Array, dataSize: number): Wave {
+  return { fileType, data: fileData.slice(0, dataSize) };
+}
+
+export function unloadWave(_wave: Wave): void {}
+
+export function loadSoundFromWave(wave: Wave): Sound {
+  return { wave, playing: false, pitch: 1.0, volume: 1.0 };
+}
+
+export function loadSoundAlias(sound: Sound): Sound {
+  return { wave: sound.wave, playing: false, pitch: sound.pitch, volume: sound.volume };
+}
+
+export function playSound(sound: Sound): void {
+  sound.playing = true;
+}
+
+export function stopSound(sound: Sound): void {
+  sound.playing = false;
+}
+
+export function isSoundPlaying(sound: Sound): boolean {
+  return sound.playing;
+}
+
+export function unloadSound(sound: Sound): void {
+  sound.playing = false;
+}
+
+export function unloadSoundAlias(sound: Sound): void {
+  sound.playing = false;
+}
+
+export function setSoundPitch(sound: Sound, pitch: number): void {
+  sound.pitch = pitch;
+}
+
+export function setSoundVolume(sound: Sound, volume: number): void {
+  sound.volume = volume;
+}
+
 let ctx: WebGLContext;
 export function setContext(context: WebGLContext): void { ctx = context; }
 
