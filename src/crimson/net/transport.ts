@@ -37,7 +37,7 @@ export class UdpTransport {
     }
     const sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM);
     sock.setblocking(false);
-    sock.bind([this.bindHost, int(this.bindPort)]);
+    sock.bind([String(this.bindHost), int(this.bindPort)]);
     this.sock = sock;
   }
 
@@ -60,7 +60,7 @@ export class UdpTransport {
       throw new Error('transport is not open');
     }
     const blob = encodePacket(packet);
-    sock.sendto(blob, [addr[0], int(addr[1])]);
+    sock.sendto(blob, [String(addr[0]), int(addr[1])]);
   }
 
   recvPackets(opts: { maxPackets?: number | null } = {}): [PeerAddr, LockstepPacket][] {
@@ -82,7 +82,7 @@ export class UdpTransport {
       } catch (exc) {
         break;
       }
-      const addr: PeerAddr = [rawAddr[0], int(rawAddr[1])];
+      const addr: PeerAddr = [String(rawAddr[0]), int(rawAddr[1])];
       let packet: ReturnType<typeof decodePacket>;
       try {
         packet = decodePacket(blob);

@@ -18,7 +18,7 @@ export function registerQuest(opts: { level: string; title: string; timeLimitMs:
   const unlockWeaponId = opts.unlockWeaponId ?? null;
   const terrainSlots = opts.terrainSlots ?? null;
   function builderName(builderFn: QuestBuilder): string {
-    return builderFn.name || String(builderFn);
+    return String(builderFn.name || String(builderFn));
   }
 
   function decorator(builder: QuestBuilder): QuestBuilder {

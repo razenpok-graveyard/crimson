@@ -138,6 +138,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       || isEnumOnlyImport(trimmed)
       || trimmed === 'from dataclasses import dataclass'
       || trimmed === 'from pathlib import Path'
+      || trimmed === 'from threading import Lock'
       || trimmed.startsWith('from construct import ')
       || trimmed === 'import msgspec'
       || trimmed === 'import tempfile'
@@ -434,6 +435,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     const parameters: FunctionParameter[] = [];
     const optsParams: OptionalFunctionParameter[] = [];
     const arrayNames = new Set<string>();
+    const functionMapNames = new Set(mapNames);
     for (const name of setReturnFunctionNames) {
       arrayNames.add(setNameMarker(name));
     }
@@ -450,6 +452,14 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         const parameter = parseFunctionParameterText(parameterText, arrayNames);
         if (parameter === null) {
           return null;
+        }
+        const parameterName = /^\*\*?([A-Za-z_][A-Za-z0-9_]*)|^([A-Za-z_][A-Za-z0-9_]*)/.exec(parameterText);
+        const pythonParameterName = parameterName?.[1] ?? parameterName?.[2] ?? null;
+        if (parameter.typeExpression.startsWith('Map<')) {
+          functionMapNames.add(parameter.name);
+          if (pythonParameterName !== null) {
+            functionMapNames.add(pythonParameterName);
+          }
         }
         if (keywordOnly) {
           optsParams.push({
@@ -500,7 +510,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         arrayNames,
         validatedTypeAliases,
         relativePath,
-        mapNames,
+        functionMapNames,
         imports,
       );
       if (statement === null) {
@@ -670,6 +680,34 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     leadingStatements.unshift(...helperStatements);
   }
+  const pathHelperStatements: string[] = [];
+  if (moduleValueText.includes('_strftimeUtcNow(')) {
+    pathHelperStatements.push(...strftimeUtcNowHelperStatements());
+  }
+  if (moduleValueText.includes('_pathJoin(')) {
+    if (pathHelperStatements.length > 0) {
+      pathHelperStatements.push('');
+    }
+    pathHelperStatements.push(...pathJoinHelperStatements());
+  }
+  if (moduleValueText.includes('_dirname(') || moduleValueText.includes('_mkdirParents(')) {
+    if (pathHelperStatements.length > 0) {
+      pathHelperStatements.push('');
+    }
+    pathHelperStatements.push(...pathFsHelperStatements());
+  }
+  if (moduleValueText.includes('_openTextFile(')) {
+    if (pathHelperStatements.length > 0) {
+      pathHelperStatements.push('');
+    }
+    pathHelperStatements.push(...openTextFileHelperStatements());
+  }
+  if (pathHelperStatements.length > 0) {
+    if (leadingStatements.length > 0) {
+      pathHelperStatements.push('');
+    }
+    leadingStatements.unshift(...pathHelperStatements);
+  }
   if (moduleValueText.includes('constructStruct(')) {
     const helperStatements = constructBinaryHelperStatements();
     if (leadingStatements.length > 0) {
@@ -683,12 +721,20 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     leadingStatements.unshift(...helperStatements);
   }
-  if (moduleValueText.includes('readFileSync(') || moduleValueText.includes('writeFileSync(')) {
+  if (
+    moduleValueText.includes('readFileSync(')
+    || moduleValueText.includes('writeFileSync(')
+    || moduleValueText.includes('appendFileSync(')
+    || moduleValueText.includes('_openTextFile(')
+    || moduleValueText.includes('_mkdirParents(')
+  ) {
     pushUniqueImportDefinition(imports, {
       modulePath: 'node:fs',
       names: [
         ...(moduleValueText.includes('readFileSync(') ? ['readFileSync'] : []),
-        ...(moduleValueText.includes('writeFileSync(') ? ['writeFileSync'] : []),
+        ...(moduleValueText.includes('writeFileSync(') || moduleValueText.includes('_openTextFile(') ? ['writeFileSync'] : []),
+        ...(moduleValueText.includes('appendFileSync(') || moduleValueText.includes('_openTextFile(') ? ['appendFileSync'] : []),
+        ...(moduleValueText.includes('_mkdirParents(') ? ['mkdirSync'] : []),
       ],
     });
   }
@@ -1041,6 +1087,83 @@ function pythonEqualsHelperStatements(): string[] {
     '    return leftKeys.every((key) => Object.prototype.hasOwnProperty.call(right, key) && pythonEquals(Reflect.get(left, key), Reflect.get(right, key)));',
     '  }',
     '  return false;',
+    '}',
+  ];
+}
+
+function strftimeUtcNowHelperStatements(): string[] {
+  return [
+    'function _strftimeUtcNow(): string {',
+    '  const now = new Date();',
+    "  const year = String(now.getUTCFullYear()).padStart(4, '0');",
+    "  const month = String(now.getUTCMonth() + 1).padStart(2, '0');",
+    "  const day = String(now.getUTCDate()).padStart(2, '0');",
+    "  const hour = String(now.getUTCHours()).padStart(2, '0');",
+    "  const minute = String(now.getUTCMinutes()).padStart(2, '0');",
+    "  const second = String(now.getUTCSeconds()).padStart(2, '0');",
+    "  const microsecond = `${String(now.getUTCMilliseconds()).padStart(3, '0')}000`;",
+    '  return `${year}${month}${day}T${hour}${minute}${second}.${microsecond}Z`;',
+    '}',
+  ];
+}
+
+function pathJoinHelperStatements(): string[] {
+  return [
+    'function _pathJoin(...parts: Array<string | number>): string {',
+    '  const cleaned = parts.map((part, idx) => {',
+    '    const text = String(part);',
+    '    if (idx === 0) {',
+    "      const stripped = text.replace(/\\/+$/g, '');",
+    "      if (stripped === '.') {",
+    "        return '';",
+    '      }',
+    "      return text === '/' ? '/' : stripped;",
+    '    }',
+    "    return text.replace(/^\\/+|\\/+$/g, '');",
+    '  }).filter((part) => part.length > 0);',
+    '  if (cleaned.length === 0) {',
+    "    return '';",
+    '  }',
+    "  if (cleaned[0] === '/') {",
+    "    return `/${cleaned.slice(1).join('/')}`;",
+    '  }',
+    "  return cleaned.join('/');",
+    '}',
+  ];
+}
+
+function pathFsHelperStatements(): string[] {
+  return [
+    'function _dirname(path: string): string {',
+    "  const idx = path.lastIndexOf('/');",
+    '  if (idx < 0) {',
+    "    return '.';",
+    '  }',
+    '  if (idx === 0) {',
+    "    return '/';",
+    '  }',
+    '  return path.slice(0, idx);',
+    '}',
+    '',
+    'function _mkdirParents(path: string): void {',
+    '  mkdirSync(path, { recursive: true });',
+    '}',
+  ];
+}
+
+function openTextFileHelperStatements(): string[] {
+  return [
+    "function _openTextFile(path: string, opts: { mode: string; encoding?: 'utf-8' }): { write(text: string): void; close(): void } {",
+    '  return {',
+    '    write(text: string): void {',
+    "      if (opts.mode.includes('a')) {",
+    "        appendFileSync(path, text, { encoding: opts.encoding ?? 'utf-8' });",
+    '      } else {',
+    "        writeFileSync(path, text, { encoding: opts.encoding ?? 'utf-8' });",
+    '      }',
+    '    },',
+    '    close(): void {},',
+    '  };',
     '}',
   ];
 }

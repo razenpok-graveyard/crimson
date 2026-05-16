@@ -225,6 +225,21 @@ export function translateExpression(
   if (trimmed === 'dt.date.today()' || trimmed === 'datetime.date.today()') {
     return 'new Date()';
   }
+  if (
+    trimmed === 'dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")'
+    || trimmed === 'datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")'
+  ) {
+    return '_strftimeUtcNow()';
+  }
+  if (
+    trimmed === 'dt.datetime.now(dt.timezone.utc).isoformat(timespec="milliseconds")'
+    || trimmed === 'datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="milliseconds")'
+  ) {
+    return "new Date().toISOString().replace('Z', '+00:00')";
+  }
+  if (trimmed === 'os.getpid()') {
+    return 'globalThis.process?.pid ?? 0';
+  }
 
   const dateAttribute = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.(day|month|year)$/.exec(trimmed);
   if (dateAttribute !== null) {
@@ -274,6 +289,22 @@ export function translateExpression(
   const constructExpression = translateConstructExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
   if (constructExpression !== null) {
     return constructExpression;
+  }
+
+  const stringJoinCall = /^((?:[fF])?(["'])(?:\\.|(?!\2)[\s\S])*\2)\.join\((.+)\)$/.exec(trimmed);
+  if (stringJoinCall !== null) {
+    const separator = parsePythonStringExpression(stringJoinCall[1]);
+    if (separator !== null) {
+      return `${translateExpression(stringJoinCall[3], nameMap, arrayNames, validatedTypeAliases, mapNames)}.join(${JSON.stringify(separator.content)})`;
+    }
+  }
+
+  const stringReplaceCall = /^(.+)\.replace\((.*)\)$/.exec(trimmed);
+  if (stringReplaceCall !== null) {
+    const args = splitTopLevelComma(stringReplaceCall[2]);
+    if (args.length === 2 && parsePythonStringExpression(args[0]) !== null) {
+      return `${translateExpression(stringReplaceCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.replaceAll(${translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
   }
 
   const colorChannel = /^([A-Za-z_][A-Za-z0-9_]*)\.([rgba])$/.exec(trimmed);
@@ -562,6 +593,12 @@ export function translateExpression(
   if (strCall !== null && strCall.rest === '.strip()') {
     return `${tsPropertyAccessBase(translateExpression(strCall.argsText, nameMap, arrayNames, validatedTypeAliases))}.trim()`;
   }
+  if (strCall !== null && strCall.rest === '') {
+    const translated = translateExpression(strCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return arrayNames.has(stringNameMarker(strCall.argsText.trim())) || arrayNames.has(stringNameMarker(translated))
+      ? translated
+      : `String(${translated})`;
+  }
 
   const bytesCall = parseCallPrefix(trimmed, 'bytes');
   if (bytesCall !== null && bytesCall.rest === '') {
@@ -610,7 +647,7 @@ export function translateExpression(
     return `int(${translateExpression(intCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
-  for (const primitiveName of ['float', 'str']) {
+  for (const primitiveName of ['float']) {
     const primitiveCall = parseCallPrefix(trimmed, primitiveName);
     if (primitiveCall !== null && primitiveCall.rest === '') {
       return translateExpression(primitiveCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -656,6 +693,22 @@ export function translateExpression(
     return translateExpression(pathCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames);
   }
 
+  const pathOpenCall = /^(.+)\.open\((.*)\)$/.exec(trimmed);
+  if (pathOpenCall !== null) {
+    const args = splitTopLevelComma(pathOpenCall[2]);
+    const modeArg = args.find((arg) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(arg));
+    const encodingArg = args
+      .map((arg) => /^encoding=(.+)$/.exec(arg))
+      .find((match): match is RegExpExecArray => match !== null);
+    if (modeArg !== undefined) {
+      const mode = translateExpression(modeArg, nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const encoding = encodingArg === undefined
+        ? "'utf-8'"
+        : translateExpression(encodingArg[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      return `_openTextFile(String(${translateExpression(pathOpenCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}), { mode: ${mode}, encoding: ${encoding} })`;
+    }
+  }
+
   const raylibConstructor = /^(r[dl])\.(Color|Vector2|Rectangle)\((.*)\)$/.exec(trimmed);
   if (raylibConstructor !== null) {
     const namespaceName = translateExpression(raylibConstructor[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -685,6 +738,18 @@ export function translateExpression(
   const tempDirPathJoin = /^Path\(tempfile\.gettempdir\(\)\) \/ "([^"\\]*)"$/.exec(trimmed);
   if (tempDirPathJoin !== null) {
     return tsStringLiteral(`"/tmp/${tempDirPathJoin[1]}"`);
+  }
+
+  const pathJoin = splitTopLevelPathJoin(trimmed);
+  if (
+    pathJoin !== null
+    && pathJoin.parts.some((part) => parsePythonStringExpression(part) !== null || /^f["']/.test(part) || parseCallPrefix(part, 'Path') !== null)
+  ) {
+    return `_pathJoin(${pathJoin.parts.map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')})`;
+  }
+
+  if (trimmed === 'Lock()') {
+    return 'null';
   }
 
   const zeroArgConstructor = /^([A-Z][A-Za-z0-9_]*)\(\)$/.exec(trimmed);
@@ -1024,6 +1089,9 @@ export function translateExpression(
   if (positionalConstructor !== null) {
     const args = splitTopLevelComma(positionalConstructor[2]);
     if (args.every((arg) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(arg))) {
+      if (positionalConstructor[1] === 'String') {
+        return `String(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;
+      }
       return `new ${tsExportNameForPythonName(positionalConstructor[1])}(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;
     }
   }
@@ -1335,6 +1403,12 @@ function sortedIterableExpression(
     return `Array.from(${left}).filter((item) => !${right}.has(item))`;
   }
   const iterable = translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (mapNames.has(iterable)) {
+    return `Array.from(${iterable}.keys())`;
+  }
+  if (arrayNames.has(objectNameMarker(pythonExpression)) || arrayNames.has(objectNameMarker(iterable))) {
+    return `Object.keys(${iterable})`;
+  }
   return `Array.from(${iterable})`;
 }
 
@@ -1830,6 +1904,48 @@ function splitTopLevelMultiplicative(value: string): { left: string; right: stri
     }
   }
   return null;
+}
+
+function splitTopLevelPathJoin(value: string): { parts: string[] } | null {
+  const parts: string[] = [];
+  let start = 0;
+  let depth = 0;
+  let quote: string | null = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      if (char === quote && value[index - 1] !== '\\') {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char === ')' || char === ']' || char === '}') {
+      depth -= 1;
+      continue;
+    }
+    if (
+      depth === 0
+      && char === '/'
+      && value[index - 1] === ' '
+      && value[index + 1] === ' '
+    ) {
+      parts.push(value.slice(start, index - 1).trim());
+      start = index + 2;
+    }
+  }
+  if (parts.length === 0) {
+    return null;
+  }
+  parts.push(value.slice(start).trim());
+  return { parts };
 }
 
 function parenthesizeForLogicalAnd(value: string): string {

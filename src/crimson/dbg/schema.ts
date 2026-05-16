@@ -179,5 +179,5 @@ export class TraceFooter {
 }
 
 export function channelVersionsFor(channels: Iterable<string>): Map<string, number> {
-  return new Map(Array.from(channels, (channel) => [channel, int(_DEFAULT_CHANNEL_VERSION)] as const));
+  return new Map(Array.from(channels, (channel) => [String(channel), int(_DEFAULT_CHANNEL_VERSION)] as const));
 }

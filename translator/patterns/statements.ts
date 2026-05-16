@@ -37,6 +37,16 @@ import {
   pythonParameterNames,
 } from './parameters.js';
 
+type WithItem = {
+  pythonName: string;
+  name: string;
+  expression: string;
+  close: true;
+} | {
+  expression: string;
+  close: false;
+};
+
 export function parseStraightLineFunctionHeader(
   lines: string[],
   index: number,
@@ -565,8 +575,10 @@ export function translateStraightLineStatement(
       return null;
     }
     for (const item of withItems) {
-      declaredNames.add(item.pythonName);
-      nameMap.set(item.pythonName, item.name);
+      if (item.close) {
+        declaredNames.add(item.pythonName);
+        nameMap.set(item.pythonName, item.name);
+      }
     }
 
     const innerIndent = `${indent}    `;
@@ -601,15 +613,27 @@ export function translateStraightLineStatement(
       return null;
     }
 
+    const namedItems = withItems.filter((item): item is Extract<WithItem, { close: true }> => item.close);
+    if (namedItems.length === 0) {
+      return {
+        statements: [
+          '{',
+          ...blockStatements,
+          '}',
+        ],
+        nextIndex,
+      };
+    }
+
     const hoistedBlock = hoistTryBlockDeclarations(blockStatements);
     return {
       statements: [
-        ...withItems.map((item) => `const ${item.name} = ${item.expression};`),
+        ...namedItems.map((item) => `const ${item.name} = ${item.expression};`),
         ...hoistedBlock.declarations,
         'try {',
         ...hoistedBlock.statements,
         '} finally {',
-        ...[...withItems].reverse().map((item) => `  ${item.name}.close();`),
+        ...[...namedItems].reverse().map((item) => `  ${item.name}.close();`),
         '}',
       ],
       nextIndex,
@@ -1003,9 +1027,20 @@ export function translateStraightLineStatement(
     return { statements: [`yield ${expression};`], nextIndex: index + 1 };
   }
 
-  if (/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\.mkdir\(parents=True, exist_ok=True\)$/.test(statement)) {
+  const pathlibMkdirParents = /^(.+)\.mkdir\(parents=True, exist_ok=True\)$/.exec(statement);
+  if (pathlibMkdirParents !== null) {
+    if (imports === null) {
+      return {
+        statements: [],
+        nextIndex: index + 1,
+      };
+    }
+    const parentPath = /^(.+)\.parent$/.exec(pathlibMkdirParents[1]);
+    const translatedPath = parentPath === null
+      ? `String(${translateExpression(pathlibMkdirParents[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`
+      : `_dirname(String(${translateExpression(parentPath[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}))`;
     return {
-      statements: [],
+      statements: [`_mkdirParents(${translatedPath});`],
       nextIndex: index + 1,
     };
   }
@@ -1123,6 +1158,16 @@ export function translateStraightLineStatement(
       statements: [
         `${reassignedNames.has(annotatedAssignment[1]) ? 'let' : 'const'} ${tsName}: ${typeExpression} = ${assignedRight};`,
       ],
+      nextIndex: index + 1,
+    };
+  }
+
+  const annotatedDeclaration = /^([A-Za-z_][A-Za-z0-9_]*): (.+)$/.exec(statement);
+  if (annotatedDeclaration !== null) {
+    const tsName = tsExportNameForPythonName(annotatedDeclaration[1]);
+    declaredNames.add(annotatedDeclaration[1]);
+    return {
+      statements: [`let ${tsName}: ${tsTypeExpression(annotatedDeclaration[2])};`],
       nextIndex: index + 1,
     };
   }
@@ -2052,17 +2097,22 @@ function parseWithItems(
   arrayNames: Set<string>,
   validatedTypeAliases: ReadonlySet<string>,
   mapNames: ReadonlySet<string>,
-): Array<{ pythonName: string; name: string; expression: string }> | null {
-  const items: Array<{ pythonName: string; name: string; expression: string }> = [];
+): WithItem[] | null {
+  const items: WithItem[] = [];
   for (const itemText of splitTopLevelComma(itemsText)) {
     const item = /^(.+) as ([A-Za-z_][A-Za-z0-9_]*)$/.exec(itemText);
-    if (item === null) {
-      return null;
+    if (item !== null) {
+      items.push({
+        pythonName: item[2],
+        name: tsExportNameForPythonName(item[2]),
+        expression: translateExpression(item[1], nameMap, arrayNames, validatedTypeAliases, mapNames),
+        close: true,
+      });
+      continue;
     }
     items.push({
-      pythonName: item[2],
-      name: tsExportNameForPythonName(item[2]),
-      expression: translateExpression(item[1], nameMap, arrayNames, validatedTypeAliases, mapNames),
+      expression: translateExpression(itemText, nameMap, arrayNames, validatedTypeAliases, mapNames),
+      close: false,
     });
   }
   return items.length === 0 ? null : items;

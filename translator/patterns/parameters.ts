@@ -5,7 +5,7 @@ import type {
 } from '../model.js';
 import { tsExportNameForPythonName, tsTypeExpression } from '../naming.js';
 import { splitTopLevelComma } from './common.js';
-import { colorNameMarker, dateNameMarker, stringNameMarker, translateExpression, vectorNameMarker } from './expression.js';
+import { colorNameMarker, dateNameMarker, objectNameMarker, stringNameMarker, translateExpression, vectorNameMarker } from './expression.js';
 
 export function parseFunctionParametersText(
   parametersText: string,
@@ -42,6 +42,18 @@ export function parseFunctionParameterText(
   parameterText: string,
   arrayNames: Set<string>,
 ): FunctionParameter | null {
+  const kwargsParameter = /^\*\*([A-Za-z_][A-Za-z0-9_]*): (.+)$/.exec(parameterText);
+  if (kwargsParameter !== null) {
+    const parameterName = tsExportNameForPythonName(kwargsParameter[1]);
+    arrayNames.add(objectNameMarker(kwargsParameter[1]));
+    arrayNames.add(objectNameMarker(parameterName));
+    return {
+      name: parameterName,
+      typeExpression: `Record<string, ${tsTypeExpression(kwargsParameter[2])}>`,
+      defaultValue: '{}',
+    };
+  }
+
   const typedParameter = /^([A-Za-z_][A-Za-z0-9_]*): ([^=]+?)(?: = (.+))?$/.exec(parameterText);
   if (typedParameter !== null) {
     const typeExpression = tsTypeExpression(typedParameter[2]);
@@ -67,6 +79,11 @@ export function parseFunctionParameterText(
       const parameterName = tsExportNameForPythonName(typedParameter[1]);
       arrayNames.add(dateNameMarker(typedParameter[1]));
       arrayNames.add(dateNameMarker(parameterName));
+    }
+    if (typeExpression.startsWith('Record<')) {
+      const parameterName = tsExportNameForPythonName(typedParameter[1]);
+      arrayNames.add(objectNameMarker(typedParameter[1]));
+      arrayNames.add(objectNameMarker(parameterName));
     }
     return {
       name: tsExportNameForPythonName(typedParameter[1]),

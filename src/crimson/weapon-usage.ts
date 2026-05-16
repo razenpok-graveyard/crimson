@@ -38,7 +38,7 @@ export function weaponUsageSlotForWeaponId(weaponId: number): number | null {
   return null;
 }
 
-export function normalizeWeaponUsageCounts(values: object): WeaponUsageCounts {
+export function normalizeWeaponUsageCounts(values: unknown): WeaponUsageCounts {
   if (!Array.isArray(values)) {
     return ZERO_WEAPON_USAGE_COUNTS;
   }

@@ -50,6 +50,9 @@ export function tsTypeExpression(pythonType: string): string {
   }
   const dictType = /^dict\[([^,\]]+), (.+)\]$/.exec(trimmed);
   if (dictType !== null) {
+    if (dictType[1].trim() === 'str' && dictType[2].trim() === 'object') {
+      return 'Record<string, unknown>';
+    }
     return `Map<${tsTypeExpression(dictType[1])}, ${tsTypeExpression(dictType[2])}>`;
   }
   const setType = /^set\[(.+)\]$/.exec(trimmed);
@@ -105,6 +108,9 @@ export function tsTypeExpression(pythonType: string): string {
     return 'boolean';
   }
   if (trimmed === 'Any') {
+    return 'unknown';
+  }
+  if (trimmed === 'object') {
     return 'unknown';
   }
   if (/^_+[A-Z][A-Z0-9_]*$/.test(trimmed)) {

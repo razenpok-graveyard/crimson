@@ -11,8 +11,8 @@ export function resetTypoState(typo: TypoState, opts: { creatureCapacity: number
   typo.typing = new TypingBuffer();
   typo.names = CreatureNameTable.sized(int(creatureCapacity));
   typo.spawnCooldownMs = 0;
-  typo.dictionaryWords = dictionaryWords.map((word) => word);
-  typo.highscoreNames = highscoreNames.map((name) => name);
+  typo.dictionaryWords = dictionaryWords.map((word) => String(word));
+  typo.highscoreNames = highscoreNames.map((name) => String(name));
   typo.pendingFireTarget = null;
   typo.pendingReload = false;
 }

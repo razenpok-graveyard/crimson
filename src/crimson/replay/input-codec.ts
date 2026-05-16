@@ -40,7 +40,7 @@ function quantizeF32(value: number): number {
 
 export function packPlayerInput(inp: PlayerInput, opts: { quant?: InputQuantization } = {}): PackedPlayerInput {
   const quant = opts.quant ?? 'f32';
-  if (quant !== 'f32') {
+  if (String(quant) !== 'f32') {
     throw new Error(`unsupported replay input quantization: ${pythonRepr(quant)}`);
   }
   let mx = inp.move.x;
