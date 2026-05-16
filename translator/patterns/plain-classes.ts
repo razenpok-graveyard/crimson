@@ -21,10 +21,10 @@ import {
 } from './expression.js';
 import { parseFunctionParametersText, pythonParameterNames } from './parameters.js';
 import {
-  parseTopLevelAssignment,
   reassignedLocalNames,
   translateStraightLineStatement,
 } from './statements.js';
+import { parseTopLevelAssignment } from './statements/top-level-assignment.js';
 
 function tsAttributeNameForPythonName(pythonName: string): string {
   if (/^__[^_].*__$/.test(pythonName)) {

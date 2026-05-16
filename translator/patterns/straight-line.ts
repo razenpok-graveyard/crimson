@@ -97,11 +97,11 @@ import {
   tupleKeyHelperStatements,
 } from './runtime-helpers.js';
 import {
-  parseTopLevelAssignment,
   reassignedLocalNames,
   rewriteStructPositionalConstructors,
   translateStraightLineStatement,
 } from './statements.js';
+import { parseTopLevelAssignment } from './statements/top-level-assignment.js';
 import { parsePlainClass, parseStructClass } from './structs.js';
 
 export function parseStraightLineModule(trimmedPython: string, relativePath: string): StraightLineModule | null {
