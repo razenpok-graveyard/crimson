@@ -57,6 +57,20 @@ function _globPattern(pattern: string): RegExp {
   return new RegExp(`^${source}$`);
 }
 
+function pythonCompareKeys(left: any, right: any): number {
+  if (Array.isArray(left) && Array.isArray(right)) {
+    const length = Math.min(left.length, right.length);
+    for (let index = 0; index < length; index += 1) {
+      const item = pythonCompareKeys(left[index], right[index]);
+      if (item !== 0) {
+        return item;
+      }
+    }
+    return left.length - right.length;
+  }
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 export class ModsContentLayout {
   readonly scale: number;
   readonly basePos: Vec2;
@@ -100,7 +114,7 @@ export class ModsMenuView extends PanelMenuView {
     const modsDir = _pathJoin(this.state.baseDir, 'mods');
     let dlls: string[] = [];
     try {
-      dlls = Array.from(_globPath(String(modsDir), '*.dll')).sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
+      dlls = Array.from(_globPath(String(modsDir), '*.dll')).sort((left, right) => pythonCompareKeys(left, right));
     } catch (exc) {
       dlls = [];
     }

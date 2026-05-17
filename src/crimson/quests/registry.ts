@@ -8,6 +8,20 @@ import { QuestBuilder, QuestDefinition } from '@crimson/quests/types.ts';
 
 const quests: Map<string, QuestDefinition> = new Map();
 
+function pythonCompareKeys(left: any, right: any): number {
+  if (Array.isArray(left) && Array.isArray(right)) {
+    const length = Math.min(left.length, right.length);
+    for (let index = 0; index < length; index += 1) {
+      const item = pythonCompareKeys(left[index], right[index]);
+      if (item !== 0) {
+        return item;
+      }
+    }
+    return left.length - right.length;
+  }
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 function pythonRepr(value: unknown): string {
   if (typeof value === 'number') {
     if (Number.isNaN(value)) {
@@ -65,7 +79,7 @@ export function registerQuest(opts: { level: string; title: string; timeLimitMs:
 }
 
 export function allQuests(): QuestDefinition[] {
-  return Array.from(quests.values()).sort((left, right) => left.level.globalIndex < right.level.globalIndex ? -1 : left.level.globalIndex > right.level.globalIndex ? 1 : 0);
+  return Array.from(quests.values()).sort((left, right) => pythonCompareKeys(left.level.globalIndex, right.level.globalIndex));
 }
 
 export function questByLevel(level: QuestLevel): QuestDefinition | null {

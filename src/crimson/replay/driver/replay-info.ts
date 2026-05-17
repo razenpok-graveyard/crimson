@@ -30,6 +30,20 @@ export const CORE_EVENT_KINDS: ReadonlySet<ReplayInfoCoreEventKind> = new Set([
   'player_death',
 ]);
 
+function pythonCompareKeys(left: any, right: any): number {
+  if (Array.isArray(left) && Array.isArray(right)) {
+    const length = Math.min(left.length, right.length);
+    for (let index = 0; index < length; index += 1) {
+      const item = pythonCompareKeys(left[index], right[index]);
+      if (item !== 0) {
+        return item;
+      }
+    }
+    return left.length - right.length;
+  }
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 export class ReplayInfoTimelineEvent {
   readonly tickIndex: number;
   readonly elapsedMs: number;
@@ -339,5 +353,5 @@ export function eventCountsByKind(timeline: ReplayInfoTimelineEvent[]): Map<stri
   for (const event of timeline) {
     counts.set(event.kind, (counts.get(event.kind) ?? 0) + 1);
   }
-  return new Map(Object.entries(Object.fromEntries(Array.from(Array.from(counts.entries()).sort((left, right) => left < right ? -1 : left > right ? 1 : 0), ([kind, count]) => [String(kind), int(count)] as const))));
+  return new Map(Object.entries(Object.fromEntries(Array.from(Array.from(counts.entries()).sort((left, right) => pythonCompareKeys(left, right)), ([kind, count]) => [String(kind), int(count)] as const))));
 }

@@ -138,7 +138,7 @@ export function tsTypeExpression(pythonType: string): string {
   if (trimmed === 'None') {
     return 'void';
   }
-  if (trimmed === 'bytes') {
+  if (trimmed === 'bytes' || trimmed === 'bytearray') {
     return 'Uint8Array';
   }
   if (trimmed === 'memoryview') {

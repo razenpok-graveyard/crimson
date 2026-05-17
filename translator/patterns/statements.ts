@@ -1000,6 +1000,10 @@ export function translateStraightLineStatement(
     if (keyErrorLookup !== null) {
       return keyErrorLookup;
     }
+    const enumValueFallback = translateEnumValueFallbackStatement(lines, index, indent, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (enumValueFallback !== null) {
+      return enumValueFallback;
+    }
 
     const innerIndent = `${indent}    `;
     const tryFinallyPredeclarations = predeclareTryFinallyAssignments(lines, index, indent, declaredNames, nameMap);
@@ -1735,9 +1739,10 @@ export function translateStraightLineStatement(
         nextIndex,
       };
     }
+    const loopVariableReassigned = reassignedNames.has(forOfStatement[1]) || blockAssignsName(lines, index + 1, innerIndent, forOfStatement[1]);
     return {
       statements: [
-        `for (const ${tsExportNameForPythonName(forOfStatement[1])} of ${translateExpression(forOfStatement[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`,
+        `for (${loopVariableReassigned ? 'let' : 'const'} ${tsExportNameForPythonName(forOfStatement[1])} of ${translateExpression(forOfStatement[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`,
         ...innerStatements,
         '}',
       ],
@@ -2246,6 +2251,23 @@ export function translateStraightLineStatement(
     if (tupleAssignment !== null) {
       return tupleAssignment;
     }
+  }
+
+  const sliceAssignment = /^(.+)\[:\s*(.+)\] = (.+)$/.exec(statement);
+  if (sliceAssignment !== null) {
+    const target = translateExpression(sliceAssignment[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const end = translateExpression(sliceAssignment[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const zeroRepeat = /^b(["'])\\x00\1 \* (.+)$/.exec(sliceAssignment[3]);
+    if (zeroRepeat !== null) {
+      return appendTrailingCommentToResult({
+        statements: [`${target}.fill(0, 0, ${translateExpression(zeroRepeat[2], nameMap, arrayNames, validatedTypeAliases, mapNames)});`],
+        nextIndex: index + 1,
+      }, trailingComment);
+    }
+    return appendTrailingCommentToResult({
+      statements: [`${target}.set(${translateExpression(sliceAssignment[3], nameMap, arrayNames, validatedTypeAliases, mapNames)}, 0);`],
+      nextIndex: index + 1,
+    }, trailingComment);
   }
 
   const assignment = /^(.+?) (\/\/=|\+=|-=|\*=|\/=|\|=|&=|\^=|=) (.+)$/.exec(statement);
@@ -2851,12 +2873,32 @@ export function translateStraightLineStatement(
 
   const callStatement = /^(.+\))$/.exec(statement);
   if (callStatement !== null) {
+    const structPackIntoCall = /^struct\.pack_into\((.*)\)$/.exec(callStatement[1]);
+    if (structPackIntoCall !== null) {
+      const args = splitTopLevelComma(structPackIntoCall[1]);
+      if (args.length === 4) {
+        return {
+          statements: [`pythonStructFormat(${translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames)}).packInto(${translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(args[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(args[3], nameMap, arrayNames, validatedTypeAliases, mapNames)});`],
+          nextIndex: index + 1,
+        };
+      }
+    }
     const pathlibWriteBytes = /^(?:Path\((.+)\)|(.+))\.write_bytes\((.+)\)$/.exec(callStatement[1]);
     if (pathlibWriteBytes !== null) {
       return {
         statements: [`writeFileSync(String(${translateExpression(pathlibWriteBytes[1] ?? pathlibWriteBytes[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}), ${translateExpression(pathlibWriteBytes[3], nameMap, arrayNames, validatedTypeAliases, mapNames)});`],
         nextIndex: index + 1,
       };
+    }
+    const listInsertCall = /^(.+)\.insert\((.*)\)$/.exec(callStatement[1]);
+    if (listInsertCall !== null) {
+      const args = splitTopLevelComma(listInsertCall[2]);
+      if (args.length === 2) {
+        return {
+          statements: [`${translateExpression(listInsertCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.splice(${translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames)}, 0, ${translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames)});`],
+          nextIndex: index + 1,
+        };
+      }
     }
     const mapItemAppend = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[(.+)\]\.append\((.+)\)$/.exec(callStatement[1]);
     if (mapItemAppend !== null) {
@@ -3344,6 +3386,58 @@ function parseSimpleGeneratorExpression(pythonExpression: string): { expression:
     iterable: generator[3],
     condition: generator[4] ?? null,
   };
+}
+
+function translateEnumValueFallbackStatement(
+  lines: string[],
+  index: number,
+  indent: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): { statements: string[]; nextIndex: number } | null {
+  const innerIndent = `${indent}    `;
+  const tryReturn = new RegExp(`^${escapeRegExp(innerIndent)}return ([A-Za-z_][A-Za-z0-9_]*)\\((.+)\\)$`).exec(lines[index + 1] ?? '');
+  if (tryReturn === null || (lines[index + 2] ?? '') !== `${indent}except ValueError:`) {
+    return null;
+  }
+  const fallbackReturn = new RegExp(`^${escapeRegExp(innerIndent)}return ${tryReturn[1]}\\.([A-Z][A-Z0-9_]*)$`).exec(lines[index + 3] ?? '');
+  if (fallbackReturn === null) {
+    return null;
+  }
+  const enumName = translateExpression(tryReturn[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const value = translateExpression(tryReturn[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  return {
+    statements: [
+      `if (Object.values(${enumName}).includes(${value} as ${enumName})) {`,
+      `  return ${value} as ${enumName};`,
+      '}',
+      `return ${translateExpression(`${tryReturn[1]}.${fallbackReturn[1]}`, nameMap, arrayNames, validatedTypeAliases, mapNames)};`,
+    ],
+    nextIndex: index + 4,
+  };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function blockAssignsName(lines: string[], startIndex: number, blockIndent: string, name: string): boolean {
+  const escapedName = escapeRegExp(name);
+  const directAssignment = new RegExp(`^${escapedName}(?:\\s*(?://=|\\+=|-=|\\*=|/=|\\|=|&=|\\^=|=)|\\s*:)\\s`);
+  const tupleAssignment = new RegExp(`^(?:[A-Za-z_][A-Za-z0-9_]*,\\s*)*${escapedName}(?:\\s*,\\s*[A-Za-z_][A-Za-z0-9_]*)+\\s*=\\s`);
+  for (let nextIndex = startIndex; nextIndex < lines.length; nextIndex += 1) {
+    const line = lines[nextIndex] ?? '';
+    if (line.trim() !== '' && !line.startsWith(blockIndent)) {
+      break;
+    }
+    const statement = splitInlineComment(line.trim()).code;
+    if (directAssignment.test(statement) || tupleAssignment.test(statement)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function collectMultilineListLiteral(

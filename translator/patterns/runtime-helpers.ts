@@ -79,6 +79,8 @@ export function pythonStructFormatHelperStatements(): string[] {
     'interface PythonStructFormat {',
     '  readonly size: number;',
     '  unpackFrom(data: Uint8Array | ArrayBuffer | ArrayBufferView, offset?: number): number[];',
+    '  pack(value: number): Uint8Array;',
+    '  packInto(data: Uint8Array | ArrayBuffer | ArrayBufferView, offset: number, value: number): void;',
     '}',
     '',
     ...bytesFromHelperStatements(),
@@ -87,11 +89,20 @@ export function pythonStructFormatHelperStatements(): string[] {
     "  if (format === '<I') {",
     '    return {',
     '      size: 4,',
-    '      unpackFrom(data, offset = 0) {',
-    '        const bytes = bytesFrom(data);',
-    '        return [new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(offset, true)];',
-    '      },',
-    '    };',
+      '      unpackFrom(data, offset = 0) {',
+      '        const bytes = bytesFrom(data);',
+      '        return [new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(offset, true)];',
+      '      },',
+      '      pack(value) {',
+      '        const bytes = new Uint8Array(4);',
+      '        new DataView(bytes.buffer).setUint32(0, int(value) >>> 0, true);',
+      '        return bytes;',
+      '      },',
+      '      packInto(data, offset, value) {',
+      '        const bytes = bytesFrom(data);',
+      '        new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).setUint32(offset, int(value) >>> 0, true);',
+      '      },',
+      '    };',
     '  }',
     "  throw new Error(`unsupported struct format: ${format}`);",
     '}',
@@ -342,6 +353,37 @@ export function latin1EncodeReplaceHelperStatements(): string[] {
   ];
 }
 
+export function latin1EncodeIgnoreHelperStatements(): string[] {
+  return [
+    'function latin1EncodeIgnore(text: string): number[] {',
+    '  const bytes: number[] = [];',
+    '  for (let index = 0; index < text.length; index += 1) {',
+    '    const code = text.charCodeAt(index);',
+    '    if (code <= 0xff) {',
+    '      bytes.push(code);',
+    '    }',
+    '  }',
+    '  return bytes;',
+    '}',
+  ];
+}
+
+export function latin1DecodeUntilNullHelperStatements(): string[] {
+  return [
+    'function latin1DecodeUntilNull(bytes: Uint8Array): string {',
+    '  let end = bytes.indexOf(0);',
+    '  if (end < 0) {',
+    '    end = bytes.byteLength;',
+    '  }',
+    '  let text = \'\';',
+    '  for (let index = 0; index < end; index += 1) {',
+    '    text += String.fromCharCode(bytes[index]);',
+    '  }',
+    '  return text;',
+    '}',
+  ];
+}
+
 export function pythonStringCountHelperStatements(): string[] {
   return [
     'function pythonStringCount(text: string, needle: string): number {',
@@ -376,6 +418,24 @@ export function pythonRoundHelperStatements(): string[] {
     '    return (floorValue + 1) / factor;',
     '  }',
     '  return (floorValue % 2 === 0 ? floorValue : floorValue + 1) / factor;',
+    '}',
+  ];
+}
+
+export function pythonCompareKeysHelperStatements(): string[] {
+  return [
+    'function pythonCompareKeys(left: any, right: any): number {',
+    '  if (Array.isArray(left) && Array.isArray(right)) {',
+    '    const length = Math.min(left.length, right.length);',
+    '    for (let index = 0; index < length; index += 1) {',
+    '      const item = pythonCompareKeys(left[index], right[index]);',
+    '      if (item !== 0) {',
+    '        return item;',
+    '      }',
+    '    }',
+    '    return left.length - right.length;',
+    '  }',
+    '  return left < right ? -1 : left > right ? 1 : 0;',
     '}',
   ];
 }
@@ -1106,6 +1166,16 @@ export function pathExtnameHelperStatements(): string[] {
   ];
 }
 
+export function pathStemHelperStatements(): string[] {
+  return [
+    'function _pathStem(path: string): string {',
+    '  const base = _basename(path);',
+    '  const ext = _pathExtname(base);',
+    '  return ext === \'\' ? base : base.slice(0, -ext.length);',
+    '}',
+  ];
+}
+
 export function pathFsHelperStatements(): string[] {
   return [
     'function _dirname(path: string): string {',
@@ -1152,13 +1222,26 @@ export function globPathHelperStatements(): string[] {
 
 export function openTextFileHelperStatements(): string[] {
   return [
-    "function _openTextFile(path: string, opts: { mode: string; encoding?: 'utf-8' }): { write(text: string): void; close(): void } {",
+    "function _openTextFile(path: string, opts: { mode: string; encoding?: 'utf-8' }): { read(size: number): Uint8Array; write(data: string | Uint8Array): void; close(): void } {",
+    '  const binary = opts.mode.includes(\'b\');',
+    '  let readOffset = 0;',
+    '  const readBuffer = opts.mode.includes(\'r\') ? new Uint8Array(readFileSync(path)) : new Uint8Array();',
+    '  let wrote = false;',
     '  return {',
-    '    write(text: string): void {',
+    '    read(size: number): Uint8Array {',
+    '      const chunk = readBuffer.slice(readOffset, readOffset + size);',
+    '      readOffset += chunk.byteLength;',
+    '      return chunk;',
+    '    },',
+    '    write(data: string | Uint8Array): void {',
+    '      const payload = binary || typeof data !== \'string\' ? data : String(data);',
     "      if (opts.mode.includes('a')) {",
-    "        appendFileSync(path, text, { encoding: opts.encoding ?? 'utf-8' });",
+    '        appendFileSync(path, payload);',
+    '      } else if (wrote) {',
+    '        appendFileSync(path, payload);',
     '      } else {',
-    "        writeFileSync(path, text, { encoding: opts.encoding ?? 'utf-8' });",
+    '        writeFileSync(path, payload);',
+    '        wrote = true;',
     '      }',
     '    },',
     '    close(): void {},',

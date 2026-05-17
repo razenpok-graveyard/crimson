@@ -3,6 +3,20 @@
 import { rl } from '@grim/raylib-api.ts';
 import * as profileHooks from '@crimson/render/world/profile-hooks.ts';
 
+function pythonCompareKeys(left: any, right: any): number {
+  if (Array.isArray(left) && Array.isArray(right)) {
+    const length = Math.min(left.length, right.length);
+    for (let index = 0; index < length; index += 1) {
+      const item = pythonCompareKeys(left[index], right[index]);
+      if (item !== 0) {
+        return item;
+      }
+    }
+    return left.length - right.length;
+  }
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 export class RenderTelemetryFrameSnapshot {
   readonly frameIndex: number;
   readonly tickIndexBeforeUpdate: number;
@@ -171,7 +185,7 @@ export class RenderTelemetrySession {
     if (this._currentFrameIndex === null || this._currentTickBeforeUpdate === null) {
       return;
     }
-    const snapshot = new RenderTelemetryFrameSnapshot({ frameIndex: int(this._currentFrameIndex), tickIndexBeforeUpdate: int(this._currentTickBeforeUpdate), tickIndexAfterUpdate: int(tickIndexAfterUpdate), updateMs, drawMs, frameMs, drawCallsTotal: int(this._drawCallsTotal), drawCallsByApi: new Map(Array.from(Array.from(this._drawCallsByApi.entries()).sort((left, right) => left < right ? -1 : left > right ? 1 : 0), ([key, value]) => [String(key), int(value)] as const)), drawCallsByPass: new Map(Array.from(Array.from(this._drawCallsByPass.entries()).sort((left, right) => left < right ? -1 : left > right ? 1 : 0), ([key, value]) => [String(key), int(value)] as const)), passMs: new Map(Array.from(Array.from(this._passMs.entries()).sort((left, right) => left < right ? -1 : left > right ? 1 : 0), ([key, value]) => [String(key), value] as const)) });
+    const snapshot = new RenderTelemetryFrameSnapshot({ frameIndex: int(this._currentFrameIndex), tickIndexBeforeUpdate: int(this._currentTickBeforeUpdate), tickIndexAfterUpdate: int(tickIndexAfterUpdate), updateMs, drawMs, frameMs, drawCallsTotal: int(this._drawCallsTotal), drawCallsByApi: new Map(Array.from(Array.from(this._drawCallsByApi.entries()).sort((left, right) => pythonCompareKeys(left, right)), ([key, value]) => [String(key), int(value)] as const)), drawCallsByPass: new Map(Array.from(Array.from(this._drawCallsByPass.entries()).sort((left, right) => pythonCompareKeys(left, right)), ([key, value]) => [String(key), int(value)] as const)), passMs: new Map(Array.from(Array.from(this._passMs.entries()).sort((left, right) => pythonCompareKeys(left, right)), ([key, value]) => [String(key), value] as const)) });
     this._frames.push(snapshot);
     this._currentFrameIndex = null;
     this._currentTickBeforeUpdate = null;

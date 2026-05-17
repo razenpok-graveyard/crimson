@@ -9,6 +9,7 @@ import {
   mapGetOrInitHelperStatements,
   mapGetOrThrowHelperStatements,
   pythonEqualsHelperStatements,
+  pythonCompareKeysHelperStatements,
   pythonRoundHelperStatements,
   tupleKeyHelperStatements,
 } from '../patterns/runtime-helpers.js';
@@ -177,6 +178,9 @@ function structModuleHelperStatements(module: StructModule): string[] {
   }
   if (moduleText.includes('pythonEquals(')) {
     pushHelper(pythonEqualsHelperStatements());
+  }
+  if (moduleText.includes('pythonCompareKeys(')) {
+    pushHelper(pythonCompareKeysHelperStatements());
   }
   if (moduleText.includes('pyRound(')) {
     pushHelper(pythonRoundHelperStatements());

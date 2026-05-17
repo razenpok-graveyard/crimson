@@ -1,6 +1,6 @@
 // Port of crimson/net/debug_log.py
 
-import { writeFileSync, appendFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'node:fs';
 
 const _TRACE_LOCK = null;
 let tracePath: string | null = null;
@@ -54,17 +54,44 @@ function _mkdirParents(path: string): void {
   mkdirSync(path, { recursive: true });
 }
 
-function _openTextFile(path: string, opts: { mode: string; encoding?: 'utf-8' }): { write(text: string): void; close(): void } {
+function _openTextFile(path: string, opts: { mode: string; encoding?: 'utf-8' }): { read(size: number): Uint8Array; write(data: string | Uint8Array): void; close(): void } {
+  const binary = opts.mode.includes('b');
+  let readOffset = 0;
+  const readBuffer = opts.mode.includes('r') ? new Uint8Array(readFileSync(path)) : new Uint8Array();
+  let wrote = false;
   return {
-    write(text: string): void {
+    read(size: number): Uint8Array {
+      const chunk = readBuffer.slice(readOffset, readOffset + size);
+      readOffset += chunk.byteLength;
+      return chunk;
+    },
+    write(data: string | Uint8Array): void {
+      const payload = binary || typeof data !== 'string' ? data : String(data);
       if (opts.mode.includes('a')) {
-        appendFileSync(path, text, { encoding: opts.encoding ?? 'utf-8' });
+        appendFileSync(path, payload);
+      } else if (wrote) {
+        appendFileSync(path, payload);
       } else {
-        writeFileSync(path, text, { encoding: opts.encoding ?? 'utf-8' });
+        writeFileSync(path, payload);
+        wrote = true;
       }
     },
     close(): void {},
   };
+}
+
+function pythonCompareKeys(left: any, right: any): number {
+  if (Array.isArray(left) && Array.isArray(right)) {
+    const length = Math.min(left.length, right.length);
+    for (let index = 0; index < length; index += 1) {
+      const item = pythonCompareKeys(left[index], right[index]);
+      if (item !== 0) {
+        return item;
+      }
+    }
+    return left.length - right.length;
+  }
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function formatValue(value: unknown): string {
@@ -74,7 +101,7 @@ function formatValue(value: unknown): string {
 
 function formatFields(fields: Record<string, unknown>): string {
   const parts: string[] = [];
-  for (const key of Object.keys(fields).sort((left, right) => left < right ? -1 : left > right ? 1 : 0)) {
+  for (const key of Object.keys(fields).sort((left, right) => pythonCompareKeys(left, right))) {
     parts.push(`${key}=${formatValue(fields[key])}`);
   }
   return parts.join(" ");

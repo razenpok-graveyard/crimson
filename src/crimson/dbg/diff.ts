@@ -8,6 +8,20 @@ import type { TickRecord } from '@crimson/dbg/schema.ts';
 import { TRACE_REQUIRED_CHANNELS } from '@crimson/dbg/schema.ts';
 import { TraceError, TraceReader } from '@crimson/dbg/trace.ts';
 
+function pythonCompareKeys(left: any, right: any): number {
+  if (Array.isArray(left) && Array.isArray(right)) {
+    const length = Math.min(left.length, right.length);
+    for (let index = 0; index < length; index += 1) {
+      const item = pythonCompareKeys(left[index], right[index]);
+      if (item !== 0) {
+        return item;
+      }
+    }
+    return left.length - right.length;
+  }
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 function tickMismatchRow(opts: { kind: string; channel: string; detail: BuiltinObject | null }): BuiltinObject {
   const kind = opts.kind;
   const channel = opts.channel;
@@ -81,7 +95,7 @@ function loadPairs(opts: { expectedTrace: TraceReader; actualTrace: TraceReader;
   const tickEnd = opts.tickEnd;
   const expectedRows = new Map(Array.from(expectedTrace.iterTicks({ tickStart: tickStart, tickEnd: tickEnd }), (row: any) => [row.tickIndex, row] as const));
   const actualRows = new Map(Array.from(actualTrace.iterTicks({ tickStart: tickStart, tickEnd: tickEnd }), (row: any) => [row.tickIndex, row] as const));
-  const allTicks = Array.from(new Set([...new Set(expectedRows.keys()), ...new Set(actualRows.keys())])).sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
+  const allTicks = Array.from(new Set([...new Set(expectedRows.keys()), ...new Set(actualRows.keys())])).sort((left, right) => pythonCompareKeys(left, right));
   const pairs: TickPair[] = [];
   for (const tick of allTicks) {
     const expRow = expectedRows.get(tick) ?? null;

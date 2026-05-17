@@ -72,7 +72,7 @@ export class BonusHudState {
     const timerRefAlt = opts.timerRefAlt ?? null;
     let existing = null;
     let free = null;
-    for (const slot of this.slots) {
+    for (let slot of this.slots) {
       if (slot.active && slot.bonusId === bonusId) {
         existing = slot;
         break;

@@ -609,6 +609,10 @@ export function translateExpression(
   if (bytesLiteral !== null) {
     return `new Uint8Array([${bytesLiteral.join(', ')}])`;
   }
+  const bytearrayCall = parseCallPrefix(trimmed, 'bytearray');
+  if (bytearrayCall !== null && bytearrayCall.rest === '') {
+    return `new Uint8Array(${translateExpression(bytearrayCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
   const vectorOffsetKeywordCall = translateVectorOffsetKeywordCall(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
   if (vectorOffsetKeywordCall !== null) {
     return vectorOffsetKeywordCall;
@@ -630,6 +634,10 @@ export function translateExpression(
   const stripCall = /^(.+)\.strip\(\)$/.exec(trimmed);
   if (stripCall !== null && splitTopLevelComma(stripCall[1]).length === 1) {
     return `${tsPropertyAccessBase(translateExpression(stripCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames))}.trim()`;
+  }
+  const findCall = /^(.+)\.find\((.+)\)$/.exec(trimmed);
+  if (findCall !== null) {
+    return `${translateExpression(findCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.indexOf(${translateExpression(findCall[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
   const toBytesCall = /^(.+)\.tobytes\(\)$/.exec(trimmed);
@@ -893,6 +901,15 @@ export function translateExpression(
     }
   }
 
+  const pathStemAttribute = /^(?:Path\((.+)\)|(.+))\.stem$/.exec(trimmed);
+  if (pathStemAttribute !== null) {
+    const pathExpression = pathStemAttribute[1] ?? pathStemAttribute[2];
+    const receiver = translateExpression(pathExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (pathStemAttribute[1] !== undefined || arrayNames.has(pathNameMarker(pathExpression)) || arrayNames.has(pathNameMarker(receiver))) {
+      return `_pathStem(String(${receiver}))`;
+    }
+  }
+
   const pathExistsCall = /^(?:Path\((.+)\)|(.+))\.exists\(\)$/.exec(trimmed);
   if (pathExistsCall !== null) {
     const pathExpression = pathExistsCall[1] ?? pathExistsCall[2];
@@ -943,6 +960,15 @@ export function translateExpression(
     }
   }
 
+  const nulTerminatedLatin1Decode = /^(.+)\.split\(b(["'])\\x00\2, 1\)\[0\]\.decode\((.*)\)$/.exec(trimmed);
+  if (nulTerminatedLatin1Decode !== null) {
+    const args = splitTopLevelComma(nulTerminatedLatin1Decode[3]);
+    const encoding = args[0] === undefined ? 'utf-8' : parsePythonStringExpression(args[0])?.content ?? null;
+    if (encoding !== null && ['latin-1', 'latin1', 'iso-8859-1'].includes(encoding.toLowerCase())) {
+      return `latin1DecodeUntilNull(${translateExpression(nulTerminatedLatin1Decode[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
+  }
+
   const bytesDecodeCall = /^(.+)\.decode\((.*)\)$/.exec(trimmed);
   if (bytesDecodeCall !== null) {
     const args = splitTopLevelComma(bytesDecodeCall[2]);
@@ -966,6 +992,13 @@ export function translateExpression(
       && (errorsValue?.content ?? 'strict') === 'replace'
     ) {
       return `latin1EncodeReplace(${translateExpression(stringEncodeCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
+    if (
+      encoding !== null
+      && ['latin-1', 'latin1', 'iso-8859-1'].includes(encoding.content.toLowerCase())
+      && (errorsValue?.content ?? 'strict') === 'ignore'
+    ) {
+      return `latin1EncodeIgnore(${translateExpression(stringEncodeCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
     }
   }
 
@@ -1571,13 +1604,22 @@ export function translateExpression(
   }
 
   const structUnpackFromCall = parseCallPrefix(trimmed, 'struct.unpack_from');
-  if (structUnpackFromCall !== null && structUnpackFromCall.rest === '') {
+  if (structUnpackFromCall !== null && (structUnpackFromCall.rest === '' || structUnpackFromCall.rest === '[0]')) {
     const args = splitTopLevelComma(structUnpackFromCall.argsText);
     if (args.length === 2 || args.length === 3) {
       const format = translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
       const data = translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
       const offset = args[2] === undefined ? '' : `, ${translateExpression(args[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
-      return `pythonStructFormat(${format}).unpackFrom(${data}${offset})`;
+      const unpacked = `pythonStructFormat(${format}).unpackFrom(${data}${offset})`;
+      return structUnpackFromCall.rest === '[0]' ? `${unpacked}[0]` : unpacked;
+    }
+  }
+
+  const structPackCall = parseCallPrefix(trimmed, 'struct.pack');
+  if (structPackCall !== null && structPackCall.rest === '') {
+    const args = splitTopLevelComma(structPackCall.argsText);
+    if (args.length === 2) {
+      return `pythonStructFormat(${translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames)}).pack(${translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
     }
   }
 
@@ -3188,23 +3230,29 @@ function translateSortedCall(
   const reverse = parts.some((part) => part === 'reverse=True');
   const iterable = sortedIterableExpression(iterablePart, nameMap, arrayNames, validatedTypeAliases, mapNames);
   if (keyPart === undefined) {
-    return `${iterable}.sort((left, right) => left < right ? ${reverse ? 1 : -1} : left > right ? ${reverse ? -1 : 1} : 0)`;
+    const comparison = 'pythonCompareKeys(left, right)';
+    return `${iterable}.sort((left, right) => ${reverse ? `-1 * ${comparison}` : comparison})`;
   }
 
   const lambda = /^key=lambda ([A-Za-z_][A-Za-z0-9_]*): (.+)$/.exec(keyPart);
-  if (lambda === null) {
-    return null;
+  if (lambda !== null) {
+    const leftNameMap = new Map(nameMap);
+    leftNameMap.set(lambda[1], 'left');
+    const rightNameMap = new Map(nameMap);
+    rightNameMap.set(lambda[1], 'right');
+    const leftKey = translateExpression(lambda[2], leftNameMap, arrayNames, validatedTypeAliases, mapNames);
+    const rightKey = translateExpression(lambda[2], rightNameMap, arrayNames, validatedTypeAliases, mapNames);
+    const comparison = `pythonCompareKeys(${leftKey}, ${rightKey})`;
+    return `${iterable}.sort((left, right) => ${reverse ? `-1 * ${comparison}` : comparison})`;
   }
 
-  const leftNameMap = new Map(nameMap);
-  leftNameMap.set(lambda[1], 'left');
-  const rightNameMap = new Map(nameMap);
-  rightNameMap.set(lambda[1], 'right');
-  const leftKey = translateExpression(lambda[2], leftNameMap, arrayNames, validatedTypeAliases, mapNames);
-  const rightKey = translateExpression(lambda[2], rightNameMap, arrayNames, validatedTypeAliases, mapNames);
-  const less = reverse ? 1 : -1;
-  const greater = reverse ? -1 : 1;
-  return `${iterable}.sort((left, right) => ${leftKey} < ${rightKey} ? ${less} : ${leftKey} > ${rightKey} ? ${greater} : 0)`;
+  const keyReference = /^key=(.+)$/.exec(keyPart);
+  if (keyReference !== null) {
+    const key = translateExpression(keyReference[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const comparison = `pythonCompareKeys(${key}(left), ${key}(right))`;
+    return `${iterable}.sort((left, right) => ${reverse ? `-1 * ${comparison}` : comparison})`;
+  }
+  return null;
 }
 
 function translateMaxCall(

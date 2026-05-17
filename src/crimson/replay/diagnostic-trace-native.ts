@@ -402,6 +402,8 @@ export class ReplayTickTraceRow {
 interface PythonStructFormat {
   readonly size: number;
   unpackFrom(data: Uint8Array | ArrayBuffer | ArrayBufferView, offset?: number): number[];
+  pack(value: number): Uint8Array;
+  packInto(data: Uint8Array | ArrayBuffer | ArrayBufferView, offset: number, value: number): void;
 }
 
 function bytesFrom(data: Uint8Array | ArrayBuffer | ArrayBufferView): Uint8Array {
@@ -421,6 +423,15 @@ function pythonStructFormat(format: string): PythonStructFormat {
       unpackFrom(data, offset = 0) {
         const bytes = bytesFrom(data);
         return [new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(offset, true)];
+      },
+      pack(value) {
+        const bytes = new Uint8Array(4);
+        new DataView(bytes.buffer).setUint32(0, int(value) >>> 0, true);
+        return bytes;
+      },
+      packInto(data, offset, value) {
+        const bytes = bytesFrom(data);
+        new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).setUint32(offset, int(value) >>> 0, true);
       },
     };
   }

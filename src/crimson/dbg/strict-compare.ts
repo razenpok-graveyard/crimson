@@ -108,6 +108,20 @@ function pythonJsonValue(value: unknown, opts: { sortKeys?: boolean; defaultRepr
   return opts.defaultRepr === true ? String(value) : null;
 }
 
+function pythonCompareKeys(left: any, right: any): number {
+  if (Array.isArray(left) && Array.isArray(right)) {
+    const length = Math.min(left.length, right.length);
+    for (let index = 0; index < length; index += 1) {
+      const item = pythonCompareKeys(left[index], right[index]);
+      if (item !== 0) {
+        return item;
+      }
+    }
+    return left.length - right.length;
+  }
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 function pythonRepr(value: unknown): string {
   if (typeof value === 'number') {
     if (Number.isNaN(value)) {
@@ -226,7 +240,7 @@ function collect(expected: unknown, actual: unknown, opts: { path: string; out: 
   if (pythonIsMapping(expected)) {
     const expectedMap = (expected as PythonMapping);
     const actualMap = (actual as PythonMapping);
-    const keys = Array.from(new Set([...new Set(pythonMappingKeys(expectedMap)), ...new Set(pythonMappingKeys(actualMap))])).sort((left, right) => pythonRepr(left) < pythonRepr(right) ? -1 : pythonRepr(left) > pythonRepr(right) ? 1 : 0);
+    const keys = Array.from(new Set([...new Set(pythonMappingKeys(expectedMap)), ...new Set(pythonMappingKeys(actualMap))])).sort((left, right) => pythonCompareKeys(pythonRepr(left), pythonRepr(right)));
     for (const key of keys) {
       const keyPath = pathKey(path, key);
       if (!((container: unknown, value: unknown) => container instanceof Set || container instanceof Map ? container.has(value) : Array.isArray(container) ? container.includes(value) : typeof container === 'string' ? container.includes(String(value)) : container !== null && typeof container === 'object' ? Object.prototype.hasOwnProperty.call(container, String(value)) : false)(expectedMap, key)) {

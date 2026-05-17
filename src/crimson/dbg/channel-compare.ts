@@ -46,6 +46,20 @@ function pythonEquals(left: object | string | number | boolean | null | undefine
   return false;
 }
 
+function pythonCompareKeys(left: any, right: any): number {
+  if (Array.isArray(left) && Array.isArray(right)) {
+    const length = Math.min(left.length, right.length);
+    for (let index = 0; index < length; index += 1) {
+      const item = pythonCompareKeys(left[index], right[index]);
+      if (item !== 0) {
+        return item;
+      }
+    }
+    return left.length - right.length;
+  }
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 function rngStreamRowPayload(row: RngStreamRow, opts: { field: string }): BuiltinObject {
   const field = opts.field;
   const payload = toBuiltinObject({ 'tick_call_index': row.tickCallIndex, 'value_15': row.value15, 'state_before_u32': row.stateBeforeU32, 'state_after_u32': row.stateAfterU32, 'caller': row.caller, 'caller_hex': row.caller === null ? null : `0x${Math.trunc(row.caller).toString(16).padStart(8, '0')}` }, { field: field });
@@ -119,13 +133,13 @@ export function compareEntitySamples(expectedObj: EntitySamplesSnapshot, actualO
       detail[`${kind}_duplicate_uids`] = { "expected": expDupes, "actual": actDupes };
     }
 
-    const missing = Array.from(expMap.keys()).filter((uid) => !actMap.has(uid)).sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
-    const extra = Array.from(actMap.keys()).filter((uid) => !expMap.has(uid)).sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
+    const missing = Array.from(expMap.keys()).filter((uid) => !actMap.has(uid)).sort((left, right) => pythonCompareKeys(left, right));
+    const extra = Array.from(actMap.keys()).filter((uid) => !expMap.has(uid)).sort((left, right) => pythonCompareKeys(left, right));
     if (missing.length > 0 || extra.length > 0) {
       detail[`${kind}_uids`] = { "missing": missing, "extra": extra };
     }
 
-    for (const uid of Array.from(expMap.keys()).filter((item) => actMap.has(item)).sort((left, right) => left < right ? -1 : left > right ? 1 : 0)) {
+    for (const uid of Array.from(expMap.keys()).filter((item) => actMap.has(item)).sort((left, right) => pythonCompareKeys(left, right))) {
       const expectedRow = mapGetOrThrow(expMap, uid);
       const actualRow = mapGetOrThrow(actMap, uid);
       if (expectedRow === actualRow) {

@@ -85,6 +85,20 @@ function pythonId(value: unknown): number {
   return objectId;
 }
 
+function pythonCompareKeys(left: any, right: any): number {
+  if (Array.isArray(left) && Array.isArray(right)) {
+    const length = Math.min(left.length, right.length);
+    for (let index = 0; index < length; index += 1) {
+      const item = pythonCompareKeys(left[index], right[index]);
+      if (item !== 0) {
+        return item;
+      }
+    }
+    return left.length - right.length;
+  }
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 function pyRound(value: number, ndigits = 0): number {
   const factor = 10 ** ndigits;
   const scaled = value * factor;
@@ -281,7 +295,7 @@ export function loadSfxIndex(state: SfxState, assetsDir: string, console: Consol
 
   const missingEntries = Array.from(SFX_SPECS.values()).filter((spec) => !paqEntries.has(spec.entryName)).map((spec) => spec.entryName);
   if (missingEntries.length > 0) {
-    const missing = Array.from(missingEntries).sort((left, right) => left < right ? -1 : left > right ? 1 : 0).join(", ");
+    const missing = Array.from(missingEntries).sort((left, right) => pythonCompareKeys(left, right)).join(", ");
     throw new Error(`audio: missing declared sfx assets in ${SFX_PAK_NAME}: ${missing}`);
   }
 

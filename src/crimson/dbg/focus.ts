@@ -7,6 +7,20 @@ import { BuiltinObject, toBuiltinObject } from '@crimson/dbg/payloads.ts';
 import type { TickRecord } from '@crimson/dbg/schema.ts';
 import { TraceReader } from '@crimson/dbg/trace.ts';
 
+function pythonCompareKeys(left: any, right: any): number {
+  if (Array.isArray(left) && Array.isArray(right)) {
+    const length = Math.min(left.length, right.length);
+    for (let index = 0; index < length; index += 1) {
+      const item = pythonCompareKeys(left[index], right[index]);
+      if (item !== 0) {
+        return item;
+      }
+    }
+    return left.length - right.length;
+  }
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 function entityUidSet(row: TickRecord, kind: string): Set<number> {
   const samples = entitySamplesChannelRequired(row);
   const out: Set<number> = new Set();
@@ -51,8 +65,8 @@ export function focusTick(opts: { goldenTrace: string; candidateTrace: string; t
   for (const kind of ENTITY_SAMPLE_KINDS) {
     const expectedUids = entityUidSet(expectedRow, kind);
     const candidateUids = entityUidSet(candidateRow, kind);
-    const missing = Array.from(expectedUids).filter((item) => !candidateUids.has(item)).sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
-    const extra = Array.from(candidateUids).filter((item) => !expectedUids.has(item)).sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
+    const missing = Array.from(expectedUids).filter((item) => !candidateUids.has(item)).sort((left, right) => pythonCompareKeys(left, right));
+    const extra = Array.from(candidateUids).filter((item) => !expectedUids.has(item)).sort((left, right) => pythonCompareKeys(left, right));
     let diverged = missing.length > 0 || extra.length > 0 || expectedUids.size !== candidateUids.size;
     if (diverged) {
       entityDiverged = true;

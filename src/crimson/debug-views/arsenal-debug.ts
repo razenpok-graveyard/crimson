@@ -57,6 +57,20 @@ function mapGetOrThrow<K, V>(map: ReadonlyMap<K, V>, key: unknown): V {
   return map.get(typedKey) as V;
 }
 
+function pythonCompareKeys(left: any, right: any): number {
+  if (Array.isArray(left) && Array.isArray(right)) {
+    const length = Math.min(left.length, right.length);
+    for (let index = 0; index < length; index += 1) {
+      const item = pythonCompareKeys(left[index], right[index]);
+      if (item !== 0) {
+        return item;
+      }
+    }
+    return left.length - right.length;
+  }
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 export class ArsenalDebugView {
   protected _assetsRoot: string;
   protected _missingAssets: string[];
@@ -90,7 +104,7 @@ export class ArsenalDebugView {
     this._audio = null;
     this._console = null;
 
-    this._weaponIds = Array.from(new Set(Array.from(WEAPON_TABLE).map((entry) => int(entry.weaponId)))).sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
+    this._weaponIds = Array.from(new Set(Array.from(WEAPON_TABLE).map((entry) => int(entry.weaponId)))).sort((left, right) => pythonCompareKeys(left, right));
     this._weaponIndex = 0;
     this._spawnIds = Array.from(DEFAULT_SPAWN_IDS);
     this._spawnRingRadius = 280.0;

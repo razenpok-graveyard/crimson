@@ -78,6 +78,8 @@ import {
   concatBytesHelperStatements,
   constructBinaryHelperStatements,
   globPathHelperStatements,
+  latin1DecodeUntilNullHelperStatements,
+  latin1EncodeIgnoreHelperStatements,
   latin1EncodeReplaceHelperStatements,
   mapGetOrInitHelperStatements,
   mapGetOrThrowHelperStatements,
@@ -88,10 +90,12 @@ import {
   pathExtnameHelperStatements,
   pathFsHelperStatements,
   pathJoinHelperStatements,
+  pathStemHelperStatements,
   pythonEqualsHelperStatements,
   pythonFloatHelperStatements,
   pythonIdHelperStatements,
   pythonJsonDumpsHelperStatements,
+  pythonCompareKeysHelperStatements,
   pythonRoundHelperStatements,
   pythonReprHelperStatements,
   pythonRuntimeIntrospectionHelperStatements,
@@ -952,6 +956,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     leadingStatements.unshift(...helperStatements);
   }
+  if (moduleValueText.includes('pythonCompareKeys(')) {
+    const helperStatements = pythonCompareKeysHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
   if (moduleValueText.includes('pythonFloat(')) {
     const helperStatements = pythonFloatHelperStatements();
     if (leadingStatements.length > 0) {
@@ -1086,6 +1097,20 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     pathHelperStatements.push(...pathExtnameHelperStatements());
   }
+  if (moduleValueText.includes('_pathStem(')) {
+    if (pathHelperStatements.length > 0) {
+      pathHelperStatements.push('');
+    }
+    if (!pathHelperStatements.some((statement) => statement.startsWith('function _basename('))) {
+      pathHelperStatements.push(...pathBasenameHelperStatements());
+      pathHelperStatements.push('');
+    }
+    if (!pathHelperStatements.some((statement) => statement.startsWith('function _pathExtname('))) {
+      pathHelperStatements.push(...pathExtnameHelperStatements());
+      pathHelperStatements.push('');
+    }
+    pathHelperStatements.push(...pathStemHelperStatements());
+  }
   if (moduleValueText.includes('_dirname(') || moduleValueText.includes('_mkdirParents(')) {
     if (pathHelperStatements.length > 0) {
       pathHelperStatements.push('');
@@ -1131,6 +1156,20 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     leadingStatements.unshift(...helperStatements);
   }
+  if (moduleValueText.includes('latin1EncodeIgnore(')) {
+    const helperStatements = latin1EncodeIgnoreHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
+  if (moduleValueText.includes('latin1DecodeUntilNull(')) {
+    const helperStatements = latin1DecodeUntilNullHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
   if (moduleValueText.includes('concatBytes(') && !moduleValueText.includes('constructStruct(')) {
     const helperStatements = concatBytesHelperStatements();
     if (leadingStatements.length > 0) {
@@ -1165,6 +1204,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       modulePath: 'node:fs',
       names: [
         ...(moduleValueText.includes('readFileSync(') ? ['readFileSync'] : []),
+        ...(moduleValueText.includes('_openTextFile(') ? ['readFileSync'] : []),
         ...(moduleValueText.includes('writeFileSync(') || moduleValueText.includes('_openTextFile(') ? ['writeFileSync'] : []),
         ...(moduleValueText.includes('appendFileSync(') || moduleValueText.includes('_openTextFile(') ? ['appendFileSync'] : []),
         ...(moduleValueText.includes('existsSync(') ? ['existsSync'] : []),

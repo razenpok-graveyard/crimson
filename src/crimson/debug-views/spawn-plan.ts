@@ -22,6 +22,20 @@ export const GRID_COLOR = wgl.makeColor(40 / 255, 40 / 255, 48 / 255, 255 / 255)
 export const LINK_COLOR = wgl.makeColor(80 / 255, 160 / 255, 255 / 255, 120 / 255);
 export const OFFSET_COLOR = wgl.makeColor(255 / 255, 200 / 255, 80 / 255, 140 / 255);
 
+function pythonCompareKeys(left: any, right: any): number {
+  if (Array.isArray(left) && Array.isArray(right)) {
+    const length = Math.min(left.length, right.length);
+    for (let index = 0; index < length; index += 1) {
+      const item = pythonCompareKeys(left[index], right[index]);
+      if (item !== 0) {
+        return item;
+      }
+    }
+    return left.length - right.length;
+  }
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 export class PlanSummary {
   readonly creatureCount: number;
   readonly spawnSlotCount: number;
@@ -65,7 +79,7 @@ export class SpawnPlanView {
     this._missingAssets = [];
     this._small = null;
 
-    this._templateIds = Array.from(SPAWN_TEMPLATES).sort((left, right) => left.spawnId < right.spawnId ? -1 : left.spawnId > right.spawnId ? 1 : 0).map((t) => t.spawnId);
+    this._templateIds = Array.from(SPAWN_TEMPLATES).sort((left, right) => pythonCompareKeys(left.spawnId, right.spawnId)).map((t) => t.spawnId);
     this._index = 0;
 
     this._seed = 0xBEEF;

@@ -6,6 +6,20 @@ import { toBuiltinObject } from '@crimson/dbg/payloads.ts';
 import { TRACE_REQUIRED_CHANNELS } from '@crimson/dbg/schema.ts';
 import { TraceReader } from '@crimson/dbg/trace.ts';
 
+function pythonCompareKeys(left: any, right: any): number {
+  if (Array.isArray(left) && Array.isArray(right)) {
+    const length = Math.min(left.length, right.length);
+    for (let index = 0; index < length; index += 1) {
+      const item = pythonCompareKeys(left[index], right[index]);
+      if (item !== 0) {
+        return item;
+      }
+    }
+    return left.length - right.length;
+  }
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 export function summarizeTraceHealth(tracePath: string, opts: { tickStart?: number | null; tickEnd?: number | null } = {}): BuiltinObject {
   const tickStart = opts.tickStart ?? null;
   const tickEnd = opts.tickEnd ?? null;
@@ -79,7 +93,7 @@ export function summarizeTraceHealth(tracePath: string, opts: { tickStart?: numb
         windowEnd = int(metaRange.get('end_tick') ?? -1);
       }
     }
-    return toBuiltinObject({ "trace_format_version": int(trace.meta.traceFormatVersion), "trace_schema_version": int(trace.meta.traceSchemaVersion), "tick_window": { 'requested_start': tickStart === null ? null : int(tickStart), 'requested_end': tickEnd === null ? null : int(tickEnd), 'actual_start': windowStart === null ? null : int(windowStart), 'actual_end': windowEnd === null ? null : int(windowEnd), 'ticks_in_window': int(ticksTotal) }, "channels_present": Object.fromEntries(Array.from(Array.from(channelsPresent.entries()).sort((left, right) => left < right ? -1 : left > right ? 1 : 0), ([key, value]) => [String(key), int(value)] as const)), "metrics": { 'ticks_with_dt_ms_i32': int(ticksWithDt), 'rng_stream_rows': int(rngStreamRows), 'sim_state_rows': int(simStateRows), 'sample_creature_rows': int(sampleCreatureRows), 'sample_projectile_rows': int(sampleProjectileRows), 'sample_secondary_projectile_rows': int(sampleSecondaryRows), 'sample_bonus_rows': int(sampleBonusRows), 'timing_samples_rows': int(timingSamplesRows) }, "issues": issues, "ok_for_movement_root_cause": issues.length === 0 }, { field: 'trace_health' });
+    return toBuiltinObject({ "trace_format_version": int(trace.meta.traceFormatVersion), "trace_schema_version": int(trace.meta.traceSchemaVersion), "tick_window": { 'requested_start': tickStart === null ? null : int(tickStart), 'requested_end': tickEnd === null ? null : int(tickEnd), 'actual_start': windowStart === null ? null : int(windowStart), 'actual_end': windowEnd === null ? null : int(windowEnd), 'ticks_in_window': int(ticksTotal) }, "channels_present": Object.fromEntries(Array.from(Array.from(channelsPresent.entries()).sort((left, right) => pythonCompareKeys(left, right)), ([key, value]) => [String(key), int(value)] as const)), "metrics": { 'ticks_with_dt_ms_i32': int(ticksWithDt), 'rng_stream_rows': int(rngStreamRows), 'sim_state_rows': int(simStateRows), 'sample_creature_rows': int(sampleCreatureRows), 'sample_projectile_rows': int(sampleProjectileRows), 'sample_secondary_projectile_rows': int(sampleSecondaryRows), 'sample_bonus_rows': int(sampleBonusRows), 'timing_samples_rows': int(timingSamplesRows) }, "issues": issues, "ok_for_movement_root_cause": issues.length === 0 }, { field: 'trace_health' });
   } finally {
     trace.close();
   }
