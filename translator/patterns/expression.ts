@@ -444,6 +444,15 @@ function translateConditionalTestExpression(
   if (expressionIsKnownMap(translated, nameMap, mapNames)) {
     return `${translated}.size > 0`;
   }
+  const fieldType = knownClassFieldType(trimmed, nameMap) ?? knownClassFieldType(translated, nameMap);
+  if (fieldType !== null) {
+    if (typeExpressionLooksMap(fieldType)) {
+      return `${translated}.size > 0`;
+    }
+    if (fieldType.endsWith('[]') || fieldType.startsWith('readonly ') && fieldType.endsWith('[]')) {
+      return `${translated}.length > 0`;
+    }
+  }
   if (arrayNames.has(setNameMarker(trimmed)) || arrayNames.has(setNameMarker(translated))) {
     return arrayNames.has(nullableNameMarker(trimmed)) || arrayNames.has(nullableNameMarker(translated))
       ? `${translated} !== null && ${translated}.size > 0`
@@ -586,6 +595,9 @@ export function translateExpression(
     || trimmed === 'datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="milliseconds")'
   ) {
     return "new Date().toISOString().replace('Z', '+00:00')";
+  }
+  if (trimmed === 'time.perf_counter_ns()') {
+    return '(performance.now() * 1_000_000)';
   }
   if (trimmed === 'os.getpid()') {
     return 'globalThis.process?.pid ?? 0';
@@ -3391,7 +3403,7 @@ function expressionLooksBoolean(tsExpression: string): boolean {
     || /(?:===|!==|<=|>=|<|>|&&|\|\||\binstanceof\b)/.test(trimmed)
     || /^typeof\b/.test(trimmed)
     || /^(?:Array\.isArray|Number\.is(?:Finite|Integer|NaN))\(/.test(trimmed)
-    || /\.(?:has|includes|startsWith|endsWith)\(/.test(trimmed)
+    || /\.(?:every|has|includes|some|startsWith|endsWith)\(/.test(trimmed)
     || /(?:^|\.)[A-Za-z_$][A-Za-z0-9_$]*(?:Ready|Connected|Started|Enabled|Available|Visible|Empty|Valid|Compatible|Allowed)\(\)$/.test(trimmed);
 }
 

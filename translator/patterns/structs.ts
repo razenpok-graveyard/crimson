@@ -426,7 +426,7 @@ export function parseStructClass(
   relativePath: string | null = null,
   imports: ImportDefinition[] | null = null,
 ): { structClass: StructModule['classes'][number]; nextIndex: number } | null {
-  const dataclass = /^@dataclass\((?<options>[^)]*)\)$/.exec(lines[index] ?? '');
+  const dataclass = /^@dataclass(?:\((?<options>[^)]*)\))?$/.exec(lines[index] ?? '');
   const classIndex = dataclass === null ? index : index + 1;
   const header = parseStructClassHeader(lines, classIndex);
   if (header === null || (dataclass !== null && header.basesText !== '')) {

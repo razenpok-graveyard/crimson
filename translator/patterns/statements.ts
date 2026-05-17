@@ -209,6 +209,23 @@ function parseClassPatternCase(
   validatedTypeAliases: ReadonlySet<string>,
   mapNames: ReadonlySet<string>,
 ): { condition: string; captures: string[]; nameMap: Map<string, string>; declaredNames: Set<string> } | null {
+  if (pattern.includes(' | ')) {
+    const conditions: string[] = [];
+    for (const part of pattern.split(' | ')) {
+      const branch = parseClassPatternCase(part, subject, nameMap, arrayNames, validatedTypeAliases, mapNames);
+      if (branch === null || branch.captures.length > 0 || branch.declaredNames.size > 0) {
+        return null;
+      }
+      conditions.push(branch.condition);
+    }
+    return {
+      condition: conditions.join(' || '),
+      captures: [],
+      nameMap,
+      declaredNames: new Set(),
+    };
+  }
+
   const classPattern = /^([A-Z][A-Za-z0-9_]*)\((.*)\)$/.exec(pattern);
   if (classPattern === null) {
     return null;
@@ -2770,6 +2787,32 @@ function parseMultilineListComprehension(
     return null;
   }
   const firstExpression = firstLine.trim().replace(/,$/, '');
+  const inlineGenerator = /^(.+?) for ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*) in (.+?)(?: if (.+))?$/.exec(firstExpression);
+  if (inlineGenerator !== null) {
+    const closeLine = lines[startIndex + 1] ?? '';
+    if (!closeLine.startsWith(indent) || closeLine.trim() !== ']') {
+      return null;
+    }
+    const itemNameMap = new Map(nameMap);
+    const targetNames = inlineGenerator[2].split(', ');
+    for (const targetName of targetNames) {
+      itemNameMap.set(targetName, tsExportNameForPythonName(targetName));
+    }
+    const mapParameter = targetNames.length === 1
+      ? tsExportNameForPythonName(targetNames[0])
+      : `[${targetNames.map(tsExportNameForPythonName).join(', ')}]`;
+    const iterable = iterableExpressionForIteration(inlineGenerator[3], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const filtered = inlineGenerator[4] === undefined
+      ? iterable
+      : `${iterable}.filter((${mapParameter}) => ${translateExpression(inlineGenerator[4], itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    const itemExpression = translateExpression(inlineGenerator[1], itemNameMap, arrayNames, validatedTypeAliases, mapNames);
+    return {
+      expression: `${filtered}.map((${mapParameter}) => ${tupleListComprehensionItemExpression(inlineGenerator[1], itemExpression)})`,
+      nextIndex: startIndex + 2,
+      tupleElements: pythonExpressionCouldBeTupleLiteral(inlineGenerator[1]),
+    };
+  }
+
   let itemExpression = '';
   let nextIndex: number;
   let tupleElements = false;
@@ -2868,6 +2911,15 @@ function parseMultilineListComprehension(
     nextIndex: closeIndex + 1,
     tupleElements,
   };
+}
+
+function tupleListComprehensionItemExpression(pythonExpression: string, itemExpression: string): string {
+  const tupleLength = pythonTupleExpressionLength(pythonExpression);
+  return tupleLength === null ? itemExpression : tupleArrayExpressionFromLength(itemExpression, tupleLength);
+}
+
+function tupleArrayExpressionFromLength(itemExpression: string, length: number): string {
+  return `${itemExpression} as [${Array.from({ length }, () => 'any').join(', ')}]`;
 }
 
 function iterableExpressionForIteration(
@@ -3518,7 +3570,7 @@ function parseLocalFunctionCallSignature(
 ): FunctionCallSignature | null {
   const signatureText = nameMap.get(functionSignatureMarker(pythonCallee));
   if (signatureText === undefined) {
-    return null;
+    return knownExternalFunctionCallSignature(pythonCallee);
   }
   try {
     const parsed = JSON.parse(signatureText) as Partial<FunctionCallSignature>;
@@ -3541,6 +3593,24 @@ function parseLocalFunctionCallSignature(
   } catch {
     return null;
   }
+}
+
+function knownExternalFunctionCallSignature(pythonCallee: string): FunctionCallSignature | null {
+  const signatures: Record<string, FunctionCallSignature> = {
+    tick_quest_completion_transition: {
+      positional: ['completion_transition_ms', 'frame_dt_ms'],
+    },
+    tickQuestCompletionTransition: {
+      positional: ['completion_transition_ms', 'frame_dt_ms'],
+    },
+    tick_quest_mode_spawns: {
+      positional: ['entries', 'quest_spawn_timeline_ms', 'frame_dt_ms'],
+    },
+    tickQuestModeSpawns: {
+      positional: ['entries', 'quest_spawn_timeline_ms', 'frame_dt_ms'],
+    },
+  };
+  return signatures[pythonCallee] ?? null;
 }
 
 function applyTupleAssignmentReturnMarkers(
@@ -4048,7 +4118,11 @@ function collectContinuedCallArgument(lines: string[], startIndex: number): { te
   const parts: string[] = [];
   let nextIndex = startIndex;
   while (nextIndex < lines.length) {
-    const trimmed = lines[nextIndex].trim();
+    const trimmed = splitInlineComment(lines[nextIndex].trim()).code.trim();
+    if (trimmed === '') {
+      nextIndex += 1;
+      continue;
+    }
     parts.push(trimmed);
     nextIndex += 1;
     if (trimmed === ')' || trimmed === '),' || trimmed.endsWith(',')) {
@@ -4360,17 +4434,27 @@ function localTupleDeclarationType(assignedRight: string, pythonRight: string | 
 }
 
 function pythonExpressionCouldBeTupleLiteral(pythonExpression: string | null): boolean {
+  return pythonTupleExpressionLength(pythonExpression) !== null;
+}
+
+function pythonTupleExpressionLength(pythonExpression: string | null): number | null {
   if (pythonExpression === null) {
-    return false;
+    return null;
   }
   const trimmed = pythonExpression.trim();
   if (trimmed === '' || trimmed.startsWith('[') || trimmed.startsWith('{')) {
-    return false;
+    return null;
   }
   if (trimmed.startsWith('(') && matchingCloseParen(trimmed, 0) === trimmed.length - 1) {
-    return splitTopLevelComma(trimmed.slice(1, -1)).length > 1;
+    const length = splitTopLevelComma(trimmed.slice(1, -1)).length;
+    return length > 1 ? length : null;
   }
-  return splitTopLevelComma(trimmed).length > 1 || /\([^)]*,[^)]*\)/.test(trimmed);
+  const length = splitTopLevelComma(trimmed).length;
+  if (length > 1) {
+    return length;
+  }
+  const nestedTuple = /\(([^)]*,[^)]*)\)/.exec(trimmed);
+  return nestedTuple === null ? null : splitTopLevelComma(nestedTuple[1]).length;
 }
 
 function addReassignedLocalType(typesByName: Map<string, string[]>, name: string, type: string | null): void {
@@ -4711,7 +4795,8 @@ function recordLocalAssignmentMarkers(
   if (/^[A-Za-z_$][A-Za-z0-9_.$]*(?:creatures|pickups|players)$/.test(assignedRight)) {
     arrayNames.add(pythonName);
   }
-  if (/^Array\.from\(/.test(assignedRight)) {
+  const isArrayFromBooleanChain = /^Array\.from\(/.test(assignedRight) && /\)\.(?:every|some)\(/.test(assignedRight);
+  if (/^Array\.from\(/.test(assignedRight) && !isArrayFromBooleanChain) {
     arrayNames.add(pythonName);
     arrayNames.add(tsName);
   }
@@ -4720,7 +4805,7 @@ function recordLocalAssignmentMarkers(
     nameMap.set(arrayElementTypeMarker(pythonName), arrayElementType);
     nameMap.set(arrayElementTypeMarker(tsName), arrayElementType);
   }
-  if (assignedRight.startsWith('[') || assignedRight.startsWith('Array.from(') || /^[A-Za-z_$][A-Za-z0-9_.$()]+\.(?:filter|map)\(/.test(assignedRight)) {
+  if (assignedRight.startsWith('[') || (assignedRight.startsWith('Array.from(') && !isArrayFromBooleanChain) || /^[A-Za-z_$][A-Za-z0-9_.$()]+\.(?:filter|map)\(/.test(assignedRight)) {
     arrayNames.add(pythonName);
     arrayNames.add(tsName);
   }
@@ -4863,7 +4948,7 @@ function translatedExpressionLooksBoolean(tsExpression: string): boolean {
     || /(?:===|!==|<=|>=|<|>|&&|\|\||\binstanceof\b)/.test(trimmed)
     || /^typeof\b/.test(trimmed)
     || /^(?:Array\.isArray|Number\.is(?:Finite|Integer|NaN))\(/.test(trimmed)
-    || /\.(?:has|includes|startsWith|endsWith)\(/.test(trimmed);
+    || /\.(?:every|has|includes|some|startsWith|endsWith)\(/.test(trimmed);
 }
 
 function translateMapPopAssignment(

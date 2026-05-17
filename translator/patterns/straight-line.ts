@@ -167,6 +167,10 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       index += 1;
       continue;
     }
+    if (trimmed === 'import time') {
+      index += 1;
+      continue;
+    }
     if (trimmed === 'import struct') {
       index += 1;
       continue;
@@ -653,6 +657,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     const parameters: FunctionParameter[] = [];
     const optsParams: OptionalFunctionParameter[] = [];
     const signaturePositionalNames: string[] = [];
+    const objectAnnotatedParameters: { pythonName: string; tsName: string }[] = [];
     const arrayNames = new Set<string>();
     const functionMapNames = new Set(mapNames);
     for (const name of setReturnFunctionNames) {
@@ -677,6 +682,12 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         }
         const parameterName = /^\*\*?([A-Za-z_][A-Za-z0-9_]*)|^([A-Za-z_][A-Za-z0-9_]*)/.exec(parameterText);
         const pythonParameterName = parameterName?.[1] ?? parameterName?.[2] ?? null;
+        if (pythonParameterName !== null && parameterText.includes(': object')) {
+          objectAnnotatedParameters.push({
+            pythonName: pythonParameterName,
+            tsName: parameter.name,
+          });
+        }
         if (parameter.typeExpression.startsWith('Map<')) {
           functionMapNames.add(parameter.name);
           if (pythonParameterName !== null) {
@@ -697,6 +708,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         }
       }
     }
+    widenDynamicObjectParameters(parameters, optsParams, objectAnnotatedParameters, lines, index, '    ');
     const signature = {
       positional: signaturePositionalNames,
       returnTupleMarkers: returnTupleMarkersForType(header.returnType),
@@ -1530,6 +1542,54 @@ function sourceExportIsMap(sourcePath: string, exportName: string, seen: Set<str
     }
   }
   return false;
+}
+
+function widenDynamicObjectParameters(
+  parameters: readonly FunctionParameter[],
+  optsParams: readonly OptionalFunctionParameter[],
+  objectAnnotatedParameters: readonly { pythonName: string; tsName: string }[],
+  lines: readonly string[],
+  startIndex: number,
+  indent: string,
+): void {
+  if (objectAnnotatedParameters.length === 0) {
+    return;
+  }
+  const allParameters = [...parameters, ...optsParams];
+  for (const objectParameter of objectAnnotatedParameters) {
+    if (!functionBodyHasDottedAccess(lines, startIndex, indent, objectParameter.pythonName)) {
+      continue;
+    }
+    const parameter = allParameters.find((candidate) => candidate.name === objectParameter.tsName);
+    if (parameter !== undefined && parameter.typeExpression === 'unknown') {
+      parameter.typeExpression = 'any';
+    }
+  }
+}
+
+function functionBodyHasDottedAccess(
+  lines: readonly string[],
+  startIndex: number,
+  indent: string,
+  pythonName: string,
+): boolean {
+  const dottedAccess = new RegExp(`(^|[^A-Za-z0-9_$])${escapeRegExp(pythonName)}\\.[A-Za-z_]`);
+  let index = startIndex;
+  while (index < lines.length) {
+    const line = lines[index] ?? '';
+    if (line.trim() !== '' && !line.startsWith(indent)) {
+      break;
+    }
+    if (dottedAccess.test(line) && line.includes('type: ignore[union-attr]')) {
+      return true;
+    }
+    index += 1;
+  }
+  return false;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function recordParameterReceiverTypes(
