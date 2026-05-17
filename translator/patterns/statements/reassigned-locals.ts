@@ -13,18 +13,26 @@ export function reassignedLocalNames(lines: string[], startIndex: number): Set<s
 
   let index = firstStatementIndex;
   while (index < lines.length) {
-    if (lines[index].trim() !== '' && !lines[index].startsWith(baseIndent)) {
+    const line = lines[index] ?? '';
+    if (line.trim() !== '' && !line.startsWith(baseIndent)) {
       break;
     }
-    const assignment = /^\s+([A-Za-z_][A-Za-z0-9_]*) (?:\/\/=|\+=|-=|\*=|\/=|\|=|&=|\^=|=) /.exec(lines[index]);
+    if (line.startsWith(baseIndent) && line.slice(baseIndent.length).startsWith('def ')) {
+      const blockIndent = `${baseIndent}    `;
+      const blockEnd = skipIndentedBlock(lines, index + 1, blockIndent);
+      countNonlocalAssignments(lines, index + 1, blockEnd, blockIndent, counts);
+      index = blockEnd;
+      continue;
+    }
+    const assignment = /^\s+([A-Za-z_][A-Za-z0-9_]*) (?:\/\/=|\+=|-=|\*=|\/=|\|=|&=|\^=|=) /.exec(line);
     if (assignment !== null) {
       counts.set(assignment[1], (counts.get(assignment[1]) ?? 0) + 1);
     }
-    const annotatedAssignment = /^\s+([A-Za-z_][A-Za-z0-9_]*): .+ = /.exec(lines[index]);
+    const annotatedAssignment = /^\s+([A-Za-z_][A-Za-z0-9_]*): .+ = /.exec(line);
     if (annotatedAssignment !== null) {
       counts.set(annotatedAssignment[1], (counts.get(annotatedAssignment[1]) ?? 0) + 1);
     }
-    const tupleAssignment = /^\s+([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+) = /.exec(lines[index]);
+    const tupleAssignment = /^\s+([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+) = /.exec(line);
     if (tupleAssignment !== null) {
       for (const name of tupleAssignment[1].split(', ')) {
         if (name !== '_') {
@@ -39,6 +47,66 @@ export function reassignedLocalNames(lines: string[], startIndex: number): Set<s
       .filter((entry) => entry[1] > 1)
       .map((entry) => entry[0]),
   );
+}
+
+function skipIndentedBlock(lines: string[], index: number, blockIndent: string): number {
+  let nextIndex = index;
+  while (nextIndex < lines.length) {
+    const line = lines[nextIndex] ?? '';
+    if (line.trim() !== '' && !line.startsWith(blockIndent)) {
+      break;
+    }
+    nextIndex += 1;
+  }
+  return nextIndex;
+}
+
+function countNonlocalAssignments(
+  lines: string[],
+  startIndex: number,
+  endIndex: number,
+  blockIndent: string,
+  counts: Map<string, number>,
+): void {
+  const names = new Set<string>();
+  for (let index = startIndex; index < endIndex; index += 1) {
+    const line = lines[index] ?? '';
+    if (!line.startsWith(blockIndent)) {
+      continue;
+    }
+    const rest = line.slice(blockIndent.length);
+    if (rest.startsWith(' ')) {
+      continue;
+    }
+    const nonlocal = /^nonlocal ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(rest.trim());
+    if (nonlocal !== null) {
+      for (const name of nonlocal[1].split(', ')) {
+        names.add(name);
+      }
+    }
+  }
+  if (names.size === 0) {
+    return;
+  }
+  for (let index = startIndex; index < endIndex; index += 1) {
+    const line = lines[index] ?? '';
+    const assignment = /^\s+([A-Za-z_][A-Za-z0-9_]*) (?:\/\/=|\+=|-=|\*=|\/=|\|=|&=|\^=|=) /.exec(line);
+    if (assignment !== null && names.has(assignment[1])) {
+      counts.set(assignment[1], (counts.get(assignment[1]) ?? 0) + 1);
+    }
+    const annotatedAssignment = /^\s+([A-Za-z_][A-Za-z0-9_]*): .+ = /.exec(line);
+    if (annotatedAssignment !== null && names.has(annotatedAssignment[1])) {
+      counts.set(annotatedAssignment[1], (counts.get(annotatedAssignment[1]) ?? 0) + 1);
+    }
+    const tupleAssignment = /^\s+([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+) = /.exec(line);
+    if (tupleAssignment !== null) {
+      for (const name of tupleAssignment[1].split(', ')) {
+        if (names.has(name)) {
+          counts.set(name, (counts.get(name) ?? 0) + 1);
+        }
+      }
+    }
+  }
 }
 
 export function nullableLocalNames(lines: string[], startIndex: number): Set<string> {

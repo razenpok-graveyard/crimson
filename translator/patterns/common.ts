@@ -488,7 +488,7 @@ export function inferPythonExpressionType(pythonExpression: string): string {
   if (!/["'`]/.test(trimmed) && /\s(?:%|\*|\/\/|\/|-)\s/.test(trimmed)) {
     return 'number';
   }
-  const enumMember = /^([A-Z][A-Za-z0-9_]*(?:Id|Mode|Type))\.[A-Z0-9_]+$/.exec(trimmed);
+  const enumMember = /^([A-Z][A-Za-z0-9_]*(?:Id|Mode|Type|Static))\.[A-Z0-9_]+$/.exec(trimmed);
   if (enumMember !== null) {
     return tsExportNameForPythonName(enumMember[1]);
   }

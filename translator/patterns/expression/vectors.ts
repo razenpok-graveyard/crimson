@@ -220,6 +220,8 @@ function finalVectorMethodCall(tsExpression: string): boolean {
     'divComponents',
     'mul_components',
     'div_components',
+    'directionTo',
+    'direction_to',
   ]);
   const methodPattern = /\.([A-Za-z_$][A-Za-z0-9_$]*)\(/g;
   let match: RegExpExecArray | null;

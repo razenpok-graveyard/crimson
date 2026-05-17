@@ -160,7 +160,7 @@ export function addReassignedLocalTypeAnnotations(
   }
 
   for (const [name, types] of typesByName) {
-    if (types.length > 1) {
+    if (types.length > 1 || types[0] === 'CrandLike') {
       reassignedNames.add(reassignedLocalTypeMarker(name, types.join(' | ')));
     }
   }
@@ -176,7 +176,7 @@ type WithItem = {
   close: false;
 };
 
-type FunctionReturnMarker = 'array' | 'map' | 'object' | 'rectangle' | 'set' | 'string';
+type FunctionReturnMarker = 'array' | 'map' | 'object' | 'rectangle' | 'set' | 'string' | 'vector';
 
 type FunctionCallSignature = {
   positional: string[];
@@ -209,24 +209,34 @@ function parseClassPatternCase(
   validatedTypeAliases: ReadonlySet<string>,
   mapNames: ReadonlySet<string>,
 ): { condition: string; captures: string[]; nameMap: Map<string, string>; declaredNames: Set<string> } | null {
-  if (pattern.includes(' | ')) {
-    const conditions: string[] = [];
-    for (const part of pattern.split(' | ')) {
-      const branch = parseClassPatternCase(part, subject, nameMap, arrayNames, validatedTypeAliases, mapNames);
-      if (branch === null || branch.captures.length > 0 || branch.declaredNames.size > 0) {
+  const normalizedPattern = stripOuterPatternParens(pattern);
+  const alternatives = splitTopLevelPatternOr(normalizedPattern);
+  if (alternatives.length > 1) {
+    const branches = alternatives.map((part) => parseClassPatternCase(part, subject, nameMap, arrayNames, validatedTypeAliases, mapNames));
+    if (branches.some((branch) => branch === null)) {
+      return null;
+    }
+    const typedBranches = branches as Array<NonNullable<(typeof branches)[number]>>;
+    const firstCaptures = typedBranches[0].captures;
+    const firstDeclaredNames = [...typedBranches[0].declaredNames].sort();
+    for (const branch of typedBranches.slice(1)) {
+      if (
+        branch.captures.length !== firstCaptures.length
+        || branch.captures.some((capture, index) => capture !== firstCaptures[index])
+        || [...branch.declaredNames].sort().join('\u0000') !== firstDeclaredNames.join('\u0000')
+      ) {
         return null;
       }
-      conditions.push(branch.condition);
     }
     return {
-      condition: conditions.join(' || '),
-      captures: [],
-      nameMap,
-      declaredNames: new Set(),
+      condition: typedBranches.map((branch) => branch.condition).join(' || '),
+      captures: firstCaptures,
+      nameMap: typedBranches[0].nameMap,
+      declaredNames: typedBranches[0].declaredNames,
     };
   }
 
-  const classPattern = /^([A-Z][A-Za-z0-9_]*)\((.*)\)$/.exec(pattern);
+  const classPattern = /^([A-Z][A-Za-z0-9_]*)\((.*)\)$/.exec(normalizedPattern);
   if (classPattern === null) {
     return null;
   }
@@ -254,6 +264,97 @@ function parseClassPatternCase(
     nameMap: branchNameMap,
     declaredNames: branchDeclaredNames,
   };
+}
+
+function stripOuterPatternParens(pattern: string): string {
+  let trimmed = pattern.trim();
+  while (trimmed.startsWith('(') && matchingCloseParen(trimmed, 0) === trimmed.length - 1) {
+    trimmed = trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
+function splitTopLevelPatternOr(pattern: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let quote: '"' | '\'' | null = null;
+  let start = 0;
+  for (let index = 0; index < pattern.length; index += 1) {
+    const char = pattern[index];
+    if (quote !== null) {
+      if (char === '\\') {
+        index += 1;
+      } else if (char === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === '\'') {
+      quote = char;
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char === ')' || char === ']' || char === '}') {
+      depth -= 1;
+      continue;
+    }
+    if (char === '|' && depth === 0) {
+      parts.push(pattern.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  parts.push(pattern.slice(start).trim());
+  return parts.filter((part) => part !== '');
+}
+
+function parseMatchCaseHeader(
+  lines: string[],
+  index: number,
+  caseIndent: string,
+): { pattern: string; comment: string | null; nextIndex: number } | null {
+  const firstLine = lines[index] ?? '';
+  if (!firstLine.startsWith(caseIndent)) {
+    return null;
+  }
+  const first = splitInlineComment(firstLine.slice(caseIndent.length).trim());
+  if (!first.code.startsWith('case ')) {
+    return null;
+  }
+
+  const patternParts: string[] = [];
+  let balance = 0;
+  let nextIndex = index;
+  while (nextIndex < lines.length) {
+    const rawLine = lines[nextIndex] ?? '';
+    if (!rawLine.startsWith(caseIndent)) {
+      return null;
+    }
+    const parsedLine = splitInlineComment(rawLine.slice(caseIndent.length).trim());
+    let code = parsedLine.code;
+    if (nextIndex === index) {
+      code = code.slice('case '.length).trim();
+    }
+    const finalLine = code.endsWith(':');
+    if (finalLine) {
+      code = code.slice(0, -1).trim();
+    }
+    if (code !== '') {
+      patternParts.push(code);
+    }
+    balance += parenthesisDelta(code);
+    nextIndex += 1;
+    if (finalLine && balance === 0) {
+      return {
+        pattern: stripOuterPatternParens(patternParts.join(' ')),
+        comment: parsedLine.comment,
+        nextIndex,
+      };
+    }
+  }
+  return null;
 }
 
 function translateClassPatternMatchStatement(
@@ -287,9 +388,8 @@ function translateClassPatternMatchStatement(
       break;
     }
 
-    const parsedCaseLine = splitInlineComment(line.slice(caseIndent.length));
-    const caseStatement = /^case (.+):$/.exec(parsedCaseLine.code);
-    if (caseStatement === null) {
+    const caseHeader = parseMatchCaseHeader(lines, nextIndex, caseIndent);
+    if (caseHeader === null) {
       return null;
     }
 
@@ -297,9 +397,9 @@ function translateClassPatternMatchStatement(
     let captures: string[] = [];
     let branchNameMap = nameMap;
     let branchDeclaredNames = declaredNames;
-    if (caseStatement[1] !== '_') {
+    if (caseHeader.pattern !== '_') {
       const parsedClassPattern = parseClassPatternCase(
-        caseStatement[1],
+        caseHeader.pattern,
         subject,
         nameMap,
         arrayNames,
@@ -316,7 +416,7 @@ function translateClassPatternMatchStatement(
       branchDeclaredNames = new Set([...declaredNames, ...parsedClassPattern.declaredNames]);
     }
 
-    const bodyStartIndex = nextIndex + 1;
+    const bodyStartIndex = caseHeader.nextIndex;
     const bodyStatements: string[] = [];
     nextIndex = bodyStartIndex;
     let caseHadPass = false;
@@ -353,7 +453,7 @@ function translateClassPatternMatchStatement(
     }
     branches.push({
       condition,
-      comment: parsedCaseLine.comment,
+      comment: caseHeader.comment,
       statements: [
         ...captures,
         ...bodyStatements,
@@ -3847,6 +3947,9 @@ function knownMethodCallSignature(methodName: string): FunctionCallSignature | n
   if (methodName === 'spawnAt') {
     return { positional: ['pos', 'bonusId', 'durationOverride'] };
   }
+  if (methodName === 'normalizedWithLength') {
+    return { positional: [], returnTupleMarkers: ['vector', null] };
+  }
   return null;
 }
 
@@ -3886,7 +3989,7 @@ function parseLocalFunctionCallSignature(
       parsed.returnTupleMarkers !== undefined
       && (
         !Array.isArray(parsed.returnTupleMarkers)
-        || !parsed.returnTupleMarkers.every((marker) => marker === null || marker === 'array' || marker === 'map' || marker === 'object' || marker === 'rectangle' || marker === 'set' || marker === 'string')
+        || !parsed.returnTupleMarkers.every((marker) => marker === null || marker === 'array' || marker === 'map' || marker === 'object' || marker === 'rectangle' || marker === 'set' || marker === 'string' || marker === 'vector')
       )
     ) {
       return null;
@@ -3929,7 +4032,7 @@ function applyTupleAssignmentReturnMarkers(
   if (call === null) {
     return;
   }
-  const signature = parseLocalFunctionCallSignature(call[1], nameMap);
+  const signature = parseLocalFunctionCallSignature(call[1], nameMap) ?? knownDottedMethodCallSignature(call[1]);
   if (signature?.returnTupleMarkers === undefined) {
     return;
   }
@@ -3961,8 +4064,16 @@ function applyTupleAssignmentReturnMarkers(
     } else if (marker === 'string') {
       arrayNames.add(stringNameMarker(pythonName));
       arrayNames.add(stringNameMarker(tsName));
+    } else if (marker === 'vector') {
+      arrayNames.add(vectorNameMarker(pythonName));
+      arrayNames.add(vectorNameMarker(tsName));
     }
   }
+}
+
+function knownDottedMethodCallSignature(callee: string): FunctionCallSignature | null {
+  const dotted = /^.+\.([A-Za-z_$][A-Za-z0-9_$]*)$/.exec(callee);
+  return dotted === null ? null : knownMethodCallSignature(dotted[1]);
 }
 
 function parseMultilineConditionalArgument(
@@ -4598,8 +4709,11 @@ function translateStraightLineAssignment(
     recordLocalAssignmentMarkers(localAssignment[1], localTsName, localAssignedRight, nameMap, arrayNames, mapNames);
     const nullableType = nullableLocalDeclarationType(localAssignment[1], localTsName, localAssignedRight, arrayNames);
     const tupleType = localTupleDeclarationType(localAssignedRight, pythonRight);
+    const widenedRuntimeType = reassignedNames.has(localAssignment[1]) && /^new Crand\(/.test(localAssignedRight)
+      ? 'CrandLike'
+      : null;
     const reassignedType = reassignedLocalTypeAnnotation(reassignedNames, localAssignment[1]);
-    const declarationType = nullableType ?? tupleType ?? reassignedType;
+    const declarationType = nullableType ?? tupleType ?? widenedRuntimeType ?? reassignedType;
     return {
       statements: [
         `${reassignedNames.has(localAssignment[1]) ? 'let' : 'const'} ${localTsName}${declarationType === null ? '' : `: ${declarationType}`} = ${localAssignedRight};`,
@@ -4882,6 +4996,9 @@ function inferredReassignedLocalType(
   }
   if (translated.startsWith('new Map(')) {
     return 'Map<unknown, unknown>';
+  }
+  if (/^new Crand\(/.test(translated)) {
+    return 'CrandLike';
   }
   if (/^(?:[A-Za-z_$][A-Za-z0-9_$]*\.)?makeVector2\(/.test(translated) || /^new Vec2\(/.test(translated)) {
     return 'Vec2';

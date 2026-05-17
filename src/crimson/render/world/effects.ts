@@ -19,7 +19,7 @@ export function drawParticlePool(renderCtx: WorldRenderCtx, opts: { camera: Vec2
   if (alpha <= 1e-3) {
     return;
   }
-  let frame = renderCtx.frame;
+  const frame = renderCtx.frame;
   const texture = frame.resources.texture(TextureId.PARTICLES);
 
   const particles = frame.state.particles.entries;
@@ -185,7 +185,7 @@ export function drawEffectPool(renderCtx: WorldRenderCtx, opts: { camera: Vec2; 
   if (alpha <= 1e-3) {
     return;
   }
-  let frame = renderCtx.frame;
+  const frame = renderCtx.frame;
   const texture = frame.resources.texture(TextureId.PARTICLES);
 
   const effects = frame.state.effects.entries;

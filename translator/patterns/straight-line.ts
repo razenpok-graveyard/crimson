@@ -1322,7 +1322,7 @@ function markIteratedLocalNames(
 
 function returnTupleMarkersForType(
   pythonReturnType: string,
-): ('array' | 'map' | 'object' | 'rectangle' | 'set' | 'string' | null)[] | undefined {
+): ('array' | 'map' | 'object' | 'rectangle' | 'set' | 'string' | 'vector' | null)[] | undefined {
   const tupleReturn = /^tuple\[(.+)\]$/.exec(pythonReturnType.trim());
   if (tupleReturn === null) {
     return undefined;
@@ -1330,10 +1330,13 @@ function returnTupleMarkersForType(
   return splitTopLevelComma(tupleReturn[1]).map(returnMarkerForType);
 }
 
-function returnMarkerForType(pythonType: string): 'array' | 'map' | 'object' | 'rectangle' | 'set' | 'string' | null {
+function returnMarkerForType(pythonType: string): 'array' | 'map' | 'object' | 'rectangle' | 'set' | 'string' | 'vector' | null {
   const trimmed = pythonType.trim();
   if (/^(?:r[dl]\.|wgl\.)?Rectangle$/.test(trimmed)) {
     return 'rectangle';
+  }
+  if (trimmed === 'Vec2' || /^(?:r[dl]\.|wgl\.)?Vector2$/.test(trimmed)) {
+    return 'vector';
   }
   if (trimmed === 'str') {
     return 'string';
@@ -2378,6 +2381,16 @@ function ensureInferredTypeImports(
     pushUniqueImportDefinition(imports, {
       modulePath: '@grim/geom.ts',
       names: ['Vec2'],
+    });
+  }
+  if (
+    identifierPattern('CrandLike').test(typeText)
+    && !localTypeNames.has('CrandLike')
+    && !imports.some((importDefinition) => importDefinition.names.some((name) => importedBindingName(name) === 'CrandLike'))
+  ) {
+    pushUniqueImportDefinition(imports, {
+      modulePath: '@grim/rand.ts',
+      names: ['CrandLike'],
     });
   }
 }

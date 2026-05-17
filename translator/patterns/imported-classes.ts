@@ -261,7 +261,7 @@ function uniqueFieldNames(fields: string[]): string[] {
 type ImportedFunctionSignature = {
   returnType: string | null;
   positional: string[];
-  returnTupleMarkers?: ('array' | 'map' | 'object' | 'rectangle' | 'set' | 'string' | null)[];
+  returnTupleMarkers?: ('array' | 'map' | 'object' | 'rectangle' | 'set' | 'string' | 'vector' | null)[];
 };
 
 function importedFunctionSignature(
@@ -297,7 +297,7 @@ function importedFunctionSignature(
 
 function returnTupleMarkersForTsType(
   typeExpression: string,
-): ('array' | 'map' | 'object' | 'rectangle' | 'set' | 'string' | null)[] | undefined {
+): ('array' | 'map' | 'object' | 'rectangle' | 'set' | 'string' | 'vector' | null)[] | undefined {
   const tupleType = /^(?:readonly\s+)?\[([\s\S]+)\]$/.exec(typeExpression.trim());
   if (tupleType === null) {
     return undefined;
@@ -305,10 +305,13 @@ function returnTupleMarkersForTsType(
   return splitTopLevelComma(tupleType[1]).map(returnMarkerForTsType);
 }
 
-function returnMarkerForTsType(typeExpression: string): 'array' | 'map' | 'object' | 'rectangle' | 'set' | 'string' | null {
+function returnMarkerForTsType(typeExpression: string): 'array' | 'map' | 'object' | 'rectangle' | 'set' | 'string' | 'vector' | null {
   const trimmed = typeExpression.trim();
   if (/^(?:r[dl]|wgl)\.Rectangle$/.test(trimmed)) {
     return 'rectangle';
+  }
+  if (trimmed === 'Vec2' || /^(?:r[dl]|wgl)\.Vector2$/.test(trimmed)) {
+    return 'vector';
   }
   if (trimmed === 'string') {
     return 'string';
