@@ -1,51 +1,50 @@
 // Port of crimson/demo.py
 
-import { getTexture, TextureId } from "@grim/assets.ts";
-import { audioUpdate } from "@grim/audio.ts";
-import { createGrimMonoFont, drawGrimMonoText, type GrimMonoFont } from "@grim/fonts/grim-mono.ts";
-import { drawSmallText, measureSmallTextWidth } from "@grim/fonts/small.ts";
-import { Vec2 } from "@grim/geom.ts";
-import { InputState } from "@grim/input.ts";
-import { clamp } from "@grim/math.ts";
-import * as wgl from "@wgl";
-import type { CreatureState } from "./creatures/runtime.ts";
-import { RANDOM_HEADING_SENTINEL, SpawnId } from "./creatures/spawn.ts";
-import type { GameState } from "./game/types.ts";
-import { GameMode } from "./game-modes.ts";
-import { questByLevel } from "./quests/index.ts";
-import { QuestLevel } from "./quests/level.ts";
-import { RngCallerStatic } from "./rng-caller-static.ts";
-import { requireRuntimeResources } from "./screens/assets.ts";
-import { advanceExplicitTerrain } from "./sim/bootstrap.ts";
-import { PlayerInput } from "./sim/input.ts";
-import { FrameContext } from "./sim/input-providers.ts";
-import type { PlayerState } from "./sim/state-types.ts";
-import { Q2_TERRAIN_SLOTS, type TerrainSlotTriplet } from "./terrain-slots.ts";
-import { drawMenuCursor } from "./ui/cursor.ts";
-import { buttonDraw, buttonUpdate, buttonWidth, UiButtonState } from "./ui/perk-menu.ts";
-import { weaponAssignPlayer } from "./weapon-runtime/assign.ts";
-import { weaponDisplayName, WeaponId } from "./weapons.ts";
-import { WorldRuntime } from "./world/runtime.ts";
-import { StandaloneTickHarness } from "./world/standalone-tick-harness.ts";
+import { TextureId } from '@grim/assets.ts';
+import { updateAudio } from '@grim/audio.ts';
+import type { GrimMonoFont } from '@grim/fonts/grim-mono.ts';
+import { drawGrimMonoText, loadGrimMonoFont } from '@grim/fonts/grim-mono.ts';
+import { drawSmallText, measureSmallTextWidth } from '@grim/fonts/small.ts';
+import { Vec2 } from '@grim/geom.ts';
+import { clamp } from '@grim/math.ts';
+import { InputState } from '@grim/input.ts';
+import { RANDOM_HEADING_SENTINEL, SpawnId } from '@crimson/creatures/spawn.ts';
+import type { GameState } from '@crimson/game/types.ts';
+import { GameMode } from '@crimson/game-modes.ts';
+import { questByLevel } from '@crimson/quests/index.ts';
+import { QuestLevel } from '@crimson/quests/level.ts';
+import { RngCallerStatic } from '@crimson/rng-caller-static.ts';
+import { requireRuntimeResources } from '@crimson/screens/assets.ts';
+import { advanceExplicitTerrain } from '@crimson/sim/bootstrap.ts';
+import { PlayerInput } from '@crimson/sim/input.ts';
+import type { FrameContext } from '@crimson/sim/input-providers.ts';
+import type { PlayerState } from '@crimson/sim/state-types.ts';
+import type { TerrainSlotTriplet } from '@crimson/terrain-slots.ts';
+import { Q2_TERRAIN_SLOTS } from '@crimson/terrain-slots.ts';
+import { drawMenuCursor } from '@crimson/ui/cursor.ts';
+import { UiButtonState, buttonDraw, buttonUpdate, buttonWidth } from '@crimson/ui/perk-menu.ts';
+import { weaponAssignPlayer } from '@crimson/weapon-runtime/index.ts';
+import type { WeaponId } from '@crimson/weapons.ts';
+import { weaponDisplayName } from '@crimson/weapons.ts';
+import { WorldRuntime } from '@crimson/world/index.ts';
+import { StandaloneTickHarness } from '@crimson/world/standalone-tick-harness.ts';
+import * as wgl from '@wgl';
 
 export const WORLD_SIZE = 1024.0;
 export const DEMO_VARIANT_COUNT = 6;
-
-const _DEMO_UPSELL_MESSAGES: readonly string[] = [
+export const DEMO_UPSELL_MESSAGES: readonly string[] = [
   'Want more Levels?',
   'Want more Weapons?',
   'Want more Perks?',
   'Want unlimited Play time?',
   'Want to post your high scores?',
 ];
-
 export const DEMO_PURCHASE_URL = 'http://buy.crimsonland.com';
 export const DEMO_PURCHASE_SCREEN_LIMIT_MS = 16_000;
 export const DEMO_PURCHASE_INTERSTITIAL_LIMIT_MS = 10_000;
-
-const DEMO_PURCHASE_TITLE = 'Upgrade to the full version of Crimsonland Today!';
-const DEMO_PURCHASE_FEATURES_TITLE = 'Full version features:';
-const DEMO_PURCHASE_FEATURE_LINES: readonly [string, number][] = [
+const _DEMO_PURCHASE_TITLE = 'Upgrade to the full version of Crimsonland Today!';
+const _DEMO_PURCHASE_FEATURES_TITLE = 'Full version features:';
+export const DEMO_PURCHASE_FEATURE_LINES: readonly [string, number][] = [
   ['-Unlimited Play Time in three thrilling Game Modes!', 22.0],
   ['-The varied weapon arsenal consisting of over 20 unique', 17.0],
   [' weapons that allow you to deal death with plasma, lead,', 17.0],
@@ -55,11 +54,20 @@ const DEMO_PURCHASE_FEATURE_LINES: readonly [string, number][] = [
   [' hours of intense and fun gameplay!', 22.0],
   ['-The ability to post your high scores online!', 44.0],
 ];
-const DEMO_PURCHASE_FOOTER = 'Purchasing the game is very easy and secure.';
+const _DEMO_PURCHASE_FOOTER = 'Purchasing the game is very easy and secure.';
 
-function weaponName(weaponId: WeaponId, opts: { preserveBugs?: boolean } = {}): string {
-  const preserveBugs = opts.preserveBugs ?? false;
-  return weaponDisplayName(weaponId, { preserveBugs });
+function pyRound(value: number, ndigits = 0): number {
+  const factor = 10 ** ndigits;
+  const scaled = value * factor;
+  const floorValue = Math.floor(scaled);
+  const frac = scaled - floorValue;
+  if (frac < 0.5) {
+    return floorValue / factor;
+  }
+  if (frac > 0.5) {
+    return (floorValue + 1) / factor;
+  }
+  return (floorValue % 2 === 0 ? floorValue : floorValue + 1) / factor;
 }
 
 // Attract-mode demo scaffold.
@@ -72,80 +80,118 @@ function weaponName(weaponId: WeaponId, opts: { preserveBugs?: boolean } = {}): 
 //   - demo_mode_start       @ 0x00403390
 export class DemoView {
   state: GameState;
-  private _runtime: WorldRuntime;
+  protected _runtime: WorldRuntime;
+  protected _demoTargets: (number | null)[];
+  protected _variantIndex: number;
+  protected _demoVariantIndex: number;
+  protected _questSpawnTimelineMs: number;
+  protected _demoTimeLimitMs: number;
+  protected _finished: boolean;
+  protected _upsellMessageIndex: number;
+  protected _upsellPulseMs: number;
+  protected _upsellFont: GrimMonoFont | null;
+  protected _purchaseActive: boolean;
+  protected _purchaseButton: UiButtonState;
+  protected _maybeLaterButton: UiButtonState;
+  protected _tickHarness: StandaloneTickHarness;
+  protected _seedFromAppState: boolean;
 
-  private _demoTargets: (number | null)[] = [];
-  private _variantIndex = 0;
-  private _demoVariantIndex = 0;
-  private _questSpawnTimelineMs = 0;
-  private _demoTimeLimitMs = 0;
-  private _finished = false;
-  private _upsellMessageIndex = 0;
-  private _upsellPulseMs = 0;
-  private _upsellFont: GrimMonoFont | null = null;
-  private _purchaseActive = false;
-  private _purchaseButton: UiButtonState;
-  private _maybeLaterButton: UiButtonState;
-  private _tickHarness: StandaloneTickHarness;
-  private _seedFromAppState = true;
+  get runtime(): WorldRuntime {
+    return this._runtime;
+  }
+  get demoTargets(): (number | null)[] {
+    return this._demoTargets;
+  }
+  get variantIndex(): number {
+    return this._variantIndex;
+  }
+  get demoVariantIndex(): number {
+    return this._demoVariantIndex;
+  }
+  get questSpawnTimelineMs(): number {
+    return this._questSpawnTimelineMs;
+  }
+  get demoTimeLimitMs(): number {
+    return this._demoTimeLimitMs;
+  }
+  get finished(): boolean {
+    return this._finished;
+  }
+  get upsellMessageIndex(): number {
+    return this._upsellMessageIndex;
+  }
+  get upsellPulseMs(): number {
+    return this._upsellPulseMs;
+  }
+  get upsellFont(): GrimMonoFont | null {
+    return this._upsellFont;
+  }
+  get purchaseActive(): boolean {
+    return this._purchaseActive;
+  }
+  get purchaseButton(): UiButtonState {
+    return this._purchaseButton;
+  }
+  get maybeLaterButton(): UiButtonState {
+    return this._maybeLaterButton;
+  }
+  get tickHarness(): StandaloneTickHarness {
+    return this._tickHarness;
+  }
+  get seedFromAppState(): boolean {
+    return this._seedFromAppState;
+  }
 
   constructor(state: GameState) {
     this.state = state;
-    this._runtime = new WorldRuntime({
-      assetsUrl: state.assetsDir,
-      worldSize: WORLD_SIZE,
-      demoModeActive: true,
-      hardcore: this.state.config.gameplay.hardcore,
-      preserveBugs: this.state.preserveBugs,
-      config: this.state.config,
-      audio: this.state.audio,
-      audioRng: this.state.rng,
-    });
+    this._runtime = new WorldRuntime({ assetsDir: state.assetsDir, worldSize: WORLD_SIZE, demoModeActive: true, hardcore: state.config.gameplay.hardcore, preserveBugs: state.preserveBugs, config: state.config, audio: state.audio, audioRng: state.rng });
     this._runtime.reset();
 
-    this._purchaseButton = new UiButtonState({ label: 'Purchase', forceWide: true  });
-    this._maybeLaterButton = new UiButtonState({ label: 'Maybe later', forceWide: true  });
-    this._tickHarness = new StandaloneTickHarness({
-      gameMode: GameMode.DEMO,
-      buildInputs: (ctx: FrameContext) => this._buildRunnerInputs(ctx),
-    });
+    this._demoTargets = [];
+    this._variantIndex = 0;
+    this._demoVariantIndex = 0;
+    this._questSpawnTimelineMs = 0;
+    this._demoTimeLimitMs = 0;
+    this._finished = false;
+    this._upsellMessageIndex = 0;
+    this._upsellPulseMs = 0;
+    this._upsellFont = null;
+    this._purchaseActive = false;
+    this._purchaseButton = new UiButtonState({ label: 'Purchase', forceWide: true });
+    this._maybeLaterButton = new UiButtonState({ label: 'Maybe later', forceWide: true });
+    this._tickHarness = new StandaloneTickHarness({ gameMode: GameMode.DEMO, buildInputs: this._buildRunnerInputs.bind(this) });
+    this._seedFromAppState = true;
   }
 
-  private _openWorldRuntime(): void {
+  protected _openWorldRuntime(): void {
     this._runtime.openRuntime();
   }
 
-  private _closeWorldRuntime(): void {
+  protected _closeWorldRuntime(): void {
     this._runtime.closeRuntime();
   }
 
-  private _applyTerrainSetup(opts: { terrainSlots: TerrainSlotTriplet }): void {
-    const terrain = advanceExplicitTerrain(
-      this._runtime.simWorld.state.rng,
-      {
-        terrainSlots: opts.terrainSlots,
-        width: int(WORLD_SIZE),
-        height: int(WORLD_SIZE)
-      },
-    );
+  protected _applyTerrainSetup(opts: { terrainSlots: TerrainSlotTriplet }): void {
+    const terrainSlots = opts.terrainSlots;
+    const terrain = advanceExplicitTerrain(this._runtime.simWorld.state.rng, { terrainSlots: terrainSlots, width: int(WORLD_SIZE), height: int(WORLD_SIZE) });
     this._runtime.terrainRuntime.applyTerrainSetup({
       terrainSlots: terrain.terrainSlots,
-      seed: terrain.terrainSeed
+      seed: terrain.terrainSeed,
     });
     this._syncAudioRngFromRuntime();
   }
 
-  private _syncAudioRngFromRuntime(): void {
+  protected _syncAudioRngFromRuntime(): void {
     const liveRng = this._runtime.simWorld.state.rng;
     this._runtime.audioRng = liveRng;
     this._runtime.syncAudioBridgeState();
   }
 
-  private _commitLiveRngStateToApp(): void {
+  protected _commitLiveRngStateToApp(): void {
     this.state.rng.srand(int(this._runtime.simWorld.state.rng.state));
   }
 
-  private _nextDemoResetSeed(): number {
+  protected _nextDemoResetSeed(): number {
     if (this._seedFromAppState) {
       this._seedFromAppState = false;
       return int(this.state.rng.state);
@@ -153,13 +199,13 @@ export class DemoView {
     return int(this._runtime.simWorld.state.rng.state);
   }
 
-  private _drawWorld(opts: { drawAimIndicators?: boolean; entityAlpha?: number } = {}): void {
+  protected _drawWorld(opts: { drawAimIndicators?: boolean; entityAlpha?: number } = {}): void {
     const drawAimIndicators = opts.drawAimIndicators ?? true;
     const entityAlpha = opts.entityAlpha ?? 1.0;
     this._runtime.renderer.draw({
       renderFrame: this._runtime.buildRenderFrame(),
-      drawAimIndicators,
-      entityAlpha,
+      drawAimIndicators: drawAimIndicators,
+      entityAlpha: entityAlpha,
     });
   }
 
@@ -168,8 +214,8 @@ export class DemoView {
     this._upsellMessageIndex = 0;
     this._upsellPulseMs = 0;
     this._purchaseActive = false;
-    this._purchaseButton = new UiButtonState({ label: 'Purchase', forceWide: true  });
-    this._maybeLaterButton = new UiButtonState({ label: 'Maybe later', forceWide: true  });
+    this._purchaseButton = new UiButtonState({ label: 'Purchase', forceWide: true });
+    this._maybeLaterButton = new UiButtonState({ label: 'Maybe later', forceWide: true });
     this._variantIndex = 0;
     this._demoVariantIndex = 0;
     this._questSpawnTimelineMs = 0;
@@ -196,19 +242,18 @@ export class DemoView {
 
   update(dt: number): void {
     if (this.state.audio !== null) {
-      audioUpdate(this.state.audio, dt);
+      updateAudio(this.state.audio, dt);
     }
-    if (this._finished) return;
-
+    if (this._finished) {
+      return;
+    }
     const frameDt = Math.min(dt, 0.1);
     const frameDtMs = int(frameDt * 1000.0);
-    if (frameDtMs <= 0) return;
+    if (frameDtMs <= 0) {
+      return;
+    }
 
-    if (
-      !this._purchaseActive &&
-      this.state.demoEnabled &&
-      this._purchaseScreenTriggered()
-    ) {
+    if (!this._purchaseActive && this.state.demoEnabled && this._purchaseScreenTriggered()) {
       this._beginPurchaseScreen(DEMO_PURCHASE_SCREEN_LIMIT_MS, { resetTimeline: false });
     }
 
@@ -238,7 +283,9 @@ export class DemoView {
   }
 
   draw(): void {
-    if (this._finished) return;
+    if (this._finished) {
+      return;
+    }
     if (this._purchaseActive) {
       this._drawPurchaseScreen();
       return;
@@ -248,46 +295,63 @@ export class DemoView {
   }
 
   protected _skipTriggered(): boolean {
-    if (InputState.getKeyPressed() !== 0) return true;
-    if (InputState.wasMouseButtonPressed(0)) return true;
-    if (InputState.wasMouseButtonPressed(2)) return true;
+    if (InputState.getKeyPressed() !== 0) {
+      return true;
+    }
+    if (InputState.wasMouseButtonPressed(0)) {
+      return true;
+    }
+    if (InputState.wasMouseButtonPressed(2)) {
+      return true;
+    }
     return false;
   }
 
   protected _purchaseScreenTriggered(): boolean {
-    if (InputState.wasMouseButtonPressed(0)) return true;
-    if (InputState.wasKeyPressed(27)) return true;
-    if (InputState.wasKeyPressed(32)) return true;
+    if (InputState.wasMouseButtonPressed(0)) {
+      return true;
+    }
+    if (InputState.wasKeyPressed(27)) {
+      return true;
+    }
+    if (InputState.wasKeyPressed(32)) {
+      return true;
+    }
     return false;
   }
 
-  private _beginPurchaseScreen(limitMs: number, opts: { resetTimeline: boolean }): void {
+  protected _beginPurchaseScreen(limitMs: number, opts: { resetTimeline: boolean }): void {
+    const resetTimeline = opts.resetTimeline;
     this._purchaseActive = true;
-    if (opts.resetTimeline) {
+    if (resetTimeline) {
       this._questSpawnTimelineMs = 0;
     }
     this._demoTimeLimitMs = Math.max(0, int(limitMs));
-    this._purchaseButton = new UiButtonState({ label: 'Purchase', forceWide: true  });
-    this._maybeLaterButton = new UiButtonState({ label: 'Maybe later', forceWide: true  });
+    this._purchaseButton = new UiButtonState({ label: 'Purchase', forceWide: true });
+    this._maybeLaterButton = new UiButtonState({ label: 'Maybe later', forceWide: true });
   }
 
-  private _purchaseLayoutWideShift(): number {
+  protected _purchaseLayoutWideShift(): number {
     const screenW = this.state.config.display.width;
-    if (screenW === 0x320) return 64.0; // 800
-    if (screenW === 0x400) return 128.0; // 1024
+    if (screenW === 0x320) {
+      return 64.0;
+    }
+    if (screenW === 0x400) {
+      return 128.0;
+    }
     return 0.0;
   }
 
-  private _triggerPurchase(): void {
+  protected _triggerPurchase(): void {
     this.state.quitRequested = true;
     try {
       window.open(DEMO_PURCHASE_URL);
-    } catch {
+    } catch (exc) {
       return;
     }
   }
 
-  private _updatePurchaseScreen(dtMs: number): void {
+  protected _updatePurchaseScreen(dtMs: number): void {
     dtMs = Math.max(0, int(dtMs));
     if (InputState.wasKeyPressed(27)) {
       this._purchaseActive = false;
@@ -303,34 +367,13 @@ export class DemoView {
     const buttonBaseY = h / 2.0 + 102.0 + wideShift * 0.3;
     const buttonBasePos = new Vec2(w / 2.0 + 128.0, buttonBaseY + 50.0);
 
-    const [mouseX, mouseY] = InputState.mousePosition();
-    const mouse = { x: mouseX, y: mouseY };
+    const mouse = (() => { const [x, y] = InputState.mousePosition(); return { x, y }; })();
     const click = InputState.wasMouseButtonPressed(0);
     const scale = 1.0;
-    const buttonW = buttonWidth(
-      resources, this._purchaseButton.label, { scale, forceWide: this._purchaseButton.forceWide },
-    );
-    let purchaseRequested = buttonUpdate(
-      this._purchaseButton,
-      {
-        pos: buttonBasePos,
-        width: buttonW,
-        dtMs,
-        mouse,
-        click,
-      },
-    );
+    const buttonW = buttonWidth(resources, this._purchaseButton.label, { scale: scale, forceWide: this._purchaseButton.forceWide });
+    let purchaseRequested = buttonUpdate(this._purchaseButton, { pos: buttonBasePos, width: buttonW, dtMs: dtMs, mouse: mouse, click: Boolean(click) });
 
-    if (buttonUpdate(
-      this._maybeLaterButton,
-      {
-        pos: buttonBasePos.offset({ dy: 40.0 }),
-        width: buttonW,
-        dtMs,
-        mouse,
-        click,
-      },
-    )) {
+    if (buttonUpdate(this._maybeLaterButton, { pos: buttonBasePos.offset({ dy: 40.0 }), width: buttonW, dtMs: dtMs, mouse: mouse, click: Boolean(click) })) {
       this._purchaseActive = false;
       this._finished = true;
       return;
@@ -343,11 +386,11 @@ export class DemoView {
     }
   }
 
-  private _drawPurchaseScreen(): void {
+  protected _drawPurchaseScreen(): void {
     wgl.clearBackground(wgl.makeColor(0, 0, 0, 1));
 
     const resources = requireRuntimeResources(this.state);
-    const backplasma = getTexture(resources, TextureId.BACKPLASMA);
+    const backplasma = resources.texture(TextureId.BACKPLASMA);
 
     const pulsePhase = this._upsellPulseMs % 1000;
     let pulse = Math.sin(pulsePhase * 6.2831855);
@@ -361,19 +404,14 @@ export class DemoView {
     //   - UV: 0..0.5 (top-left quarter of the backplasma atlas)
     //   - per-corner color slots, with a sin^2 pulse at bottom-right
 
-    function _toU8(value: number): number {
-      return int(clamp(value, 0.0, 1.0) * 255.0 + 0.5) / 255.0;
-    }
+    const _toU8 = (value: number): number => {
+      return int(clamp(value, 0.0, 1.0) * 255.0 + 0.5);
+    };
 
-    const c0 = wgl.makeColor(_toU8(0.0), _toU8(0.0), _toU8(0.0), _toU8(1.0));
-    const c1 = wgl.makeColor(_toU8(0.0), _toU8(0.0), _toU8(0.3), _toU8(1.0));
-    const c2 = wgl.makeColor(
-      _toU8(0.0),
-      _toU8(0.4),
-      _toU8(pulse * 0.55),
-      _toU8(pulse),
-    );
-    const c3 = wgl.makeColor(_toU8(0.0), _toU8(0.4), _toU8(0.4), _toU8(1.0));
+    const c0 = wgl.makeColor(_toU8(0.0) / 255, _toU8(0.0) / 255, _toU8(0.0) / 255, _toU8(1.0) / 255);
+    const c1 = wgl.makeColor(_toU8(0.0) / 255, _toU8(0.0) / 255, _toU8(0.3) / 255, _toU8(1.0) / 255);
+    const c2 = wgl.makeColor(_toU8(0.0) / 255, _toU8(0.4) / 255, _toU8(pulse * 0.55) / 255, _toU8(pulse) / 255);
+    const c3 = wgl.makeColor(_toU8(0.0) / 255, _toU8(0.4) / 255, _toU8(0.4) / 255, _toU8(1.0) / 255);
 
     wgl.beginBlendMode(wgl.BlendMode.ALPHA);
     wgl.beginQuads(backplasma);
@@ -399,14 +437,14 @@ export class DemoView {
     const wideShift = this._purchaseLayoutWideShift();
 
     // Mockup and logo textures.
-    const mockup = getTexture(resources, TextureId.MOCKUP);
+    const mockup = resources.texture(TextureId.MOCKUP);
     let x = screenW / 2.0 - 128.0 + wideShift;
     let y = screenH / 2.0 - 140.0;
     let dst = wgl.makeRectangle(x, y, 512.0, 256.0);
     let src = wgl.makeRectangle(0.0, 0.0, mockup.width, mockup.height);
     wgl.drawTexturePro(mockup, src, dst, wgl.makeVector2(0.0, 0.0), 0.0, wgl.makeColor(1, 1, 1, 1));
 
-    const clLogo = getTexture(resources, TextureId.CL_LOGO);
+    const clLogo = resources.texture(TextureId.CL_LOGO);
     x = screenW / 2.0 - 256.0;
     y = screenH / 2.0 - 200.0 - wideShift * 0.4;
     dst = wgl.makeRectangle(x, y, 512.0, 64.0);
@@ -415,63 +453,55 @@ export class DemoView {
 
     const xText = screenW / 2.0 - 296.0 - wideShift * 0.8;
     y = screenH / 2.0 - 104.0;
-    const color = wgl.makeColor(1, 1, 1, 1);
+    const color = wgl.makeColor(255 / 255, 255 / 255, 255 / 255, 255 / 255);
     const small = resources.smallFont;
-    drawSmallText(small, DEMO_PURCHASE_TITLE, new Vec2(xText, y), color);
+    drawSmallText(small, _DEMO_PURCHASE_TITLE, new Vec2(xText, y), color);
     y += 28.0;
-    drawSmallText(small, DEMO_PURCHASE_FEATURES_TITLE, new Vec2(xText, y), color);
+    drawSmallText(small, _DEMO_PURCHASE_FEATURES_TITLE, new Vec2(xText, y), color);
 
-    const underlineW = measureSmallTextWidth(small, DEMO_PURCHASE_FEATURES_TITLE);
-    wgl.drawRectangle(int(xText), int(y + 15.0), int(underlineW), 2, wgl.makeColor(1, 1, 1, 160 / 255.0));
+    const underlineW = measureSmallTextWidth(small, _DEMO_PURCHASE_FEATURES_TITLE);
+    wgl.drawRectangle(xText, y + 15.0, underlineW, 2.0, wgl.makeColor(255 / 255, 255 / 255, 255 / 255, 160 / 255));
 
     y += 22.0;
     const xList = xText + 8.0;
-    for (const [line, deltaY] of DEMO_PURCHASE_FEATURE_LINES) {
+    for (let [line, deltaY] of DEMO_PURCHASE_FEATURE_LINES) {
       drawSmallText(small, line, new Vec2(xList, y), color);
       y += deltaY;
     }
-    drawSmallText(small, DEMO_PURCHASE_FOOTER, new Vec2(xText, y), color);
+    drawSmallText(small, _DEMO_PURCHASE_FOOTER, new Vec2(xText, y), color);
 
     // Buttons on the right.
     const buttonBaseY = screenH / 2.0 + 102.0 + wideShift * 0.3;
     const buttonBasePos = new Vec2(screenW / 2.0 + 128.0, buttonBaseY + 50.0);
     const scale = 1.0;
-    const buttonW = buttonWidth(
-      resources, this._purchaseButton.label, { scale, forceWide: this._purchaseButton.forceWide },
-    );
-    buttonDraw(resources, this._purchaseButton, { pos: buttonBasePos, width: buttonW, scale });
+    const buttonW = buttonWidth(resources, this._purchaseButton.label, { scale: scale, forceWide: this._purchaseButton.forceWide });
+    buttonDraw(resources, this._purchaseButton, { pos: buttonBasePos, width: buttonW, scale: scale });
     buttonDraw(
       resources,
       this._maybeLaterButton,
-      {
-        pos: buttonBasePos.offset({ dy: 40.0 }),
-        width: buttonW,
-        scale
-      },
+      { pos: buttonBasePos.offset({ dy: 40.0 }), width: buttonW, scale: scale },
     );
 
     // Demo purchase screen uses menu-style cursor; draw it explicitly since the OS cursor is hidden.
-    const particles = getTexture(resources, TextureId.PARTICLES);
-    const cursorTex = getTexture(resources, TextureId.UI_CURSOR);
-    const [mouseX, mouseY] = InputState.mousePosition();
+    const particles = resources.texture(TextureId.PARTICLES);
+    const cursorTex = resources.texture(TextureId.UI_CURSOR);
+    const mouse = (() => { const [x, y] = InputState.mousePosition(); return { x, y }; })();
     const pulseTime = this._upsellPulseMs * 0.001;
-    drawMenuCursor(particles, cursorTex, { pos: new Vec2(mouseX, mouseY), pulseTime });
+    drawMenuCursor(particles, cursorTex, { pos: Vec2.fromXY(mouse), pulseTime: pulseTime });
   }
 
-  private _demoModeStart(): void {
+  protected _demoModeStart(): void {
     const index = this._demoVariantIndex;
-    this._demoVariantIndex = (index + 1) % DEMO_VARIANT_COUNT;
+    this._demoVariantIndex = ((index + 1) + DEMO_VARIANT_COUNT) % DEMO_VARIANT_COUNT;
     this._variantIndex = index;
     this._questSpawnTimelineMs = 0;
     this._demoTimeLimitMs = 0;
     this._purchaseActive = false;
-
-    const playerCount = (index === 0 || index === 1 || index === 4) ? 2 : 1;
-    this._runtime.reset({ seed: this._nextDemoResetSeed(), playerCount });
+    const playerCount = index === 0 || index === 1 || index === 4 ? 2 : 1;
+    this._runtime.reset({ seed: this._nextDemoResetSeed(), playerCount: playerCount });
     this._tickHarness.reset();
     this._syncAudioRngFromRuntime();
     this._runtime.simWorld.state.bonuses.weaponPowerUp = 0.0;
-
     if (index === 0) {
       this._setupVariant0();
     } else if (index === 1) {
@@ -489,124 +519,109 @@ export class DemoView {
 
     // demo_purchase_screen_update increments demo_upsell_message_index when the
     // timeline resets (quest_spawn_timeline == 0) and the purchase screen is inactive.
-    if (!this._purchaseActive && _DEMO_UPSELL_MESSAGES.length > 0) {
-      this._upsellMessageIndex = (this._upsellMessageIndex + 1) % _DEMO_UPSELL_MESSAGES.length;
+    if (!this._purchaseActive && DEMO_UPSELL_MESSAGES.length > 0) {
+      this._upsellMessageIndex = ((this._upsellMessageIndex + 1) + DEMO_UPSELL_MESSAGES.length) % DEMO_UPSELL_MESSAGES.length;
     }
     this._syncAudioRngFromRuntime();
   }
 
-  private _setupWorldPlayers(specs: [Vec2, number][]): void {
-    for (let idx = 0; idx < specs.length; idx++) {
-      if (idx >= this._runtime.simWorld.players.length) continue;
-      const [pos, weaponId] = specs[idx];
+  protected _setupWorldPlayers(specs: [Vec2, number][]): void {
+    for (const [idx, [pos, weaponId]] of specs.entries()) {
+      if (idx >= this._runtime.simWorld.players.length) {
+        continue;
+      }
       const player = this._runtime.simWorld.players[idx];
       player.pos = pos;
       // Keep aim anchored to the spawn position so demo aim starts stable.
       player.aim = pos;
       weaponAssignPlayer(player, weaponId, { state: this._runtime.simWorld.state });
     }
-    this._demoTargets = new Array(this._runtime.simWorld.players.length).fill(null);
+    this._demoTargets = Array.from({ length: this._runtime.simWorld.players.length }, () => null);
   }
 
-  private _spawn(spawnId: SpawnId, pos: Vec2, opts: { heading?: number } = {}): void {
+  protected _spawn(spawnId: SpawnId, pos: Vec2, opts: { heading?: number } = {}): void {
     const heading = opts.heading ?? 0.0;
     const rng = this._runtime.simWorld.state.rng;
     this._runtime.simWorld.creatures.spawnTemplate(spawnId, pos, heading, rng);
   }
 
-  private _setupVariant0(): void {
+  protected _setupVariant0(): void {
     this._demoTimeLimitMs = 4000;
     // demo_setup_variant_0 uses weapon_id=0x0B.
     const weaponId = 11;
-    this._setupWorldPlayers([
-      [new Vec2(448.0, 384.0), weaponId],
-      [new Vec2(546.0, 654.0), weaponId],
-    ]);
+    this._setupWorldPlayers([[new Vec2(448.0, 384.0), weaponId], [new Vec2(546.0, 654.0), weaponId]] as const);
     let y = 256;
     let i = 0;
     while (y < 1696) {
       const col = i % 2;
       this._spawn(SpawnId.SPIDER_SP1_AI7_TIMER_38, new Vec2((col + 2) * 64, y), { heading: RANDOM_HEADING_SENTINEL });
-      this._spawn(SpawnId.SPIDER_SP1_AI7_TIMER_38, new Vec2(col * 64 + 798, y), { heading: RANDOM_HEADING_SENTINEL });
+      this._spawn(SpawnId.SPIDER_SP1_AI7_TIMER_38, new Vec2((col * 64 + 798), y), { heading: RANDOM_HEADING_SENTINEL });
       y += 80;
       i += 1;
     }
   }
 
-  private _setupVariant1(): void {
+  protected _setupVariant1(): void {
     this._demoTimeLimitMs = 5000;
     // demo_setup_variant_1 uses weapon_id=0x05.
     const weaponId = 5;
     const rng = this._runtime.simWorld.state.rng;
-    this._setupWorldPlayers([
-      [new Vec2(490.0, 448.0), weaponId],
-      [new Vec2(480.0, 576.0), weaponId],
-    ]);
+    this._setupWorldPlayers([[new Vec2(490.0, 448.0), weaponId], [new Vec2(480.0, 576.0), weaponId]] as const);
     // Native variant 1 calls terrain_generate(&quest_meta_terrain_desc_unlock_gt_0x13).
     this._applyTerrainSetup({ terrainSlots: Q2_TERRAIN_SLOTS });
     this._runtime.simWorld.state.bonuses.weaponPowerUp = 15.0;
     for (let idx = 0; idx < 20; idx++) {
-      const x =
-        int(rng.rand({ caller: RngCallerStatic.DEMO_SETUP_VARIANT_1_SPIDER_SP1_X }) % 200) + 32;
-      const y =
-        int(rng.rand({ caller: RngCallerStatic.DEMO_SETUP_VARIANT_1_SPIDER_SP1_Y }) % 899) + 64;
+      const x = int(rng.rand({ caller: RngCallerStatic.DEMO_SETUP_VARIANT_1_SPIDER_SP1_X }) % 200) + 32;
+      const y = int(rng.rand({ caller: RngCallerStatic.DEMO_SETUP_VARIANT_1_SPIDER_SP1_Y }) % 899) + 64;
       this._spawn(SpawnId.SPIDER_SP1_RANDOM_GREEN_34, new Vec2(x, y), { heading: RANDOM_HEADING_SENTINEL });
       if (idx % 3 !== 0) {
-        const sx =
-          int(rng.rand({ caller: RngCallerStatic.DEMO_SETUP_VARIANT_1_SPIDER_SP2_X }) % 30) + 32;
-        const sy =
-          int(rng.rand({ caller: RngCallerStatic.DEMO_SETUP_VARIANT_1_SPIDER_SP2_Y }) % 899) + 64;
-        this._spawn(SpawnId.SPIDER_SP2_RANDOM_35, new Vec2(sx, sy), { heading: RANDOM_HEADING_SENTINEL });
+        const spawnPos = new Vec2((int(rng.rand({ caller: RngCallerStatic.DEMO_SETUP_VARIANT_1_SPIDER_SP2_X }) % 30) + 32), (int(rng.rand({ caller: RngCallerStatic.DEMO_SETUP_VARIANT_1_SPIDER_SP2_Y }) % 899) + 64));
+        this._spawn(SpawnId.SPIDER_SP2_RANDOM_35, spawnPos, { heading: RANDOM_HEADING_SENTINEL });
       }
     }
   }
 
-  private _setupVariant2(): void {
+  protected _setupVariant2(): void {
     this._demoTimeLimitMs = 5000;
     // demo_setup_variant_2 uses weapon_id=0x15.
     const weaponId = 21;
-    this._setupWorldPlayers([[new Vec2(512.0, 512.0), weaponId]]);
+    this._setupWorldPlayers([[new Vec2(512.0, 512.0), weaponId]] as const);
     let y = 128;
     let i = 0;
     while (y < 848) {
       const col = i % 2;
-      this._spawn(SpawnId.ZOMBIE_RANDOM_41, new Vec2(col * 64 + 32, y), { heading: RANDOM_HEADING_SENTINEL });
+      this._spawn(SpawnId.ZOMBIE_RANDOM_41, new Vec2((col * 64 + 32), y), { heading: RANDOM_HEADING_SENTINEL });
       this._spawn(SpawnId.ZOMBIE_RANDOM_41, new Vec2((col + 2) * 64, y), { heading: RANDOM_HEADING_SENTINEL });
-      this._spawn(SpawnId.ZOMBIE_RANDOM_41, new Vec2(col * 64 - 64, y), { heading: RANDOM_HEADING_SENTINEL });
+      this._spawn(SpawnId.ZOMBIE_RANDOM_41, new Vec2((col * 64 - 64), y), { heading: RANDOM_HEADING_SENTINEL });
       this._spawn(SpawnId.ZOMBIE_RANDOM_41, new Vec2((col + 12) * 64, y), { heading: RANDOM_HEADING_SENTINEL });
       y += 60;
       i += 1;
     }
   }
 
-  private _setupVariant3(): void {
+  protected _setupVariant3(): void {
     this._demoTimeLimitMs = 4000;
     // demo_setup_variant_3 uses weapon_id=0x12.
     const weaponId = 18;
     const rng = this._runtime.simWorld.state.rng;
-    this._setupWorldPlayers([[new Vec2(512.0, 512.0), weaponId]]);
+    this._setupWorldPlayers([[new Vec2(512.0, 512.0), weaponId]] as const);
     const quest = questByLevel(new QuestLevel({ major: 1, minor: 1 }));
-    if (quest === null) throw new Error("quest 1.1 must exist");
+    if (!(quest !== null)) throw new Error();
     // Native variant 3 calls terrain_generate(&quest_selected_meta), which is the
     // base of the quest metadata array in this build, so it resolves to quest 1.1.
     this._applyTerrainSetup({ terrainSlots: quest.terrainSlots });
     for (let idx = 0; idx < 20; idx++) {
-      const x =
-        int(rng.rand({ caller: RngCallerStatic.DEMO_SETUP_VARIANT_3_ALIEN_BIG_X }) % 200) + 32;
-      const y =
-        int(rng.rand({ caller: RngCallerStatic.DEMO_SETUP_VARIANT_3_ALIEN_BIG_Y }) % 899) + 64;
+      const x = int(rng.rand({ caller: RngCallerStatic.DEMO_SETUP_VARIANT_3_ALIEN_BIG_X }) % 200) + 32;
+      const y = int(rng.rand({ caller: RngCallerStatic.DEMO_SETUP_VARIANT_3_ALIEN_BIG_Y }) % 899) + 64;
       this._spawn(SpawnId.ALIEN_CONST_GREEN_24, new Vec2(x, y), { heading: 0.0 });
       if (idx % 3 !== 0) {
-        const sx =
-          int(rng.rand({ caller: RngCallerStatic.DEMO_SETUP_VARIANT_3_ALIEN_SMALL_X }) % 30) + 32;
-        const sy =
-          int(rng.rand({ caller: RngCallerStatic.DEMO_SETUP_VARIANT_3_ALIEN_SMALL_Y }) % 899) + 64;
-        this._spawn(SpawnId.ALIEN_CONST_GREEN_SMALL_25, new Vec2(sx, sy), { heading: 0.0 });
+        const spawnPos = new Vec2((int(rng.rand({ caller: RngCallerStatic.DEMO_SETUP_VARIANT_3_ALIEN_SMALL_X }) % 30) + 32), (int(rng.rand({ caller: RngCallerStatic.DEMO_SETUP_VARIANT_3_ALIEN_SMALL_Y }) % 899) + 64));
+        this._spawn(SpawnId.ALIEN_CONST_GREEN_SMALL_25, spawnPos, { heading: 0.0 });
       }
     }
   }
 
-  private _drawOverlay(): void {
+  protected _drawOverlay(): void {
     if (this.state.demoEnabled) {
       this._drawDemoUpsellOverlay();
       return;
@@ -614,30 +629,30 @@ export class DemoView {
     const title = `DEMO MODE  (${this._variantIndex + 1}/${DEMO_VARIANT_COUNT})`;
     const hint = 'Press any key / click to skip';
     const remaining = Math.max(0.0, (this._demoTimeLimitMs - this._questSpawnTimelineMs) / 1000.0);
-    const weapons = this._runtime.simWorld.players.map(
-      (p) => `P${p.index + 1}:${weaponName(p.weapon.weaponId, { preserveBugs: this.state.preserveBugs })}`,
-    ).join(', ');
-    const detail = `${weapons}  \u2014  next in ${remaining.toFixed(1)}s`;
-    wgl.drawText(title, 16, 12, 20, wgl.makeColor(240 / 255.0, 240 / 255.0, 240 / 255.0, 255 / 255.0));
-    wgl.drawText(detail, 16, 36, 16, wgl.makeColor(180 / 255.0, 180 / 255.0, 190 / 255.0, 255 / 255.0));
-    wgl.drawText(hint, 16, 56, 16, wgl.makeColor(140 / 255.0, 140 / 255.0, 150 / 255.0, 255 / 255.0));
+    const weapons = Array.from(this._runtime.simWorld.players).map((p) => `P${p.index + 1}:${weaponName(p.weapon.weaponId, { preserveBugs: this.state.preserveBugs })}`).join(", ");
+    const detail = `${weapons}  —  next in ${remaining.toFixed(1).padStart(0, ' ')}s`;
+    wgl.drawText(title, 16, 12, 20, wgl.makeColor(240 / 255, 240 / 255, 240 / 255, 255 / 255));
+    wgl.drawText(detail, 16, 36, 16, wgl.makeColor(180 / 255, 180 / 255, 190 / 255, 255 / 255));
+    wgl.drawText(hint, 16, 56, 16, wgl.makeColor(140 / 255, 140 / 255, 150 / 255, 255 / 255));
   }
 
-  private _ensureUpsellFont(): GrimMonoFont {
-    if (this._upsellFont !== null) return this._upsellFont;
-    const resources = requireRuntimeResources(this.state);
-    const texture = getTexture(resources, TextureId.DEFAULT_FONT_COURIER);
-    this._upsellFont = createGrimMonoFont(texture);
+  protected _ensureUpsellFont(): GrimMonoFont {
+    if (this._upsellFont !== null) {
+      return this._upsellFont;
+    }
+    this._upsellFont = loadGrimMonoFont(this.state.assetsDir);
     return this._upsellFont;
   }
 
-  private _drawDemoUpsellOverlay(): void {
+  protected _drawDemoUpsellOverlay(): void {
     // Modeled after the shareware "Want more ..." overlay in demo_purchase_screen_update
     // (crimsonland.exe 0x0040B740), but without the purchase screen.
-    if (_DEMO_UPSELL_MESSAGES.length === 0) return;
+    if (DEMO_UPSELL_MESSAGES.length === 0) {
+      return;
+    }
 
     const font = this._ensureUpsellFont();
-    const msg = _DEMO_UPSELL_MESSAGES[this._upsellMessageIndex];
+    const msg = DEMO_UPSELL_MESSAGES[this._upsellMessageIndex];
 
     const timelineMs = this._questSpawnTimelineMs;
     const limitMs = this._demoTimeLimitMs;
@@ -662,74 +677,58 @@ export class DemoView {
     const barX = 64.0;
     const barY = var2c + 72.0;
 
-    function pyRound(value: number): number {
-      const floorValue = Math.floor(value);
-      const frac = value - floorValue;
-      if (frac < 0.5) return floorValue;
-      if (frac > 0.5) return floorValue + 1;
-      return floorValue % 2 === 0 ? floorValue : floorValue + 1;
-    }
-
     const bgAlpha = int(pyRound(clamp(alpha * 0.5, 0.0, 1.0) * 255.0));
     const barAlpha = int(pyRound(clamp(alpha * 0.8, 0.0, 1.0) * 255.0));
     const txtAlpha = int(pyRound(clamp(alpha, 0.0, 1.0) * 255.0));
 
-    wgl.drawRectangle(
-      int(bgX), int(bgY), int(textW + 12.0), 30,
-      wgl.makeColor(0, 0, 0, bgAlpha / 255.0),
-    );
+    wgl.drawRectangle(bgX, bgY, textW + 12.0, 30.0, wgl.makeColor(0 / 255, 0 / 255, 0 / 255, bgAlpha / 255));
 
     let progress = 0.0;
     if (limitMs > 0) {
       progress = clamp(timelineMs / limitMs, 0.0, 1.0);
     }
-    wgl.drawRectangle(
-      int(barX), int(barY), int(textW * progress), 3,
-      wgl.makeColor(128 / 255.0, 26 / 255.0, 26 / 255.0, barAlpha / 255.0),
-    );
+    wgl.drawRectangle(barX, barY, textW * progress, 3.0, wgl.makeColor(128 / 255, 26 / 255, 26 / 255, barAlpha / 255));
 
-    drawGrimMonoText(font, msg, new Vec2(textX, textY), scale, wgl.makeColor(255 / 255.0, 255 / 255.0, 255 / 255.0, txtAlpha / 255.0));
+    drawGrimMonoText(font, msg, new Vec2(textX, textY), scale, wgl.makeColor(255 / 255, 255 / 255, 255 / 255, txtAlpha / 255));
   }
 
-  private _buildRunnerInputs(frameCtx: FrameContext): PlayerInput[] {
+  protected _buildRunnerInputs(frameCtx: FrameContext): PlayerInput[] {
     return this._buildDemoInputs(frameCtx.dtSeconds);
   }
 
-  private _updateWorld(dt: number): void {
-    if (this._runtime.simWorld.players.length === 0) return;
+  protected _updateWorld(dt: number): void {
+    if (this._runtime.simWorld.players.length === 0) {
+      return;
+    }
     this._tickHarness.advanceFrame(this._runtime, dt);
   }
 
-  private _buildDemoInputs(dt: number): PlayerInput[] {
+  protected _buildDemoInputs(dt: number): PlayerInput[] {
     const players = this._runtime.simWorld.players;
     const creatures = this._runtime.simWorld.creatures.entries;
     if (this._demoTargets.length !== players.length) {
-      this._demoTargets = new Array(players.length).fill(null);
+      this._demoTargets = Array.from({ length: players.length }, () => null);
     }
     const center = new Vec2(this._runtime.worldSize * 0.5, this._runtime.worldSize * 0.5);
 
-    const TAU = Math.PI * 2;
 
-    function pyMod(value: number, modulus: number): number {
-      return value - Math.floor(value / modulus) * modulus;
-    }
-
-    function turnTowardsHeading(cur: number, target: number): [number, number] {
-      let c = pyMod(cur, TAU);
-      const t = pyMod(target, TAU);
-      const delta = pyMod(t - c + Math.PI, TAU) - Math.PI;
+    const _turnTowardsHeading = (cur: number, target: number): [number, number] => {
+      cur = cur % (Math.PI * 2.0);
+      target = target % (Math.PI * 2.0);
+      const delta = ((target - cur + Math.PI) + (Math.PI * 2.0)) % (Math.PI * 2.0) - Math.PI;
       const diff = Math.abs(delta);
-      if (diff <= 1e-9) return [c, 0.0];
+      if (diff <= 1e-9) {
+        return [cur, 0.0];
+      }
       const step = dt * diff * 5.0;
-      c = delta > 0.0 ? pyMod(c + step, TAU) : pyMod(c - step, TAU);
-      return [c, diff];
-    }
+      cur = delta > 0.0 ? ((cur + step) + (Math.PI * 2.0)) % (Math.PI * 2.0) : ((cur - step) + (Math.PI * 2.0)) % (Math.PI * 2.0);
+      return [cur, diff];
+    };
 
     const inputs: PlayerInput[] = [];
-    for (let idx = 0; idx < players.length; idx++) {
-      const player = players[idx];
+    for (const [idx, player] of players.entries()) {
       const targetIdx = this._selectDemoTarget(idx, player, creatures);
-      let target: CreatureState | null = null;
+      let target = null;
       if (targetIdx !== null && targetIdx >= 0 && targetIdx < creatures.length) {
         const candidate = creatures[targetIdx];
         if (candidate.active && candidate.hp > 0.0) {
@@ -740,10 +739,10 @@ export class DemoView {
       // Aim: ease the aim point toward the target.
       let aim = player.aim;
       let autoFire = false;
+      let awayFromCenter: Vec2;
       if (target !== null) {
         const targetPos = target.pos;
-        const aimDelta = targetPos.sub(aim);
-        const [aimDir, aimDist] = aimDelta.normalizedWithLength();
+        const [aimDir, aimDist] = (targetPos.sub(aim)).normalizedWithLength();
         if (aimDist >= 4.0) {
           const step = aimDist * 6.0 * dt;
           aim = aim.add(aimDir.mul(step));
@@ -752,9 +751,11 @@ export class DemoView {
         }
         autoFire = aimDist < 128.0;
       } else {
-        const awayDelta = player.pos.sub(center);
-        const [awayDir, aMag] = awayDelta.normalizedWithLength();
-        const awayFromCenter = aMag <= 1e-6 ? new Vec2(0.0, -1.0) : awayDir;
+        let amag: any;
+        [awayFromCenter, amag] = (player.pos.sub(center)).normalizedWithLength();
+        if (amag <= 1e-6) {
+          awayFromCenter = new Vec2(0.0, -1.0);
+        }
         aim = player.pos.add(awayFromCenter.mul(60.0));
       }
 
@@ -764,9 +765,9 @@ export class DemoView {
       // - return to center when too far
       let moveDelta: Vec2;
       if (target === null) {
-        moveDelta = player.pos.sub(center).rotated(Math.PI / 2.0);
+        moveDelta = (player.pos.sub(center)).rotated(Math.PI / 2.0);
       } else {
-        const centerDist = player.pos.sub(center).length();
+        const centerDist = (player.pos.sub(center)).length();
         if (centerDist <= 300.0) {
           moveDelta = target.pos.sub(player.pos);
         } else {
@@ -780,32 +781,24 @@ export class DemoView {
         move = new Vec2();
       } else {
         const desiredHeading = desiredDir.toHeading();
-        const [smoothedHeading, angleDiff] = turnTowardsHeading(player.heading, desiredHeading);
+        const [smoothedHeading, angleDiff] = _turnTowardsHeading(player.heading, desiredHeading);
         const moveMag = Math.max(0.001, (Math.PI - angleDiff) / Math.PI);
         move = Vec2.fromHeading(smoothedHeading).mul(moveMag);
       }
 
-      inputs.push(
-        new PlayerInput({
-          move,
-          aim,
-          fireDown: autoFire,
-          firePressed: autoFire,
-          reloadPressed: false,
-        }),
-      );
+      inputs.push(new PlayerInput({ move: move, aim: aim, fireDown: autoFire, firePressed: autoFire, reloadPressed: false }));
     }
 
     return inputs;
   }
 
-  private _nearestWorldCreatureIndex(pos: Vec2): number | null {
-    const creatures = this._runtime.simWorld.creatures.entries;
-    let bestIdx: number | null = null;
+  protected _nearestWorldCreatureIndex(pos: Vec2): number | null {
+    let bestIdx = null;
     let bestDist = 0.0;
-    for (let idx = 0; idx < creatures.length; idx++) {
-      const creature = creatures[idx];
-      if (!(creature.active && creature.hp > 0.0)) continue;
+    for (const [idx, creature] of this._runtime.simWorld.creatures.entries.entries()) {
+      if (!(creature.active && creature.hp > 0.0)) {
+        continue;
+      }
       const d = Vec2.distanceSq(pos, creature.pos);
       if (bestIdx === null || d < bestDist) {
         bestIdx = idx;
@@ -815,15 +808,9 @@ export class DemoView {
     return bestIdx;
   }
 
-  private _selectDemoTarget(
-    playerIndex: number,
-    player: PlayerState,
-    creatures: CreatureState[],
-  ): number | null {
+  protected _selectDemoTarget(playerIndex: number, player: PlayerState, creatures: any[]): number | null {
     const candidate = this._nearestWorldCreatureIndex(player.pos);
-    const current =
-      playerIndex < this._demoTargets.length ? this._demoTargets[playerIndex] : null;
-
+    const current = playerIndex < this._demoTargets.length ? this._demoTargets[playerIndex] : null;
     if (current === null) {
       this._demoTargets[playerIndex] = candidate;
       return candidate;
@@ -844,12 +831,17 @@ export class DemoView {
     if (!candCreature.active || candCreature.hp <= 0.0) {
       return current;
     }
-    const curD = currentCreature.pos.sub(player.pos).length();
-    const candD = candCreature.pos.sub(player.pos).length();
+    const curD = (currentCreature.pos.sub(player.pos)).length();
+    const candD = (candCreature.pos.sub(player.pos)).length();
     if (candD + 64.0 < curD) {
       this._demoTargets[playerIndex] = candidate;
       return candidate;
     }
     return current;
   }
+}
+
+export function weaponName(weaponId: WeaponId, opts: { preserveBugs?: boolean } = {}): string {
+  const preserveBugs = opts.preserveBugs ?? false;
+  return weaponDisplayName(weaponId, { preserveBugs: preserveBugs });
 }

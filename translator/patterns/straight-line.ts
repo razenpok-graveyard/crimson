@@ -251,6 +251,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       || trimmed === 'import tempfile'
       || trimmed === 'import typer'
       || trimmed === 'import warnings'
+      || trimmed === 'import webbrowser'
       || trimmed === 'import zlib'
       || trimmed === 'import zstandard as zstd'
     ) {

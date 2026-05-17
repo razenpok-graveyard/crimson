@@ -1,7 +1,7 @@
 // Port of crimson/world/audio_bridge.py
 
 import type { AudioState } from '@grim/audio.ts';
-import type { Crand } from '@grim/rand.ts';
+import type { CrandLike } from '@grim/rand.ts';
 import { AudioRouter } from '@crimson/audio-router.ts';
 import type { PresentationStepCommands } from '@crimson/sim/presentation-step.ts';
 import { applyPresentationPlan } from '@crimson/sim/presentation-step.ts';
@@ -11,14 +11,14 @@ function zeroReflexBoost(): number {
 }
 
 export class AudioBridge {
-  audioRng: Crand;
+  audioRng: CrandLike;
   demoModeActive: boolean;
   reflexBoostTimerSource: () => number;
   audio: AudioState | null;
   router: AudioRouter;
 
   constructor(opts: {
-    audioRng: Crand;
+    audioRng: CrandLike;
     demoModeActive?: boolean;
     reflexBoostTimerSource?: () => number;
     audio?: AudioState | null;
@@ -31,7 +31,7 @@ export class AudioBridge {
     this.router = new AudioRouter({ audioRng: this.audioRng, audio: this.audio, demoModeActive: this.demoModeActive, reflexBoostTimerSource: this.reflexBoostTimerSource });
   }
 
-  sync(opts: { audio: AudioState | null; audioRng: Crand; demoModeActive: boolean }): void {
+  sync(opts: { audio: AudioState | null; audioRng: CrandLike; demoModeActive: boolean }): void {
     const audio = opts.audio;
     const audioRng = opts.audioRng;
     const demoModeActive = opts.demoModeActive;

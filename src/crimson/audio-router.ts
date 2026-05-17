@@ -2,7 +2,7 @@
 
 import type { AudioState } from '@grim/audio.ts';
 import { playSfx, triggerGameTune } from '@grim/audio.ts';
-import type { Crand, CrandLike } from '@grim/rand.ts';
+import type { CrandLike } from '@grim/rand.ts';
 import { SfxId } from '@grim/sfx-map.ts';
 import { GameMode } from '@crimson/game-modes.ts';
 import type { ProjectileHit } from '@crimson/projectiles/types.ts';
@@ -29,14 +29,14 @@ function mapGetOrThrow<K, V>(map: ReadonlyMap<K, V>, key: unknown): V {
 }
 
 export class AudioRouter {
-  audioRng: Crand;
+  audioRng: CrandLike;
   audio: AudioState | null;
   demoModeActive: boolean;
   sfxEnabled: boolean;
   reflexBoostTimerSource: (() => number) | null;
 
   constructor(opts: {
-    audioRng: Crand;
+    audioRng: CrandLike;
     audio?: AudioState | null;
     demoModeActive?: boolean;
     sfxEnabled?: boolean;

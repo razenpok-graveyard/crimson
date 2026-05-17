@@ -209,6 +209,9 @@ export function translatePositionalCallExpression(
   }
   const callee = translateCallCalleeExpression(pythonCallee, nameMap, arrayNames, validatedTypeAliases);
   const args = positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
+  if (pythonCallee === 'webbrowser.open' && args.length >= 1) {
+    return `window.open(${args.join(', ')})`;
+  }
   const raylibConstructor = /^(r[dl]|wgl)\.(Color|Vector2|Rectangle)$/.exec(callee);
   if (raylibConstructor !== null) {
     if (raylibConstructor[2] === 'Color' && positionalParts.length === 4) {

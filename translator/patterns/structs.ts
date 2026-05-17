@@ -297,6 +297,7 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
     index = structClass.nextIndex;
   }
 
+  ensureStructInferredTypeImports(imports, typeAliases, functions, classes, protocols);
   markStructTypeOnlyImports(imports, typeAliases, functions, classes, protocols);
   markStructNamespaceImports(namespaceImports, typeAliases, functions, classes, protocols);
   const reexports = structReexportsForAllNames(imports, allNames);
@@ -1487,28 +1488,7 @@ function markStructTypeOnlyImports(
     ]),
     ...functions.flatMap((fn) => fn.statements),
   ].join('\n'));
-  const typeText = [
-    ...typeAliases.map((alias) => alias.typeExpression),
-    ...functions.flatMap((fn) => [
-      fn.returnType,
-      ...fn.parameters.map((parameter) => parameter.typeExpression),
-      ...fn.optsParams.map((parameter) => parameter.typeExpression),
-    ]),
-    ...classes.flatMap((structClass) => structClass.fields.map((field) => field.typeExpression)),
-    ...classes.flatMap((structClass) => structClass.methods.flatMap((method) => [
-      method.returnType,
-      ...method.parameters.map((parameter) => parameter.typeExpression),
-      ...method.optsParams.map((parameter) => parameter.typeExpression),
-    ])),
-    ...protocols.flatMap((protocol) => [
-      ...(protocol.extendsNames ?? []),
-      ...protocol.methods.flatMap((method) => [
-        method.returnType,
-        ...method.parameters.map((parameter) => parameter.typeExpression),
-        ...method.optsParams.map((parameter) => parameter.typeExpression),
-      ]),
-    ]),
-  ].join('\n');
+  const typeText = structModuleTypeUsageText(typeAliases, functions, classes, protocols);
 
   for (let index = 0; index < imports.length; index += 1) {
     const importDefinition = imports[index];
@@ -1538,6 +1518,77 @@ function markStructTypeOnlyImports(
       { ...importDefinition, names: valueNames, typeOnly: false },
     );
     index += 1;
+  }
+}
+
+function ensureStructInferredTypeImports(
+  imports: ImportDefinition[],
+  typeAliases: TypeAlias[],
+  functions: SimpleModuleFunction[],
+  classes: StructModule['classes'],
+  protocols: StructModule['protocols'],
+): void {
+  const typeText = structModuleTypeUsageText(typeAliases, functions, classes, protocols);
+  const localTypeNames = new Set([
+    ...typeAliases.map((alias) => alias.name),
+    ...classes.map((structClass) => structClass.name),
+    ...protocols.map((protocol) => protocol.name),
+  ]);
+  if (
+    identifierPattern('CrandLike').test(typeText)
+    && !localTypeNames.has('CrandLike')
+    && !imports.some((importDefinition) => importDefinition.names.some((name) => importedBindingName(name) === 'CrandLike'))
+  ) {
+    pushUniqueImportDefinition(imports, {
+      modulePath: '@grim/rand.ts',
+      names: ['CrandLike'],
+    });
+  }
+}
+
+function structModuleTypeUsageText(
+  typeAliases: TypeAlias[],
+  functions: SimpleModuleFunction[],
+  classes: StructModule['classes'],
+  protocols: StructModule['protocols'],
+): string {
+  return [
+    ...typeAliases.map((alias) => alias.typeExpression),
+    ...functions.flatMap((fn) => [
+      fn.returnType,
+      ...fn.parameters.map((parameter) => parameter.typeExpression),
+      ...fn.optsParams.map((parameter) => parameter.typeExpression),
+    ]),
+    ...classes.flatMap((structClass) => structClass.fields.map((field) => field.typeExpression)),
+    ...classes.flatMap((structClass) => structClass.methods.flatMap((method) => [
+      method.returnType,
+      ...method.parameters.map((parameter) => parameter.typeExpression),
+      ...method.optsParams.map((parameter) => parameter.typeExpression),
+    ])),
+    ...protocols.flatMap((protocol) => [
+      ...(protocol.extendsNames ?? []),
+      ...protocol.methods.flatMap((method) => [
+        method.returnType,
+        ...method.parameters.map((parameter) => parameter.typeExpression),
+        ...method.optsParams.map((parameter) => parameter.typeExpression),
+      ]),
+    ]),
+  ].join('\n');
+}
+
+function pushUniqueImportDefinition(imports: ImportDefinition[], importDefinition: ImportDefinition): void {
+  const existing = imports.find((candidate) => (
+    candidate.modulePath === importDefinition.modulePath
+    && candidate.typeOnly === importDefinition.typeOnly
+  ));
+  if (existing === undefined) {
+    imports.push(importDefinition);
+    return;
+  }
+  for (const name of importDefinition.names) {
+    if (!existing.names.includes(name)) {
+      existing.names.push(name);
+    }
   }
 }
 

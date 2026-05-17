@@ -57,6 +57,7 @@ import {
   parseEnumerateCallArgs,
   type EnumerateCallArgs,
 } from './expression/generators.js';
+import { expressionIsKnownVector } from './expression/vectors.js';
 import {
   parseFunctionParameterText,
   pythonParameterNames,
@@ -4147,11 +4148,14 @@ function applyTupleAssignmentReturnMarkers(
   arrayNames: Set<string>,
   mapNames: ReadonlySet<string>,
 ): void {
-  const call = /^([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)?)\(/.exec(assignedRight.trim());
-  if (call === null) {
-    return;
-  }
-  const signature = parseLocalFunctionCallSignature(call[1], nameMap) ?? knownDottedMethodCallSignature(call[1]);
+  const trimmedRight = assignedRight.trim();
+  const call = /^([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)?)\(/.exec(trimmedRight);
+  const parenthesizedMethodCall = call === null
+    ? /^\(.+\)\.([A-Za-z_$][A-Za-z0-9_$]*)\(/.exec(trimmedRight)
+    : null;
+  const signature = call === null
+    ? parenthesizedMethodCall === null ? null : knownMethodCallSignature(parenthesizedMethodCall[1])
+    : parseLocalFunctionCallSignature(call[1], nameMap) ?? knownDottedMethodCallSignature(call[1]);
   if (signature?.returnTupleMarkers === undefined) {
     return;
   }
@@ -4755,19 +4759,21 @@ function collectContinuedCallArgument(lines: string[], startIndex: number): { te
     ) {
       break;
     }
-    if (depth <= 0 && (trimmed === ')' || trimmed === '),' || trimmed.endsWith(','))) {
-      break;
-    }
-
     let lookaheadIndex = nextIndex;
     while (lookaheadIndex < lines.length && (lines[lookaheadIndex] ?? '').trim() === '') {
       lookaheadIndex += 1;
     }
     const nextTrimmed = (lines[lookaheadIndex] ?? '').trim();
+    const continues = depth <= 0
+      && callArgumentLineContinues(trimmed, nextTrimmed)
+      && (trimmed !== ')' || parts.length > 1);
+    if (depth <= 0 && (trimmed === ')' || trimmed === '),' || trimmed.endsWith(',')) && !continues) {
+      break;
+    }
     if (depth <= 0 && (nextTrimmed === '' || nextTrimmed === ')' || nextTrimmed === '),')) {
       break;
     }
-    if (depth <= 0 && !callArgumentLineContinues(trimmed, nextTrimmed)) {
+    if (depth <= 0 && !continues) {
       break;
     }
     nextIndex = lookaheadIndex;
@@ -5130,6 +5136,14 @@ function translateStraightLineAssignment(
     const tsLeft = translateExpression(pythonLeft, nameMap, arrayNames, validatedTypeAliases, mapNames);
     return {
       statements: [`${tsLeft} = ${tsLeft} >>> 0;`],
+      nextIndex,
+    };
+  }
+  if ((operator === '+=' || operator === '-=') && expressionIsKnownVector(pythonLeft, nameMap, arrayNames)) {
+    const tsLeft = translateExpression(pythonLeft, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const method = operator === '+=' ? 'add' : 'sub';
+    return {
+      statements: [`${tsLeft} = ${tsLeft}.${method}(${assignedRight});`],
       nextIndex,
     };
   }

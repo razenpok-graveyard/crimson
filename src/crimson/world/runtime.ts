@@ -3,7 +3,7 @@
 import type { AudioState } from '@grim/audio.ts';
 import type { CrimsonConfig } from '@grim/config.ts';
 import { Vec2 } from '@grim/geom.ts';
-import type { Crand } from '@grim/rand.ts';
+import type { CrandLike } from '@grim/rand.ts';
 import type { RenderFrame } from '@crimson/render/frame.ts';
 import { RtxRenderMode } from '@crimson/render/rtx/mode.ts';
 import { WorldRenderer } from '@crimson/render/world/renderer.ts';
@@ -24,7 +24,7 @@ export class WorldRuntime {
   preserveBugs: boolean;
   config: CrimsonConfig | null;
   audio: AudioState | null;
-  audioRng: Crand;
+  audioRng: CrandLike;
   rtxMode: RtxRenderMode;
   simWorld: SimWorldState;
   renderResources: RenderResources;
@@ -36,7 +36,7 @@ export class WorldRuntime {
   lanLocalPlayerSlotIndex: number;
   renderer: WorldRenderer;
 
-  constructor(opts: { assetsDir: string; worldSize?: number; demoModeActive?: boolean; questFailRetryCount?: number; hardcore?: boolean; preserveBugs?: boolean; config?: CrimsonConfig | null; audioRng: Crand; audio?: AudioState | null; rtxMode?: RtxRenderMode }) {
+  constructor(opts: { assetsDir: string; worldSize?: number; demoModeActive?: boolean; questFailRetryCount?: number; hardcore?: boolean; preserveBugs?: boolean; config?: CrimsonConfig | null; audioRng: CrandLike; audio?: AudioState | null; rtxMode?: RtxRenderMode }) {
     const assetsDir = opts.assetsDir;
     const worldSize = opts.worldSize ?? 1024.0;
     const demoModeActive = opts.demoModeActive ?? false;

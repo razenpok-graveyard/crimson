@@ -148,6 +148,9 @@ export function tsTypeExpression(pythonType: string): string {
   if (trimmed === 'dict') {
     return 'Record<string, any>';
   }
+  if (trimmed === 'list') {
+    return 'any[]';
+  }
   if (trimmed === 'bytes' || trimmed === 'bytearray') {
     return 'Uint8Array';
   }
@@ -171,6 +174,9 @@ export function tsTypeExpression(pythonType: string): string {
   }
   if (trimmed === 'bool') {
     return 'boolean';
+  }
+  if (trimmed === 'Crand') {
+    return 'CrandLike';
   }
   if (trimmed === 'Any') {
     return 'unknown';

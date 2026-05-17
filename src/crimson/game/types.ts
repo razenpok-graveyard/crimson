@@ -1,6 +1,6 @@
 // Port of crimson/game/types.py
 
-import type { Crand } from '@grim/rand.ts';
+import type { CrandLike } from '@grim/rand.ts';
 import type { GameMode } from '@crimson/game-modes.ts';
 import type { RoomCode } from '@crimson/net/room-code.ts';
 import { defaultRuntimeDir } from '@crimson/paths.ts';
@@ -188,7 +188,7 @@ export class HighScoresRequest {
 export class GameState {
   baseDir: string;
   assetsDir: string;
-  rng: Crand;
+  rng: CrandLike;
   config: CrimsonConfig;
   status: GameStatus;
   console: ConsoleState;
@@ -235,7 +235,7 @@ export class GameState {
   constructor(opts: {
     baseDir: string;
     assetsDir: string;
-    rng: Crand;
+    rng: CrandLike;
     config: CrimsonConfig;
     status: GameStatus;
     console: ConsoleState;
@@ -340,7 +340,7 @@ export interface GameplayScreen extends Screen, PauseBackground {
   defaultGameModeId: GameMode;
   bindStatus(status: GameStatus | null): void;
   bindScreenFade(fade: GameState | null): void;
-  bindAudio(audio: AudioState | null, audioRng: Crand): void;
+  bindAudio(audio: AudioState | null, audioRng: CrandLike): void;
   setLanRuntime(opts: { enabled: boolean; role: string; expectedPlayers: number; connectedPlayers: number; waitingForPlayers: boolean }): void;
   bindLanRuntime(runtime: RollbackRuntime | LockstepRuntime | null): void;
   setLanMatchStart(opts: { seed: number; startTick?: number; status?: GameStatusData | null }): void;

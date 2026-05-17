@@ -177,7 +177,6 @@ function usesUnsupportedRuntimeIo(trimmedPython: string): boolean {
     /^import structlog$/m,
     /^\s*import hashlib$/m,
     /^import faulthandler$/m,
-    /^import webbrowser$/m,
     /^import urllib\.(?:error|request)$/m,
     /^from PIL import /m,
     /^import ast$/m,
@@ -185,7 +184,6 @@ function usesUnsupportedRuntimeIo(trimmedPython: string): boolean {
     /^class RGBA\(msgspec\.Struct, frozen=True\):$/m,
     /\brl\.load_shader_from_memory\(/m,
     /\brl\.begin_shader_mode\(/m,
-    /\brl\.rl_begin\(/m,
   ].some((pattern) => pattern.test(trimmedPython));
 }
 
