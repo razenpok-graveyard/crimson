@@ -30,6 +30,7 @@ import {
   classFieldTypeMarker,
   colorNameMarker,
   dateNameMarker,
+  functionDeclaredReturnTypeMarker,
   functionReturnTypeMarker,
   instanceMethodSignatureMarker,
   mapValueMapNameMarker,
@@ -2980,12 +2981,16 @@ export function translateStraightLineStatement(
     if (callParts === null) {
       return null;
     }
-    const positionalParts = callParts.keywordParts.length > 0 && callParts.positionalParts.length === 1 && callParts.positionalParts[0].trim() === 'ctx'
+    const shouldFoldContext = callParts.keywordParts.length > 0 && callParts.positionalParts.length === 1 && callParts.positionalParts[0].trim() === 'ctx';
+    const positionalParts = shouldFoldContext
       ? []
       : callParts.positionalParts;
+    const contextKeywordParts = shouldFoldContext
+      ? ['assetsUrl: ctx.assetsDir', 'preserveBugs: ctx.preserveBugs']
+      : [];
     const args = [
       ...positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)),
-      ...(callParts.keywordParts.length === 0 ? [] : [`{ ${callParts.keywordParts.join(', ')} }`]),
+      ...(callParts.keywordParts.length === 0 ? [] : [`{ ${[...contextKeywordParts, ...callParts.keywordParts].join(', ')} }`]),
     ];
     return {
       statements: [`super(${args.join(', ')});`],
@@ -5344,6 +5349,12 @@ function translateStraightLineAssignment(
   }
   const localAssignment = /^([A-Za-z_][A-Za-z0-9_]*)$/.exec(pythonLeft);
   if (operator === '=' && localAssignment !== null) {
+    if (localAssignment[1] === '_' && reassignedNames.has(localAssignment[1])) {
+      return {
+        statements: [`void ${assignedRight};`],
+        nextIndex,
+      };
+    }
     const globalName = nameMap.get(localAssignment[1]);
     if (globalName !== undefined) {
       return {
@@ -5640,6 +5651,10 @@ function iterableIsPathArray(
 function maybeAwaitAsyncCall(tsExpression: string, nameMap: ReadonlyMap<string, string> = new Map()): string {
   const call = /^([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\(/.exec(tsExpression);
   if (call !== null) {
+    const declaredReturnType = nameMap.get(functionDeclaredReturnTypeMarker(call[1]));
+    if (declaredReturnType !== undefined) {
+      return declaredReturnType.startsWith('Promise<') ? `await ${tsExpression}` : tsExpression;
+    }
     const returnType = nameMap.get(functionReturnTypeMarker(call[1]));
     if (returnType !== undefined) {
       if (returnType.startsWith('Promise<')) {

@@ -102,6 +102,7 @@ export {
   classFieldTypeMarker,
   colorNameMarker,
   dateNameMarker,
+  functionDeclaredReturnTypeMarker,
   functionReturnTypeMarker,
   instanceMethodSignatureMarker,
   mapValueMapNameMarker,
@@ -3636,7 +3637,8 @@ function expressionLooksBoolean(tsExpression: string): boolean {
   return trimmed === 'true'
     || trimmed === 'false'
     || /^!/.test(trimmed)
-    || /(?:===|!==|<=|>=|<|>|&&|\|\||\binstanceof\b)/.test(trimmed)
+    || expressionContainsComparisonOperator(trimmed)
+    || /(?:&&|\|\||\binstanceof\b)/.test(trimmed)
     || /^typeof\b/.test(trimmed)
     || /^(?:Array\.isArray|Number\.is(?:Finite|Integer|NaN))\(/.test(trimmed)
     || /^(?:InputState\.(?:is|was)|wgl\.is)[A-Za-z0-9_$]*\(/.test(trimmed)
@@ -3660,12 +3662,37 @@ function translatedExpressionLooksBooleanForInt(tsExpression: string): boolean {
   return trimmed === 'true'
     || trimmed === 'false'
     || /^!/.test(trimmed)
-    || /(?:===|!==|<=|>=|<|>|\binstanceof\b)/.test(trimmed)
+    || expressionContainsComparisonOperator(trimmed)
+    || /\binstanceof\b/.test(trimmed)
     || /^typeof\b/.test(trimmed)
     || /^pythonTruthy\(/.test(trimmed)
     || /^(?:Array\.isArray|Number\.is(?:Finite|Integer|NaN))\(/.test(trimmed)
     || /^InputState\.(?:is|was)[A-Za-z0-9_$]*\(/.test(trimmed)
     || /\.(?:has|includes|startsWith|endsWith)\(/.test(trimmed);
+}
+
+function expressionContainsComparisonOperator(tsExpression: string): boolean {
+  for (let index = 0; index < tsExpression.length; index += 1) {
+    if (
+      tsExpression.startsWith('===', index)
+      || tsExpression.startsWith('!==', index)
+      || tsExpression.startsWith('<=', index)
+      || tsExpression.startsWith('>=', index)
+    ) {
+      return true;
+    }
+    const char = tsExpression[index];
+    if (char !== '<' && char !== '>') {
+      continue;
+    }
+    const previous = tsExpression[index - 1] ?? '';
+    const next = tsExpression[index + 1] ?? '';
+    if (previous === char || next === char || next === '=') {
+      continue;
+    }
+    return true;
+  }
+  return false;
 }
 
 function expressionLooksSimpleValueReference(tsExpression: string): boolean {

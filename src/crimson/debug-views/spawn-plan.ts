@@ -99,9 +99,9 @@ export class SpawnPlanView {
     this._rebuildPlan();
   }
 
-  async open(): Promise<void> {
+  open(): void {
     this._missingAssets.length = 0;
-    this._small = await loadSmallFont(this._assetsRoot);
+    this._small = loadSmallFont(this._assetsRoot);
   }
 
   close(): void {

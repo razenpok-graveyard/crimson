@@ -98,6 +98,10 @@ export function functionReturnTypeMarker(functionName: string): string {
   return `__function_return_type__:${functionName}`;
 }
 
+export function functionDeclaredReturnTypeMarker(functionName: string): string {
+  return `__function_declared_return_type__:${functionName}`;
+}
+
 export function staticClassMethodNameMarker(className: string, methodName: string): string {
   return `__static_class_method__:${className}:${methodName}`;
 }

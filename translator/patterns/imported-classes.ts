@@ -3,7 +3,7 @@ import path from 'node:path';
 import { tsTargetRoot } from '../paths.js';
 import { splitTopLevelComma } from './common.js';
 import { functionSignatureMarker } from './function-headers.js';
-import { classFieldTypeMarker, functionReturnTypeMarker, instanceMethodSignatureMarker } from './expression.js';
+import { classFieldTypeMarker, functionDeclaredReturnTypeMarker, functionReturnTypeMarker, instanceMethodSignatureMarker } from './expression.js';
 
 export function recordImportedInstanceMethodSignatures(
   modulePath: string,
@@ -112,6 +112,8 @@ export function recordImportedFunctionReturnTypes(
     if (signature.returnType !== null) {
       moduleNameMap.set(functionReturnTypeMarker(name.localName), `ReturnType<typeof ${name.localName}>`);
       moduleNameMap.set(functionReturnTypeMarker(name.importedName), `ReturnType<typeof ${name.importedName}>`);
+      moduleNameMap.set(functionDeclaredReturnTypeMarker(name.localName), signature.returnType);
+      moduleNameMap.set(functionDeclaredReturnTypeMarker(name.importedName), signature.returnType);
     }
     const signatureJson = JSON.stringify({
       positional: signature.positional,

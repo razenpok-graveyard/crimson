@@ -39,13 +39,17 @@ export class TutorialMode extends BaseGameplayMode {
   protected _frameInputState: PlayerInput | null;
   protected _perkPickPending: boolean;
 
-  constructor(ctx: ViewContext, opts: { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand }) {
+  constructor(ctx: ViewContext, opts: { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand });
+  constructor(opts: { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean });
+  constructor(ctxOrOpts: ViewContext | { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean }, maybeOpts?: { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand }) {
+    const ctx = maybeOpts === undefined ? { assetsDir: (ctxOrOpts as { assetsUrl?: string }).assetsUrl ?? '', preserveBugs: (ctxOrOpts as { preserveBugs?: boolean }).preserveBugs ?? false } as ViewContext : ctxOrOpts as ViewContext;
+    const opts = maybeOpts ?? (ctxOrOpts as { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean });
     const demoModeActive = opts.demoModeActive ?? false;
     const config = opts.config;
     const console = opts.console ?? null;
     const audio = opts.audio ?? null;
     const audioRng = opts.audioRng;
-    super({ worldSize: 1024.0, defaultGameModeId: GameMode.TUTORIAL, demoModeActive: demoModeActive, questFailRetryCount: 0, hardcore: false, config: config, console: console, audio: audio, audioRng: audioRng });
+    super({ assetsUrl: ctx.assetsDir, preserveBugs: ctx.preserveBugs, worldSize: 1024.0, defaultGameModeId: GameMode.TUTORIAL, demoModeActive: demoModeActive, questFailRetryCount: 0, hardcore: false, config: config, console: console, audio: audio, audioRng: audioRng });
     this._perkMenu = new PerkMenuController();
 
     this._skipButton = new UiButtonState({ label: 'Skip tutorial', forceWide: true });

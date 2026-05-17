@@ -353,7 +353,7 @@ export class ArsenalDebugView {
     this._runtime.audioRng = this._audioRng;
     this._runtime.syncAudioBridgeState();
 
-    this._small = await loadSmallFont(this._assetsRoot);
+    this._small = loadSmallFont(this._assetsRoot);
 
     this._runtime.openRuntime();
     this._aimTexture = this._loadTexture(TextureId.UI_AIM);

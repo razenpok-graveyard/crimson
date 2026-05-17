@@ -44,15 +44,33 @@ export function renderPlainClasses(lines: string[], classes: StraightLineModule[
       lines.push('');
     }
     const constructorParams = plainClass.constructorDefinition.parameters.map(renderParameter);
+    let optsType: string | null = null;
     if (plainClass.constructorDefinition.optsParams.length > 0) {
-      const optsType = plainClass.constructorDefinition.optsParams
+      optsType = plainClass.constructorDefinition.optsParams
         .map((param) => `${param.name}${param.defaultValue === null ? '' : '?'}: ${param.typeExpression}`)
         .join('; ');
       const allOptsHaveDefaults = plainClass.constructorDefinition.optsParams.every((param) => param.defaultValue !== null);
       constructorParams.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
     }
     if (shouldRenderConstructor) {
-      lines.push(`  constructor(${constructorParams.join(', ')}) {`);
+      const gameplayContextParam = plainClass.extendsName === 'BaseGameplayMode'
+        && plainClass.constructorDefinition.parameters.length === 1
+        && plainClass.constructorDefinition.parameters[0].typeExpression === 'ViewContext'
+        && optsType !== null
+        ? plainClass.constructorDefinition.parameters[0]
+        : null;
+      if (gameplayContextParam === null) {
+        lines.push(`  constructor(${constructorParams.join(', ')}) {`);
+      } else {
+        const optsObjectType = `{ ${optsType} }`;
+        const legacyOptsType = `${optsObjectType} & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean }`;
+        const implementationParam = `${gameplayContextParam.name}OrOpts`;
+        lines.push(`  constructor(${renderParameter(gameplayContextParam)}, opts: ${optsObjectType});`);
+        lines.push(`  constructor(opts: ${legacyOptsType});`);
+        lines.push(`  constructor(${implementationParam}: ${gameplayContextParam.typeExpression} | ${legacyOptsType}, maybeOpts?: ${optsObjectType}) {`);
+        lines.push(`    const ${gameplayContextParam.name} = maybeOpts === undefined ? { assetsDir: (${implementationParam} as { assetsUrl?: string }).assetsUrl ?? '', preserveBugs: (${implementationParam} as { preserveBugs?: boolean }).preserveBugs ?? false } as ${gameplayContextParam.typeExpression} : ${implementationParam} as ${gameplayContextParam.typeExpression};`);
+        lines.push(`    const opts = maybeOpts ?? (${implementationParam} as ${legacyOptsType});`);
+      }
       for (const param of plainClass.constructorDefinition.optsParams) {
         const declaration = functionBodyAssignsName(plainClass.constructorDefinition.statements, param.name) ? 'let' : 'const';
         if (param.defaultValue === null) {

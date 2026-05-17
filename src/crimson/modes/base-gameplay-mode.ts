@@ -14,6 +14,7 @@ import { InputState } from '@grim/input.ts';
 import { type GroundRenderer } from '@grim/terrain-render.ts';
 import { debugEnabled } from '@crimson/debug.ts';
 import { GameMode } from '@crimson/game-modes.ts';
+import type { ModeStateSnapshotV2, ReplayStateSnapshotV2 } from '@crimson/net/rollback-resync-v5.ts';
 import { LocalInputInterpreter, clearInputEdges } from '@crimson/local-input.ts';
 import { PerkId } from '@crimson/perks/ids.ts';
 import { perkCountGet } from '@crimson/perks/helpers.ts';
@@ -64,8 +65,8 @@ interface ReplayCheckpoint {
 }
 
 type LanRuntimeHandle = object;
-type NetReplaySnapshotState = object | null;
-type NetRuntimeSnapshotPayload = Record<string, string | number | boolean | object | null>;
+type NetReplaySnapshotState = ReplayStateSnapshotV2 | null;
+type NetRuntimeSnapshotPayload = { snapshot: ModeStateSnapshotV2 };
 
 export type GameStatus = GameStateStatus;
 type GameStatusData = GameStateStatus;
@@ -893,7 +894,7 @@ export class BaseGameplayMode {
 
   protected _consumeNetRuntimeRecovery(_opts: { modeName: string }): void {}
 
-  protected _applyResyncSnapshot(_snapshot: NetRuntimeSnapshotPayload): void {
+  protected _applyResyncSnapshot(_snapshot: ModeStateSnapshotV2): void {
     throw new Error(`${this.constructor.name}._applyResyncSnapshot() must be implemented`);
   }
 

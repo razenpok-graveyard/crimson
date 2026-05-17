@@ -89,7 +89,7 @@ export class BootView {
       this.state.console.log.flush();
     }
     if (this.state.audio === null) {
-      this.state.audio = await initAudioState(this.state.config, this.state.assetsDir, this.state.console);
+      this.state.audio = initAudioState(this.state.config, this.state.assetsDir, this.state.console);
       this.state.console.execLine('exec music/game_tunes.txt');
     }
     this._bootTime = 0.5;
