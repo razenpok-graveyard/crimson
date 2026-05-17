@@ -206,10 +206,10 @@ export function tsFStringTemplateContent(
           : baseExpression === 'exc'
             ? 'exc instanceof Error ? exc.message : String(exc)'
             : baseExpression;
-        const zeroPaddedInteger = format === null ? null : /^0(\d+)([dx])$/.exec(format);
+        const zeroPaddedInteger = format === null ? null : /^0(\d+)([dXx])$/.exec(format);
         if (zeroPaddedInteger !== null) {
-          const formatted = zeroPaddedInteger[2] === 'x'
-            ? `Math.trunc(${translatedExpression}).toString(16)`
+          const formatted = zeroPaddedInteger[2] === 'x' || zeroPaddedInteger[2] === 'X'
+            ? `Math.trunc(${translatedExpression}).toString(16)${zeroPaddedInteger[2] === 'X' ? '.toUpperCase()' : ''}`
             : `String(${translatedExpression})`;
           translated += `\${${formatted}.padStart(${zeroPaddedInteger[1]}, '0')}`;
         } else {
@@ -1831,6 +1831,9 @@ export function translateExpression(
     }
     if (args.length === 1) {
       const source = translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      if (expressionIsKnownMap(source, nameMap, mapNames)) {
+        return `new Map(${source})`;
+      }
       return `{ ...${source.includes(' ') ? `(${source})` : source} }`;
     }
   }
@@ -3481,6 +3484,7 @@ function expressionLooksBoolean(tsExpression: string): boolean {
     || /(?:===|!==|<=|>=|<|>|&&|\|\||\binstanceof\b)/.test(trimmed)
     || /^typeof\b/.test(trimmed)
     || /^(?:Array\.isArray|Number\.is(?:Finite|Integer|NaN))\(/.test(trimmed)
+    || /^(?:InputState\.(?:is|was)|wgl\.is)[A-Za-z0-9_$]*\(/.test(trimmed)
     || /\.(?:every|has|includes|some|startsWith|endsWith)\(/.test(trimmed)
     || /(?:^|\.)[A-Za-z_$][A-Za-z0-9_$]*(?:Ready|Connected|Started|Enabled|Available|Visible|Empty|Valid|Compatible|Allowed)\(\)$/.test(trimmed);
 }

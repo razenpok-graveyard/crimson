@@ -136,6 +136,89 @@ export function getScreenHeight(): number { return ctx.screenHeight; }
 export function getRandomValue(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
+
+export const enum GamepadButton {
+  GAMEPAD_BUTTON_UNKNOWN = -1,
+  GAMEPAD_BUTTON_LEFT_FACE_UP = 12,
+  GAMEPAD_BUTTON_LEFT_FACE_RIGHT = 15,
+  GAMEPAD_BUTTON_LEFT_FACE_DOWN = 13,
+  GAMEPAD_BUTTON_LEFT_FACE_LEFT = 14,
+  GAMEPAD_BUTTON_RIGHT_FACE_UP = 3,
+  GAMEPAD_BUTTON_RIGHT_FACE_RIGHT = 1,
+  GAMEPAD_BUTTON_RIGHT_FACE_DOWN = 0,
+  GAMEPAD_BUTTON_RIGHT_FACE_LEFT = 2,
+  GAMEPAD_BUTTON_LEFT_TRIGGER_1 = 4,
+  GAMEPAD_BUTTON_LEFT_TRIGGER_2 = 6,
+  GAMEPAD_BUTTON_RIGHT_TRIGGER_1 = 5,
+  GAMEPAD_BUTTON_RIGHT_TRIGGER_2 = 7,
+  GAMEPAD_BUTTON_MIDDLE_LEFT = 8,
+  GAMEPAD_BUTTON_MIDDLE = 16,
+  GAMEPAD_BUTTON_MIDDLE_RIGHT = 9,
+}
+
+export const enum GamepadAxis {
+  GAMEPAD_AXIS_LEFT_X = 0,
+  GAMEPAD_AXIS_LEFT_Y = 1,
+  GAMEPAD_AXIS_RIGHT_X = 2,
+  GAMEPAD_AXIS_RIGHT_Y = 3,
+  GAMEPAD_AXIS_LEFT_TRIGGER = 4,
+  GAMEPAD_AXIS_RIGHT_TRIGGER = 5,
+}
+
+const gamepadButtonDown = new Map<string, boolean>();
+const gamepadButtonPressed = new Set<string>();
+
+function gamepadForIndex(gamepadIndex: number): Gamepad | null {
+  if (typeof navigator === 'undefined' || typeof navigator.getGamepads !== 'function') {
+    return null;
+  }
+  return navigator.getGamepads()[int(gamepadIndex)] ?? null;
+}
+
+function gamepadButtonKey(gamepadIndex: number, button: number): string {
+  return `${int(gamepadIndex)},${int(button)}`;
+}
+
+function updateGamepadButtonEdges(): void {
+  gamepadButtonPressed.clear();
+  const nextDown = new Map<string, boolean>();
+  if (typeof navigator !== 'undefined' && typeof navigator.getGamepads === 'function') {
+    for (const gamepad of navigator.getGamepads()) {
+      if (gamepad === null) {
+        continue;
+      }
+      for (let buttonIndex = 0; buttonIndex < gamepad.buttons.length; buttonIndex += 1) {
+        const key = gamepadButtonKey(gamepad.index, buttonIndex);
+        const down = gamepad.buttons[buttonIndex]?.pressed ?? false;
+        nextDown.set(key, down);
+        if (down && !(gamepadButtonDown.get(key) ?? false)) {
+          gamepadButtonPressed.add(key);
+        }
+      }
+    }
+  }
+  gamepadButtonDown.clear();
+  for (const [key, down] of nextDown) {
+    gamepadButtonDown.set(key, down);
+  }
+}
+
+export function isGamepadAvailable(gamepadIndex: number): boolean {
+  return gamepadForIndex(gamepadIndex) !== null;
+}
+
+export function getGamepadAxisMovement(gamepadIndex: number, axis: number): number {
+  return gamepadForIndex(gamepadIndex)?.axes[int(axis)] ?? 0.0;
+}
+
+export function isGamepadButtonDown(gamepadIndex: number, button: number): boolean {
+  return gamepadForIndex(gamepadIndex)?.buttons[int(button)]?.pressed ?? false;
+}
+
+export function isGamepadButtonPressed(gamepadIndex: number, button: number): boolean {
+  return gamepadButtonPressed.has(gamepadButtonKey(gamepadIndex, button));
+}
+
 export function clearBackground(color: Color): void {
   ctx.clearBackground(color.r, color.g, color.b, color.a);
 }
@@ -403,6 +486,7 @@ function textContext(): CanvasRenderingContext2D | null {
 }
 
 export function updateFps(now: number): void {
+  updateGamepadButtonEdges();
   if (_lastFrameTime > 0) {
     const dt = (now - _lastFrameTime) * 0.001;
     _currentFrameTime = Math.max(0, dt);

@@ -3251,6 +3251,22 @@ function collectMultilineDictLiteral(
   let nextIndex = startIndex;
   while (nextIndex < lines.length) {
     const trimmed = lines[nextIndex].trim();
+    const closingGet = /^\}\.get\((.*)\)$/.exec(trimmed);
+    if (closingGet !== null) {
+      const args = splitTopLevelComma(closingGet[1]);
+      if (args.length !== 1 && args.length !== 2) {
+        return null;
+      }
+      const mapExpression = `new Map([${entries.join(', ')}])`;
+      const key = translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const value = `${mapExpression}.get(${key})`;
+      return {
+        expression: args.length === 1
+          ? `${value} ?? null`
+          : `${value} ?? ${translateMapDefaultExpression(args[1], '', mapExpression, nameMap, arrayNames, validatedTypeAliases, mapNames)}`,
+        nextIndex: nextIndex + 1,
+      };
+    }
     if (trimmed === '}' || trimmed === '},') {
       return {
         expression: requiresMap ? `new Map([${entries.join(', ')}])` : `{ ${parts.join(', ')} }`,
@@ -4721,6 +4737,9 @@ function mapAssignmentValueExpression(assignedRight: string): string {
   const fromEntries = /^Object\.fromEntries\(([\s\S]+)\)$/.exec(assignedRight.trim());
   if (fromEntries !== null) {
     return `new Map(${fromEntries[1]})`;
+  }
+  if (assignedRight.trim() === '{}') {
+    return 'new Map()';
   }
   return assignedRight.trim().startsWith('{') && assignedRight.trim().endsWith('}')
     ? `new Map(Object.entries(${assignedRight}))`
