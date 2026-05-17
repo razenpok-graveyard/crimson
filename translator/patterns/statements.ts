@@ -2029,6 +2029,77 @@ export function translateStraightLineStatement(
     }, trailingComment);
   }
 
+  const annotatedMultilineListAssignment = /^([A-Za-z_][A-Za-z0-9_]*): (.+?) = \[$/.exec(statement);
+  if (annotatedMultilineListAssignment !== null) {
+    const pythonName = annotatedMultilineListAssignment[1];
+    const annotation = annotatedMultilineListAssignment[2].trim();
+    const tsName = tsExportNameForPythonName(pythonName);
+    const typeExpression = tsTypeExpression(annotation);
+    const alreadyDeclared = declaredNames.has(pythonName);
+    const listComprehension = parseMultilineListComprehension(
+      lines,
+      index + 1,
+      indent,
+      nameMap,
+      arrayNames,
+      validatedTypeAliases,
+      mapNames,
+    );
+    const listLiteral = listComprehension === null
+      ? collectMultilineListLiteral(
+        lines,
+        index + 1,
+        indent,
+        nameMap,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+      )
+      : null;
+    if (listComprehension === null && listLiteral === null) {
+      return null;
+    }
+    declaredNames.add(pythonName);
+    if (typeExpression.endsWith('[]')) {
+      arrayNames.add(pythonName);
+      arrayNames.add(tsName);
+      if (pythonListTypeIsNumeric(annotation)) {
+        arrayNames.add(numberArrayNameMarker(pythonName));
+        arrayNames.add(numberArrayNameMarker(tsName));
+      }
+    }
+    arrayNames.add(pythonName);
+    arrayNames.add(tsName);
+    if (listComprehension?.tupleElements === true) {
+      arrayNames.add(tupleElementArrayNameMarker(pythonName));
+      arrayNames.add(tupleElementArrayNameMarker(tsName));
+    }
+    if (annotation === 'list[Path]') {
+      arrayNames.add(pathArrayNameMarker(pythonName));
+      arrayNames.add(pathArrayNameMarker(tsName));
+    }
+    if (listComprehension !== null) {
+      return appendTrailingCommentToResult({
+        statements: [
+          alreadyDeclared
+            ? `${tsName} = ${listComprehension.expression};`
+            : `${reassignedNames.has(pythonName) ? 'let' : 'const'} ${tsName}: ${typeExpression} = ${listComprehension.expression};`,
+        ],
+        nextIndex: listComprehension.nextIndex,
+      }, trailingComment);
+    }
+    return appendTrailingCommentToResult({
+      statements: [
+        alreadyDeclared
+          ? `${tsName} = [`
+          : `${reassignedNames.has(pythonName) ? 'let' : 'const'} ${tsName}: ${typeExpression} = [`,
+        ...(listLiteral?.items ?? []).map((item) => `  ${item},`),
+        '];',
+      ],
+      nextIndex: listLiteral?.nextIndex ?? index + 1,
+    }, trailingComment);
+  }
+
   const annotatedAttributeAssignment = /^((?:self|this)\.[A-Za-z_][A-Za-z0-9_]*): (.+?) = (.+)$/.exec(statement);
   if (annotatedAttributeAssignment !== null) {
     const pythonLeft = annotatedAttributeAssignment[1];
