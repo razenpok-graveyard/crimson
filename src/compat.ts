@@ -1,3 +1,3 @@
-export function int(x: number): number {
-  return Math.trunc(x);
+export function int(x: number | boolean): number {
+  return Math.trunc(Number(x));
 }

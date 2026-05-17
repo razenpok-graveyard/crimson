@@ -213,7 +213,16 @@ export function translatePositionalCallExpression(
     }
   }
   const callee = translateCallCalleeExpression(pythonCallee, nameMap, arrayNames, validatedTypeAliases);
+  if (positionalParts.at(-1)?.trim().startsWith('**') === true) {
+    const normalArgs = positionalParts.slice(0, -1).map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
+    const kwargsArg = translateExpression(positionalParts.at(-1)?.trim().slice(2) ?? '', nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const callPrefix = constructUppercase && calleeLooksConstructable(callee) ? `new ${callee}` : callee;
+    return `${callPrefix}(${[...normalArgs, kwargsArg].join(', ')})`;
+  }
   const args = positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
+  if ((pythonCallee === 'max' || pythonCallee === 'min') && positionalParts.length === 1 && !positionalParts[0].trim().startsWith('*')) {
+    return `${pythonCallee === 'max' ? 'Math.max' : 'Math.min'}(...${args[0]})`;
+  }
   if (pythonCallee === 'webbrowser.open' && args.length >= 1) {
     return `window.open(${args.join(', ')})`;
   }
@@ -338,6 +347,7 @@ function translateCallCalleeExpression(
   return translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases)
     .replace(/\.append$/, '.push')
     .replace(/\.extend$/, '.push')
+    .replace(/\.popleft$/, '.shift')
     .replace(/\.index$/, '.indexOf');
 }
 
@@ -928,6 +938,20 @@ export function translateExpression(
     }
   }
 
+  const pathParentAttribute = /^(?:Path\((.+)\)|(.+))\.parent$/.exec(trimmed);
+  if (pathParentAttribute !== null) {
+    const pathExpression = pathParentAttribute[1] ?? pathParentAttribute[2];
+    const receiver = translateExpression(pathExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (
+      pathParentAttribute[1] !== undefined
+      || arrayNames.has(pathNameMarker(pathExpression))
+      || arrayNames.has(pathNameMarker(receiver))
+      || /path$/i.test(pathExpression.trim())
+    ) {
+      return `_dirname(String(${receiver}))`;
+    }
+  }
+
   const pathExistsCall = /^(?:Path\((.+)\)|(.+))\.exists\(\)$/.exec(trimmed);
   if (pathExistsCall !== null) {
     const pathExpression = pathExistsCall[1] ?? pathExistsCall[2];
@@ -1378,6 +1402,10 @@ export function translateExpression(
   const aggregateGenerator = translateAggregateGeneratorCall(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
   if (aggregateGenerator !== null) {
     return aggregateGenerator;
+  }
+  const singleIterableMinMax = translateSingleIterableMinMaxCall(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (singleIterableMinMax !== null) {
+    return singleIterableMinMax;
   }
 
   const enumerateCall = parseCallPrefix(trimmed, 'enumerate');
@@ -3362,6 +3390,31 @@ function translateAggregateGeneratorCall(
   return null;
 }
 
+function translateSingleIterableMinMaxCall(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  for (const [pythonName, tsName] of [['max', 'Math.max'], ['min', 'Math.min']] as const) {
+    const call = parseCallPrefix(pythonExpression, pythonName);
+    if (call === null || call.rest !== '') {
+      continue;
+    }
+    const args = splitTopLevelComma(call.argsText);
+    if (args.length !== 1) {
+      continue;
+    }
+    const arg = args[0].trim();
+    if (arg === '' || arg.startsWith('*') || /^[A-Za-z_][A-Za-z0-9_]*=/.test(arg)) {
+      continue;
+    }
+    return `${tsName}(...${translateExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+  return null;
+}
+
 function tupleTargetGeneratorExpressionToArray(
   generator: TupleTargetGeneratorExpression,
   nameMap: Map<string, string>,
@@ -3660,6 +3713,9 @@ function iterableExpressionForIteration(
     return `Object.keys(${iterable})`;
   }
   if (arrayNames.has(setNameMarker(pythonExpression)) || arrayNames.has(setNameMarker(iterable))) {
+    return `Array.from(${iterable})`;
+  }
+  if (expressionLooksIteratorResult(iterable)) {
     return `Array.from(${iterable})`;
   }
   return iterable;

@@ -92,11 +92,15 @@ export function addReassignedLocalTypeAnnotations(
       break;
     }
     const lineIndent = /^(\s*)/.exec(line)?.[1] ?? '';
-    if (lineIndent !== baseIndent) {
+    if (!line.startsWith(baseIndent) || lineIndent.length < baseIndent.length) {
       index += 1;
       continue;
     }
     const statement = splitInlineComment(line.trim()).code;
+    if (/^(?:async\s+)?def |^class /.test(statement)) {
+      index += 1;
+      continue;
+    }
     const assignment = /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(statement);
     if (assignment !== null) {
       const type = inferredReassignedLocalType(assignment[2], nameMap, arrayNames, validatedTypeAliases, mapNames, localTypes);
@@ -462,6 +466,12 @@ function applyLocalTypeMarkers(
     arrayNames.add(tsName);
     nameMap.set(arrayElementTypeMarker(pythonName), elementType);
     nameMap.set(arrayElementTypeMarker(tsName), elementType);
+    return;
+  }
+  const receiverType = nullableTypeExpressionBase(typeExpression) ?? typeExpression;
+  if (/^[A-Z][A-Za-z0-9_$]*$/.test(receiverType)) {
+    nameMap.set(receiverTypeNameMarker(pythonName), receiverType);
+    nameMap.set(receiverTypeNameMarker(tsName), receiverType);
   }
 }
 
@@ -623,17 +633,17 @@ function inferredReassignedLocalType(
     return localType;
   }
   const fieldType = knownDottedFieldType(translated, nameMap);
-  if (fieldType === 'number' || fieldType === 'string' || fieldType === 'boolean') {
+  if (fieldType !== null) {
     return fieldType;
   }
   const dottedReference = /^([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\.[A-Za-z_$][A-Za-z0-9_$]*$/.exec(translated);
   if (dottedReference !== null) {
-    return localTypes.has(dottedReference[1]) || nameMap.has(receiverTypeNameMarker(dottedReference[1]))
+    return localTypes.has(dottedReference[1]) && knownDottedFieldType(translated, nameMap) !== null
       ? `typeof ${translated}`
       : null;
   }
   if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(translated)) {
-    return `typeof ${translated}`;
+    return null;
   }
   const call = /^([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\(/.exec(translated);
   if (call !== null) {
@@ -997,9 +1007,10 @@ export function recordLocalAssignmentMarkers(
   }
   const assignedFieldType = knownDottedFieldType(assignedRight, nameMap);
   if (assignedFieldType !== null) {
-    nameMap.set(receiverTypeNameMarker(pythonName), assignedFieldType);
-    nameMap.set(receiverTypeNameMarker(tsName), assignedFieldType);
-    recordKnownTypeMarkers(pythonName, tsName, assignedFieldType, arrayNames);
+    const receiverType = nullableTypeExpressionBase(assignedFieldType) ?? assignedFieldType;
+    nameMap.set(receiverTypeNameMarker(pythonName), receiverType);
+    nameMap.set(receiverTypeNameMarker(tsName), receiverType);
+    recordKnownTypeMarkers(pythonName, tsName, receiverType, arrayNames);
   }
   const assignedCall = /^([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\(/.exec(assignedRight.trim());
   const assignedCallReturnType = assignedCall === null ? null : knownCallReturnType(assignedCall[1], nameMap);

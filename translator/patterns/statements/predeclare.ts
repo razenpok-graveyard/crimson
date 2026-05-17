@@ -17,6 +17,7 @@ import {
 } from '../expression.js';
 import { nullableTypeExpressionBase } from '../expression/types.js';
 import { splitTopLevelAdditive } from '../expression/scanners.js';
+import { reassignedLocalTypeAnnotation } from './local-declarations.js';
 import { tsAttributeNameForPythonName } from './names.js';
 import { lineStartsAtIndent } from './utils.js';
 
@@ -107,6 +108,19 @@ export function predeclareIfBranchAssignments(
     if (bodyStartedAfterConditionContinuation && !referencedAfterBlock) {
       continue;
     }
+    if (reassignedNames.has(name)) {
+      recordSubsequentSameBlockAssignmentTypes(
+        lines,
+        blockEndIndex,
+        indent,
+        name,
+        nameMap,
+        arrayNames,
+        declaredNames,
+        localTypes,
+        (type) => directTypes.add(type),
+      );
+    }
     const types = new Set(directTypes);
     if (referencedAfterBlock) {
       for (const type of nestedTypes) {
@@ -116,11 +130,54 @@ export function predeclareIfBranchAssignments(
     if (types.size === 0) {
       continue;
     }
-    const type = predeclaredTypeExpression(types);
+    const type = reassignedLocalTypeAnnotation(reassignedNames, name) ?? predeclaredTypeExpression(types);
     declarations.push(`let ${tsExportNameForPythonName(name)}${definiteAssignment ? '!' : ''}: ${type};`);
     declaredNames.add(name);
   }
   return declarations;
+}
+
+function recordSubsequentSameBlockAssignmentTypes(
+  lines: string[],
+  startIndex: number,
+  indent: string,
+  name: string,
+  nameMap: ReadonlyMap<string, string>,
+  arrayNames: ReadonlySet<string>,
+  declaredNames: ReadonlySet<string>,
+  localTypes: Map<string, string>,
+  recordType: (type: string) => void,
+): void {
+  let nextIndex = startIndex;
+  while (nextIndex < lines.length) {
+    const line = lines[nextIndex] ?? '';
+    const trimmed = line.trim();
+    if (trimmed === '') {
+      nextIndex += 1;
+      continue;
+    }
+    if (!line.startsWith(indent)) {
+      break;
+    }
+    const lineIndent = /^(\s*)/.exec(line)?.[1] ?? '';
+    if (lineIndent.length < indent.length) {
+      break;
+    }
+    if (lineIndent !== indent) {
+      nextIndex += 1;
+      continue;
+    }
+    const assignment = new RegExp(`^${name} = (.+)$`).exec(trimmed);
+    if (assignment !== null) {
+      const type = inferPredeclaredAssignmentType(lines, nextIndex, lineIndent, assignment[1], nameMap, arrayNames, declaredNames, localTypes);
+      recordType(type);
+      if (type !== 'any' && type !== 'unknown') {
+        localTypes.set(name, type);
+        localTypes.set(tsExportNameForPythonName(name), type);
+      }
+    }
+    nextIndex += 1;
+  }
 }
 
 function inferTupleElementAssignmentType(
@@ -483,7 +540,7 @@ function inferPredeclaredAssignmentType(
     if (returnType !== undefined) {
       return returnType;
     }
-    const inferredType = inferPythonExpressionType(assignedExpression);
+    const inferredType = inferPredeclaredFallbackType(assignedExpression);
     if (inferredType !== 'any') {
       return inferredType;
     }
@@ -515,7 +572,7 @@ function inferPredeclaredAssignmentType(
     }
   }
   if (assignedExpression !== '(') {
-    return inferPythonExpressionType(assignedExpression);
+    return inferPredeclaredFallbackType(assignedExpression);
   }
   const expressionLines: string[] = [];
   let nextIndex = index + 1;
@@ -666,6 +723,13 @@ function predeclaredDottedExpressionType(
     }
   }
   return fieldType ?? null;
+}
+
+function inferPredeclaredFallbackType(assignedExpression: string): string {
+  const inferredType = inferPythonExpressionType(assignedExpression);
+  return /^typeof [A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)+$/.test(inferredType)
+    ? 'any'
+    : inferredType;
 }
 
 function localNameLooksVector(name: string): boolean {

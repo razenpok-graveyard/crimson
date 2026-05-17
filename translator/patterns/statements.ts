@@ -234,7 +234,15 @@ export function translateStraightLineStatement(
   const subscriptDeleteStatement = /^del (.+)\[(.+)\]$/.exec(statement);
   if (subscriptDeleteStatement !== null) {
     const target = translateExpression(subscriptDeleteStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
-    const key = translateExpression(subscriptDeleteStatement[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const translatedKey = translateExpression(subscriptDeleteStatement[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const key = mapDeleteKeyExpression(
+      target,
+      subscriptDeleteStatement[2],
+      translatedKey,
+      nameMap,
+      arrayNames,
+      mapNames,
+    );
     const deleteStatement = expressionIsKnownMap(target, nameMap, mapNames)
       ? `${target}.delete(${key});`
       : `delete ${target}[${key}];`;
@@ -1249,7 +1257,9 @@ export function translateStraightLineStatement(
     }
     applyTupleTargetTypeMarkers(
       targets,
-      nameMap.get(arrayElementTypeMarker(tupleForOfStatement[2])) ?? nameMap.get(arrayElementTypeMarker(iterableExpression)) ?? null,
+      nameMap.get(arrayElementTypeMarker(tupleForOfStatement[2]))
+        ?? nameMap.get(arrayElementTypeMarker(iterableExpression))
+        ?? mapEntriesElementType(tupleForOfStatement[2], iterableExpression, nameMap),
       nameMap,
       arrayNames,
     );
@@ -2460,6 +2470,25 @@ export function translateStraightLineStatement(
         nextIndex = sequenceLiteral.nextIndex;
         continue;
       }
+      const stringLiteral = parsePythonStringExpression(arg);
+      if (stringLiteral !== null && !trimmed.endsWith(',')) {
+        const adjacentStrings = [arg];
+        nextIndex += 1;
+        while (nextIndex < lines.length) {
+          const adjacentTrimmed = lines[nextIndex].trim();
+          const adjacentArg = adjacentTrimmed.replace(/,$/, '');
+          if (parsePythonStringExpression(adjacentArg) === null) {
+            break;
+          }
+          adjacentStrings.push(adjacentArg);
+          nextIndex += 1;
+          if (adjacentTrimmed.endsWith(',')) {
+            break;
+          }
+        }
+        positionalParts.push(combinePythonStringExpressions(adjacentStrings));
+        continue;
+      }
       const conditionalArg = parseMultilineConditionalArgument(
         lines,
         nextIndex,
@@ -2717,14 +2746,16 @@ export function translateStraightLineStatement(
     const dictPopDefaultNone = /^(.+)\.pop\((.+), None\)$/.exec(callStatement[1]);
     if (dictPopDefaultNone !== null) {
       const mapName = translateExpression(dictPopDefaultNone[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const keyExpression = translateExpression(dictPopDefaultNone[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const key = mapDeleteKeyExpression(mapName, dictPopDefaultNone[2], keyExpression, nameMap, arrayNames, mapNames);
       if (expressionIsKnownMap(mapName, nameMap, mapNames)) {
         return {
-          statements: [`${mapName}.delete(${translateMapKeyExpression(mapName, translateExpression(dictPopDefaultNone[2], nameMap, arrayNames, validatedTypeAliases, mapNames), mapNames)});`],
+          statements: [`${mapName}.delete(${key});`],
           nextIndex: index + 1,
         };
       }
       return {
-        statements: [`delete ${mapName}[${translateExpression(dictPopDefaultNone[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}];`],
+        statements: [`delete ${mapName}[${key}];`],
         nextIndex: index + 1,
       };
     }
@@ -5464,6 +5495,97 @@ function knownDottedFieldType(
   return receiverType === undefined
     ? null
     : nameMap.get(classFieldTypeMarker(receiverType, dotted[2])) ?? null;
+}
+
+function mapDeleteKeyExpression(
+  mapName: string,
+  pythonKeyExpression: string,
+  keyExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string {
+  const translated = translateMapKeyExpression(mapName, keyExpression, mapNames);
+  if (translated.startsWith('tupleKey(')) {
+    return translated;
+  }
+  if (
+    arrayNames.has(tupleElementArrayNameMarker(pythonKeyExpression))
+    || arrayNames.has(tupleElementArrayNameMarker(keyExpression))
+  ) {
+    return `tupleKey(${translated})`;
+  }
+  const mapKeyType = knownMapKeyType(mapName, nameMap);
+  const keyReceiverType = nameMap.get(receiverTypeNameMarker(pythonKeyExpression))
+    ?? nameMap.get(receiverTypeNameMarker(keyExpression));
+  if (
+    mapKeyType === 'string'
+    && keyReceiverType !== undefined
+    && keyReceiverType !== 'string'
+    && !/^['"`]/.test(keyExpression)
+    && !/^String\(/.test(keyExpression)
+  ) {
+    return `tupleKey(${translated})`;
+  }
+  return translated;
+}
+
+function knownMapKeyType(
+  expression: string,
+  nameMap: ReadonlyMap<string, string>,
+): string | null {
+  const fieldType = knownDottedFieldType(expression, nameMap);
+  if (fieldType === null) {
+    return null;
+  }
+  const mapArgs = /^(?:Readonly)?Map<(.+)>$/.exec(fieldType.trim());
+  if (mapArgs === null) {
+    return null;
+  }
+  const args = splitTopLevelComma(mapArgs[1]);
+  return args.length === 2 ? args[0].trim() : null;
+}
+
+function mapEntriesElementType(
+  pythonExpression: string,
+  tsExpression: string,
+  nameMap: ReadonlyMap<string, string>,
+): string | null {
+  const mapExpression = mapEntriesReceiverExpression(tsExpression)
+    ?? mapItemsReceiverExpression(pythonExpression);
+  if (mapExpression === null) {
+    return null;
+  }
+  const mapType = knownDottedFieldType(mapExpression, nameMap);
+  if (mapType === null) {
+    return null;
+  }
+  const mapArgs = /^(?:Readonly)?Map<(.+)>$/.exec(mapType.trim());
+  if (mapArgs === null) {
+    return null;
+  }
+  const args = splitTopLevelComma(mapArgs[1]);
+  return args.length === 2 ? `[${args[0].trim()}, ${args[1].trim()}]` : null;
+}
+
+function mapEntriesReceiverExpression(expression: string): string | null {
+  const trimmed = expression.trim();
+  const arrayFromEntries = /^Array\.from\((.+)\.entries\(\)\)$/.exec(trimmed);
+  if (arrayFromEntries !== null) {
+    return arrayFromEntries[1];
+  }
+  const entries = /^(.+)\.entries\(\)$/.exec(trimmed);
+  return entries?.[1] ?? null;
+}
+
+function mapItemsReceiverExpression(expression: string): string | null {
+  const trimmed = expression.trim();
+  const listItems = /^list\((.+)\.items\(\)\)$/.exec(trimmed);
+  if (listItems !== null) {
+    return listItems[1];
+  }
+  const items = /^(.+)\.items\(\)$/.exec(trimmed);
+  return items?.[1] ?? null;
 }
 
 function iterableIsPathArray(

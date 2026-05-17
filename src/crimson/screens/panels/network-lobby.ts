@@ -276,7 +276,7 @@ export class NetworkLobbyPanelView extends PanelMenuView {
     }
     connected = Math.max(0, Math.min(4, int(connected)));
 
-    const dots = '.'.repeat(int(this._cursorPulseTime * 2.5 % 4));
+    const dots = '.'.repeat(int((this._cursorPulseTime * 2.5) % 4));
     const connectedText = `${connected}/${expected}${dots}`;
     const roleLabel = role === 'host' ? 'Host' : 'Client';
     const codeText = roomCode || '-';

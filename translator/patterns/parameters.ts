@@ -14,10 +14,12 @@ import {
   nullableNameMarker,
   pathNameMarker,
   rectangleNameMarker,
+  receiverTypeNameMarker,
   stringNameMarker,
   translateExpression,
   vectorNameMarker,
 } from './expression.js';
+import { nullableTypeExpressionBase } from './expression/types.js';
 
 export function parseFunctionParametersText(
   parametersText: string,
@@ -142,6 +144,11 @@ export function recordParameterNameBindings(
   for (let index = 0; index < Math.min(pythonNames.length, parameters.length); index += 1) {
     if (parameters[index].name !== tsExportNameForPythonName(pythonNames[index])) {
       nameMap.set(pythonNames[index], parameters[index].name);
+    }
+    const receiverType = nullableTypeExpressionBase(parameters[index].typeExpression) ?? parameters[index].typeExpression;
+    if (/^[A-Z][A-Za-z0-9_$]*$/.test(receiverType)) {
+      nameMap.set(receiverTypeNameMarker(pythonNames[index]), receiverType);
+      nameMap.set(receiverTypeNameMarker(parameters[index].name), receiverType);
     }
   }
 }
