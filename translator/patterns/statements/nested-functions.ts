@@ -112,14 +112,46 @@ export function parseNestedFunctionStatement(
   const returnType = tsFunctionReturnTypeExpression(header.returnType);
   outerNameMap.set(functionReturnTypeMarker(header.name), returnType);
   outerNameMap.set(functionReturnTypeMarker(functionName), returnType);
+  const prologue = parsedParams.prologue.map((line) => nestedParameterPrologueDeclaration(line, parsedParams.nameBindings, reassignedNames, statements));
   return {
     statements: [
       `${alreadyDeclared ? functionName : `const ${functionName}`} = ${async ? 'async ' : ''}(${parsedParams.params.join(', ')}): ${async ? `Promise<${returnType}>` : returnType} => {`,
-      ...[...parsedParams.prologue, ...statements].map(indentStatementLine),
+      ...[...prologue, ...statements].map(indentStatementLine),
       '};',
     ],
     nextIndex,
   };
+}
+
+function nestedParameterPrologueDeclaration(
+  line: string,
+  nameBindings: ReadonlyMap<string, string>,
+  reassignedNames: ReadonlySet<string>,
+  statements: readonly string[],
+): string {
+  const declaration = /^const ([A-Za-z_$][A-Za-z0-9_$]*) = /.exec(line);
+  if (declaration === null) {
+    return line;
+  }
+  for (const [pythonName, tsName] of nameBindings) {
+    if (tsName === declaration[1] && (reassignedNames.has(pythonName) || functionBodyAssignsName(statements, tsName))) {
+      return line.replace(/^const /, 'let ');
+    }
+  }
+  if (reassignedNames.has(declaration[1]) || functionBodyAssignsName(statements, declaration[1])) {
+    return line.replace(/^const /, 'let ');
+  }
+  return line;
+}
+
+function functionBodyAssignsName(statements: readonly string[], name: string): boolean {
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`^${escapedName} (?:\\+=|-=|\\*=|/=|=) `);
+  const destructuringPattern = new RegExp(`^\\[[^\\]]*\\b${escapedName}\\b[^\\]]*\\] = `);
+  return statements.some((statement) => {
+    const trimmed = statement.trim();
+    return pattern.test(trimmed) || destructuringPattern.test(trimmed);
+  });
 }
 
 function nonlocalNames(lines: string[], startIndex: number, indent: string): Set<string> {

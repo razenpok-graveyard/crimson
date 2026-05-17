@@ -2748,7 +2748,9 @@ export function translateExpression(
     }
     const left = parenthesizeForModulo(translateExpression(stripBalancedOuterParens(modulo.left), nameMap, arrayNames, validatedTypeAliases, mapNames));
     const right = parenthesizeForModulo(translateExpression(stripBalancedOuterParens(modulo.right), nameMap, arrayNames, validatedTypeAliases, mapNames));
-    return modulo.left.includes(' - ') || modulo.left.includes(' + ') ? `(${left} + ${right}) % ${right}` : `${left} % ${right}`;
+    return moduloNeedsPythonNormalization(modulo.left, modulo.right, right)
+      ? `((${left} % ${right}) + ${right}) % ${right}`
+      : `${left} % ${right}`;
   }
 
   const floorDivision = splitTopLevelFloorDivision(trimmed);
@@ -3105,13 +3107,34 @@ function translateComparisonClause(
 }
 
 function parenthesizeComparisonOperand(value: string): string {
-  return value.includes(' ?? ') || value.includes(' && ') || value.includes(' || ')
+  return value.includes(' ? ') || value.includes(' ?? ') || value.includes(' && ') || value.includes(' || ')
     ? `(${value})`
     : value;
 }
 
 function parenthesizeForModulo(value: string): string {
-  return value.includes(' ? ') || value.includes(' + ') || value.includes(' - ') ? `(${value})` : value;
+  const trimmed = value.trim();
+  if (stripBalancedOuterParens(trimmed) !== trimmed) {
+    return trimmed;
+  }
+  return trimmed.includes(' ? ')
+    || trimmed.includes(' + ')
+    || trimmed.includes(' - ')
+    || trimmed.includes(' * ')
+    || trimmed.includes(' / ')
+    || trimmed.includes(' % ')
+    ? `(${trimmed})`
+    : trimmed;
+}
+
+function moduloNeedsPythonNormalization(rawLeft: string, rawRight: string, translatedRight: string): boolean {
+  const left = stripBalancedOuterParens(rawLeft.trim());
+  const right = stripBalancedOuterParens(rawRight.trim());
+  const tsRight = stripBalancedOuterParens(translatedRight.trim());
+  return left.includes(' - ')
+    || left.includes(' + ')
+    || right === 'math.tau'
+    || tsRight === 'Math.PI * 2.0';
 }
 
 function translatePythonPercentStringFormat(
