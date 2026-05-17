@@ -5,6 +5,15 @@ import {
   renderParameter,
   renderTypeParameters,
 } from './functions.js';
+import {
+  allStructFieldsHaveDefaults,
+  defaultedOptionExpression,
+  fieldsAssignedByPostInit,
+  renderPositionalStructConstructor,
+  shouldRenderPositionalConstructor,
+  structConstructorOptsType,
+} from './struct-classes/constructors.js';
+import { keywordMethodOverload } from './struct-classes/method-overloads.js';
 
 export function renderStructClasses(lines: string[], classes: StructModule['classes']): void {
   for (let index = 0; index < classes.length; index += 1) {
@@ -103,139 +112,4 @@ export function renderStructClasses(lines: string[], classes: StructModule['clas
       lines.push('');
     }
   }
-}
-
-function keywordMethodOverload(
-  method: StructModule['classes'][number]['methods'][number],
-  generator: boolean,
-  returnType: string,
-): string[] | null {
-  if (
-    method.static === true
-    || generator
-    || method.optsParams.length > 0
-    || method.parameters.length === 0
-    || method.name.includes(' ')
-    || method.typeParams !== undefined && method.typeParams.length > 0
-  ) {
-    return null;
-  }
-  const firstParam = method.parameters[0];
-  if (/^(?:Record|Map|ReadonlyMap|Set|ReadonlySet|Array|ReadonlyArray|[A-Z][A-Za-z0-9_$]*)[<\[]?/.test(firstParam.typeExpression.trim())) {
-    return null;
-  }
-  const prefix = `${method.async === true ? 'async ' : ''}${method.name}`;
-  const optsType = inlineMethodKeywordOptsType(method.parameters);
-  const positionalParams = method.parameters.map(renderOverloadParameter).join(', ');
-  const firstImplName = `${firstParam.name}OrOpts`;
-  const firstDefault = firstParam.defaultValue === undefined || firstParam.defaultValue === null ? '' : ` = ${firstParam.defaultValue}`;
-  const implementationParams = [
-    `${firstImplName}: ${firstParam.typeExpression} | ${optsType}${firstDefault}`,
-    ...method.parameters.slice(1).map((param) => `${param.name}Arg: ${param.typeExpression} | undefined = undefined`),
-  ];
-  const optsCondition = `typeof ${firstImplName} === 'object' && ${firstImplName} !== null && '${methodKeywordOptionName(firstParam.name)}' in ${firstImplName}`;
-  const lines = [
-    `  ${prefix}(opts: ${optsType})${returnType};`,
-    `  ${prefix}(${positionalParams})${returnType};`,
-    `  ${prefix}(${implementationParams.join(', ')})${returnType} {`,
-  ];
-  for (let index = 0; index < method.parameters.length; index += 1) {
-    const param = method.parameters[index];
-    const declaration = functionBodyAssignsName(method.statements, param.name) ? 'let' : 'const';
-    const optionName = methodKeywordOptionName(param.name);
-    const positionalExpression = index === 0 ? firstImplName : `${param.name}Arg`;
-    const optionExpression = `${firstImplName}.${optionName}`;
-    const valueExpression = param.defaultValue === undefined || param.defaultValue === null
-      ? `${optsCondition} ? ${optionExpression} : ${positionalExpression} as ${param.typeExpression}`
-      : `${optsCondition} ? ${optionExpression} ?? ${param.defaultValue} : ${positionalExpression} ?? ${param.defaultValue}`;
-    lines.push(`    ${declaration} ${param.name}: ${param.typeExpression} = ${valueExpression};`);
-  }
-  return lines;
-}
-
-function renderOverloadParameter(param: StructModule['classes'][number]['methods'][number]['parameters'][number]): string {
-  return `${param.name}${param.defaultValue === undefined || param.defaultValue === null ? '' : '?'}: ${param.typeExpression}`;
-}
-
-function inlineMethodKeywordOptsType(parameters: StructModule['classes'][number]['methods'][number]['parameters']): string {
-  return `{ ${parameters.map((param) => `${methodKeywordOptionName(param.name)}${param.defaultValue === undefined || param.defaultValue === null ? '' : '?'}: ${param.typeExpression}`).join('; ')} }`;
-}
-
-function methodKeywordOptionName(parameterName: string): string {
-  return parameterName.startsWith('_') ? parameterName.slice(1) : parameterName;
-}
-
-function shouldRenderPositionalConstructor(structClass: StructModule['classes'][number]): boolean {
-  return structClass.positionalConstructor === true
-    && structClass.extendsName === undefined
-    && structClass.fields.length > 0
-    && structClass.postInitStatements.length === 0
-    && allStructFieldsHaveDefaults(structClass)
-    && ['number', 'string', 'boolean'].includes(structClass.fields[0].typeExpression);
-}
-
-function renderPositionalStructConstructor(lines: string[], structClass: StructModule['classes'][number]): void {
-  const optsType = inlineStructConstructorOptsType(structClass);
-  const firstField = structClass.fields[0];
-  const firstParamName = `optsOr${firstField.name[0].toUpperCase()}${firstField.name.slice(1)}`;
-  const positionalParams = structClass.fields
-    .map((field) => `${field.name}?: ${field.typeExpression}`)
-    .join(', ');
-  const implementationParams = [
-    `${firstParamName}: ${optsType} | ${firstField.typeExpression} = {}`,
-    ...structClass.fields.slice(1).map((field) => `${field.name}: ${field.typeExpression} = ${field.defaultValue}`),
-  ];
-  lines.push(`  constructor(opts?: ${optsType});`);
-  lines.push(`  constructor(${positionalParams});`);
-  lines.push(`  constructor(${implementationParams.join(', ')}) {`);
-  lines.push(`    if (typeof ${firstParamName} === 'object' && ${firstParamName} !== null) {`);
-  for (const field of structClass.fields) {
-    lines.push(`      this.${field.name} = ${defaultedOptionExpression(`${firstParamName}.${field.name}`, field.typeExpression, field.defaultValue!)};`);
-  }
-  lines.push('      return;');
-  lines.push('    }');
-  lines.push(`    this.${firstField.name} = ${firstParamName} ?? ${firstField.defaultValue};`);
-  for (const field of structClass.fields.slice(1)) {
-    lines.push(`    this.${field.name} = ${field.name};`);
-  }
-  lines.push('  }');
-}
-
-function inlineStructConstructorOptsType(structClass: StructModule['classes'][number]): string {
-  return `{ ${structClass.fields.map((field) => `${field.name}${field.defaultValue === null ? '' : '?'}: ${field.typeExpression}`).join('; ')} }`;
-}
-
-function fieldsAssignedByPostInit(statements: readonly string[]): Set<string> {
-  const fields = new Set<string>();
-  for (const statement of statements) {
-    const assignment = /^this\.([A-Za-z_$][A-Za-z0-9_$]*) = /.exec(statement);
-    if (assignment !== null) {
-      fields.add(assignment[1]);
-    }
-  }
-  return fields;
-}
-
-function structConstructorOptsType(structClass: StructModule['classes'][number]): string {
-  const ownFields = [
-    '{',
-    ...structClass.fields.map((field) => `    ${field.name}${field.defaultValue === null ? '' : '?'}: ${field.typeExpression};`),
-    '  }',
-  ].join('\n');
-  return structClass.extendsName === undefined
-    ? ownFields
-    : `${ownFields} & ConstructorParameters<typeof ${structClass.extendsName}>[0]`;
-}
-
-function allStructFieldsHaveDefaults(structClass: StructModule['classes'][number]): boolean {
-  return structClass.fields.every((field) => field.defaultValue !== null);
-}
-
-function defaultedOptionExpression(optionExpression: string, typeExpression: string, defaultValue: string): string {
-  if (typeExpression.startsWith('readonly ') && typeExpression.endsWith('[]')) {
-    return `Array.from(${optionExpression} ?? ${defaultValue})`;
-  }
-  return typeExpression.includes('null') && defaultValue !== 'null'
-    ? `${optionExpression} !== undefined ? ${optionExpression} : ${defaultValue}`
-    : `${optionExpression} ?? ${defaultValue}`;
 }

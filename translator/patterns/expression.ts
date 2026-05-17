@@ -1,10 +1,13 @@
 import { tsExportNameForPythonName, tsTypeExpression } from '../naming.js';
 import {
-  combinePythonStringExpressions,
   parsePythonStringExpression,
   splitTopLevelComma,
   tsStringLiteral,
 } from './common.js';
+import {
+  parseAdjacentPythonStringExpression,
+  parseParenthesizedAdjacentPythonStringExpression,
+} from './expression/adjacent-strings.js';
 import {
   classBaseTypeMarker,
   classFieldTypeMarker,
@@ -85,6 +88,7 @@ import {
   expressionLooksPathJoinPart,
   splitTopLevelPathJoin,
 } from './expression/paths.js';
+import { expressionIsKnownMap } from './expression/maps.js';
 import { stripPrimitiveCallWrappers } from './expression/primitives.js';
 import {
   nullableTypeExpressionBase,
@@ -138,6 +142,7 @@ export {
 } from './expression/vectors.js';
 
 export { splitTopLevelLogicalOperator } from './expression/scanners.js';
+export { expressionIsKnownMap } from './expression/maps.js';
 
 export function tsRegExpExpression(pythonLiteral: string): string {
   return renderTsRegExpExpression(pythonLiteral, translateExpression);
@@ -2939,54 +2944,6 @@ export function translateExpression(
   );
 }
 
-function parseAdjacentPythonStringExpression(trimmedExpression: string): string | null {
-  const parts: string[] = [];
-  let index = 0;
-  while (index < trimmedExpression.length) {
-    while (/\s/.test(trimmedExpression[index] ?? '')) {
-      index += 1;
-    }
-    if (index >= trimmedExpression.length) {
-      break;
-    }
-    const literal = parseLeadingPythonStringLiteral(trimmedExpression.slice(index));
-    if (literal === null) {
-      return null;
-    }
-    parts.push(literal);
-    index += literal.length;
-  }
-  return parts.length > 1 ? combinePythonStringExpressions(parts) : null;
-}
-
-function parseParenthesizedAdjacentPythonStringExpression(trimmedExpression: string): string | null {
-  if (!trimmedExpression.startsWith('(') || matchingCloseParen(trimmedExpression, 0) !== trimmedExpression.length - 1) {
-    return null;
-  }
-  return parseAdjacentPythonStringExpression(trimmedExpression.slice(1, -1).trim());
-}
-
-function parseLeadingPythonStringLiteral(value: string): string | null {
-  const prefix = /^[fF]?/.exec(value)?.[0] ?? '';
-  const quote = value[prefix.length];
-  if (quote !== '"' && quote !== "'") {
-    return null;
-  }
-  let index = prefix.length + 1;
-  while (index < value.length) {
-    const char = value[index];
-    if (char === '\\') {
-      index += 2;
-      continue;
-    }
-    if (char === quote) {
-      return value.slice(0, index + 1);
-    }
-    index += 1;
-  }
-  return null;
-}
-
 function replaceKnownRectangleDimensions(tsExpression: string, arrayNames: Set<string>): string {
   return tsExpression.replaceAll(
     /\b([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\.(width|height)\b/g,
@@ -3193,90 +3150,6 @@ export function translateMapKeyExpression(
     return `${keyExpression}.text`;
   }
   return keyExpression;
-}
-
-export function expressionIsKnownMap(
-  tsExpression: string,
-  nameMap: Map<string, string>,
-  mapNames: ReadonlySet<string> = new Set(),
-): boolean {
-  if (mapNames.has(tsExpression)) {
-    return true;
-  }
-  const mapGet = /^([A-Za-z_$][A-Za-z0-9_.$]*)\.get\(.*\)!?(?: \?\? null)?$/.exec(tsExpression);
-  if (mapGet !== null && mapNames.has(mapValueMapNameMarker(mapGet[1]))) {
-    return true;
-  }
-  const mapGetOrThrow = /^mapGetOrThrow\(([A-Za-z_$][A-Za-z0-9_.$]*), .+\)$/.exec(tsExpression);
-  if (mapGetOrThrow !== null && mapNames.has(mapValueMapNameMarker(mapGetOrThrow[1]))) {
-    return true;
-  }
-  if (mapGetOrThrow !== null) {
-    const valueType = knownMapValueType(mapGetOrThrow[1], nameMap);
-    if (valueType?.startsWith('Map<') === true || valueType?.startsWith('ReadonlyMap<') === true) {
-      return true;
-    }
-  }
-  const dottedField = /^(.+)\.([A-Za-z_$][A-Za-z0-9_$]*)$/.exec(tsExpression);
-  if (dottedField === null) {
-    return false;
-  }
-  const receiverType = nameMap.get(receiverTypeNameMarker(dottedField[1]));
-  const fieldType = receiverType === undefined ? undefined : nameMap.get(classFieldTypeMarker(receiverType, dottedField[2]));
-  return fieldType?.startsWith('Map<') === true || fieldType?.startsWith('ReadonlyMap<') === true;
-}
-
-function knownMapValueType(
-  tsExpression: string,
-  nameMap: Map<string, string>,
-): string | null {
-  const dottedField = /^(.+)\.([A-Za-z_$][A-Za-z0-9_$]*)$/.exec(tsExpression);
-  if (dottedField === null) {
-    return null;
-  }
-  const receiverType = nameMap.get(receiverTypeNameMarker(dottedField[1]));
-  const fieldType = receiverType === undefined ? undefined : nameMap.get(classFieldTypeMarker(receiverType, dottedField[2]));
-  if (fieldType === undefined) {
-    return null;
-  }
-  const mapArgs = /^ReadonlyMap<(.+)>$/.exec(fieldType) ?? /^Map<(.+)>$/.exec(fieldType);
-  if (mapArgs === null) {
-    return null;
-  }
-  const args = splitTopLevelTypeComma(mapArgs[1]);
-  return args.length === 2 ? args[1].trim() : null;
-}
-
-function splitTopLevelTypeComma(value: string): string[] {
-  const parts: string[] = [];
-  let start = 0;
-  let angleDepth = 0;
-  let parenDepth = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index];
-    if (char === '<') {
-      angleDepth += 1;
-      continue;
-    }
-    if (char === '>') {
-      angleDepth = Math.max(0, angleDepth - 1);
-      continue;
-    }
-    if (char === '(' || char === '[' || char === '{') {
-      parenDepth += 1;
-      continue;
-    }
-    if (char === ')' || char === ']' || char === '}') {
-      parenDepth = Math.max(0, parenDepth - 1);
-      continue;
-    }
-    if (char === ',' && angleDepth === 0 && parenDepth === 0) {
-      parts.push(value.slice(start, index).trim());
-      start = index + 1;
-    }
-  }
-  parts.push(value.slice(start).trim());
-  return parts.filter((part) => part !== '');
 }
 
 function translateAggregateGeneratorCall(
