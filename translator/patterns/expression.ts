@@ -513,6 +513,25 @@ function translateStaticMethodCalleeIfKnown(pythonCallee: string, nameMap: Map<s
   return staticMethod === undefined ? null : `${receiverType}.${staticMethod}`;
 }
 
+function enumVariableTypeName(pythonName: string, nameMap: Map<string, string>): string | null {
+  const receiver = translateIdentifierName(pythonName, nameMap);
+  const receiverType = nameMap.get(receiverTypeNameMarker(pythonName)) ?? nameMap.get(receiverTypeNameMarker(receiver));
+  return receiverType !== undefined && typeExpressionLooksTsEnum(receiverType) ? receiverType : null;
+}
+
+function enumIterableTypeName(pythonExpression: string, nameMap: Map<string, string>): string | null {
+  const trimmed = pythonExpression.trim();
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(trimmed)) {
+    return null;
+  }
+  const translated = translateIdentifierName(trimmed, nameMap);
+  return typeExpressionLooksTsEnum(translated) ? translated : null;
+}
+
+function tsEnumValuesExpression(enumName: string): string {
+  return `Object.values(${enumName}).filter((value): value is ${enumName} => typeof value === 'number')`;
+}
+
 export function translateExpression(
   pythonExpression: string,
   nameMap: Map<string, string> = new Map(),
@@ -714,6 +733,20 @@ export function translateExpression(
     const receiverType = nameMap.get(receiverTypeNameMarker(enumVariableValue[1])) ?? nameMap.get(receiverTypeNameMarker(receiver));
     if (receiverType !== undefined && typeExpressionLooksTsEnum(receiverType)) {
       return receiver;
+    }
+  }
+  const enumVariableNameLower = /^([A-Za-z_][A-Za-z0-9_]*)\.name\.lower\(\)$/.exec(trimmed);
+  if (enumVariableNameLower !== null) {
+    const enumName = enumVariableTypeName(enumVariableNameLower[1], nameMap);
+    if (enumName !== null) {
+      return `String(${enumName}[${translateIdentifierName(enumVariableNameLower[1], nameMap)}]).toLowerCase()`;
+    }
+  }
+  const enumVariableName = /^([A-Za-z_][A-Za-z0-9_]*)\.name$/.exec(trimmed);
+  if (enumVariableName !== null) {
+    const enumName = enumVariableTypeName(enumVariableName[1], nameMap);
+    if (enumName !== null) {
+      return `${enumName}[${translateIdentifierName(enumVariableName[1], nameMap)}]`;
     }
   }
 
@@ -985,8 +1018,15 @@ export function translateExpression(
     const itemName = tsExportNameForPythonName(dictComprehension[3]);
     const itemNameMap = new Map(nameMap);
     itemNameMap.set(dictComprehension[3], itemName);
-    const iterable = translateExpression(dictComprehension[4], nameMap, arrayNames, validatedTypeAliases, mapNames);
-    const itemParameter = methodCallIterableCallbackParameter(itemName, iterable);
+    const enumIterableType = enumIterableTypeName(dictComprehension[4], nameMap);
+    if (enumIterableType !== null) {
+      itemNameMap.set(receiverTypeNameMarker(dictComprehension[3]), enumIterableType);
+      itemNameMap.set(receiverTypeNameMarker(itemName), enumIterableType);
+    }
+    const iterable = enumIterableType === null
+      ? translateExpression(dictComprehension[4], nameMap, arrayNames, validatedTypeAliases, mapNames)
+      : tsEnumValuesExpression(enumIterableType);
+    const itemParameter = enumIterableType === null ? methodCallIterableCallbackParameter(itemName, iterable) : itemName;
     return `new Map(Array.from(${iterable}, (${itemParameter}) => [${translateExpression(dictComprehension[1], itemNameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(dictComprehension[2], itemNameMap, arrayNames, validatedTypeAliases, mapNames)}] as const))`;
   }
 
