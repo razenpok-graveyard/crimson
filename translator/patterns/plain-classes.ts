@@ -1019,7 +1019,7 @@ function inferPlainClassFieldType(
   if (directParameterType !== undefined) {
     return directParameterType;
   }
-  if (/^[A-Z][A-Z0-9_]*$/.test(trimmedValueText)) {
+  if (/^_?[A-Z][A-Z0-9_]*$/.test(trimmedValueText)) {
     return 'number';
   }
   const literalType = inferPythonExpressionType(trimmedValueText);

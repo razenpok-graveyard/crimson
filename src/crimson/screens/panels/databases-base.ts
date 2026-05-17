@@ -4,7 +4,6 @@ import { TextureId } from '@grim/assets.ts';
 import { playSfx, updateAudio } from '@grim/audio.ts';
 import type { SmallFontData } from '@grim/fonts/small.ts';
 import { Vec2 } from '@grim/geom.ts';
-import type { rl } from '@grim/raylib-api.ts';
 import { InputState } from '@grim/input.ts';
 import { SfxId } from '@grim/sfx-map.ts';
 import type { GroundRenderer } from '@grim/terrain-render.ts';
@@ -258,7 +257,7 @@ export abstract class DatabaseBaseView {
 
   protected abstract _drawContents(opts: { leftTopLeft: Vec2; rightTopLeft: Vec2; scale: number; font: SmallFontData }): void;
 
-  protected _updateContentInteraction(opts: { leftTopLeft: Vec2; scale: number; mouse: rl.Vector2 }): void {
+  protected _updateContentInteraction(opts: { leftTopLeft: Vec2; scale: number; mouse: wgl.Vector2 }): void {
     const leftTopLeft = opts.leftTopLeft;
     const scale = opts.scale;
     const mouse = opts.mouse;

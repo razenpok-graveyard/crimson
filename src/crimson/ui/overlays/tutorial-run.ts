@@ -1,11 +1,10 @@
 // Port of crimson/ui/overlays/tutorial_run.py
 
 import { Vec2 } from '@grim/geom.ts';
-import type { rl } from '@grim/raylib-api.ts';
 import type { TutorialOverlayState } from '@crimson/tutorial/index.ts';
 import * as wgl from '@wgl';
 
-export type DrawUiText = (arg0: string, arg1: Vec2, arg2: rl.Color, arg3: number) => void;
+export type DrawUiText = (arg0: string, arg1: Vec2, arg2: wgl.Color, arg3: number) => void;
 export type MeasureUiTextWidth = (arg0: string, arg1: number) => number;
 export type MeasureUiLineHeight = (arg0: number) => number;
 
@@ -23,7 +22,7 @@ function pythonSplitlines(text: string): string[] {
   return lines;
 }
 
-export function tutorialPromptPanelRect(text: string, opts: { measureTextWidth: MeasureUiTextWidth; measureLineHeight: MeasureUiLineHeight; pos: Vec2; scale: number }): [rl.Rectangle, string[], number] {
+export function tutorialPromptPanelRect(text: string, opts: { measureTextWidth: MeasureUiTextWidth; measureLineHeight: MeasureUiLineHeight; pos: Vec2; scale: number }): [wgl.Rectangle, string[], number] {
   const measureTextWidth = opts.measureTextWidth;
   const measureLineHeight = opts.measureLineHeight;
   const pos = opts.pos;

@@ -4,7 +4,6 @@ import type { RuntimeResources } from '@grim/assets.ts';
 import { TextureId } from '@grim/assets.ts';
 import type { CrimsonConfig } from '@grim/config.ts';
 import { Rect, Vec2 } from '@grim/geom.ts';
-import type { rl } from '@grim/raylib-api.ts';
 import { drawUiText } from '@crimson/ui/perk-menu.ts';
 import * as wgl from '@wgl';
 
@@ -66,7 +65,7 @@ export class PerkPromptUi {
     return Rect.fromTopLeft(hinge.offset({ dx: localX, dy: localY }), barW, barH);
   }
 
-  static draw(opts: { resources: RuntimeResources; label: string; timerMs: number; pulse: number; uiTextWidth: (arg0: string, arg1: number) => number; textColor: rl.Color; scale?: number }): void {
+  static draw(opts: { resources: RuntimeResources; label: string; timerMs: number; pulse: number; uiTextWidth: (arg0: string, arg1: number) => number; textColor: wgl.Color; scale?: number }): void {
     const resources = opts.resources;
     const label = opts.label;
     const timerMs = opts.timerMs;

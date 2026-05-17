@@ -62,8 +62,8 @@ export class WorldDrawContext {
   readonly trooperTexture: rl.Texture | null;
   readonly particlesTexture: rl.Texture | null;
   readonly monsterVision: boolean;
-  readonly monsterVisionSrc: rl.Rectangle | null;
-  readonly poisonSrc: rl.Rectangle | null;
+  readonly monsterVisionSrc: wgl.Rectangle | null;
+  readonly poisonSrc: wgl.Rectangle | null;
 
   constructor(opts: {
     camera?: Vec2;
@@ -73,8 +73,8 @@ export class WorldDrawContext {
     trooperTexture?: rl.Texture | null;
     particlesTexture?: rl.Texture | null;
     monsterVision?: boolean;
-    monsterVisionSrc?: rl.Rectangle | null;
-    poisonSrc?: rl.Rectangle | null;
+    monsterVisionSrc?: wgl.Rectangle | null;
+    poisonSrc?: wgl.Rectangle | null;
   } = {}) {
     this.camera = opts.camera ?? new Vec2();
     this.viewScale = opts.viewScale ?? new Vec2(1.0, 1.0);
@@ -178,7 +178,7 @@ function drawBackground(renderCtx: WorldRenderCtx, opts: { camera: Vec2; screenS
   );
 }
 
-function effectSrcRect(texture: rl.Texture, effectId: EffectId): rl.Rectangle | null {
+function effectSrcRect(texture: rl.Texture, effectId: EffectId): wgl.Rectangle | null {
   const atlas = EFFECT_ID_ATLAS_TABLE_BY_ID.get(int(effectId)) ?? null;
   if (atlas === null) {
     return null;

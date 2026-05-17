@@ -4,7 +4,6 @@ import { TextureId } from '@grim/assets.ts';
 import { RGBA } from '@grim/color.ts';
 import type { Vec2 } from '@grim/geom.ts';
 import { clamp } from '@grim/math.ts';
-import { rl } from '@grim/raylib-api.ts';
 import { EffectEntry, ParticleStyleId } from '@crimson/effects.ts';
 import { EFFECT_ID_ATLAS_TABLE_BY_ID, SIZE_CODE_GRID, EffectId } from '@crimson/effects-atlas.ts';
 import { RAD_TO_DEG } from '@crimson/render/world/constants.ts';
@@ -29,7 +28,7 @@ export function drawParticlePool(renderCtx: WorldRenderCtx, opts: { camera: Vec2
 
   const scale = renderCtx._viewScaleAvg(viewScale);
 
-  const srcRect = (effectId: number): rl.Rectangle | null => {
+  const srcRect = (effectId: number): wgl.Rectangle | null => {
     const atlas = EFFECT_ID_ATLAS_TABLE_BY_ID.get(int(effectId)) ?? null;
     if (atlas === null) {
       return null;
@@ -195,9 +194,9 @@ export function drawEffectPool(renderCtx: WorldRenderCtx, opts: { camera: Vec2; 
 
   const scale = renderCtx._viewScaleAvg(viewScale);
 
-  const srcCache: Map<number, rl.Rectangle> = new Map();
+  const srcCache: Map<number, wgl.Rectangle> = new Map();
 
-  const srcRect = (effectId: number): rl.Rectangle | null => {
+  const srcRect = (effectId: number): wgl.Rectangle | null => {
     const cached = srcCache.get(effectId) ?? null;
     if (cached !== null) {
       return cached;

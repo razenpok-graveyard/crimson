@@ -7,7 +7,6 @@ import type { ConsoleState } from '@grim/console.ts';
 import { Vec2 } from '@grim/geom.ts';
 import { clamp } from '@grim/math.ts';
 import type { Crand } from '@grim/rand.ts';
-import type { rl } from '@grim/raylib-api.ts';
 import { InputState } from '@grim/input.ts';
 import type { ViewContext } from '@grim/view.ts';
 import { GameMode } from '@crimson/game-modes.ts';
@@ -199,7 +198,7 @@ export class TutorialMode extends BaseGameplayMode {
     this.closeRequested = true;
   }
 
-  protected _updatePromptButtons(opts: { dtMs: number; mouse: rl.Vector2; click: boolean }): void {
+  protected _updatePromptButtons(opts: { dtMs: number; mouse: wgl.Vector2; click: boolean }): void {
     const dtMs = opts.dtMs;
     const mouse = opts.mouse;
     const click = opts.click;

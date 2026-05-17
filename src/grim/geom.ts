@@ -2,6 +2,7 @@
 
 import { clamp } from '@grim/math.ts';
 import { rl } from '@grim/raylib-api.ts';
+import * as wgl from '@wgl';
 
 export interface SupportsXY {
   x: number;
@@ -148,7 +149,7 @@ export class Vec2 {
     return new Vec2({ x: this.y, y: -this.x });
   }
 
-  toRl(): rl.Vector2 {
+  toRl(): wgl.Vector2 {
 
     return rl.makeVector2(this.x, this.y);
   }
@@ -200,7 +201,7 @@ export class Rect {
     this.h = opts.h ?? 0.0;
   }
 
-  static fromXywh(value: Rect | rl.Rectangle): Rect {
+  static fromXywh(value: Rect | wgl.Rectangle): Rect {
     return new Rect({ x: value.x, y: value.y, w: value.w, h: value.h });
   }
 
@@ -282,7 +283,7 @@ export class Rect {
     return this.x <= px && px <= this.right && this.y <= py && py <= this.bottom;
   }
 
-  toRl(): rl.Rectangle {
+  toRl(): wgl.Rectangle {
 
     return rl.makeRectangle(this.x, this.y, this.w, this.h);
   }

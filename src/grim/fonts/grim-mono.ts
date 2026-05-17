@@ -66,7 +66,7 @@ export function loadGrimMonoFont(assetsRoot: string): GrimMonoFont {
   return new GrimMonoFont({ texture: texture, grid: grid, cellWidth: cellWidth, cellHeight: cellHeight, advance: GRIM_MONO_ADVANCE });
 }
 
-export function drawGrimMonoText(font: GrimMonoFont, text: string, pos: Vec2, scale: number, color: rl.Color): void {
+export function drawGrimMonoText(font: GrimMonoFont, text: string, pos: Vec2, scale: number, color: wgl.Color): void {
   let xPos = pos.x;
   let yPos = pos.y;
   const advance = font.advance * scale;

@@ -4,7 +4,6 @@ import { TextureId } from '@grim/assets.ts';
 import type { SmallFontData } from '@grim/fonts/small.ts';
 import { drawSmallText, measureSmallTextWidth } from '@grim/fonts/small.ts';
 import { Vec2 } from '@grim/geom.ts';
-import type { rl } from '@grim/raylib-api.ts';
 import { InputState } from '@grim/input.ts';
 import type { GameState } from '@crimson/game/types.ts';
 import { requireRuntimeResources } from '@crimson/screens/assets.ts';
@@ -145,7 +144,7 @@ export class UnlockedWeaponsDatabaseView extends DatabaseBaseView {
     drawSmallText(font, `Clip size: ${clipSize}`, detailTopLeft.add(new Vec2(66.0 * scale, 164.0 * scale)), textColor);
   }
 
-  protected _updateContentInteraction(opts: { leftTopLeft: Vec2; scale: number; mouse: rl.Vector2 }): void {
+  protected _updateContentInteraction(opts: { leftTopLeft: Vec2; scale: number; mouse: wgl.Vector2 }): void {
     const leftTopLeft = opts.leftTopLeft;
     const scale = opts.scale;
     const mouse = opts.mouse;

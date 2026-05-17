@@ -466,7 +466,7 @@ function translateBoundMethodReference(
 
 function attributeNameLooksLikeCallbackMethod(pythonName: string): boolean {
   const normalized = pythonName.replace(/^_+/, '');
-  if (normalized.endsWith('_button')) {
+  if (/(?:_button|_pos|_position|_rect|_color|_label|_width|_height)$/.test(normalized)) {
     return false;
   }
   return /^(?:apply|build|consume|create|draw|handle|on|play|process|registry|reset|sync|update)(?:_|$)/.test(normalized);
@@ -2644,6 +2644,10 @@ export function translateExpression(
 
   const modulo = splitTopLevelModulo(trimmed);
   if (modulo !== null) {
+    const stringFormat = translatePythonPercentStringFormat(modulo.left, modulo.right, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (stringFormat !== null) {
+      return stringFormat;
+    }
     const left = parenthesizeForModulo(translateExpression(stripBalancedOuterParens(modulo.left), nameMap, arrayNames, validatedTypeAliases, mapNames));
     const right = parenthesizeForModulo(translateExpression(stripBalancedOuterParens(modulo.right), nameMap, arrayNames, validatedTypeAliases, mapNames));
     return modulo.left.includes(' - ') || modulo.left.includes(' + ') ? `(${left} + ${right}) % ${right}` : `${left} % ${right}`;
@@ -3003,6 +3007,47 @@ function parenthesizeComparisonOperand(value: string): string {
 
 function parenthesizeForModulo(value: string): string {
   return value.includes(' ? ') || value.includes(' + ') || value.includes(' - ') ? `(${value})` : value;
+}
+
+function translatePythonPercentStringFormat(
+  rawLeft: string,
+  rawRight: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  const leftRaw = stripBalancedOuterParens(rawLeft.trim());
+  const leftTranslated = translateExpression(leftRaw, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (!expressionLooksStringFormatSource(leftRaw, leftTranslated, arrayNames)) {
+    return null;
+  }
+  const rightRaw = stripBalancedOuterParens(rawRight.trim());
+  const tupleArgs = /^\(([\s\S]*)\)$/.exec(rightRaw) !== null && matchingCloseParen(rightRaw, 0) === rightRaw.length - 1
+    ? splitTopLevelComma(rightRaw.slice(1, -1))
+    : [rightRaw];
+  if (tupleArgs.length === 0 || tupleArgs.some((arg) => arg.trim() === '')) {
+    return null;
+  }
+  return tupleArgs.reduce(
+    (formatted, arg) => `${formatted}.replace(/%[-+ #0]*(?:\\d+|\\*)?(?:\\.(?:\\d+|\\*))?[sdif]/, String(${translateExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames)}))`,
+    parenthesizeMethodReceiver(leftTranslated),
+  );
+}
+
+function expressionLooksStringFormatSource(rawExpression: string, translatedExpression: string, arrayNames: ReadonlySet<string>): boolean {
+  return /^(?:[rRuUbBfF]*)?(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')$/.test(rawExpression)
+    || /^(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)$/.test(translatedExpression)
+    || arrayNames.has(stringNameMarker(rawExpression))
+    || arrayNames.has(stringNameMarker(translatedExpression));
+}
+
+function parenthesizeMethodReceiver(value: string): string {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*$/.test(value)
+    || /^(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)$/.test(value)
+    || /^\([\s\S]+\)$/.test(value)
+    ? value
+    : `(${value})`;
 }
 
 function parenthesizeTranslatedMultiplicativeOperand(raw: string, translated: string): string {
@@ -4303,7 +4348,7 @@ function translateKeywordArgumentExpression(
   const callbackReference = keywordNameLooksLikeCallback(pythonKeywordName)
     ? translateKeywordDetachedMethodReference(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames)
     : null;
-  return callbackReference ?? translateCallArgumentExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  return callbackReference ?? translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
 }
 
 function keywordNameLooksLikeCallback(pythonKeywordName: string): boolean {

@@ -10,7 +10,7 @@ import { RAD_TO_DEG } from '@crimson/render/world/constants.ts';
 import type { WorldRenderCtx } from '@crimson/render/world/context.ts';
 import * as wgl from '@wgl';
 
-export function drawCreatureSprite(renderCtx: WorldRenderCtx, texture: rl.Texture, opts: { typeId: CreatureTypeId; flags: number; phase: number; mirrorLong?: boolean | null; shadowAlpha?: number | null; pos: Vec2; screenPos?: Vec2 | null; rotationRad: number; scale: number; sizeScale: number; tint: rl.Color; shadow?: boolean }): void {
+export function drawCreatureSprite(renderCtx: WorldRenderCtx, texture: rl.Texture, opts: { typeId: CreatureTypeId; flags: number; phase: number; mirrorLong?: boolean | null; shadowAlpha?: number | null; pos: Vec2; screenPos?: Vec2 | null; rotationRad: number; scale: number; sizeScale: number; tint: wgl.Color; shadow?: boolean }): void {
   const typeId = opts.typeId;
   const flags = opts.flags;
   const phase = opts.phase;

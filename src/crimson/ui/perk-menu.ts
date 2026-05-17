@@ -202,7 +202,7 @@ function uiTextWidth(resources: RuntimeResources, text: string, scale: number): 
   return measureSmallTextWidth(font, text);
 }
 
-export function drawUiText(resources: RuntimeResources, text: string, pos: Vec2, opts: { scale: number; color: rl.Color }): void {
+export function drawUiText(resources: RuntimeResources, text: string, pos: Vec2, opts: { scale: number; color: wgl.Color }): void {
   const scale = opts.scale;
   const color = opts.color;
   const font = resources.smallFont;
@@ -236,7 +236,7 @@ export function wrapUiText(resources: RuntimeResources, text: string, opts: { ma
   return lines;
 }
 
-export function drawWrappedUiTextInRect(resources: RuntimeResources, text: string, opts: { rect: Rect; scale: number; color: rl.Color }): void {
+export function drawWrappedUiTextInRect(resources: RuntimeResources, text: string, opts: { rect: Rect; scale: number; color: wgl.Color }): void {
   const rect = opts.rect;
   const scale = opts.scale;
   const color = opts.color;
@@ -300,7 +300,7 @@ export function buttonHitRect(opts: { pos: Vec2; width: number }): Rect {
   return Rect.fromTopLeft(pos.offset({ dy: 2.0 }), width, 28.0);
 }
 
-export function buttonUpdate(state: UiButtonState, opts: { pos: Vec2; width: number; dtMs: number; mouse: rl.Vector2; click: boolean }): boolean {
+export function buttonUpdate(state: UiButtonState, opts: { pos: Vec2; width: number; dtMs: number; mouse: wgl.Vector2; click: boolean }): boolean {
   const pos = opts.pos;
   const width = opts.width;
   const dtMs = opts.dtMs;
@@ -368,7 +368,7 @@ export function buttonDraw(resources: RuntimeResources, state: UiButtonState, op
   drawUiText(resources, state.label, textPos, { scale: scale, color: textTint });
 }
 
-export function cursorDraw(resources: RuntimeResources, opts: { mouse: rl.Vector2; scale: number; alpha?: number }): void {
+export function cursorDraw(resources: RuntimeResources, opts: { mouse: wgl.Vector2; scale: number; alpha?: number }): void {
   const mouse = opts.mouse;
   const scale = opts.scale;
   const alpha = opts.alpha ?? 1.0;

@@ -3,7 +3,6 @@
 import { TextureId } from '@grim/assets.ts';
 import { Vec2 } from '@grim/geom.ts';
 import { clamp } from '@grim/math.ts';
-import type { rl } from '@grim/raylib-api.ts';
 import { RAD_TO_DEG } from '@crimson/render/world/constants.ts';
 import { WorldRenderCtx } from '@crimson/render/world/context.ts';
 import * as wgl from '@wgl';
@@ -89,7 +88,7 @@ export function directionArrowEnabled(renderCtx: WorldRenderCtx, playerIndex: nu
   return config.controls.player(playerIndex).showDirectionArrow;
 }
 
-export function directionArrowTint(renderCtx: WorldRenderCtx, playerIndex: number, opts: { alpha: number }): rl.Color {
+export function directionArrowTint(renderCtx: WorldRenderCtx, playerIndex: number, opts: { alpha: number }): wgl.Color {
   let alpha = opts.alpha;
   alpha = clamp(alpha, 0.0, 1.0);
   if (renderCtx.frame.players.length === 2) {

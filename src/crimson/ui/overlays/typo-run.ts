@@ -5,7 +5,7 @@ import type { rl } from '@grim/raylib-api.ts';
 import type { CreatureState } from '@crimson/creatures/runtime.ts';
 import * as wgl from '@wgl';
 
-export type DrawUiText = (arg0: string, arg1: Vec2, arg2: rl.Color, arg3: number) => void;
+export type DrawUiText = (arg0: string, arg1: Vec2, arg2: wgl.Color, arg3: number) => void;
 export type MeasureUiTextWidth = (arg0: string, arg1: number) => number;
 export type WorldToScreen = (arg0: Vec2) => Vec2;
 

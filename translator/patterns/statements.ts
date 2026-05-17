@@ -4333,7 +4333,7 @@ function translateKeywordCallArgumentExpression(
   const callbackReference = keywordNameLooksLikeCallback(pythonKeywordName)
     ? translateDetachedMethodReference(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames)
     : null;
-  return callbackReference ?? translateCallArgumentExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  return callbackReference ?? translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
 }
 
 function keywordNameLooksLikeCallback(pythonKeywordName: string): boolean {

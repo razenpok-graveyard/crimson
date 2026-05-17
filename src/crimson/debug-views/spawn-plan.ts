@@ -4,7 +4,6 @@ import type { SmallFontData } from '@grim/fonts/small.ts';
 import { loadSmallFont, measureSmallTextWidth } from '@grim/fonts/small.ts';
 import { Vec2 } from '@grim/geom.ts';
 import { Crand } from '@grim/rand.ts';
-import type { rl } from '@grim/raylib-api.ts';
 import { InputState } from '@grim/input.ts';
 import type { View, ViewContext } from '@grim/view.ts';
 import { SPAWN_TEMPLATES, CreatureTypeId, SpawnEnv, SpawnSlotInit, UnsupportedSpawnTemplateError, buildSpawnPlan, spawnIdLabel, tickSpawnSlot } from '@crimson/creatures/spawn.ts';
@@ -376,7 +375,7 @@ export class SpawnPlanView {
   }
 }
 
-function typeColor(typeId: CreatureTypeId | null): rl.Color {
+function typeColor(typeId: CreatureTypeId | null): wgl.Color {
   if (typeId === CreatureTypeId.ZOMBIE) {
     return wgl.makeColor(120 / 255, 220 / 255, 120 / 255, 255 / 255);
   }

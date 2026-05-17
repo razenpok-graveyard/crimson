@@ -4,7 +4,6 @@ import { playSfx } from '@grim/audio.ts';
 import type { SmallFontData } from '@grim/fonts/small.ts';
 import { drawSmallText, measureSmallTextWidth } from '@grim/fonts/small.ts';
 import { Vec2 } from '@grim/geom.ts';
-import type { rl } from '@grim/raylib-api.ts';
 import { InputState } from '@grim/input.ts';
 import { SfxId } from '@grim/sfx-map.ts';
 import type { GameState } from '@crimson/game/types.ts';
@@ -193,7 +192,7 @@ export class UnlockedPerksDatabaseView extends DatabaseBaseView {
     }
   }
 
-  protected _updateContentInteraction(opts: { leftTopLeft: Vec2; scale: number; mouse: rl.Vector2 }): void {
+  protected _updateContentInteraction(opts: { leftTopLeft: Vec2; scale: number; mouse: wgl.Vector2 }): void {
     const leftTopLeft = opts.leftTopLeft;
     const scale = opts.scale;
     const mouse = opts.mouse;

@@ -28,6 +28,10 @@ export function tsTypeExpression(pythonType: string): string {
   if (forwardReference !== null) {
     return tsTypeExpression(forwardReference[2]);
   }
+  const raylibType = /^(?:r[dl]|wgl)\.(Color|Rectangle|Vector2)$/.exec(trimmed);
+  if (raylibType !== null) {
+    return `wgl.${raylibType[1]}`;
+  }
   const variadicCallable = /^Callable\[\.\.\., (.+)\]$/.exec(trimmed);
   if (variadicCallable !== null) {
     return `(...args: any[]) => ${tsTypeExpression(variadicCallable[1])}`;

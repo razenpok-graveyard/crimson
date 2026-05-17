@@ -8,7 +8,7 @@ import * as wgl from '@wgl';
 export const UI_SHADOW_OFFSET = 7.0;
 export const UI_SHADOW_TINT = wgl.makeColor(0x44 / 255, 0x44 / 255, 0x44 / 255, 0x44 / 255);
 
-export function drawUiQuadShadow(opts: { texture: rl.Texture; src: rl.Rectangle; dst: rl.Rectangle; origin: rl.Vector2; rotationDeg: number }): void {
+export function drawUiQuadShadow(opts: { texture: rl.Texture; src: wgl.Rectangle; dst: wgl.Rectangle; origin: wgl.Vector2; rotationDeg: number }): void {
   // NOTE: raylib/rlgl tracks custom blend factors as state; some backends
   // only apply them when switching the blend mode.
   const texture = opts.texture;

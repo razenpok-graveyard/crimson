@@ -102,7 +102,7 @@ export class StandaloneTickHarness {
       outputs: outputs,
       syncAudioBridgeState: runtime.syncAudioBridgeState.bind(runtime),
       applyAudioPlan: (plan, shouldApplyAudio) => runtime.audioBridge.applyPlan({ plan: plan, applyAudio: shouldApplyAudio }),
-      applyTerrainFx: runtime.renderResources.consumeTerrainFxBatch.bind(runtime.renderResources),
+      applyTerrainFx: runtime.renderResources.consumeTerrainFxBatch,
       updateCamera: runtime.updateCamera.bind(runtime),
       onOutputApplied: (output) => applyPostApplyReaction({ reaction: reactions.get(int(output.tickIndex)) ?? new PostApplyReaction(), playSfx: runtime.audioBridge.router.playSfx.bind(runtime.audioBridge.router) }),
       applyAudio: true,

@@ -535,6 +535,9 @@ export function inferPythonExpressionType(pythonExpression: string): string {
   if (/^(?:(?:r[dl]|wgl)\.)?(?:Color|makeColor)\(/.test(trimmed)) {
     return 'wgl.Color';
   }
+  if (/^(?:r[dl]|wgl)\.[A-Z][A-Z0-9_]*$/.test(trimmed)) {
+    return 'wgl.Color';
+  }
   if (/\.(?:to_rl|to_wgl|toRl|toWgl)\(\)$/.test(trimmed)) {
     return 'wgl.Color';
   }

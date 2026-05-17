@@ -939,6 +939,14 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     leadingStatements.unshift(...helperStatements);
   }
   const moduleValueText = moduleValueUsageText(typeAliases, protocols, classes, plainClasses, [...leadingStatements, ...trailingStatements], functions, [...leadingAssignments, ...assignments]);
+  const moduleTypeText = straightLineModuleTypeUsageText(typeAliases, protocols, classes, plainClasses, [...leadingStatements, ...trailingStatements], functions, [...leadingAssignments, ...assignments]);
+  const moduleUsageText = [moduleValueText, moduleTypeText].join('\n');
+  if (/\bwgl\./.test(moduleUsageText)) {
+    pushUniqueNamespaceImport(namespaceImports, {
+      alias: 'wgl',
+      modulePath: '@wgl',
+    });
+  }
   if (moduleValueText.includes('latin1EncodeReplace(')) {
     const helperStatements = latin1EncodeReplaceHelperStatements();
     if (leadingStatements.length > 0) {
@@ -1255,7 +1263,14 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   const reexports = reexportsForAllNames(imports, allNames, relativePath);
   ensureInferredTypeImports(imports, typeAliases, protocols, classes, plainClasses, [...leadingStatements, ...trailingStatements], functions, [...leadingAssignments, ...assignments]);
   markTypeOnlyImports(imports, typeAliases, protocols, classes, plainClasses, [...leadingStatements, ...trailingStatements], functions, [...leadingAssignments, ...assignments]);
-  markNamespaceImports(namespaceImports, moduleValueUsageText(typeAliases, protocols, classes, plainClasses, [...leadingStatements, ...trailingStatements], functions, [...leadingAssignments, ...assignments]));
+  const finalModuleUsageText = [
+    moduleValueUsageText(typeAliases, protocols, classes, plainClasses, [...leadingStatements, ...trailingStatements], functions, [...leadingAssignments, ...assignments]),
+    straightLineModuleTypeUsageText(typeAliases, protocols, classes, plainClasses, [...leadingStatements, ...trailingStatements], functions, [...leadingAssignments, ...assignments]),
+  ].join('\n');
+  markNamespaceImports(
+    namespaceImports,
+    finalModuleUsageText,
+  );
   if (allNames.length > 0) {
     const exportedNames = new Set(allNames.map(tsPublicNameForPythonName));
     for (const alias of typeAliases) {
@@ -2483,6 +2498,12 @@ function recordTopLevelArrayAssignmentMarkers(
 ): void {
   const typeExpression = assignment.typeExpression?.trim() ?? '';
   const valueText = assignment.valueLines.join('\n').trim();
+  if (typeExpression === 'string' || /^(?:'[^']*'|"[^"]*"|`[^`]*`)$/.test(valueText)) {
+    arrayNames.add(stringNameMarker(assignment.name));
+    if (assignment.pythonName !== undefined) {
+      arrayNames.add(stringNameMarker(assignment.pythonName));
+    }
+  }
   const looksArray = typeExpression.endsWith('[]')
     || typeExpression.startsWith('readonly ') && typeExpression.endsWith('[]')
     || typeExpression.startsWith('ReadonlyArray<')

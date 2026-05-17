@@ -3,7 +3,7 @@
 import { TextureId } from '@grim/assets.ts';
 import { Vec2 } from '@grim/geom.ts';
 import { clamp } from '@grim/math.ts';
-import { rl } from '@grim/raylib-api.ts';
+import type { rl } from '@grim/raylib-api.ts';
 import { EFFECT_ID_ATLAS_TABLE_BY_ID, SIZE_CODE_GRID, EffectId } from '@crimson/effects-atlas.ts';
 import { PerkId } from '@crimson/perks/index.ts';
 import { perkActive } from '@crimson/perks/helpers.ts';
@@ -150,7 +150,7 @@ export function drawPlayerTrooperSprite(renderCtx: WorldRenderCtx, texture: rl.T
     }
   }
 
-  const draw = (frame: number, opts: { pos: Vec2; scaleMul: number; rotation: number; color: rl.Color }): void => {
+  const draw = (frame: number, opts: { pos: Vec2; scaleMul: number; rotation: number; color: wgl.Color }): void => {
     const pos = opts.pos;
     const scaleMul = opts.scaleMul;
     const rotation = opts.rotation;

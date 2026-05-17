@@ -4,7 +4,7 @@ import { TextureId } from '@grim/assets.ts';
 import { drawSmallText, measureSmallTextWidth } from '@grim/fonts/small.ts';
 import { Vec2 } from '@grim/geom.ts';
 import { clamp } from '@grim/math.ts';
-import { rl } from '@grim/raylib-api.ts';
+import type { rl } from '@grim/raylib-api.ts';
 import { BONUS_BY_ID, BonusId } from '@crimson/bonuses/index.ts';
 import { bonusFindAimHoverEntry, bonusLabelForEntry } from '@crimson/bonuses/pool.ts';
 import { WEAPON_BY_ID } from '@crimson/weapons.ts';
@@ -20,7 +20,7 @@ function mapGetOrThrow<K, V>(map: ReadonlyMap<K, V>, key: unknown): V {
   return map.get(typedKey) as V;
 }
 
-export function bonusIconSrc(texture: rl.Texture, iconId: number): rl.Rectangle {
+export function bonusIconSrc(texture: rl.Texture, iconId: number): wgl.Rectangle {
   const grid = 4;
   const cellW = texture.width / grid;
   const cellH = texture.height / grid;
@@ -29,7 +29,7 @@ export function bonusIconSrc(texture: rl.Texture, iconId: number): rl.Rectangle 
   return wgl.makeRectangle(col * cellW, row * cellH, cellW, cellH);
 }
 
-export function weaponIconSrc(texture: rl.Texture, iconIndex: number): rl.Rectangle {
+export function weaponIconSrc(texture: rl.Texture, iconIndex: number): wgl.Rectangle {
   const grid = 8;
   const cellW = texture.width / grid;
   const cellH = texture.height / grid;
@@ -87,7 +87,7 @@ export function drawBonusPickups(renderCtx: WorldRenderCtx, opts: { camera: Vec2
     const bonusId = bonus.bonusId;
     let pulse: number;
     let iconScale: number;
-    let src: rl.Rectangle;
+    let src: wgl.Rectangle;
     let dst: wgl.Rectangle;
     let origin: wgl.Vector2;
     if (bonusId === BonusId.WEAPON) {

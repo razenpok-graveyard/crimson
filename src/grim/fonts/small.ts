@@ -55,7 +55,7 @@ export function loadSmallFont(assetsRoot: string): SmallFontData {
   return runtimeResourcesFor(assetsRoot).smallFont;
 }
 
-export function drawSmallText(font: SmallFontData, text: string, pos: Vec2, color: rl.Color): void {
+export function drawSmallText(font: SmallFontData, text: string, pos: Vec2, color: wgl.Color): void {
   let xPos = int(pos.x);
   let yPos = int(pos.y);
   const baseX = xPos;

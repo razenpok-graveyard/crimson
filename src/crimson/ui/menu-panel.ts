@@ -1,6 +1,6 @@
 // Port of crimson/ui/menu_panel.py
 
-import { rl } from '@grim/raylib-api.ts';
+import type { rl } from '@grim/raylib-api.ts';
 import { UI_SHADOW_OFFSET, drawUiQuadShadow } from '@crimson/ui/shadow.ts';
 import * as wgl from '@wgl';
 
@@ -18,7 +18,7 @@ export const MENU_PANEL_SRC_SLICE_Y2 = 150.0;
 export const MENU_PANEL_DST_TOP_H = 138.0;
 export const MENU_PANEL_DST_BOTTOM_H = 116.0;
 
-export function drawClassicMenuPanel(texture: rl.Texture, opts: { dst: rl.Rectangle; tint?: rl.Color; shadow?: boolean; flipX?: boolean }): void {
+export function drawClassicMenuPanel(texture: rl.Texture, opts: { dst: wgl.Rectangle; tint?: wgl.Color; shadow?: boolean; flipX?: boolean }): void {
   //
   // Draw a classic menu panel (ui_menuPanel) with the same slicing behavior as the original.
   //
@@ -50,7 +50,7 @@ export function drawClassicMenuPanel(texture: rl.Texture, opts: { dst: rl.Rectan
 
   const origin = wgl.makeVector2(0.0, 0.0);
 
-  const _src = (rect: rl.Rectangle): rl.Rectangle => {
+  const _src = (rect: wgl.Rectangle): wgl.Rectangle => {
     if (!flipX) {
       return rect;
     }

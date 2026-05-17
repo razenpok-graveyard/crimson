@@ -5,7 +5,6 @@ import { TextureId } from '@grim/assets.ts';
 import type { SmallFontData } from '@grim/fonts/small.ts';
 import { measureSmallTextWidth } from '@grim/fonts/small.ts';
 import { clamp } from '@grim/math.ts';
-import type { rl } from '@grim/raylib-api.ts';
 import { InputState } from '@grim/input.ts';
 import { SfxId } from '@grim/sfx-map.ts';
 import { PerkId, perkDisplayDescription, perkDisplayName } from '@crimson/perks/index.ts';
@@ -30,7 +29,7 @@ export class PerkMenuUiContext {
   readonly violenceDisabled: number;
   readonly preserveBugs: boolean;
   readonly resources: RuntimeResources;
-  readonly mouse: rl.Vector2;
+  readonly mouse: wgl.Vector2;
   readonly fxDetail: boolean;
   readonly playSfx: PlaySfxFn | null;
 
@@ -39,7 +38,7 @@ export class PerkMenuUiContext {
     violenceDisabled: number;
     preserveBugs: boolean;
     resources: RuntimeResources;
-    mouse: rl.Vector2;
+    mouse: wgl.Vector2;
     fxDetail?: boolean;
     playSfx?: PlaySfxFn | null;
   }) {
