@@ -1932,6 +1932,11 @@ function rewriteStructConstructorCalls(
     rewriteStatementArray(assignment.valueLines, structConstructorFields, structMapConstructorFields);
   }
   for (const structClass of classes) {
+    for (const field of structClass.fields) {
+      if (field.defaultValue !== null) {
+        field.defaultValue = rewriteStructPositionalConstructors(field.defaultValue, structConstructorFields, structMapConstructorFields);
+      }
+    }
     rewriteStatementArray(structClass.postInitStatements, structConstructorFields, structMapConstructorFields);
     for (const method of structClass.methods) {
       rewriteStatementArray(method.statements, structConstructorFields, structMapConstructorFields);

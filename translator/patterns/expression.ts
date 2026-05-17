@@ -224,6 +224,30 @@ export function translatePositionalCallExpression(
       return `${raylibConstructor[1]}.makeRectangle(${args.join(', ')})`;
     }
   }
+  const raylibTimeCall = /^(?:r[dl]|wgl)\.(?:get_time|getTime)$/.exec(callee);
+  if (raylibTimeCall !== null && args.length === 0) {
+    return '(performance.now() / 1000.0)';
+  }
+  const raylibInputNoArgCall = /^(?:r[dl]|wgl)\.(get_char_pressed|getCharPressed|get_key_pressed|getKeyPressed)$/.exec(callee);
+  if (raylibInputNoArgCall !== null && args.length === 0) {
+    return raylibInputNoArgCall[1].includes('char') || raylibInputNoArgCall[1].includes('Char')
+      ? 'InputState.getCharPressed()'
+      : 'InputState.getKeyPressed()';
+  }
+  const raylibKeyInputCall = /^(?:r[dl]|wgl)\.(is_key_pressed|isKeyPressed|is_key_pressed_repeat|isKeyPressedRepeat|is_key_down|isKeyDown)$/.exec(callee);
+  if (raylibKeyInputCall !== null && args.length === 1) {
+    const method = raylibKeyInputCall[1].includes('repeat') || raylibKeyInputCall[1].includes('Repeat')
+      ? 'wasKeyPressedRepeat'
+      : raylibKeyInputCall[1].includes('down') || raylibKeyInputCall[1].includes('Down') ? 'isKeyDown' : 'wasKeyPressed';
+    return `InputState.${method}(${args[0]})`;
+  }
+  const raylibMouseInputCall = /^(?:r[dl]|wgl)\.(is_mouse_button_pressed|isMouseButtonPressed|is_mouse_button_down|isMouseButtonDown)$/.exec(callee);
+  if (raylibMouseInputCall !== null && args.length === 1) {
+    const method = raylibMouseInputCall[1].includes('down') || raylibMouseInputCall[1].includes('Down')
+      ? 'isMouseButtonDown'
+      : 'wasMouseButtonPressed';
+    return `InputState.${method}(${args[0]})`;
+  }
   if (pythonCallee.endsWith('.extend') && args.length === 1) {
     return `${callee}(...${args[0]})`;
   }
@@ -699,6 +723,11 @@ export function translateExpression(
       : 'InputState.getKeyPressed()';
   }
 
+  const raylibTimeCall = /^(?:r[dl]|wgl)\.(?:get_time|getTime)\(\)$/.exec(trimmed);
+  if (raylibTimeCall !== null) {
+    return '(performance.now() / 1000.0)';
+  }
+
   const raylibKeyInputCall = parseRaylibMethodCall(trimmed, ['is_key_pressed', 'isKeyPressed', 'is_key_pressed_repeat', 'isKeyPressedRepeat', 'is_key_down', 'isKeyDown']);
   if (raylibKeyInputCall !== null) {
     const method = raylibKeyInputCall.method.includes('repeat') || raylibKeyInputCall.method.includes('Repeat')
@@ -786,6 +815,15 @@ export function translateExpression(
       return `super(${superArgs.join(', ')})`;
     }
     return `super.${tsMemberNameForPythonName(superMethodCall[1])}(${args.join(', ')})`;
+  }
+
+  const parenthesizedReceiverMethodCall = /^\(([\s\S]+)\)\.([A-Za-z_][A-Za-z0-9_]*)\((.*)\)$/.exec(trimmed);
+  if (parenthesizedReceiverMethodCall !== null && matchingCloseParen(trimmed, 0) === parenthesizedReceiverMethodCall[1].length + 1) {
+    const receiver = translateExpression(parenthesizedReceiverMethodCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const args = splitTopLevelComma(parenthesizedReceiverMethodCall[3])
+      .filter((arg) => arg.trim() !== '')
+      .map((arg) => translateCallArgumentExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames));
+    return `${tsPropertyAccessBase(receiver)}.${tsMemberNameForPythonName(parenthesizedReceiverMethodCall[2])}(${args.join(', ')})`;
   }
 
   const menuViewHelper = menuViewHelperName(trimmed);
@@ -2273,13 +2311,7 @@ export function translateExpression(
     const rightRaw = multiplicativeWithFloorDivision.right;
     const left = translateExpression(leftRaw, nameMap, arrayNames, validatedTypeAliases, mapNames);
     const right = translateExpression(rightRaw, nameMap, arrayNames, validatedTypeAliases, mapNames);
-    if (
-      (left !== leftRaw || right !== rightRaw)
-      && (
-        multiplicativeOperandNeedsRecursiveTranslation(leftRaw, left)
-        || multiplicativeOperandNeedsRecursiveTranslation(rightRaw, right)
-      )
-    ) {
+    if (left !== leftRaw || right !== rightRaw) {
       return `${parenthesizeTranslatedMultiplicativeOperand(leftRaw, left)} * ${parenthesizeTranslatedMultiplicativeOperand(rightRaw, right)}`;
     }
   }
@@ -2633,11 +2665,11 @@ export function translateExpression(
     return `${translateExpression(identityComparison[1], nameMap, arrayNames, validatedTypeAliases, mapNames)} ${identityComparison[2] === undefined ? '===' : '!=='} ${translateExpression(identityComparison[3], nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
   }
 
-  const binaryComparison = /^(.+?) (<=|>=|<|>|==|!=) (.+)$/.exec(trimmed);
-  if (binaryComparison !== null) {
-    const left = translateExpression(binaryComparison[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
-    const right = translateExpression(binaryComparison[3], nameMap, arrayNames, validatedTypeAliases, mapNames);
-    return translateComparisonClause(left, binaryComparison[2], right, arrayNames);
+  const topLevelComparison = splitTopLevelComparisonOperators(trimmed);
+  if (topLevelComparison !== null && topLevelComparison.operators.length === 1) {
+    const left = translateExpression(topLevelComparison.parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const right = translateExpression(topLevelComparison.parts[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return translateComparisonClause(left, topLevelComparison.operators[0], right, arrayNames);
   }
 
   const negativeIndexAttribute = /^(.+)\[-(\d+)\]\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);
@@ -2699,7 +2731,7 @@ export function translateExpression(
   if (privatePositionalConstructor !== null) {
     const args = splitTopLevelComma(privatePositionalConstructor[2]);
     if (args.every((arg) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(arg))) {
-      return `new ${tsExportNameForPythonName(`_${privatePositionalConstructor[1]}`)}(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;
+      return `new ${tsExportNameForPythonName(`_${privatePositionalConstructor[1]}`)}(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')})`;
     }
   }
 
@@ -2708,9 +2740,9 @@ export function translateExpression(
     const args = splitTopLevelComma(positionalConstructor[2]);
     if (args.every((arg) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(arg))) {
       if (positionalConstructor[1] === 'String') {
-        return `String(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;
+        return `String(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')})`;
       }
-      return `new ${tsExportNameForPythonName(positionalConstructor[1])}(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases)).join(', ')})`;
+      return `new ${tsExportNameForPythonName(positionalConstructor[1])}(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')})`;
     }
   }
 
@@ -3025,10 +3057,6 @@ function parenthesizeTranslatedMultiplicativeOperand(raw: string, translated: st
     return `(${translated})`;
   }
   return parenthesizeForMultiplicative(translated);
-}
-
-function multiplicativeOperandNeedsRecursiveTranslation(raw: string, translated: string): boolean {
-  return /\b(?:and|or)\b/.test(raw) || translated.includes(' && ') || translated.includes(' || ') || translated.includes(' ?? ');
 }
 
 function tsComparisonOperator(operator: string): string {

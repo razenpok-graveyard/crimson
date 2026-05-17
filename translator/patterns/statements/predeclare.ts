@@ -16,6 +16,7 @@ import {
   vectorNameMarker,
 } from '../expression.js';
 import { nullableTypeExpressionBase } from '../expression/types.js';
+import { splitTopLevelAdditive } from '../expression/scanners.js';
 import { tsAttributeNameForPythonName } from './names.js';
 import { lineStartsAtIndent } from './utils.js';
 
@@ -31,6 +32,7 @@ export function predeclareIfBranchAssignments(
 ): string[] {
   const innerIndent = `${indent}    `;
   const assignedTypes = new Map<string, { directTypes: Set<string>; nestedTypes: Set<string>; definiteAssignment: boolean }>();
+  const localTypes = new Map<string, string>();
   const recordAssignedType = (name: string, type: string, nested: boolean, definiteAssignment: boolean): void => {
     const entry = assignedTypes.get(name) ?? { directTypes: new Set<string>(), nestedTypes: new Set<string>(), definiteAssignment: false };
     if (nested) {
@@ -40,6 +42,10 @@ export function predeclareIfBranchAssignments(
     }
     entry.definiteAssignment = entry.definiteAssignment || definiteAssignment;
     assignedTypes.set(name, entry);
+    if (type !== 'any' && type !== 'unknown') {
+      localTypes.set(name, type);
+      localTypes.set(tsExportNameForPythonName(name), type);
+    }
   };
   let nextIndex = bodyStartIndex;
   while (nextIndex < lines.length) {
@@ -69,7 +75,7 @@ export function predeclareIfBranchAssignments(
         }
         recordAssignedType(
           assignment[1],
-          inferPredeclaredAssignmentType(lines, nextIndex, lineIndent, assignment[2], nameMap, arrayNames, declaredNames),
+          inferPredeclaredAssignmentType(lines, nextIndex, lineIndent, assignment[2], nameMap, arrayNames, declaredNames, localTypes),
           lineIndent !== innerIndent,
           !reassignedNames.has(assignment[1]),
         );
@@ -80,7 +86,7 @@ export function predeclareIfBranchAssignments(
           if (name === '_' || !reassignedNames.has(name) || declaredNames.has(name)) {
             continue;
           }
-          recordAssignedType(name, inferTupleElementAssignmentType(tupleAssignment[2], nameIndex, nameMap, arrayNames), lineIndent !== innerIndent, false);
+          recordAssignedType(name, inferTupleElementAssignmentType(tupleAssignment[2], nameIndex, nameMap, arrayNames, localTypes), lineIndent !== innerIndent, false);
         }
       }
       nextIndex += 1;
@@ -122,16 +128,17 @@ function inferTupleElementAssignmentType(
   elementIndex: number,
   nameMap: ReadonlyMap<string, string>,
   arrayNames: ReadonlySet<string> = new Set(),
+  localTypes: ReadonlyMap<string, string> = new Map(),
 ): string {
   const trimmed = assignedExpression.trim();
   const parts = splitTopLevelComma(trimmed);
   if (parts.length > 1 && parts.length > elementIndex) {
-    return inferPredeclaredAssignmentType([], 0, '', parts[elementIndex], nameMap, arrayNames);
+    return inferPredeclaredAssignmentType([], 0, '', parts[elementIndex], nameMap, arrayNames, new Set(), localTypes);
   }
   if (/\.normalized_with_length\(\)$/.test(trimmed) || /\.normalizedWithLength\(\)$/.test(trimmed)) {
     return elementIndex === 0 ? 'Vec2' : 'number';
   }
-  const inferredType = inferPredeclaredAssignmentType([], 0, '', assignedExpression, nameMap, arrayNames);
+  const inferredType = inferPredeclaredAssignmentType([], 0, '', assignedExpression, nameMap, arrayNames, new Set(), localTypes);
   const tupleType = /^\[([\s\S]+)\]$/.exec(inferredType);
   if (tupleType !== null) {
     return splitTopLevelComma(tupleType[1])[elementIndex]?.trim() ?? 'any';
@@ -190,6 +197,7 @@ export function predeclareMatchCaseAssignments(
   declaredNames: Set<string>,
   reassignedNames: Set<string>,
   nameMap: ReadonlyMap<string, string>,
+  arrayNames: ReadonlySet<string> = new Set(),
 ): string[] {
   const caseIndent = `${indent}    `;
   const bodyIndent = `${caseIndent}    `;
@@ -214,7 +222,7 @@ export function predeclareMatchCaseAssignments(
       const assignment = rest.startsWith(' ') ? null : /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(rest);
       if (assignment !== null && reassignedNames.has(assignment[1]) && !declaredNames.has(assignment[1])) {
         const types = assignedTypes.get(assignment[1]) ?? new Set<string>();
-        types.add(inferPredeclaredAssignmentType(lines, nextIndex, bodyIndent, assignment[2], nameMap, new Set(), declaredNames));
+        types.add(inferPredeclaredAssignmentType(lines, nextIndex, bodyIndent, assignment[2], nameMap, arrayNames, declaredNames));
         assignedTypes.set(assignment[1], types);
       }
       nextIndex += 1;
@@ -224,9 +232,11 @@ export function predeclareMatchCaseAssignments(
   }
 
   const declarations: string[] = [];
+  addFollowingAssignmentTypes(lines, nextIndex, indent, assignedTypes, nameMap, arrayNames, declaredNames);
   for (const [name, types] of assignedTypes) {
-    const concreteTypes = [...types].filter((type) => type !== 'any');
-    const candidateTypes = concreteTypes.length > 0 ? concreteTypes : [...types];
+    const allTypes = flattenUnionTypes(types);
+    const concreteTypes = allTypes.filter((type) => type !== 'any');
+    const candidateTypes = concreteTypes.length > 0 ? concreteTypes : allTypes;
     const uniqueTypes = [...new Set(candidateTypes)];
     const type = uniqueTypes.length === 1 ? uniqueTypes[0] : uniqueTypes.join(' | ');
     declarations.push(`let ${tsExportNameForPythonName(name)}: ${type};`);
@@ -324,7 +334,7 @@ function firstNonBlankIndex(lines: string[], startIndex: number): number {
 }
 
 function predeclaredTypeExpression(types: Iterable<string>): string {
-  const allTypes = [...types];
+  const allTypes = flattenUnionTypes(types);
   const concreteTypes = allTypes.filter((type) => (
     type !== 'any'
     && type !== 'unknown'
@@ -333,6 +343,10 @@ function predeclaredTypeExpression(types: Iterable<string>): string {
   const candidateTypes = concreteTypes.length > 0 ? concreteTypes : allTypes;
   const uniqueTypes = [...new Set(candidateTypes)];
   return uniqueTypes.length === 1 ? uniqueTypes[0] : uniqueTypes.join(' | ');
+}
+
+function flattenUnionTypes(types: Iterable<string>): string[] {
+  return [...types].flatMap((type) => type.split('|').map((part) => part.trim()).filter((part) => part !== ''));
 }
 
 function nameReferencedAfterBlock(lines: string[], startIndex: number, indent: string, name: string): boolean {
@@ -406,10 +420,15 @@ function inferPredeclaredAssignmentType(
   nameMap: ReadonlyMap<string, string>,
   arrayNames: ReadonlySet<string> = new Set(),
   declaredNames: ReadonlySet<string> = new Set(),
+  localTypes: ReadonlyMap<string, string> = new Map(),
 ): string {
   const localReference = /^[A-Za-z_][A-Za-z0-9_]*$/.exec(assignedExpression.trim());
   if (localReference !== null) {
     const name = localReference[0];
+    const localType = localTypes.get(name) ?? localTypes.get(tsExportNameForPythonName(name));
+    if (localType !== undefined) {
+      return localType;
+    }
     if (arrayNames.has(numberNameMarker(name))) {
       return 'number';
     }
@@ -426,6 +445,15 @@ function inferPredeclaredAssignmentType(
       return `typeof ${nameMap.get(name) ?? tsExportNameForPythonName(name)}`;
     }
   }
+  const additive = splitTopLevelAdditive(assignedExpression.trim());
+  if (
+    additive !== null
+    && additive.parts.length === 2
+    && (additive.operators[0] === '+' || additive.operators[0] === '-')
+    && additive.parts.some((part) => predeclaredExpressionLooksVector(part, nameMap, arrayNames))
+  ) {
+    return 'Vec2';
+  }
   const mapSubscript = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[.+\]$/.exec(assignedExpression.trim());
   if (mapSubscript !== null) {
     const mapName = nameMap.get(mapSubscript[1]) ?? tsExportNameForPythonName(mapSubscript[1]);
@@ -441,6 +469,10 @@ function inferPredeclaredAssignmentType(
   if (callExpression !== null && callIsWholeAssignment) {
     if (/^[A-Z][A-Za-z0-9_]*(?:Id|Type|Flags)$/.test(callExpression[1])) {
       return tsExportNameForPythonName(callExpression[1]);
+    }
+    const methodReturnType = predeclaredMethodCallReturnType(callExpression[1], nameMap, localTypes);
+    if (methodReturnType !== null) {
+      return methodReturnType;
     }
     const translatedCallee = nameMap.get(callExpression[1]) ?? tsExportNameForPythonName(callExpression[1]);
     const returnType = nameMap.get(functionReturnTypeMarker(translatedCallee))
@@ -461,7 +493,11 @@ function inferPredeclaredAssignmentType(
   if (dottedField !== null) {
     const receiver = nameMap.get(dottedField[1]) ?? tsExportNameForPythonName(dottedField[1]);
     const receiverType = nullableTypeExpressionBase(
-      nameMap.get(receiverTypeNameMarker(dottedField[1])) ?? nameMap.get(receiverTypeNameMarker(receiver)) ?? null,
+      localTypes.get(dottedField[1])
+        ?? localTypes.get(receiver)
+        ?? nameMap.get(receiverTypeNameMarker(dottedField[1]))
+        ?? nameMap.get(receiverTypeNameMarker(receiver))
+        ?? null,
     );
     const fieldType = receiverType === undefined ? undefined : nameMap.get(classFieldTypeMarker(receiverType, tsAttributeNameForPythonName(dottedField[2])));
     if (fieldType !== undefined) {
@@ -482,7 +518,7 @@ function inferPredeclaredAssignmentType(
     if (lineStartsAtIndent(line, indent) && trimmed === ')') {
       return expressionLines.length === 0
         ? 'any'
-        : inferPredeclaredAssignmentType(lines, index, indent, expressionLines.join(' '), nameMap, arrayNames, declaredNames);
+        : inferPredeclaredAssignmentType(lines, index, indent, expressionLines.join(' '), nameMap, arrayNames, declaredNames, localTypes);
     }
     if (trimmed !== '') {
       expressionLines.push(trimmed);
@@ -490,6 +526,120 @@ function inferPredeclaredAssignmentType(
     nextIndex += 1;
   }
   return 'any';
+}
+
+function addFollowingAssignmentTypes(
+  lines: string[],
+  startIndex: number,
+  indent: string,
+  assignedTypes: Map<string, Set<string>>,
+  nameMap: ReadonlyMap<string, string>,
+  arrayNames: ReadonlySet<string>,
+  declaredNames: ReadonlySet<string>,
+): void {
+  const names = new Set(assignedTypes.keys());
+  if (names.size === 0) {
+    return;
+  }
+  let index = startIndex;
+  while (index < lines.length) {
+    const line = lines[index] ?? '';
+    const trimmed = line.trim();
+    if (trimmed !== '' && !line.startsWith(indent)) {
+      break;
+    }
+    if (trimmed === '') {
+      index += 1;
+      continue;
+    }
+    const lineIndent = /^(\s*)/.exec(line)?.[1] ?? '';
+    const rest = line.slice(lineIndent.length);
+    if (/^(?:class|def) [A-Za-z_][A-Za-z0-9_]*/.test(rest)) {
+      index = indentedBlockEndIndex(lines, index + 1, `${lineIndent}    `);
+      continue;
+    }
+    const assignment = /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(rest);
+    if (assignment !== null && names.has(assignment[1])) {
+      const types = assignedTypes.get(assignment[1]);
+      types?.add(inferPredeclaredAssignmentType(lines, index, lineIndent, assignment[2], nameMap, arrayNames, declaredNames));
+    }
+    index += 1;
+  }
+}
+
+function predeclaredExpressionLooksVector(
+  expression: string,
+  nameMap: ReadonlyMap<string, string>,
+  arrayNames: ReadonlySet<string>,
+): boolean {
+  const trimmed = expression.trim();
+  if (/^(?:Vec2|new Vec2)\(/.test(trimmed)) {
+    return true;
+  }
+  const localReference = /^[A-Za-z_][A-Za-z0-9_]*$/.exec(trimmed);
+  if (localReference !== null && arrayNames.has(vectorNameMarker(localReference[0]))) {
+    return true;
+  }
+  const dottedField = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);
+  if (dottedField === null) {
+    return false;
+  }
+  const receiver = nameMap.get(dottedField[1]) ?? tsExportNameForPythonName(dottedField[1]);
+  const receiverType = nullableTypeExpressionBase(
+    nameMap.get(receiverTypeNameMarker(dottedField[1])) ?? nameMap.get(receiverTypeNameMarker(receiver)) ?? null,
+  );
+  return receiverType !== undefined && nameMap.get(classFieldTypeMarker(receiverType, tsAttributeNameForPythonName(dottedField[2]))) === 'Vec2';
+}
+
+function predeclaredMethodCallReturnType(
+  callee: string,
+  nameMap: ReadonlyMap<string, string>,
+  localTypes: ReadonlyMap<string, string>,
+): string | null {
+  const dotted = /^(.+)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(callee);
+  if (dotted === null) {
+    return null;
+  }
+  const receiver = nameMap.get(dotted[1]) ?? tsExportNameForPythonName(dotted[1]);
+  const receiverType = nullableTypeExpressionBase(
+    localTypes.get(dotted[1])
+      ?? localTypes.get(receiver)
+      ?? nameMap.get(receiverTypeNameMarker(dotted[1]))
+      ?? nameMap.get(receiverTypeNameMarker(receiver))
+      ?? null,
+  );
+  if (receiverType === undefined) {
+    return null;
+  }
+  const methodName = tsAttributeNameForPythonName(dotted[2]);
+  const declaredReturnType = nameMap.get(functionReturnTypeMarker(`${receiverType}.${methodName}`));
+  if (declaredReturnType !== undefined) {
+    return declaredReturnType;
+  }
+  if (receiverType === 'Vec2' || receiverType === 'wgl.Vector2') {
+    return vectorMethodReturnType(methodName);
+  }
+  if (receiverType === 'Rect' && methodName === 'offset') {
+    return 'Rect';
+  }
+  return null;
+}
+
+function vectorMethodReturnType(methodName: string): string | null {
+  return new Set([
+    'add',
+    'sub',
+    'offset',
+    'mul',
+    'div',
+    'rotated',
+    'normalized',
+    'perpLeft',
+    'perpRight',
+    'mulComponents',
+    'divComponents',
+    'directionTo',
+  ]).has(methodName) ? 'Vec2' : null;
 }
 
 function fallbackCallReturnType(pythonCallee: string, translatedCallee: string): string | null {

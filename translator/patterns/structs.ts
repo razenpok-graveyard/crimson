@@ -503,7 +503,7 @@ export function parseStructClass(
 
     if (trimmedField === '@property') {
       pendingFieldComments.length = 0;
-      const propertyMethod = parseStructMethod(lines, nextIndex + 1, false, arrayFieldNames, mapFieldNames, classNameMap, null, relativePath, imports);
+      const propertyMethod = parseStructMethod(lines, nextIndex + 1, false, arrayFieldNames, mapFieldNames, classNameMap, null, className, relativePath, imports);
       if (propertyMethod === null || propertyMethod.method.parameters.length > 0 || propertyMethod.method.optsParams.length > 0) {
         return null;
       }
@@ -518,7 +518,7 @@ export function parseStructClass(
     const propertySetter = /^@([A-Za-z_][A-Za-z0-9_]*)\.setter$/.exec(trimmedField);
     if (propertySetter !== null) {
       pendingFieldComments.length = 0;
-      const setterMethod = parseStructMethod(lines, nextIndex + 1, false, arrayFieldNames, mapFieldNames, classNameMap, null, relativePath, imports);
+      const setterMethod = parseStructMethod(lines, nextIndex + 1, false, arrayFieldNames, mapFieldNames, classNameMap, null, className, relativePath, imports);
       if (
         setterMethod === null
         || setterMethod.method.name !== tsAttributeNameForPythonName(propertySetter[1])
@@ -537,7 +537,7 @@ export function parseStructClass(
 
     if (trimmedField === '@staticmethod') {
       pendingFieldComments.length = 0;
-      const staticMethod = parseStructMethod(lines, nextIndex + 1, true, arrayFieldNames, mapFieldNames, classNameMap, null, relativePath, imports);
+      const staticMethod = parseStructMethod(lines, nextIndex + 1, true, arrayFieldNames, mapFieldNames, classNameMap, null, className, relativePath, imports);
       if (staticMethod === null) {
         return null;
       }
@@ -550,7 +550,7 @@ export function parseStructClass(
 
     if (trimmedField === '@classmethod') {
       pendingFieldComments.length = 0;
-      const classMethod = parseStructMethod(lines, nextIndex + 1, true, arrayFieldNames, mapFieldNames, classNameMap, className, relativePath, imports);
+      const classMethod = parseStructMethod(lines, nextIndex + 1, true, arrayFieldNames, mapFieldNames, classNameMap, className, className, relativePath, imports);
       if (classMethod === null) {
         return null;
       }
@@ -561,7 +561,7 @@ export function parseStructClass(
       continue;
     }
 
-    const method = parseStructMethod(lines, nextIndex, false, arrayFieldNames, mapFieldNames, classNameMap, null, relativePath, imports);
+    const method = parseStructMethod(lines, nextIndex, false, arrayFieldNames, mapFieldNames, classNameMap, null, className, relativePath, imports);
     if (method !== null) {
       pendingFieldComments.length = 0;
       positionalConstructor ||= pythonOperatorMethodUsesPositionalConstructor(method.pythonName);
@@ -928,6 +928,7 @@ function parseStructMethod(
   initialMapNames: ReadonlySet<string> = new Set(),
   moduleNameMap: ReadonlyMap<string, string> = new Map(),
   classBindingName: string | null = null,
+  ownerClassName: string | null = null,
   relativePath: string | null = null,
   imports: ImportDefinition[] | null = null,
 ): { method: SimpleModuleFunction; nextIndex: number; pythonName: string } | null {
@@ -1018,13 +1019,21 @@ function parseStructMethod(
   for (const [mapName, valueType] of mapValueTypes) {
     nameMap.set(mapValueTypeMarker(mapName), valueType);
   }
+  const receiverClassName = ownerClassName ?? classBindingName;
   if (classBindingName !== null) {
     if (classReceiver === null) {
       return null;
     }
     nameMap.set(classReceiver, classBindingName);
+    if (receiverClassName !== null) {
+      nameMap.set(receiverTypeNameMarker(classReceiver), receiverClassName);
+    }
   } else if (!staticMethod) {
     nameMap.set('self', 'this');
+    if (receiverClassName !== null) {
+      nameMap.set(receiverTypeNameMarker('self'), receiverClassName);
+      nameMap.set(receiverTypeNameMarker('this'), receiverClassName);
+    }
   }
   for (const parameter of [...parameters, ...optsParams]) {
     const parameterTypeName = simpleClassTypeName(parameter.typeExpression);

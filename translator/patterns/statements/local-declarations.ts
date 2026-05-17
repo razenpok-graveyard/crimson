@@ -554,8 +554,10 @@ function addReassignedLocalType(typesByName: Map<string, string[]>, name: string
     return;
   }
   const types = typesByName.get(name) ?? [];
-  if (!types.includes(type)) {
-    types.push(type);
+  for (const part of type.split('|').map((item) => item.trim()).filter((item) => item !== '')) {
+    if (!types.includes(part)) {
+      types.push(part);
+    }
   }
   typesByName.set(name, types);
 }
@@ -635,8 +637,8 @@ function inferredReassignedLocalType(
   }
   const call = /^([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\(/.exec(translated);
   if (call !== null) {
-    const returnType = nameMap.get(functionReturnTypeMarker(call[1]));
-    if (returnType === 'number' || returnType === 'string' || returnType === 'boolean') {
+    const returnType = knownCallReturnType(call[1], nameMap);
+    if (returnType !== null && returnType !== 'void') {
       return returnType;
     }
   }
@@ -992,19 +994,15 @@ export function recordLocalAssignmentMarkers(
   if (assignedFieldType !== null) {
     nameMap.set(receiverTypeNameMarker(pythonName), assignedFieldType);
     nameMap.set(receiverTypeNameMarker(tsName), assignedFieldType);
-    if (assignedFieldType === 'number') {
-      arrayNames.add(numberNameMarker(pythonName));
-      arrayNames.add(numberNameMarker(tsName));
-    } else if (assignedFieldType === 'boolean') {
-      arrayNames.add(booleanNameMarker(pythonName));
-      arrayNames.add(booleanNameMarker(tsName));
-    } else if (assignedFieldType === 'string') {
-      arrayNames.add(stringNameMarker(pythonName));
-      arrayNames.add(stringNameMarker(tsName));
-    } else if (assignedFieldType === 'Vec2') {
-      arrayNames.add(vectorNameMarker(pythonName));
-      arrayNames.add(vectorNameMarker(tsName));
-    }
+    recordKnownTypeMarkers(pythonName, tsName, assignedFieldType, arrayNames);
+  }
+  const assignedCall = /^([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\(/.exec(assignedRight.trim());
+  const assignedCallReturnType = assignedCall === null ? null : knownCallReturnType(assignedCall[1], nameMap);
+  if (assignedCallReturnType !== null && assignedCallReturnType !== 'void') {
+    const receiverType = nullableTypeExpressionBase(assignedCallReturnType) ?? assignedCallReturnType;
+    nameMap.set(receiverTypeNameMarker(pythonName), receiverType);
+    nameMap.set(receiverTypeNameMarker(tsName), receiverType);
+    recordKnownTypeMarkers(pythonName, tsName, receiverType, arrayNames);
   }
   if (/^[A-Za-z_$][A-Za-z0-9_.$]*(?:creatures|pickups|players)$/.test(assignedRight)) {
     arrayNames.add(pythonName);
@@ -1145,6 +1143,48 @@ export function recordLocalAssignmentMarkers(
     arrayNames.add(dateNameMarker(pythonName));
     arrayNames.add(dateNameMarker(tsName));
   }
+}
+
+function recordKnownTypeMarkers(
+  pythonName: string,
+  tsName: string,
+  typeExpression: string,
+  arrayNames: Set<string>,
+): void {
+  if (typeExpression === 'number') {
+    arrayNames.add(numberNameMarker(pythonName));
+    arrayNames.add(numberNameMarker(tsName));
+  } else if (typeExpression === 'boolean') {
+    arrayNames.add(booleanNameMarker(pythonName));
+    arrayNames.add(booleanNameMarker(tsName));
+  } else if (typeExpression === 'string') {
+    arrayNames.add(stringNameMarker(pythonName));
+    arrayNames.add(stringNameMarker(tsName));
+  } else if (typeExpression === 'Vec2' || typeExpression === 'wgl.Vector2') {
+    arrayNames.add(vectorNameMarker(pythonName));
+    arrayNames.add(vectorNameMarker(tsName));
+  } else if (typeExpression === 'wgl.Rectangle' || typeExpression === 'rl.Rectangle') {
+    arrayNames.add(rectangleNameMarker(pythonName));
+    arrayNames.add(rectangleNameMarker(tsName));
+  }
+}
+
+function knownCallReturnType(
+  callee: string,
+  nameMap: ReadonlyMap<string, string>,
+): string | null {
+  const direct = nameMap.get(functionReturnTypeMarker(callee));
+  if (direct !== undefined) {
+    return direct;
+  }
+  const dotted = /^(.+)\.([A-Za-z_$][A-Za-z0-9_$]*)$/.exec(callee);
+  if (dotted === null) {
+    return null;
+  }
+  const receiverType = nullableTypeExpressionBase(nameMap.get(receiverTypeNameMarker(dotted[1])) ?? null);
+  return receiverType === undefined
+    ? null
+    : nameMap.get(functionReturnTypeMarker(`${receiverType}.${dotted[2]}`)) ?? null;
 }
 
 function assignedRightLooksNumericArray(assignedRight: string): boolean {

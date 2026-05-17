@@ -829,7 +829,7 @@ export function translateStraightLineStatement(
 
     const caseIndent = `${indent}    `;
     const bodyIndent = `${caseIndent}    `;
-    const branchDeclarations = predeclareMatchCaseAssignments(lines, index, indent, declaredNames, reassignedNames, nameMap);
+    const branchDeclarations = predeclareMatchCaseAssignments(lines, index, indent, declaredNames, reassignedNames, nameMap, arrayNames);
     const statements = [
       ...branchDeclarations,
       `switch (${translateExpression(matchStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`,
@@ -1543,6 +1543,9 @@ export function translateStraightLineStatement(
 
   const returnStatement = /^return (.+)$/.exec(statement);
   if (returnStatement !== null) {
+    if (returnStatement[1].trim() === 'None' && nameMap.get(functionReturnTypeMarker('__current__')) === 'void') {
+      return { statements: ['return;'], nextIndex: index + 1 };
+    }
     return { statements: [`return ${translateReturnExpression(returnStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)};`], nextIndex: index + 1 };
   }
 
