@@ -1,4 +1,11 @@
 export function splitInlineComment(line: string): { code: string; comment: string | null } {
+  const trimmedStart = line.trimStart();
+  if (trimmedStart.startsWith('#')) {
+    return {
+      code: '',
+      comment: trimmedStart.slice(1).trim(),
+    };
+  }
   let quote: string | null = null;
   for (let index = 0; index < line.length; index += 1) {
     const char = line[index];

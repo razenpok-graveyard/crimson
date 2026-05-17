@@ -1634,6 +1634,15 @@ export function translateExpression(
     return '[][Symbol.iterator]()';
   }
 
+  const iterCall = parseCallPrefix(trimmed, 'iter');
+  if (iterCall !== null && iterCall.rest === '') {
+    const args = splitTopLevelComma(iterCall.argsText);
+    if (args.length === 1) {
+      const iterable = translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      return `${tsPropertyAccessBase(iterable)}[Symbol.iterator]()`;
+    }
+  }
+
   for (const sequenceConstructor of ['list', 'tuple']) {
     const sequenceCall = parseCallPrefix(trimmed, sequenceConstructor);
     if (sequenceCall !== null && sequenceCall.rest === '') {
@@ -2756,7 +2765,7 @@ export function translateExpression(
   if (topLevelComparison !== null && topLevelComparison.operators.length === 1) {
     const left = translateExpression(topLevelComparison.parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
     const right = translateExpression(topLevelComparison.parts[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
-    return translateComparisonClause(left, topLevelComparison.operators[0], right, arrayNames);
+    return translateComparisonClause(left, topLevelComparison.operators[0], right, arrayNames, nameMap);
   }
 
   const negativeIndexAttribute = /^(.+)\[-(\d+)\]\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);
@@ -3075,14 +3084,20 @@ function translateChainedComparison(
 
   const parts = comparison.parts.map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
   return comparison.operators
-    .map((operator, index) => translateComparisonClause(parts[index], operator, parts[index + 1], arrayNames))
+    .map((operator, index) => translateComparisonClause(parts[index], operator, parts[index + 1], arrayNames, nameMap))
     .join(' && ');
 }
 
-function translateComparisonClause(left: string, operator: string, right: string, arrayNames: ReadonlySet<string>): string {
+function translateComparisonClause(
+  left: string,
+  operator: string,
+  right: string,
+  arrayNames: ReadonlySet<string>,
+  nameMap: Map<string, string>,
+): string {
   const leftOperand = parenthesizeComparisonOperand(left);
   const rightOperand = parenthesizeComparisonOperand(right);
-  if ((operator === '==' || operator === '!=') && comparisonNeedsPythonEquality(left, right, arrayNames)) {
+  if ((operator === '==' || operator === '!=') && comparisonNeedsPythonEquality(left, right, arrayNames, nameMap)) {
     const equality = `pythonEquals(${leftOperand}, ${rightOperand})`;
     return operator === '==' ? equality : `!${equality}`;
   }
@@ -3157,7 +3172,12 @@ function tsComparisonOperator(operator: string): string {
   return operator;
 }
 
-function comparisonNeedsPythonEquality(left: string, right: string, arrayNames: ReadonlySet<string>): boolean {
+function comparisonNeedsPythonEquality(
+  left: string,
+  right: string,
+  arrayNames: ReadonlySet<string>,
+  nameMap: Map<string, string>,
+): boolean {
   const leftSubscript = /^([A-Za-z_$][A-Za-z0-9_.$]*)\[.+\]$/.exec(left);
   const rightSubscript = /^([A-Za-z_$][A-Za-z0-9_.$]*)\[.+\]$/.exec(right);
   return /\bnew [A-Z][A-Za-z0-9_$]*\(/.test(left)
@@ -3171,7 +3191,26 @@ function comparisonNeedsPythonEquality(left: string, right: string, arrayNames: 
     || arrayNames.has(objectNameMarker(left))
     || arrayNames.has(objectNameMarker(right))
     || arrayNames.has(vectorNameMarker(left))
-    || arrayNames.has(vectorNameMarker(right));
+    || arrayNames.has(vectorNameMarker(right))
+    || typeExpressionNeedsPythonEquality(knownClassFieldType(left, nameMap))
+    || typeExpressionNeedsPythonEquality(knownClassFieldType(right, nameMap));
+}
+
+function typeExpressionNeedsPythonEquality(typeExpression: string | null): boolean {
+  const baseType = nullableTypeExpressionBase(typeExpression) ?? typeExpression?.trim();
+  if (baseType === undefined || baseType === '') {
+    return false;
+  }
+  if (baseType === 'string' || baseType === 'number' || baseType === 'boolean' || baseType === 'bigint' || baseType === 'symbol') {
+    return false;
+  }
+  if (typeExpressionLooksTsEnum(baseType)) {
+    return false;
+  }
+  if (baseType === 'Date' || baseType === 'RegExp' || baseType === 'Error') {
+    return false;
+  }
+  return /^[A-Z][A-Za-z0-9_$]*(?:<.*>)?$/.test(baseType);
 }
 
 export function translateMapKeyExpression(
@@ -4022,7 +4061,12 @@ function translateNextCall(
   }
   const generator = parseSimpleGeneratorExpression(args[0]);
   if (generator === null) {
-    return null;
+    const iterator = translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (args.length === 1) {
+      return `${tsPropertyAccessBase(iterator)}.next().value!`;
+    }
+    const fallback = translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return `(() => { const _next = ${tsPropertyAccessBase(iterator)}.next(); return _next.done ? ${fallback} : _next.value; })()`;
   }
   const itemName = tsExportNameForPythonName(generator.itemName);
   const itemNameMap = new Map(nameMap);
