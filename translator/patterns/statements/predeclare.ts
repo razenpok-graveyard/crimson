@@ -86,7 +86,7 @@ export function predeclareIfBranchAssignments(
           if (name === '_' || !reassignedNames.has(name) || declaredNames.has(name)) {
             continue;
           }
-          recordAssignedType(name, inferTupleElementAssignmentType(tupleAssignment[2], nameIndex, nameMap, arrayNames, localTypes), lineIndent !== innerIndent, false);
+          recordAssignedType(name, inferTupleElementAssignmentType(lines, nextIndex, lineIndent, tupleAssignment[2], nameIndex, nameMap, arrayNames, localTypes), lineIndent !== innerIndent, false);
         }
       }
       nextIndex += 1;
@@ -124,6 +124,9 @@ export function predeclareIfBranchAssignments(
 }
 
 function inferTupleElementAssignmentType(
+  lines: string[],
+  index: number,
+  indent: string,
   assignedExpression: string,
   elementIndex: number,
   nameMap: ReadonlyMap<string, string>,
@@ -133,12 +136,12 @@ function inferTupleElementAssignmentType(
   const trimmed = assignedExpression.trim();
   const parts = splitTopLevelComma(trimmed);
   if (parts.length > 1 && parts.length > elementIndex) {
-    return inferPredeclaredAssignmentType([], 0, '', parts[elementIndex], nameMap, arrayNames, new Set(), localTypes);
+    return inferPredeclaredAssignmentType(lines, index, indent, parts[elementIndex], nameMap, arrayNames, new Set(), localTypes);
   }
   if (/\.normalized_with_length\(\)$/.test(trimmed) || /\.normalizedWithLength\(\)$/.test(trimmed)) {
     return elementIndex === 0 ? 'Vec2' : 'number';
   }
-  const inferredType = inferPredeclaredAssignmentType([], 0, '', assignedExpression, nameMap, arrayNames, new Set(), localTypes);
+  const inferredType = inferPredeclaredAssignmentType(lines, index, indent, assignedExpression, nameMap, arrayNames, new Set(), localTypes);
   const tupleType = /^\[([\s\S]+)\]$/.exec(inferredType);
   if (tupleType !== null) {
     return splitTopLevelComma(tupleType[1])[elementIndex]?.trim() ?? 'any';

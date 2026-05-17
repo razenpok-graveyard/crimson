@@ -5194,7 +5194,7 @@ function translateStraightLineAssignment(
         bindings.push(tsName);
         if (!declaredNames.has(localTarget[1])) {
           if (hasExistingLocalTarget) {
-            preDeclarations.push(`let ${tsName}: any;`);
+            preDeclarations.push(`let ${tsName}: ${tupleAssignmentElementType(assignedRight, targetIndex, nameMap)};`);
           }
           declaredNames.add(localTarget[1]);
         }
@@ -5203,7 +5203,7 @@ function translateStraightLineAssignment(
       const binding = tupleAssignmentBindingName(target, targetIndex);
       bindings.push(binding);
       if (hasExistingLocalTarget) {
-        preDeclarations.push(`let ${binding}: any;`);
+        preDeclarations.push(`let ${binding}: ${tupleAssignmentElementType(assignedRight, targetIndex, nameMap)};`);
       }
       postAssignments.push(`${translateExpression(target, nameMap, arrayNames, validatedTypeAliases, mapNames)} = ${binding};`);
     }
@@ -5245,8 +5245,9 @@ function translateStraightLineAssignment(
     const preDeclarations = alreadyDeclared || !someAlreadyDeclared
       ? []
       : names
-        .filter((name) => name !== '_' && !declaredNames.has(name))
-        .map((name) => `let ${tsExportNameForPythonName(name)}: any;`);
+        .flatMap((name, targetIndex) => name !== '_' && !declaredNames.has(name)
+          ? [`let ${tsExportNameForPythonName(name)}: ${tupleAssignmentElementType(assignedRight, targetIndex, nameMap)};`]
+          : []);
     for (const name of names) {
       if (name !== '_') {
         declaredNames.add(name);
@@ -5313,6 +5314,23 @@ function tupleAssignmentBindingName(target: string, targetIndex: number): string
     .map((word) => tsExportNameForPythonName(word))
     .map((word, wordIndex) => (wordIndex === 0 ? word : `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`))
     .join('')}`;
+}
+
+function tupleAssignmentElementType(
+  assignedRight: string,
+  targetIndex: number,
+  nameMap: ReadonlyMap<string, string>,
+): string {
+  const call = /^([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\(/.exec(assignedRight.trim());
+  if (call === null) {
+    return 'any';
+  }
+  const returnType = nameMap.get(functionReturnTypeMarker(call[1]));
+  const tupleType = returnType === undefined ? null : /^\[([\s\S]+)\]$/.exec(returnType);
+  if (tupleType !== null) {
+    return splitTopLevelComma(tupleType[1])[targetIndex]?.trim() ?? 'any';
+  }
+  return `ReturnType<typeof ${call[1]}>[${targetIndex}]`;
 }
 
 function mapAssignmentValueExpression(assignedRight: string): string {

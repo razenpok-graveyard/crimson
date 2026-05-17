@@ -287,7 +287,7 @@ export function translatePositionalCallExpression(
   if (raylibWindowCall !== null) {
     return `(${raylibWindowCall[1]} as any).${raylibWindowCall[2]}(${reorderedArgs.join(', ')})`;
   }
-  const callPrefix = constructUppercase && /^[A-Z][A-Za-z0-9_]*$/.test(callee) ? `new ${callee}` : callee;
+  const callPrefix = constructUppercase && calleeLooksConstructable(callee) ? `new ${callee}` : callee;
   return `${callPrefix}(${reorderedArgs.join(', ')})`;
 }
 
@@ -4355,7 +4355,7 @@ function translateMixedKeywordCall(
   }
   const callee = translateStaticMethodCalleeIfKnown(call[1], nameMap)
     ?? translateExpression(call[1], nameMap, arrayNames, validatedTypeAliases);
-  const callPrefix = /^[A-Z][A-Za-z0-9_]*$/.test(callee) ? `new ${callee}` : callee;
+  const callPrefix = calleeLooksConstructable(callee) ? `new ${callee}` : callee;
   const optsExpression = `{ ${keywordParts.map((part) => `${part.tsName}: ${part.expression}`).join(', ')} }`;
   if (positionalParts.length === 0) {
     return `${callPrefix}(${optsExpression})`;
@@ -4365,6 +4365,11 @@ function translateMixedKeywordCall(
     ...positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)),
     optsExpression,
   ].join(', ')})`;
+}
+
+function calleeLooksConstructable(callee: string): boolean {
+  const name = callee.split('.').at(-1)?.replace(/^_+/, '') ?? callee;
+  return /^[A-Z][A-Za-z0-9_]*$/.test(name);
 }
 
 function singleCallArgumentText(argsText: string): string {

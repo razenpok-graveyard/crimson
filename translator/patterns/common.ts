@@ -1,6 +1,7 @@
 import type { ImportDefinition, TypeAlias } from '../model.js';
 import { tsExportNameForPythonName } from '../naming.js';
 import { tsImportPathForPythonImport } from '../paths.js';
+import { splitTopLevelComparisonOperators } from './expression/scanners.js';
 
 export function isTypeAliasExpression(pythonExpression: string): boolean {
   const trimmed = pythonExpression.trim();
@@ -565,11 +566,14 @@ export function inferPythonExpressionType(pythonExpression: string): string {
   }
   const conditional = splitTopLevelConditionalExpression(trimmed);
   if (conditional !== null) {
-    const trueType = inferPythonExpressionType(conditional.trueExpression);
-    const falseType = inferPythonExpressionType(conditional.falseExpression);
-    if (trueType === falseType) {
-      return trueType;
-    }
+    return inferConditionalBranchType(conditional.trueExpression, conditional.falseExpression);
+  }
+  const ternary = splitTopLevelTernaryExpression(trimmed);
+  if (ternary !== null) {
+    return inferConditionalBranchType(ternary.trueExpression, ternary.falseExpression);
+  }
+  if ((splitTopLevelComparisonOperators(trimmed)?.operators.length ?? 0) > 0) {
+    return 'boolean';
   }
   const listComprehension = /^\[(.+?) for [A-Za-z_][A-Za-z0-9_]* in .+\]$/.exec(trimmed);
   if (listComprehension !== null) {
@@ -636,6 +640,18 @@ export function inferPythonExpressionType(pythonExpression: string): string {
   return 'any';
 }
 
+function inferConditionalBranchType(trueExpression: string, falseExpression: string): string {
+  const trueType = inferPythonExpressionType(trueExpression);
+  const falseType = inferPythonExpressionType(falseExpression);
+  if (trueType === falseType) {
+    return trueType;
+  }
+  if (trueType === 'any' || falseType === 'any') {
+    return 'any';
+  }
+  return `${trueType} | ${falseType}`;
+}
+
 function splitTopLevelConditionalExpression(value: string): { trueExpression: string; falseExpression: string } | null {
   let depth = 0;
   let quote: string | null = null;
@@ -669,6 +685,44 @@ function splitTopLevelConditionalExpression(value: string): { trueExpression: st
       return {
         trueExpression: value.slice(0, ifIndex).trim(),
         falseExpression: value.slice(index + 6).trim(),
+      };
+    }
+  }
+  return null;
+}
+
+function splitTopLevelTernaryExpression(value: string): { trueExpression: string; falseExpression: string } | null {
+  let depth = 0;
+  let quote: string | null = null;
+  let questionIndex: number | null = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      if (char === quote && !characterIsEscaped(value, index)) {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'" || char === '`') {
+      quote = char;
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char === ')' || char === ']' || char === '}') {
+      depth -= 1;
+      continue;
+    }
+    if (char === '?' && depth === 0 && questionIndex === null) {
+      questionIndex = index;
+      continue;
+    }
+    if (char === ':' && depth === 0 && questionIndex !== null) {
+      return {
+        trueExpression: value.slice(questionIndex + 1, index).trim(),
+        falseExpression: value.slice(index + 1).trim(),
       };
     }
   }

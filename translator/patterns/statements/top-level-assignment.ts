@@ -396,7 +396,7 @@ export function parseTopLevelAssignment(
   }
 
   const callee = tsExportNameForPythonName(keywordCall[1]);
-  const callPrefix = /^[A-Z][A-Za-z0-9_]*$/.test(callee) ? `new ${callee}` : callee;
+  const callPrefix = calleeLooksConstructable(callee) ? `new ${callee}` : callee;
   const valueLines = [`${callPrefix}({`];
   let nextIndex = index + 1;
   while (nextIndex < lines.length) {
@@ -474,7 +474,7 @@ function parseMultilineKeywordCallValueLines(
   nameMap: Map<string, string>,
 ): { valueLines: string[]; nextIndex: number } | null {
   const callee = translateExpression(pythonCallee, nameMap);
-  const callPrefix = /^[A-Z][A-Za-z0-9_]*$/.test(callee) ? `new ${callee}` : callee;
+  const callPrefix = calleeLooksConstructable(callee) ? `new ${callee}` : callee;
   const valueLines = [`${callPrefix}({`];
   let nextIndex = startIndex;
   while (nextIndex < lines.length) {
@@ -503,6 +503,11 @@ function parseMultilineKeywordCallValueLines(
     nextIndex += 1;
   }
   return null;
+}
+
+function calleeLooksConstructable(callee: string): boolean {
+  const name = callee.split('.').at(-1)?.replace(/^_+/, '') ?? callee;
+  return /^[A-Z][A-Za-z0-9_]*$/.test(name);
 }
 
 function mapKeyTypeHasStableIdentity(pythonType: string): boolean {
