@@ -58,15 +58,15 @@ function pyRound(value: number, ndigits = 0): number {
 
 export class BootView {
   state: GameState;
-  private _bootTime: number;
-  private _fadeOutReady: boolean;
-  private _fadeOutDone: boolean;
-  private _logoDelayTicks: number;
-  private _logoSkip: boolean;
-  private _logoActive: boolean;
-  private _introStarted: boolean;
-  private _themeStarted: boolean;
-  private _loadingHoldRemaining: number;
+  protected _bootTime: number;
+  protected _fadeOutReady: boolean;
+  protected _fadeOutDone: boolean;
+  protected _logoDelayTicks: number;
+  protected _logoSkip: boolean;
+  protected _logoActive: boolean;
+  protected _introStarted: boolean;
+  protected _themeStarted: boolean;
+  protected _loadingHoldRemaining: number;
 
   constructor(state: GameState) {
     this.state = state;
@@ -183,7 +183,7 @@ export class BootView {
     this.state.resources = null;
   }
 
-  _startTheme(): void {
+  protected _startTheme(): void {
     if (this._themeStarted) {
       return;
     }
@@ -199,7 +199,7 @@ export class BootView {
     return this._themeStarted;
   }
 
-  _skipTriggered(): boolean {
+  protected _skipTriggered(): boolean {
     if (InputState.getKeyPressed() !== 0) {
       return true;
     }
@@ -212,7 +212,7 @@ export class BootView {
     return false;
   }
 
-  _logoState(t: number): [TextureId, number] | null {
+  protected _logoState(t: number): [TextureId, number] | null {
     if (LOGO_10_IN_START <= t && t < LOGO_10_OUT_END) {
       let alpha: number;
       if (t < LOGO_10_IN_END) {
@@ -238,7 +238,7 @@ export class BootView {
     return null;
   }
 
-  _drawCompanyLogoSequence(): void {
+  protected _drawCompanyLogoSequence(): void {
     const resources = this.state.resources;
     if (resources === null) {
       return;
@@ -258,11 +258,11 @@ export class BootView {
     (() => { const texture = tex; const position = wgl.makeVector2(x, y); wgl.drawTexturePro(texture, wgl.makeRectangle(0, 0, texture.width, texture.height), wgl.makeRectangle(position.x, position.y, texture.width, texture.height), wgl.makeVector2(0, 0), 0.0, tint); })();
   }
 
-  _splashAlpha(): number {
+  protected _splashAlpha(): number {
     return BootView._clamp01(this._bootTime * SPLASH_ALPHA_SCALE);
   }
 
-  static _clamp01(value: number): number {
+  protected static _clamp01(value: number): number {
     if (value < 0.0) {
       return 0.0;
     }
@@ -272,7 +272,7 @@ export class BootView {
     return value;
   }
 
-  _drawSplash(resources: RuntimeResources, alpha: number): void {
+  protected _drawSplash(resources: RuntimeResources, alpha: number): void {
     const screenW = wgl.getScreenWidth();
     const screenH = wgl.getScreenHeight();
     if (alpha <= 0.0) {

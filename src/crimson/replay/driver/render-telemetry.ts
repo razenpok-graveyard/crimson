@@ -41,7 +41,7 @@ export class RenderTelemetryFrameSnapshot {
 }
 
 export class SessionSink {
-  private _session: RenderTelemetrySession;
+  protected _session: RenderTelemetrySession;
 
   constructor(session: RenderTelemetrySession) {
     this._session = session;
@@ -53,7 +53,7 @@ export class SessionSink {
 }
 
 export class RenderTelemetrySession {
-  private _INTERCEPT_APIS: readonly [string, string][] = [
+  protected _INTERCEPT_APIS: readonly [string, string][] = [
     ['draw_texture_pro', 'draw_texture_pro'],
     ['draw_circle', 'draw_circle'],
     ['draw_circle_lines', 'draw_circle_lines'],
@@ -66,17 +66,17 @@ export class RenderTelemetrySession {
     ['begin_blend_mode', 'begin_blend_mode'],
     ['end_blend_mode', 'end_blend_mode'],
   ];
-  private _active: boolean;
-  private _originals: Map<string, (...args: any[]) => unknown>;
-  private _frames: RenderTelemetryFrameSnapshot[];
-  private _currentFrameIndex: number | null;
-  private _currentTickBeforeUpdate: number | null;
-  private _drawCallsTotal: number;
-  private _drawCallsByApi: Map<string, number>;
-  private _drawCallsByPass: Map<string, number>;
-  private _passMs: Map<string, number>;
-  private _sink: SessionSink;
-  private _prevSink: profileHooks.RenderProfileSink | null;
+  protected _active: boolean;
+  protected _originals: Map<string, (...args: any[]) => unknown>;
+  protected _frames: RenderTelemetryFrameSnapshot[];
+  protected _currentFrameIndex: number | null;
+  protected _currentTickBeforeUpdate: number | null;
+  protected _drawCallsTotal: number;
+  protected _drawCallsByApi: Map<string, number>;
+  protected _drawCallsByPass: Map<string, number>;
+  protected _passMs: Map<string, number>;
+  protected _sink: SessionSink;
+  protected _prevSink: profileHooks.RenderProfileSink | null;
 
   constructor() {
     this._active = false;
@@ -140,12 +140,12 @@ export class RenderTelemetrySession {
     this._prevSink = null;
   }
 
-  __enter__(): RenderTelemetrySession {
+  protected __enter__(): RenderTelemetrySession {
     this.start();
     return this;
   }
 
-  __exit__(excType: unknown, exc: unknown, tb: unknown): void {
+  protected __exit__(excType: unknown, exc: unknown, tb: unknown): void {
     this.stop();
   }
 

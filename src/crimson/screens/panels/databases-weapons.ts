@@ -31,9 +31,9 @@ function pyRound(value: number, ndigits = 0): number {
 }
 
 export class UnlockedWeaponsDatabaseView extends DatabaseBaseView {
-  private _weaponIds: number[];
-  private _selectedWeaponId: number | null;
-  private _listScrollIndex: number;
+  protected _weaponIds: number[];
+  protected _selectedWeaponId: number | null;
+  protected _listScrollIndex: number;
 
   constructor(state: GameState) {
     super(state);
@@ -54,12 +54,12 @@ export class UnlockedWeaponsDatabaseView extends DatabaseBaseView {
     super.close();
   }
 
-  _backButtonPos(): Vec2 {
+  protected _backButtonPos(): Vec2 {
     // state_15: ui_buttonSm bbox [270,507]..[352,539] => relative to left panel (-98,194): (368, 313)
     return new Vec2(368.0, 313.0);
   }
 
-  _drawContents(opts: { leftTopLeft: Vec2; rightTopLeft: Vec2; scale: number; font: SmallFontData }): void {
+  protected _drawContents(opts: { leftTopLeft: Vec2; rightTopLeft: Vec2; scale: number; font: SmallFontData }): void {
     const leftTopLeft = opts.leftTopLeft;
     const rightTopLeft = opts.rightTopLeft;
     const scale = opts.scale;
@@ -137,7 +137,7 @@ export class UnlockedWeaponsDatabaseView extends DatabaseBaseView {
     drawSmallText(font, `Clip size: ${clipSize}`, detailTopLeft.add(new Vec2(66.0 * scale, 164.0 * scale)), textColor);
   }
 
-  _updateContentInteraction(opts: { leftTopLeft: Vec2; scale: number; mouse: rl.Vector2 }): void {
+  protected _updateContentInteraction(opts: { leftTopLeft: Vec2; scale: number; mouse: rl.Vector2 }): void {
     const leftTopLeft = opts.leftTopLeft;
     const scale = opts.scale;
     const mouse = opts.mouse;
@@ -178,7 +178,7 @@ export class UnlockedWeaponsDatabaseView extends DatabaseBaseView {
     this._selectedWeaponId = null;
   }
 
-  _buildWeaponDatabaseIds(): number[] {
+  protected _buildWeaponDatabaseIds(): number[] {
 
     const available = buildWeaponAvailability({ status: this.state.status, gameMode: (() => { const value = this.state.config.gameplay.mode; if (!Object.values(GameMode).includes(value as GameMode)) { throw new Error('invalid GameMode'); } return value as GameMode; })(), demoModeActive: this.state.demoEnabled });
     const status = this.state.status;
@@ -205,16 +205,16 @@ export class UnlockedWeaponsDatabaseView extends DatabaseBaseView {
     return used;
   }
 
-  _weaponEntry(weaponId: number): Weapon {
+  protected _weaponEntry(weaponId: number): Weapon {
 
     return WEAPON_BY_ID.get(weaponId)!;
   }
 
-  _weaponRpm(weapon: Weapon): number {
+  protected _weaponRpm(weapon: Weapon): number {
     return int(60.0 / weapon.shotCooldown);
   }
 
-  _drawWicon(iconIndex: number, opts: { pos: Vec2; scale: number }): void {
+  protected _drawWicon(iconIndex: number, opts: { pos: Vec2; scale: number }): void {
     const pos = opts.pos;
     const scale = opts.scale;
     const tex = requireRuntimeResources(this.state).texture(TextureId.UI_WICONS);
@@ -233,7 +233,7 @@ export class UnlockedWeaponsDatabaseView extends DatabaseBaseView {
     wgl.drawTexturePro(tex, wgl.makeRectangle(srcX, srcY, iconW, iconH), wgl.makeRectangle(pos.x, pos.y, iconW * scale, iconH * scale), wgl.makeVector2(0.0, 0.0), 0.0, wgl.makeColor(1, 1, 1, 1));
   }
 
-  _weaponLabelAndIcon(weaponId: number): [string, number | null] {
+  protected _weaponLabelAndIcon(weaponId: number): [string, number | null] {
 
     const weapon = WEAPON_BY_ID.get(weaponId)!;
     const name = weaponDisplayName(weapon.weaponId, { preserveBugs: this.state.preserveBugs });

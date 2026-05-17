@@ -25,17 +25,17 @@ import * as wgl from '@wgl';
 //   - clicking it transitions to state 0x15 (game_update_victory_screen @ 0x00406350)
 export class EndNoteView {
   state: GameState;
-  private _ground: GroundRenderer | null;
-  private _action: string | null;
-  private _cursorPulseTime: number;
+  protected _ground: GroundRenderer | null;
+  protected _action: string | null;
+  protected _cursorPulseTime: number;
   _timelineMs: number;
-  private _timelineMaxMs: number;
-  private _closing: boolean;
-  private _closeAction: string | null;
-  private _survivalButton: UiButtonState;
-  private _rushButton: UiButtonState;
-  private _typoButton: UiButtonState;
-  private _mainMenuButton: UiButtonState;
+  protected _timelineMaxMs: number;
+  protected _closing: boolean;
+  protected _closeAction: string | null;
+  protected _survivalButton: UiButtonState;
+  protected _rushButton: UiButtonState;
+  protected _typoButton: UiButtonState;
+  protected _mainMenuButton: UiButtonState;
 
   constructor(state: GameState) {
     this.state = state;
@@ -214,7 +214,7 @@ export class EndNoteView {
     return action;
   }
 
-  _worldEntityAlpha(): number {
+  protected _worldEntityAlpha(): number {
     if (!this._closing) {
       return 1.0;
     }
@@ -232,7 +232,7 @@ export class EndNoteView {
     return alpha;
   }
 
-  _beginCloseTransition(action: string, opts: { fadeToBlack?: boolean } = {}): void {
+  protected _beginCloseTransition(action: string, opts: { fadeToBlack?: boolean } = {}): void {
     const fadeToBlack = opts.fadeToBlack ?? false;
     if (this._closing) {
       return;

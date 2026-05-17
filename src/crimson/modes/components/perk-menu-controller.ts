@@ -54,15 +54,15 @@ export class PerkMenuUiContext {
 }
 
 export class PerkMenuController {
-  private _DESC_WRAP_WIDTH_PX: number = 256.0;
-  private _cancelLabel: string;
-  private _onClose: OnCloseFn | null;
-  private _selectedIndex!: number;
+  protected _DESC_WRAP_WIDTH_PX: number = 256.0;
+  protected _cancelLabel: string;
+  protected _onClose: OnCloseFn | null;
+  protected _selectedIndex!: number;
   _timelineMs!: number;
-  private _layout!: PerkMenuLayout;
-  private _cancelButton!: UiButtonState;
-  private _open!: boolean;
-  private _wrappedDescCache!: Map<string, string>;
+  protected _layout!: PerkMenuLayout;
+  protected _cancelButton!: UiButtonState;
+  protected _open!: boolean;
+  protected _wrappedDescCache!: Map<string, string>;
 
   constructor(opts: { cancelLabel?: string; onClose?: OnCloseFn | null } = {}) {
     const cancelLabel = opts.cancelLabel ?? 'Cancel';
@@ -113,7 +113,7 @@ export class PerkMenuController {
     this._wrappedDescCache = new Map();
   }
 
-  _prewrappedPerkDesc(perkId: PerkId, font: SmallFontData, opts: { violenceDisabled: number; preserveBugs: boolean }): string {
+  protected _prewrappedPerkDesc(perkId: PerkId, font: SmallFontData, opts: { violenceDisabled: number; preserveBugs: boolean }): string {
     const violenceDisabled = opts.violenceDisabled;
     const preserveBugs = opts.preserveBugs;
     const key = [int(perkId), int(violenceDisabled), (preserveBugs ? 1 : 0)];
@@ -127,7 +127,7 @@ export class PerkMenuController {
     return wrapped;
   }
 
-  static _wrapSmallTextNative(font: SmallFontData, text: string, maxWidthPx: number, opts: { scale: number }): string {
+  protected static _wrapSmallTextNative(font: SmallFontData, text: string, maxWidthPx: number, opts: { scale: number }): string {
     const scale = opts.scale;
     const wrapped = Array.from(text);
     if (wrapped.length === 0) {

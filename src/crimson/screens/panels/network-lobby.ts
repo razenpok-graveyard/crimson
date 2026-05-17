@@ -43,8 +43,8 @@ export class LobbyLayout {
 }
 
 export class NetworkLobbyPanelView extends PanelMenuView {
-  private _backButton: UiButtonState;
-  private _error: string;
+  protected _backButton: UiButtonState;
+  protected _error: string;
 
   constructor(state: GameState) {
     super(state, { title: 'Network Lobby', panelOffset: new Vec2(-63.0, MENU_PANEL_OFFSET_Y), panelHeight: 278.0, backAction: 'open_play_game' });
@@ -58,7 +58,7 @@ export class NetworkLobbyPanelView extends PanelMenuView {
     this._error = '';
   }
 
-  _beginCloseTransition(action: string): void {
+  protected _beginCloseTransition(action: string): void {
     if (action === 'open_play_game') {
       const runtime = this.state.networkRuntime;
       if (runtime !== null) {
@@ -172,12 +172,12 @@ export class NetworkLobbyPanelView extends PanelMenuView {
     this._beginCloseTransition(action);
   }
 
-  _drawEntry(entry: MenuEntry): void {
+  protected _drawEntry(entry: MenuEntry): void {
     const _ = entry;
     return;
   }
 
-  _layout(): LobbyLayout {
+  protected _layout(): LobbyLayout {
     const [panelScale, localShift] = this._menuItemScale(0);
     const panelW = MENU_PANEL_WIDTH * panelScale;
     const [, slideX] = uiElementAnim(this, { index: 1, startMs: PANEL_TIMELINE_START_MS, endMs: PANEL_TIMELINE_END_MS, width: panelW });
@@ -192,7 +192,7 @@ export class NetworkLobbyPanelView extends PanelMenuView {
     return new LobbyLayout({ scale: panelScale, panelTopLeft: panelTopLeft, basePos: basePos, backPos: backPos, backW: backW });
   }
 
-  _updateBackButton(opts: { dtMs: number; enabled: boolean }): void {
+  protected _updateBackButton(opts: { dtMs: number; enabled: boolean }): void {
     const dtMs = opts.dtMs;
     const enabled = opts.enabled;
     if (!enabled) {
@@ -213,7 +213,7 @@ export class NetworkLobbyPanelView extends PanelMenuView {
     }
   }
 
-  _drawContents(): void {
+  protected _drawContents(): void {
     const layout = this._layout();
     const resources = requireRuntimeResources(this.state);
     const font = resources.smallFont;

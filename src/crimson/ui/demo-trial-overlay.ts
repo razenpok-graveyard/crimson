@@ -29,12 +29,12 @@ const _TIME_UP_TEXT = 'Trial time is up. If you would like to have unlimited pla
 const _TIME_UP_ALL_FEATURES_TEXT = 'all features, please upgrade to the full version of Crimsonland.  The process';
 
 export class DemoTrialOverlayUi {
-  private _assetsRoot: string;
-  private _font: ReturnType<typeof loadSmallFont>;
-  private _resources: ReturnType<typeof runtimeResourcesFor>;
-  private _cursorPulseTime: number;
-  private _purchaseButton: UiButtonState;
-  private _maybeLaterButton: UiButtonState;
+  protected _assetsRoot: string;
+  protected _font: ReturnType<typeof loadSmallFont>;
+  protected _resources: ReturnType<typeof runtimeResourcesFor>;
+  protected _cursorPulseTime: number;
+  protected _purchaseButton: UiButtonState;
+  protected _maybeLaterButton: UiButtonState;
 
   constructor(assetsRoot: string) {
     this._assetsRoot = assetsRoot;
@@ -51,7 +51,7 @@ export class DemoTrialOverlayUi {
     this._cursorPulseTime = 0.0;
   }
 
-  static _panelXy(opts: { screenW: number; screenH: number }): Vec2 {
+  protected static _panelXy(opts: { screenW: number; screenH: number }): Vec2 {
     const screenW = opts.screenW;
     const screenH = opts.screenH;
     return new Vec2(screenW * 0.5 - 256.0, screenH * 0.5 - 128.0);

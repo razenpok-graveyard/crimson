@@ -74,7 +74,7 @@ export class ModsContentLayout {
 }
 
 export class ModsMenuView extends PanelMenuView {
-  private _lines: string[];
+  protected _lines: string[];
 
   constructor(state: GameState) {
     super(state, { title: 'Mods' });
@@ -86,7 +86,7 @@ export class ModsMenuView extends PanelMenuView {
     this._lines = this._buildLines();
   }
 
-  _contentLayout(): ModsContentLayout {
+  protected _contentLayout(): ModsContentLayout {
     const [panelScale, localShift] = this._menuItemScale(0);
     const panelW = MENU_PANEL_WIDTH * panelScale;
     const [angleRad, slideX] = uiElementAnim(this, { index: 1, startMs: PANEL_TIMELINE_START_MS, endMs: PANEL_TIMELINE_END_MS, width: panelW });
@@ -96,7 +96,7 @@ export class ModsMenuView extends PanelMenuView {
     return new ModsContentLayout({ scale: panelScale, basePos: basePos, labelPos: labelPos });
   }
 
-  _buildLines(): string[] {
+  protected _buildLines(): string[] {
     const modsDir = _pathJoin(this.state.baseDir, 'mods');
     let dlls: string[] = [];
     try {
@@ -128,7 +128,7 @@ export class ModsMenuView extends PanelMenuView {
     return lines;
   }
 
-  _drawContents(): void {
+  protected _drawContents(): void {
     const layout = this._contentLayout();
     const basePos = layout.basePos;
     const labelPos = layout.labelPos;

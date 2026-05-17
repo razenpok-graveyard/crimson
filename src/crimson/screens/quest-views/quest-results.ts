@@ -54,13 +54,13 @@ function pythonEquals(left: object | string | number | boolean | null | undefine
 
 export class QuestResultsView {
   state: GameState;
-  private _ground: GroundRenderer | null;
-  private _questLevel: QuestLevel | null;
-  private _questTitle: string;
-  private _unlockWeaponName: string;
-  private _unlockPerkName: string;
-  private _ui: QuestResultsUi | null;
-  private _action: string | null;
+  protected _ground: GroundRenderer | null;
+  protected _questLevel: QuestLevel | null;
+  protected _questTitle: string;
+  protected _unlockWeaponName: string;
+  protected _unlockPerkName: string;
+  protected _ui: QuestResultsUi | null;
+  protected _action: string | null;
 
   constructor(state: GameState) {
     this.state = state;
@@ -283,7 +283,7 @@ export class QuestResultsView {
     return action;
   }
 
-  _openHighScoresList(): void {
+  protected _openHighScoresList(): void {
     let highlightRank = null;
     if (this._ui !== null) {
       highlightRank = this._ui.highlightRank;
@@ -293,7 +293,7 @@ export class QuestResultsView {
     this._action = 'open_high_scores';
   }
 
-  _setPendingQuestLevel(level: QuestLevel): void {
+  protected _setPendingQuestLevel(level: QuestLevel): void {
     this.state.pendingQuestLevel = level;
     this.state.config.gameplay.mode = GameMode.QUESTS;
     this.state.config.gameplay.questLevel = level;
@@ -304,7 +304,7 @@ export class QuestResultsView {
     }
   }
 
-  _logNonfatal(message: string, exc: unknown): void {
+  protected _logNonfatal(message: string, exc: unknown): void {
     this.state.console.log.log(`quest results: ${message}: ${exc instanceof Error ? exc.message : String(exc)}`);
   }
 }

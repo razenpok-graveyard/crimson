@@ -147,13 +147,13 @@ export class TickSupply {
 
 // Adapter over local input polling.
 export class LocalInputProvider {
-  private _playerCount: number;
-  private _buildInputs: LocalInputBuilder;
-  private _pendingCommands: GameCommand[];
-  private _commandsForNextTick: GameCommand[];
-  private _frameInputs: PlayerInput[];
-  private _edgeInputs: PlayerInput[];
-  private _firstTickPending: boolean;
+  protected _playerCount: number;
+  protected _buildInputs: LocalInputBuilder;
+  protected _pendingCommands: GameCommand[];
+  protected _commandsForNextTick: GameCommand[];
+  protected _frameInputs: PlayerInput[];
+  protected _edgeInputs: PlayerInput[];
+  protected _firstTickPending: boolean;
 
   constructor(opts: { playerCount: number; buildInputs: LocalInputBuilder }) {
     const playerCount = opts.playerCount;

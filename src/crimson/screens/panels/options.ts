@@ -52,20 +52,20 @@ export class OptionsContentLayout {
 }
 
 export class OptionsMenuView extends PanelMenuView {
-  private _LABELS: string[] = [
+  protected _LABELS: string[] = [
     'Sound volume:',
     'Music volume:',
     'Graphics detail:',
     'Mouse sensitivity:',
   ];
-  private _controlsButton: UiButtonState;
-  private _sliderSfx: SliderState;
-  private _sliderMusic: SliderState;
-  private _sliderDetail: SliderState;
-  private _sliderMouse: SliderState;
-  private _uiInfoTexts: boolean;
-  private _activeSlider: string | null;
-  private _dirty: boolean;
+  protected _controlsButton: UiButtonState;
+  protected _sliderSfx: SliderState;
+  protected _sliderMusic: SliderState;
+  protected _sliderDetail: SliderState;
+  protected _sliderMouse: SliderState;
+  protected _uiInfoTexts: boolean;
+  protected _activeSlider: string | null;
+  protected _dirty: boolean;
 
   constructor(state: GameState) {
     super(state, { title: 'Options', backAction: 'open_pause_menu' });
@@ -171,7 +171,7 @@ export class OptionsMenuView extends PanelMenuView {
     );
   }
 
-  _beginCloseTransition(action: string): void {
+  protected _beginCloseTransition(action: string): void {
     if (this._dirty) {
       let _trySucceeded150 = false;
       try {
@@ -187,7 +187,7 @@ export class OptionsMenuView extends PanelMenuView {
     super._beginCloseTransition(action);
   }
 
-  _syncFromConfig(): void {
+  protected _syncFromConfig(): void {
     const config = this.state.config;
     this._uiInfoTexts = config.gameplay.showInfoTexts;
 
@@ -208,7 +208,7 @@ export class OptionsMenuView extends PanelMenuView {
     this._sliderMouse.value = Math.max(this._sliderMouse.minValue, Math.min(this._sliderMouse.maxValue, int(mouseSensitivity * 10.0 + 0.5)));
   }
 
-  _contentLayout(): OptionsContentLayout {
+  protected _contentLayout(): OptionsContentLayout {
     const [panelScale, localShift] = this._menuItemScale(0);
     const panelW = MENU_PANEL_WIDTH * panelScale;
     const [angleRad, slideX] = uiElementAnim(this, { index: 1, startMs: PANEL_TIMELINE_START_MS, endMs: PANEL_TIMELINE_END_MS, width: panelW });
@@ -220,7 +220,7 @@ export class OptionsMenuView extends PanelMenuView {
     return new OptionsContentLayout({ basePos: basePos, labelPos: labelPos, sliderPos: sliderPos, scale: panelScale });
   }
 
-  _updateSlider(sliderId: string, slider: SliderState, pos: Vec2, rectOn: rl.Texture, rectOff: rl.Texture, scale: number): boolean {
+  protected _updateSlider(sliderId: string, slider: SliderState, pos: Vec2, rectOn: rl.Texture, rectOff: rl.Texture, scale: number): boolean {
     const rectW = rectOn.width * scale;
     const rectH = rectOn.height * scale;
     if (rectW <= 0.0 || rectH <= 0.0) {
@@ -267,7 +267,7 @@ export class OptionsMenuView extends PanelMenuView {
     return changed;
   }
 
-  _updateCheckbox(pos: Vec2, scale: number): boolean {
+  protected _updateCheckbox(pos: Vec2, scale: number): boolean {
     const resources = requireRuntimeResources(this.state);
     const checkOn = resources.texture(TextureId.UI_CHECK_ON);
     const font = resources.smallFont;
@@ -285,7 +285,7 @@ export class OptionsMenuView extends PanelMenuView {
     return false;
   }
 
-  _drawOptionsContents(): void {
+  protected _drawOptionsContents(): void {
     const resources = requireRuntimeResources(this.state);
     const labelsTex = resources.texture(TextureId.UI_ITEM_TEXTS);
     const layout = this._contentLayout();
@@ -337,7 +337,7 @@ export class OptionsMenuView extends PanelMenuView {
     );
   }
 
-  _drawSlider(slider: SliderState, pos: Vec2, rectOn: rl.Texture, rectOff: rl.Texture, rectW: number, rectH: number): void {
+  protected _drawSlider(slider: SliderState, pos: Vec2, rectOn: rl.Texture, rectOff: rl.Texture, rectW: number, rectH: number): void {
     for (let idx = 0; idx < slider.maxValue; idx++) {
       const tex = idx < slider.value ? rectOn : rectOff;
       const dst = wgl.makeRectangle(pos.x + idx * rectW, pos.y, rectW, rectH);

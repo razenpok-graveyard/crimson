@@ -21,7 +21,7 @@ export function renderPlainClasses(lines: string[], classes: StraightLineModule[
     lines.push(`export ${abstractPrefix}class ${plainClass.name}${plainClass.extendsName === undefined ? '' : ` extends ${plainClass.extendsName}`} {`);
     for (const field of plainClass.fields) {
       const assignmentAssertion = field.defaultValueLines === undefined && field.definiteAssignment === true ? '!' : '';
-      const prefix = `  ${field.private ? 'private ' : ''}${field.readonly ? 'readonly ' : ''}${field.name}${assignmentAssertion}: ${field.typeExpression}`;
+      const prefix = `  ${field.private ? 'protected ' : ''}${field.readonly ? 'readonly ' : ''}${field.name}${assignmentAssertion}: ${field.typeExpression}`;
       if (field.defaultValueLines === undefined) {
         lines.push(`${prefix};`);
       } else if (field.defaultValueLines.length === 1) {
@@ -80,7 +80,7 @@ export function renderPlainClasses(lines: string[], classes: StraightLineModule[
         params.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
       }
       const returnType = method.name.startsWith('set ') ? '' : `: ${renderFunctionReturnType(method)}`;
-      const accessModifier = classIsAbstract && method.name.startsWith('_') ? 'protected ' : '';
+      const accessModifier = method.name.startsWith('_') ? 'protected ' : '';
       if (method.abstract === true) {
         lines.push(`  ${accessModifier}abstract ${method.name}(${params.join(', ')})${returnType};`);
         continue;

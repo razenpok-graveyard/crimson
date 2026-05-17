@@ -35,9 +35,9 @@ export class TickBatchResult {
 }
 
 export class TickRunner {
-  private _session: DeterministicSession;
-  private _inputProvider: InputProvider;
-  private _config: TickRunnerConfig;
+  protected _session: DeterministicSession;
+  protected _inputProvider: InputProvider;
+  protected _config: TickRunnerConfig;
 
   constructor(opts: { session: DeterministicSession; inputProvider: InputProvider; config?: TickRunnerConfig | null }) {
     const session = opts.session;
@@ -103,7 +103,7 @@ export class TickRunner {
     return new TickBatchResult({ ticksCompleted: ticksCompleted, batchStatus: batchStatus, nextTickIndex: int(startTick) + int(ticksCompleted), completedResults: Array.from(completedResults) });
   }
 
-  static _validatedSourceTick(opts: { tickSupply: any; expectedTickIndex: number }): ResolvedTick {
+  protected static _validatedSourceTick(opts: { tickSupply: any; expectedTickIndex: number }): ResolvedTick {
     const tickSupply = opts.tickSupply;
     const expectedTickIndex = opts.expectedTickIndex;
     const sourceTick = tickSupply.tick;

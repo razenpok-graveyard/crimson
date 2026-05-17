@@ -81,7 +81,7 @@ export class WorldRuntime {
     this._syncWorldSizeOwnership();
   }
 
-  _syncWorldSizeOwnership(): void {
+  protected _syncWorldSizeOwnership(): void {
     const worldSize = this.worldSize;
     this.simWorld.worldSize = worldSize;
     this.renderResources.worldSize = worldSize;

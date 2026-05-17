@@ -830,6 +830,9 @@ function inferPlainClassFieldType(
   if (/^Path\([A-Za-z_][A-Za-z0-9_]*\)$/.test(valueText)) {
     return 'string';
   }
+  if (/\.splitlines\(\)$/.test(valueText.trim())) {
+    return 'string[]';
+  }
   const nonNoneDefault = /^([A-Za-z_][A-Za-z0-9_]*) if \1 is not None else ([A-Z][A-Za-z0-9_]*)\(\)$/.exec(valueText.trim());
   if (nonNoneDefault !== null) {
     const directType = fieldTypes.get(tsExportNameForPythonName(nonNoneDefault[1]));

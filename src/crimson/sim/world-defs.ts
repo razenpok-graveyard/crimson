@@ -46,19 +46,19 @@ export const KNOWN_PROJ_FRAMES: Map<number, [number, number]> = new Map([
   [ProjectileTemplateId.FIRE_BULLETS, [4, 2]],
   [ProjectileTemplateId.ION_RIFLE, [4, 2]],
 ]);
-export const PLASMA_PARTICLE_TYPES: ReadonlySet<number> = new Set([
+export const PLASMA_PARTICLE_TYPES: ReadonlySet<ProjectileTemplateId> = new Set([
   ProjectileTemplateId.PLASMA_RIFLE,
   ProjectileTemplateId.PLASMA_MINIGUN,
   ProjectileTemplateId.PLASMA_CANNON,
   ProjectileTemplateId.SPIDER_PLASMA,
   ProjectileTemplateId.SHRINKIFIER,
 ]);
-export const ION_TYPES: ReadonlySet<number> = new Set([
+export const ION_TYPES: ReadonlySet<ProjectileTemplateId> = new Set([
   ProjectileTemplateId.ION_RIFLE,
   ProjectileTemplateId.ION_MINIGUN,
   ProjectileTemplateId.ION_CANNON,
 ]);
-export const FIRE_BULLETS_TYPES: ReadonlySet<number> = new Set([
+export const FIRE_BULLETS_TYPES: ReadonlySet<ProjectileTemplateId> = new Set([
   ProjectileTemplateId.FIRE_BULLETS,
 ]);
 // "Beam" in the original renderer is really the Ion/Fire streak + chain UV family.

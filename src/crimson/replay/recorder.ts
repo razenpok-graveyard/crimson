@@ -35,10 +35,10 @@ function pythonRepr(value: unknown): string {
 }
 
 export class ReplayRecorder {
-  private _header: ReplayHeader;
-  private _defaultDt: number;
-  private _tickIndex: number;
-  private _ticks: ReplayTick[];
+  protected _header: ReplayHeader;
+  protected _defaultDt: number;
+  protected _tickIndex: number;
+  protected _ticks: ReplayTick[];
 
   constructor(header: ReplayHeader) {
     if (header.replayFormatVersion !== REPLAY_FORMAT_VERSION) {

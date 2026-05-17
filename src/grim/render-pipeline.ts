@@ -12,8 +12,8 @@ export interface RenderSink {
 
 // Default interactive sink; present/flush delegate to the frame loop.
 export class WindowSink {
-  private _presentFrame: RenderPresent | null;
-  private _opened: boolean;
+  protected _presentFrame: RenderPresent | null;
+  protected _opened: boolean;
 
   constructor(opts: { presentFrame?: RenderPresent | null } = {}) {
     const presentFrame = opts.presentFrame ?? null;
@@ -42,14 +42,14 @@ export class WindowSink {
 
 // Shared draw/present orchestration for live and replay contexts.
 export class RenderPipeline {
-  private _sink: RenderSink;
-  private _onResize: ((arg0: number, arg1: number) => void) | null;
-  private _beginEndDrawing: boolean;
-  private _beginDraw: (() => void) | null;
-  private _endDraw: (() => void) | null;
-  private _opened: boolean;
-  private _width: number;
-  private _height: number;
+  protected _sink: RenderSink;
+  protected _onResize: ((arg0: number, arg1: number) => void) | null;
+  protected _beginEndDrawing: boolean;
+  protected _beginDraw: (() => void) | null;
+  protected _endDraw: (() => void) | null;
+  protected _opened: boolean;
+  protected _width: number;
+  protected _height: number;
 
   constructor(opts: { sink: RenderSink; onResize?: ((arg0: number, arg1: number) => void) | null; beginEndDrawing?: boolean; beginDraw?: (() => void) | null; endDraw?: (() => void) | null }) {
     const sink = opts.sink;
@@ -98,7 +98,7 @@ export class RenderPipeline {
     this._height = normalizedH;
   }
 
-  _ensureOpen(opts: { width: number; height: number }): void {
+  protected _ensureOpen(opts: { width: number; height: number }): void {
     const width = opts.width;
     const height = opts.height;
     if (this._opened) {
@@ -107,7 +107,7 @@ export class RenderPipeline {
     this.open({ width: int(width), height: int(height) });
   }
 
-  _resizeIfNeeded(opts: { width: number; height: number }): void {
+  protected _resizeIfNeeded(opts: { width: number; height: number }): void {
     const width = opts.width;
     const height = opts.height;
     const normalizedW = Math.max(0, int(width));

@@ -48,9 +48,9 @@ export class RngDrawRecord {
 //   seed = seed * 214013 + 2531011
 //   return (seed >> 16) & 0x7fff
 export class CrtRand {
-  private _state: number;
-  private _traceSink: RngTraceSink | null;
-  private _traceRequireCaller: boolean;
+  protected _state: number;
+  protected _traceSink: RngTraceSink | null;
+  protected _traceRequireCaller: boolean;
 
   constructor(seed: number | null = null) {
     if (seed === null) {
@@ -129,7 +129,7 @@ export class RecordingState {
 }
 
 export class RecordingCrand {
-  private _shared: RecordingState;
+  protected _shared: RecordingState;
 
   constructor(base: CrandLike, shared: RecordingState | null = null) {
     this._shared = shared === null ? new RecordingState(base) : shared;

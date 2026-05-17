@@ -38,12 +38,12 @@ export class NullSink {
 // Video-export sink. Fail-fast by policy: presentation errors abort rendering.
 export class VideoSink {
   outputPath: string;
-  private _openTransport: (() => void) | null;
-  private _presentFrame: RenderPresent | null;
-  private _flushTransport: (() => void) | null;
-  private _closeTransport: (() => void) | null;
-  private _opened: boolean;
-  private _flushed: boolean;
+  protected _openTransport: (() => void) | null;
+  protected _presentFrame: RenderPresent | null;
+  protected _flushTransport: (() => void) | null;
+  protected _closeTransport: (() => void) | null;
+  protected _opened: boolean;
+  protected _flushed: boolean;
 
   constructor(opts: { outputPath: string; openTransport?: (() => void) | null; presentFrame?: RenderPresent | null; flushTransport?: (() => void) | null; closeTransport?: (() => void) | null }) {
     const outputPath = opts.outputPath;

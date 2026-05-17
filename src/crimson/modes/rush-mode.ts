@@ -35,7 +35,7 @@ export const UI_HINT_COLOR = wgl.makeColor(140 / 255, 140 / 255, 140 / 255, 255 
 export const UI_ERROR_COLOR = wgl.makeColor(240 / 255, 80 / 255, 80 / 255, 255 / 255);
 
 export class RushMode extends BaseGameplayMode {
-  private _spawnState: RushSpawnState;
+  protected _spawnState: RushSpawnState;
 
   constructor(ctx: ViewContext, opts: { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand }) {
     const config = opts.config;
@@ -48,7 +48,7 @@ export class RushMode extends BaseGameplayMode {
     this._simSession = this._newSimSession();
   }
 
-  _newSimSession(): DeterministicSession {
+  protected _newSimSession(): DeterministicSession {
     const [session, spawnState] = buildRushSession({ world: this.simWorld.worldState, worldSize: this.worldSize, damageScaleByType: this.simWorld.damageScaleByType, detailPreset: 5, violenceDisabled: 0, gameTuneStarted: this.simWorld.gameTuneStarted, finalizePostRenderLifecycle: true });
     this._spawnState = spawnState;
     return session;
@@ -101,7 +101,7 @@ export class RushMode extends BaseGameplayMode {
     super.close();
   }
 
-  _handleInput(): void {
+  protected _handleInput(): void {
     if (this._gameOverActive) {
       if (InputState.wasKeyPressed(27)) {
         this._action = 'back_to_menu';
@@ -120,7 +120,7 @@ export class RushMode extends BaseGameplayMode {
     }
   }
 
-  _enterGameOver(): void {
+  protected _enterGameOver(): void {
     if (this._gameOverActive) {
       return;
     }
@@ -134,19 +134,19 @@ export class RushMode extends BaseGameplayMode {
     this._saveReplay();
   }
 
-  _replayCheckpointElapsedMs(): number {
+  protected _replayCheckpointElapsedMs(): number {
     return this._sessionElapsedMs();
   }
 
-  _replayClaimedStatsComplete(): boolean {
+  protected _replayClaimedStatsComplete(): boolean {
     return this._gameOverActive;
   }
 
-  _replayClaimedStatsElapsedMs(): number {
+  protected _replayClaimedStatsElapsedMs(): number {
     return int(this._sessionElapsedMs());
   }
 
-  _replayOutputBasename(opts: { stamp: string; replay: Replay }): string {
+  protected _replayOutputBasename(opts: { stamp: string; replay: Replay }): string {
     const stamp = opts.stamp;
     const replay = opts.replay;
     const _ = replay;
@@ -154,22 +154,22 @@ export class RushMode extends BaseGameplayMode {
     return `rush_${stamp}_kills${kills}`;
   }
 
-  _lanModeName(): "rush" {
+  protected _lanModeName(): "rush" {
     return 'rush';
   }
 
-  _lanMatchSession(): DeterministicSession | null {
+  protected _lanMatchSession(): DeterministicSession | null {
     return this._simSession;
   }
 
-  _lanPrepareFrame(role: string, dtUiMs: number, session: LanSession, dtTick: number): boolean {
+  protected _lanPrepareFrame(role: string, dtUiMs: number, session: LanSession, dtTick: number): boolean {
     const _ = [role, dtUiMs, dtTick];
     session.detailPreset = int(this._deterministicDetailPreset());
     session.violenceDisabled = int(this._deterministicViolenceDisabled());
     return true;
   }
 
-  _lanOnTickApplied(tick: DeterministicSessionTick, frameTickIndex: number | null, dtTick: number): LanStepAction {
+  protected _lanOnTickApplied(tick: DeterministicSessionTick, frameTickIndex: number | null, dtTick: number): LanStepAction {
     const _ = [tick, dtTick];
     const elapsedMs = this._sessionElapsedMs();
     const spawnCooldownMs = this._spawnState.spawnCooldownMs;
@@ -185,7 +185,7 @@ export class RushMode extends BaseGameplayMode {
     return 'continue';
   }
 
-  _applyResyncSnapshot(snapshot: ModeStateSnapshotV2): void {
+  protected _applyResyncSnapshot(snapshot: ModeStateSnapshotV2): void {
     if (!(snapshot instanceof RushStateSnapshotV2)) {
       return;
     }
@@ -256,7 +256,7 @@ export class RushMode extends BaseGameplayMode {
     });
   }
 
-  _drawGameCursor(): void {
+  protected _drawGameCursor(): void {
     const resources = this.renderResources.resources;
     const mousePos = this._uiMouse;
     drawMenuCursor(

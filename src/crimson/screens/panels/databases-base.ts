@@ -27,17 +27,17 @@ export const RIGHT_PANEL_HEIGHT = 254.0;
 
 export abstract class DatabaseBaseView {
   state: GameState;
-  private _isOpen: boolean;
-  private _ground: GroundRenderer | null;
-  private _cursorPulseTime: number;
-  private _widescreenYShift: number;
+  protected _isOpen: boolean;
+  protected _ground: GroundRenderer | null;
+  protected _cursorPulseTime: number;
+  protected _widescreenYShift: number;
   _timelineMs: number;
-  private _timelineMaxMs: number;
-  private _closing: boolean;
-  private _closeAction: string | null;
-  private _pendingAction: string | null;
-  private _action: string | null;
-  private _backButton: UiButtonState;
+  protected _timelineMaxMs: number;
+  protected _closing: boolean;
+  protected _closeAction: string | null;
+  protected _pendingAction: string | null;
+  protected _action: string | null;
+  protected _backButton: UiButtonState;
 
   constructor(state: GameState) {
     this.state = state;

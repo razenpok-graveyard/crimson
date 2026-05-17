@@ -24,18 +24,18 @@ export { QUEST_FAILED_PANEL_SLIDE_DURATION_MS, QUEST_FAILED_PANEL_W } from '@cri
 
 export class QuestFailedView {
   state: GameState;
-  private _ground: GroundRenderer | null;
-  private _outcome: QuestRunOutcome | null;
-  private _record: HighScoreRecord | null;
-  private _questTitle: string;
-  private _action: string | null;
-  private _cursorPulseTime: number;
-  private _introMs: number;
-  private _closing: boolean;
-  private _closeAction: string | null;
-  private _retryButton: UiButtonState;
-  private _questListButton: UiButtonState;
-  private _mainMenuButton: UiButtonState;
+  protected _ground: GroundRenderer | null;
+  protected _outcome: QuestRunOutcome | null;
+  protected _record: HighScoreRecord | null;
+  protected _questTitle: string;
+  protected _action: string | null;
+  protected _cursorPulseTime: number;
+  protected _introMs: number;
+  protected _closing: boolean;
+  protected _closeAction: string | null;
+  protected _retryButton: UiButtonState;
+  protected _questListButton: UiButtonState;
+  protected _mainMenuButton: UiButtonState;
 
   constructor(state: GameState) {
     this.state = state;
@@ -209,13 +209,13 @@ export class QuestFailedView {
     return action;
   }
 
-  _panelOrigin(): Vec2 {
+  protected _panelOrigin(): Vec2 {
     const screenW = wgl.getScreenWidth();
     const widescreenShiftY = MenuView._menuWidescreenYShift(screenW);
     return new Vec2(QUEST_FAILED_PANEL_GEOM_X0 + QUEST_FAILED_PANEL_POS_X, QUEST_FAILED_PANEL_GEOM_Y0 + QUEST_FAILED_PANEL_POS_Y + widescreenShiftY);
   }
 
-  _panelSlideX(): number {
+  protected _panelSlideX(): number {
     if (QUEST_FAILED_PANEL_SLIDE_DURATION_MS <= 1e-6) {
       return 0.0;
     }
@@ -229,7 +229,7 @@ export class QuestFailedView {
     return -QUEST_FAILED_PANEL_W * (1.0 - eased);
   }
 
-  _worldEntityAlpha(): number {
+  protected _worldEntityAlpha(): number {
     if (!this._closing) {
       return 1.0;
     }
@@ -246,11 +246,11 @@ export class QuestFailedView {
     return alpha;
   }
 
-  _panelTopLeft(): Vec2 {
+  protected _panelTopLeft(): Vec2 {
     return this._panelOrigin().offset({ dx: this._panelSlideX() });
   }
 
-  _failureMessage(): string {
+  protected _failureMessage(): string {
     const retryCount = int(this.state.questFailRetryCount);
     if (retryCount === 1) {
       return 'You didn\'t make it, do try again.';
@@ -273,7 +273,7 @@ export class QuestFailedView {
     return 'Quest failed, try again.';
   }
 
-  _buildScorePreview(outcome: QuestRunOutcome | null): void {
+  protected _buildScorePreview(outcome: QuestRunOutcome | null): void {
 
     this._record = null;
     if (outcome === null) {
@@ -300,7 +300,7 @@ export class QuestFailedView {
     this._record = record;
   }
 
-  _activateRetry(): void {
+  protected _activateRetry(): void {
     const outcome = this._outcome;
     if (outcome === null) {
       return;
@@ -321,7 +321,7 @@ export class QuestFailedView {
     this._beginClose('start_quest');
   }
 
-  _activatePlayAnother(): void {
+  protected _activatePlayAnother(): void {
     this.state.questFailRetryCount = 0;
     if (this.state.audio !== null) {
       playSfx(this.state.audio, SfxId.UI_BUTTONCLICK);
@@ -329,7 +329,7 @@ export class QuestFailedView {
     this._beginClose('open_quests');
   }
 
-  _activateMainMenu(): void {
+  protected _activateMainMenu(): void {
     this.state.questFailRetryCount = 0;
     if (this.state.audio !== null) {
       playSfx(this.state.audio, SfxId.UI_BUTTONCLICK);
@@ -337,7 +337,7 @@ export class QuestFailedView {
     this._beginClose('back_to_menu');
   }
 
-  _beginClose(action: string): void {
+  protected _beginClose(action: string): void {
     if (this._closing) {
       return;
     }
@@ -345,11 +345,11 @@ export class QuestFailedView {
     this._closeAction = action;
   }
 
-  _textWidth(text: string, scale: number): number {
+  protected _textWidth(text: string, scale: number): number {
     return measureSmallTextWidth(requireRuntimeResources(this.state).smallFont, text);
   }
 
-  _drawScorePreview(font: SmallFontData, opts: { panelTopLeft: Vec2 }): void {
+  protected _drawScorePreview(font: SmallFontData, opts: { panelTopLeft: Vec2 }): void {
     const panelTopLeft = opts.panelTopLeft;
     const record = this._record;
     if (record === null) {

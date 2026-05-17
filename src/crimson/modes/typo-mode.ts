@@ -62,7 +62,7 @@ export class TypoShooterMode extends BaseGameplayMode {
     this._simSession = this._newSimSession();
   }
 
-  _newSimSession(): DeterministicSession {
+  protected _newSimSession(): DeterministicSession {
     return buildTypoSession({ world: this.simWorld.worldState, worldSize: this.worldSize, damageScaleByType: this.simWorld.damageScaleByType, detailPreset: 5, violenceDisabled: 0, gameTuneStarted: this.simWorld.gameTuneStarted, dictionaryWords: this.state.typo.dictionaryWords, highscoreNames: this.state.typo.highscoreNames });
   }
 
@@ -103,11 +103,11 @@ export class TypoShooterMode extends BaseGameplayMode {
     super.close();
   }
 
-  _runtimePlayerCount(): number {
+  protected _runtimePlayerCount(): number {
     return 1;
   }
 
-  _buildLocalInputs(opts: { dt: number }): PlayerInput[] {
+  protected _buildLocalInputs(opts: { dt: number }): PlayerInput[] {
     const dt = opts.dt;
     const _ = dt;
     return [
@@ -115,7 +115,7 @@ export class TypoShooterMode extends BaseGameplayMode {
     ];
   }
 
-  _handleInput(): void {
+  protected _handleInput(): void {
     if (this._gameOverActive) {
       if (InputState.wasKeyPressed(27)) {
         this._action = 'back_to_menu';
@@ -134,7 +134,7 @@ export class TypoShooterMode extends BaseGameplayMode {
     }
   }
 
-  _enqueueTypingCommands(): void {
+  protected _enqueueTypingCommands(): void {
     const enterPressed = InputState.wasKeyPressed(13) || InputState.wasKeyPressed(335);
     if (enterPressed && this.state.typo.typing.text) {
       this.enqueueInputCommand(new TypoSubmitCommand({ playerIndex: 0 }));
@@ -159,7 +159,7 @@ export class TypoShooterMode extends BaseGameplayMode {
     }
   }
 
-  _enterGameOver(): void {
+  protected _enterGameOver(): void {
     if (this._gameOverActive) {
       return;
     }
@@ -173,23 +173,23 @@ export class TypoShooterMode extends BaseGameplayMode {
     this._saveReplay();
   }
 
-  _replayCheckpointElapsedMs(): number {
+  protected _replayCheckpointElapsedMs(): number {
     return this._sessionElapsedMs();
   }
 
-  _replayClaimedStatsComplete(): boolean {
+  protected _replayClaimedStatsComplete(): boolean {
     return this._gameOverActive;
   }
 
-  _replayClaimedStatsElapsedMs(): number {
+  protected _replayClaimedStatsElapsedMs(): number {
     return int(this._sessionElapsedMs());
   }
 
-  _replayClaimedShots(): [number, number] {
+  protected _replayClaimedShots(): [number, number] {
     return typoShotCounts(this.state.typo);
   }
 
-  _replayOutputBasename(opts: { stamp: string; replay: Replay }): string {
+  protected _replayOutputBasename(opts: { stamp: string; replay: Replay }): string {
     const stamp = opts.stamp;
     const replay = opts.replay;
     const _ = replay;
@@ -258,7 +258,7 @@ export class TypoShooterMode extends BaseGameplayMode {
     // trooper death animation can play before the UI slides in.
   }
 
-  _drawGameCursor(): void {
+  protected _drawGameCursor(): void {
     const resources = this.renderResources.resources;
     const mousePos = this._uiMouse;
     drawMenuCursor(
@@ -268,7 +268,7 @@ export class TypoShooterMode extends BaseGameplayMode {
     );
   }
 
-  _drawNameLabels(): void {
+  protected _drawNameLabels(): void {
     drawTypoNameLabels({
       creatures: this.creatures.entries,
       names: this.state.typo.names.names,
@@ -278,7 +278,7 @@ export class TypoShooterMode extends BaseGameplayMode {
     });
   }
 
-  _drawTypingBox(): void {
+  protected _drawTypingBox(): void {
     drawTypingBox(
       this.renderResources.resources.texture(TextureId.UI_IND_PANEL),
       { text: this.state.typo.typing.text, cursorPulseTime: this._cursorPulseTime, drawText: (text, pos, color, scale) => this._drawUiText(text, pos, color, scale), measureTextWidth: (text, scale) => this._uiTextWidth(text, scale) },

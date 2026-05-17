@@ -5,7 +5,7 @@ import {
   tsPublicNameForPythonName,
   tsTypeExpression,
 } from '../../naming.js';
-import { splitTopLevelComma } from '../common.js';
+import { inferPythonExpressionType, splitTopLevelComma } from '../common.js';
 import { translateExpression } from '../expression.js';
 import {
   collectMultilineSequenceLiteral,
@@ -252,7 +252,7 @@ export function parseTopLevelAssignment(
     return {
       assignment: {
         ...baseAssignment,
-        typeExpression: baseAssignment.typeExpression ?? 'ReadonlySet<number>',
+        typeExpression: baseAssignment.typeExpression ?? inferredReadonlySetTypeExpression(items),
         valueLines: [
           'new Set([',
           ...items.map((item) => `  ${translateExpression(item, nameMap, new Set(), new Set(), mapNames)},`),
@@ -271,7 +271,7 @@ export function parseTopLevelAssignment(
     return {
       assignment: {
         ...baseAssignment,
-        typeExpression: baseAssignment.typeExpression ?? 'ReadonlySet<number>',
+        typeExpression: baseAssignment.typeExpression ?? inferredReadonlySetTypeExpression(frozenSet.items),
         valueLines: frozenSet.valueLines,
       },
       nextIndex: frozenSet.nextIndex,
@@ -503,12 +503,13 @@ function tsTopLevelAssignmentTypeExpression(pythonType: string): string {
 function parseMultilineFrozenSet(
   lines: string[],
   startIndex: number,
-): { valueLines: string[]; nextIndex: number } | null {
+): { items: string[]; valueLines: string[]; nextIndex: number } | null {
   const opener = (lines[startIndex] ?? '').trim();
   if (opener !== '{' && opener !== '(') {
     return null;
   }
   const closingItems = opener === '{' ? new Set(['}', '},']) : new Set([')', '),']);
+  const items: string[] = [];
   const valueLines = ['new Set(['];
   let nextIndex = startIndex + 1;
   while (nextIndex < lines.length) {
@@ -518,7 +519,7 @@ function parseMultilineFrozenSet(
         return null;
       }
       valueLines.push('])');
-      return { valueLines, nextIndex: nextIndex + 2 };
+      return { items, valueLines, nextIndex: nextIndex + 2 };
     }
     if (trimmed.startsWith('#')) {
       valueLines.push(`  // ${trimmed.replace(/^# ?/, '')}`);
@@ -529,10 +530,19 @@ function parseMultilineFrozenSet(
     if (item === null) {
       return null;
     }
+    items.push(item[1]);
     valueLines.push(`  ${translateExpression(item[1])},`);
     nextIndex += 1;
   }
   return null;
+}
+
+function inferredReadonlySetTypeExpression(items: string[]): string {
+  const itemTypes = items
+    .map((item) => inferPythonExpressionType(item))
+    .filter((type) => type !== 'any');
+  const uniqueTypes = [...new Set(itemTypes)];
+  return `ReadonlySet<${uniqueTypes.length === 1 ? uniqueTypes[0] : 'unknown'}>`;
 }
 
 function parseMultilineDictComprehension(
