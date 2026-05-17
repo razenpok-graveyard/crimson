@@ -58,8 +58,7 @@ export function renderPlainClasses(lines: string[], classes: StraightLineModule[
       }
     }
     const shouldRenderConstructor = (
-      plainClass.fields.length > 0
-      || plainClass.constructorDefinition.parameters.length > 0
+      plainClass.constructorDefinition.parameters.length > 0
       || plainClass.constructorDefinition.optsParams.length > 0
       || plainClass.constructorDefinition.statements.length > 0
     );

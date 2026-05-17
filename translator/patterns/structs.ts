@@ -15,6 +15,7 @@ import { flattenFromImportBlocks } from '../python-utils.js';
 import {
   identifierPattern,
   isCollectionsAbcTypeImport,
+  isCollectionsRuntimeImport,
   isIndentedBlockLine,
   isTypingOnlyImport,
   isTypeAliasExpression,
@@ -27,12 +28,14 @@ import {
 } from './common.js';
 import {
   arrayValueMapNameMarker,
+  booleanNameMarker,
   classFieldTypeMarker,
   functionReturnTypeMarker,
   instanceMethodSignatureMarker,
   mapValueMapNameMarker,
   mapValueTypeMarker,
   receiverTypeNameMarker,
+  setNameMarker,
   translateExpression,
   tupleElementArrayNameMarker,
   tupleKeyMapNameMarker,
@@ -41,7 +44,7 @@ import {
   functionSignatureMarker,
   parseStraightLineFunctionHeader,
 } from './function-headers.js';
-import { recordImportedInstanceMethodSignatures, recordImportedMapNames, recordImportedStructConstructorFields, recordImportedTupleTypeAliases } from './imported-classes.js';
+import { recordImportedClassFieldTypes, recordImportedInstanceMethodSignatures, recordImportedMapNames, recordImportedStructConstructorFields, recordImportedTupleTypeAliases } from './imported-classes.js';
 import { parseFunctionParameterText, parseFunctionParametersText, pythonParameterNames, recordParameterNameBindings } from './parameters.js';
 import {
   reassignedLocalNames,
@@ -93,9 +96,8 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
     }
     if (
       isCollectionsAbcTypeImport(trimmed)
+      || isCollectionsRuntimeImport(trimmed)
       || isTypingOnlyImport(trimmed)
-      || trimmed === 'from collections import OrderedDict'
-      || trimmed === 'from collections import defaultdict'
       || trimmed === 'from pathlib import Path'
       || isDataclassImport(trimmed)
     ) {
@@ -165,6 +167,12 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       names,
     });
     recordImportedInstanceMethodSignatures(
+      modulePath,
+      names.map((name) => ({ importedName: name, localName: name })),
+      relativePath,
+      moduleNameMap,
+    );
+    recordImportedClassFieldTypes(
       modulePath,
       names.map((name) => ({ importedName: name, localName: name })),
       relativePath,
@@ -603,6 +611,14 @@ export function parseStructClass(
         arrayFieldNames.add(tupleElementArrayNameMarker(`self.${field[1]}`));
         arrayFieldNames.add(tupleElementArrayNameMarker(`this.${fieldName}`));
       }
+    }
+    if (typeExpression === 'boolean') {
+      arrayFieldNames.add(booleanNameMarker(`self.${field[1]}`));
+      arrayFieldNames.add(booleanNameMarker(`this.${fieldName}`));
+    }
+    if (typeExpression.startsWith('Set<') || typeExpression.startsWith('ReadonlySet<')) {
+      arrayFieldNames.add(setNameMarker(`self.${field[1]}`));
+      arrayFieldNames.add(setNameMarker(`this.${fieldName}`));
     }
     if (typeExpression.startsWith('Map<')) {
       mapFieldNames.add(`self.${field[1]}`);
@@ -1430,6 +1446,9 @@ function tsStructFieldDefaultValue(pythonValue: string): string | null {
   }
   if (trimmed === 'msgspec.field(default_factory=dict)') {
     return 'new Map()';
+  }
+  if (trimmed === 'msgspec.field(default_factory=set)') {
+    return 'new Set()';
   }
   if (trimmed === 'msgspec.field(default_factory=OrderedDict)') {
     return 'new Map()';

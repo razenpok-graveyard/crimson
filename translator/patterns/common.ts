@@ -165,6 +165,16 @@ export function isCollectionsAbcTypeImport(trimmedLine: string): boolean {
     .every((name) => ['Callable', 'Iterable', 'Iterator', 'Mapping', 'MutableSequence', 'Sequence'].includes(name));
 }
 
+export function isCollectionsRuntimeImport(trimmedLine: string): boolean {
+  const collectionsImport = /^from collections import (.+)$/.exec(trimmedLine);
+  if (collectionsImport === null) {
+    return false;
+  }
+  return collectionsImport[1]
+    .split(', ')
+    .every((name) => ['Counter', 'OrderedDict', 'defaultdict', 'deque'].includes(name));
+}
+
 export function isTypingOnlyImport(trimmedLine: string): boolean {
   const typeImport = /^from typing import (.+)$/.exec(trimmedLine);
   if (typeImport === null) {

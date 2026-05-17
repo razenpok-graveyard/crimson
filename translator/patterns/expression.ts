@@ -539,6 +539,14 @@ export function translateExpression(
   mapNames: ReadonlySet<string> = new Set(),
 ): string {
   const trimmed = pythonExpression.trim();
+  const adjacentStringExpression = parseAdjacentPythonStringExpression(trimmed);
+  if (adjacentStringExpression !== null) {
+    return translateExpression(adjacentStringExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  }
+  const parenthesizedAdjacentStringExpression = parseParenthesizedAdjacentPythonStringExpression(trimmed);
+  if (parenthesizedAdjacentStringExpression !== null) {
+    return translateExpression(parenthesizedAdjacentStringExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  }
   const lambdaExpression = translateInlineLambdaExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
   if (lambdaExpression !== null) {
     return lambdaExpression;
@@ -568,6 +576,11 @@ export function translateExpression(
   const notStripCall = /^not (.+\.strip\(\))$/.exec(trimmed);
   if (notStripCall !== null && delimitersBalanced(notStripCall[1])) {
     return `!${translateExpression(notStripCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
+  }
+
+  const leadingBoolCall = parseCallPrefix(trimmed, 'bool');
+  if (leadingBoolCall !== null && leadingBoolCall.rest === '') {
+    return translateBooleanCast(leadingBoolCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames);
   }
 
   const lstripCall = /^(.+)\.lstrip\(\)$/.exec(trimmed);
@@ -618,6 +631,9 @@ export function translateExpression(
   if (trimmed === 'time.perf_counter_ns()') {
     return '(performance.now() * 1_000_000)';
   }
+  if (trimmed === 'time.monotonic()') {
+    return '(performance.now() / 1000)';
+  }
   if (trimmed === 'os.getpid()') {
     return 'globalThis.process?.pid ?? 0';
   }
@@ -656,6 +672,11 @@ export function translateExpression(
   const secretsTokenHexCall = parseCallPrefix(trimmed, 'secrets.token_hex');
   if (secretsTokenHexCall !== null && secretsTokenHexCall.rest === '') {
     return `secretsTokenHex(${translateExpression(secretsTokenHexCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
+  const socketGetHostByNameCall = parseCallPrefix(trimmed, 'socket.gethostbyname');
+  if (socketGetHostByNameCall !== null && socketGetHostByNameCall.rest === '') {
+    return `String(${translateExpression(socketGetHostByNameCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
   if (/^(?:collections\.)?defaultdict\((?:list|dict|set|int|float)?\)$/.test(trimmed)) {
@@ -1755,6 +1776,14 @@ export function translateExpression(
     return `bytesFrom(${translateExpression(bytesCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
+  const printCall = parseCallPrefix(trimmed, 'print');
+  if (printCall !== null && printCall.rest === '') {
+    const args = splitTopLevelComma(printCall.argsText)
+      .filter((arg) => !/^(?:flush|file|end|sep)=/.test(arg.trim()))
+      .map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames));
+    return `console.log(${args.join(', ')})`;
+  }
+
   const getattrCall = parseCallPrefix(trimmed, 'getattr');
   if (getattrCall !== null && getattrCall.rest === '') {
     const args = splitTopLevelComma(getattrCall.argsText);
@@ -1916,6 +1945,20 @@ export function translateExpression(
     if (args.length === 1) {
       const iterable = translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
       return expressionIsKnownMap(iterable, nameMap, mapNames) ? `new Set(${iterable}.keys())` : `new Set(${iterable})`;
+    }
+  }
+
+  const dequeCall = parseCallPrefix(trimmed, 'deque');
+  if (dequeCall !== null && dequeCall.rest === '') {
+    const args = splitTopLevelComma(dequeCall.argsText);
+    if (args.length === 0) {
+      return '[]';
+    }
+    if (args.length === 1) {
+      if (parseSimpleGeneratorExpression(args[0]) !== null) {
+        return sortedIterableExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      }
+      return `Array.from(${translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
     }
   }
 
@@ -2838,6 +2881,7 @@ export function translateExpression(
     .replaceAll(/\.append\(/g, '.push(')
     .replaceAll(/\.extend\(/g, '.push(...')
     .replaceAll(/\.index\(/g, '.indexOf(')
+    .replaceAll(/\bstr\(/g, 'String(')
     .replaceAll(/\.strip\(\)/g, '.trim()')
     .replaceAll(/\.lower\(\)/g, '.toLowerCase()')
     .replaceAll(/\bmath\.pi\b/g, 'Math.PI')
@@ -2893,6 +2937,54 @@ export function translateExpression(
     .replaceAll(/\.TEXTURE_WRAP_CLAMP\b/g, '.CLAMP'),
     arrayNames,
   );
+}
+
+function parseAdjacentPythonStringExpression(trimmedExpression: string): string | null {
+  const parts: string[] = [];
+  let index = 0;
+  while (index < trimmedExpression.length) {
+    while (/\s/.test(trimmedExpression[index] ?? '')) {
+      index += 1;
+    }
+    if (index >= trimmedExpression.length) {
+      break;
+    }
+    const literal = parseLeadingPythonStringLiteral(trimmedExpression.slice(index));
+    if (literal === null) {
+      return null;
+    }
+    parts.push(literal);
+    index += literal.length;
+  }
+  return parts.length > 1 ? combinePythonStringExpressions(parts) : null;
+}
+
+function parseParenthesizedAdjacentPythonStringExpression(trimmedExpression: string): string | null {
+  if (!trimmedExpression.startsWith('(') || matchingCloseParen(trimmedExpression, 0) !== trimmedExpression.length - 1) {
+    return null;
+  }
+  return parseAdjacentPythonStringExpression(trimmedExpression.slice(1, -1).trim());
+}
+
+function parseLeadingPythonStringLiteral(value: string): string | null {
+  const prefix = /^[fF]?/.exec(value)?.[0] ?? '';
+  const quote = value[prefix.length];
+  if (quote !== '"' && quote !== "'") {
+    return null;
+  }
+  let index = prefix.length + 1;
+  while (index < value.length) {
+    const char = value[index];
+    if (char === '\\') {
+      index += 2;
+      continue;
+    }
+    if (char === quote) {
+      return value.slice(0, index + 1);
+    }
+    index += 1;
+  }
+  return null;
 }
 
 function replaceKnownRectangleDimensions(tsExpression: string, arrayNames: Set<string>): string {
@@ -3119,6 +3211,12 @@ export function expressionIsKnownMap(
   if (mapGetOrThrow !== null && mapNames.has(mapValueMapNameMarker(mapGetOrThrow[1]))) {
     return true;
   }
+  if (mapGetOrThrow !== null) {
+    const valueType = knownMapValueType(mapGetOrThrow[1], nameMap);
+    if (valueType?.startsWith('Map<') === true || valueType?.startsWith('ReadonlyMap<') === true) {
+      return true;
+    }
+  }
   const dottedField = /^(.+)\.([A-Za-z_$][A-Za-z0-9_$]*)$/.exec(tsExpression);
   if (dottedField === null) {
     return false;
@@ -3126,6 +3224,59 @@ export function expressionIsKnownMap(
   const receiverType = nameMap.get(receiverTypeNameMarker(dottedField[1]));
   const fieldType = receiverType === undefined ? undefined : nameMap.get(classFieldTypeMarker(receiverType, dottedField[2]));
   return fieldType?.startsWith('Map<') === true || fieldType?.startsWith('ReadonlyMap<') === true;
+}
+
+function knownMapValueType(
+  tsExpression: string,
+  nameMap: Map<string, string>,
+): string | null {
+  const dottedField = /^(.+)\.([A-Za-z_$][A-Za-z0-9_$]*)$/.exec(tsExpression);
+  if (dottedField === null) {
+    return null;
+  }
+  const receiverType = nameMap.get(receiverTypeNameMarker(dottedField[1]));
+  const fieldType = receiverType === undefined ? undefined : nameMap.get(classFieldTypeMarker(receiverType, dottedField[2]));
+  if (fieldType === undefined) {
+    return null;
+  }
+  const mapArgs = /^ReadonlyMap<(.+)>$/.exec(fieldType) ?? /^Map<(.+)>$/.exec(fieldType);
+  if (mapArgs === null) {
+    return null;
+  }
+  const args = splitTopLevelTypeComma(mapArgs[1]);
+  return args.length === 2 ? args[1].trim() : null;
+}
+
+function splitTopLevelTypeComma(value: string): string[] {
+  const parts: string[] = [];
+  let start = 0;
+  let angleDepth = 0;
+  let parenDepth = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (char === '<') {
+      angleDepth += 1;
+      continue;
+    }
+    if (char === '>') {
+      angleDepth = Math.max(0, angleDepth - 1);
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') {
+      parenDepth += 1;
+      continue;
+    }
+    if (char === ')' || char === ']' || char === '}') {
+      parenDepth = Math.max(0, parenDepth - 1);
+      continue;
+    }
+    if (char === ',' && angleDepth === 0 && parenDepth === 0) {
+      parts.push(value.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  parts.push(value.slice(start).trim());
+  return parts.filter((part) => part !== '');
 }
 
 function translateAggregateGeneratorCall(
@@ -3696,15 +3847,15 @@ function translateBooleanCast(
   validatedTypeAliases: ReadonlySet<string>,
   mapNames: ReadonlySet<string>,
 ): string {
-  if (pythonExpression.includes(' or ')) {
-    return pythonExpression
-      .split(' or ')
+  const orParts = splitTopLevelLogicalOperator(pythonExpression, 'or');
+  if (orParts !== null) {
+    return orParts
       .map((part) => translatePythonTruthy(part, nameMap, arrayNames, validatedTypeAliases, mapNames))
       .join(' || ');
   }
-  if (pythonExpression.includes(' and ')) {
-    return pythonExpression
-      .split(' and ')
+  const andParts = splitTopLevelLogicalOperator(pythonExpression, 'and');
+  if (andParts !== null) {
+    return andParts
       .map((part) => translatePythonTruthy(part, nameMap, arrayNames, validatedTypeAliases, mapNames))
       .join(' && ');
   }
@@ -3736,9 +3887,21 @@ function translatePythonTruthy(
     if (typeExpressionLooksMap(fieldType)) {
       return `${translated}.size > 0`;
     }
+    if (fieldType === 'string') {
+      return `${tsPropertyAccessBase(translated)}.length > 0`;
+    }
     if (fieldType.endsWith('[]') || fieldType.startsWith('readonly ') && fieldType.endsWith('[]')) {
       return `${translated}.length > 0`;
     }
+  }
+  if (
+    arrayNames.has(stringNameMarker(trimmed))
+    || arrayNames.has(stringNameMarker(translated))
+    || /^String\(/.test(translated)
+    || /^\(.+\)\.trim\(\)$/.test(translated)
+    || /^[A-Za-z_$][A-Za-z0-9_.$]*\.trim\(\)$/.test(translated)
+  ) {
+    return `${tsPropertyAccessBase(translated)}.length > 0`;
   }
   if (/^[A-Za-z_$][A-Za-z0-9_.$]*(?:creatures|entries|pickups|players)$/.test(translated)) {
     return `${translated}.length > 0`;
@@ -3943,6 +4106,10 @@ function translateNextCall(
   const args = splitTopLevelComma(argsText);
   if (args.length < 1 || args.length > 2) {
     return null;
+  }
+  const reversedCall = parseCallPrefix(args[0].trim(), 'reversed');
+  if (reversedCall !== null && reversedCall.rest === '' && args.length === 1) {
+    return `Array.from(${translateExpression(reversedCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)}).at(-1)!`;
   }
   const generator = parseSimpleGeneratorExpression(args[0]);
   if (generator === null) {

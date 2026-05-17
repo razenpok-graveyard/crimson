@@ -3295,6 +3295,15 @@ function collectMultilineListLiteral(
       return null;
     }
     const item = trimmed.replace(/,$/, '');
+    if (item === '(') {
+      const parenthesized = collectMultilineParenthesizedExpression(lines, nextIndex, item);
+      if (parenthesized === null) {
+        return null;
+      }
+      items.push(translateExpression(parenthesized.expression.replace(/,$/, ''), nameMap, arrayNames, validatedTypeAliases, mapNames));
+      nextIndex = parenthesized.nextIndex;
+      continue;
+    }
     const multilineCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(item);
     if (multilineCall !== null) {
       const callExpression = parseMultilineCallExpression(
@@ -3354,6 +3363,15 @@ export function collectMultilineSequenceLiteral(
     }
 
     const item = trimmed.replace(/,$/, '');
+    if (item === '(') {
+      const parenthesized = collectMultilineParenthesizedExpression(lines, nextIndex, item);
+      if (parenthesized === null) {
+        return null;
+      }
+      items.push(translateExpression(parenthesized.expression.replace(/,$/, ''), nameMap, arrayNames, validatedTypeAliases, mapNames));
+      nextIndex = parenthesized.nextIndex;
+      continue;
+    }
     const multilineCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(item);
     if (multilineCall !== null) {
       const callExpression = parseMultilineCallExpression(

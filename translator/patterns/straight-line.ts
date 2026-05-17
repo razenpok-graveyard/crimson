@@ -31,6 +31,7 @@ import { parseProtocolClass } from './basic.js';
 import {
   identifierPattern,
   isCollectionsAbcTypeImport,
+  isCollectionsRuntimeImport,
   isIndentedBlockLine,
   isTypingOnlyImport,
   parseIndentedDocstring,
@@ -230,13 +231,10 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     if (
       isCollectionsAbcTypeImport(trimmed)
+      || isCollectionsRuntimeImport(trimmed)
       || isTypingOnlyImport(trimmed)
       || isEnumOnlyImport(trimmed)
       || isDataclassOnlyImport(trimmed)
-      || trimmed === 'from collections import Counter'
-      || trimmed === 'from collections import OrderedDict'
-      || trimmed === 'from collections import defaultdict'
-      || trimmed === 'from collections import deque'
       || trimmed === 'from contextlib import contextmanager'
       || trimmed === 'from functools import lru_cache'
       || trimmed === 'from pathlib import Path'
@@ -1785,14 +1783,11 @@ function privateFunctionNamesCollidingWithParameters(lines: readonly string[]): 
   const parameterNames = new Set<string>();
   const functionNames = topLevelFunctionNames(lines);
   for (let index = 0; index < lines.length; index += 1) {
-    if (!lines[index]?.startsWith('def ')) {
-      continue;
-    }
-    const header = parseStraightLineFunctionHeader(lines as string[], index);
+    const header = /^\s*def [A-Za-z_][A-Za-z0-9_]*\((.*)\)(?: -> .+)?:$/.exec(lines[index] ?? '');
     if (header === null) {
       continue;
     }
-    for (const parameterName of pythonParameterNames(header.parametersText)) {
+    for (const parameterName of pythonParameterNames(header[1])) {
       parameterNames.add(tsExportNameForPythonName(parameterName));
     }
   }
