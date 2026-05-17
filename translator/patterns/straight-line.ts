@@ -107,6 +107,7 @@ import {
   strftimeUtcNowHelperStatements,
   structFloatBufferStatements,
   tupleKeyHelperStatements,
+  zipHelperStatements,
 } from './runtime-helpers.js';
 import {
   addReassignedLocalTypeAnnotations,
@@ -736,7 +737,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       positional: signaturePositionalNames,
       returnTupleMarkers: returnTupleMarkersForType(header.returnType),
     };
-    const functionName = tsFunctionNameForPythonName(header.name, privateFunctionNameCollisions);
+    const functionName = topLevelFunctionNameForPythonName(header.name, privateFunctionNameCollisions, imports);
     moduleNameMap.set(functionSignatureMarker(header.name), JSON.stringify(signature));
     moduleNameMap.set(functionSignatureMarker(functionName), JSON.stringify(signature));
 
@@ -994,8 +995,15 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     leadingStatements.unshift(...helperStatements);
   }
-  if (moduleValueText.includes('pythonTruthy(')) {
+  if (moduleValueText.includes('pythonTruthy(') || /\bpythonTruthy\b/.test(moduleValueText)) {
     const helperStatements = pythonTruthyHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
+  if (/\bzip\(/.test(moduleValueText)) {
+    const helperStatements = zipHelperStatements();
     if (leadingStatements.length > 0) {
       helperStatements.push('');
     }
@@ -1719,6 +1727,19 @@ function topLevelFunctionNames(lines: readonly string[]): string[] {
 function tsFunctionNameForPythonName(pythonName: string, privateFunctionNameCollisions: ReadonlySet<string>): string {
   const publicName = tsExportNameForPythonName(pythonName);
   return privateFunctionNameCollisions.has(pythonName) ? `_${publicName}` : publicName;
+}
+
+function topLevelFunctionNameForPythonName(
+  pythonName: string,
+  privateFunctionNameCollisions: ReadonlySet<string>,
+  imports: readonly ImportDefinition[],
+): string {
+  const name = tsFunctionNameForPythonName(pythonName, privateFunctionNameCollisions);
+  if (!pythonName.startsWith('_')) {
+    return name;
+  }
+  const importedNames = new Set(imports.flatMap((importDefinition) => importDefinition.names.map(importedBindingName)));
+  return importedNames.has(name) ? `_${name}` : name;
 }
 
 function recordParameterReceiverTypes(

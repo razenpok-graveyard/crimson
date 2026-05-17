@@ -54,6 +54,7 @@ export function drawPlasmaParticles(ctx: ProjectileDrawCtx): boolean {
   const auraAlphaMul = plasmaCfg.auraAlphaMul;
 
   let segCount: number;
+  let alpha!: number;
   let size: number;
   let origin: wgl.Vector2;
   let dst: wgl.Rectangle;
@@ -71,7 +72,7 @@ export function drawPlasmaParticles(ctx: ProjectileDrawCtx): boolean {
     // The stored projectile angle is rotated by +pi/2 vs travel direction.
     const direction = Vec2.fromHeading(ctx.angle + Math.PI).mul(speedScale);
 
-    const alpha = ctx.alpha;
+    alpha = ctx.alpha;
     const tailTint = new RGBA(rgb[0], rgb[1], rgb[2], alpha * 0.4).toRl();
     const headTint = new RGBA(rgb[0], rgb[1], rgb[2], alpha * headAlphaMul).toRl();
     const auraTint = new RGBA(auraRgb[0], auraRgb[1], auraRgb[2], alpha * auraAlphaMul).toRl();

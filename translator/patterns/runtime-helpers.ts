@@ -631,6 +631,20 @@ export function pythonTruthyHelperStatements(): string[] {
   ];
 }
 
+export function zipHelperStatements(): string[] {
+  return [
+    'function zip<A, B>(a: readonly A[], b: readonly B[], opts?: { strict?: boolean }): [A, B][];',
+    'function zip<A, B, C>(a: readonly A[], b: readonly B[], c: readonly C[], opts?: { strict?: boolean }): [A, B, C][];',
+    'function zip(...args: unknown[]): unknown[][] {',
+    '  const last = args.at(-1);',
+    "  const hasOpts = last !== null && typeof last === 'object' && !Array.isArray(last) && Object.prototype.hasOwnProperty.call(last, 'strict');",
+    '  const arrays = (hasOpts ? args.slice(0, -1) : args) as readonly unknown[][];',
+    '  const length = arrays.length === 0 ? 0 : Math.min(...arrays.map((array) => array.length));',
+    '  return Array.from({ length }, (_, index) => arrays.map((array) => array[index]));',
+    '}',
+  ];
+}
+
 export function pythonJsonDumpsHelperStatements(): string[] {
   return [
     'function pythonJsonDumps(value: unknown, opts: { sortKeys?: boolean; indent?: number; defaultRepr?: boolean } = {}): string {',

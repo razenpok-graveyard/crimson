@@ -8,6 +8,7 @@ import {
   colorNameMarker,
   dateNameMarker,
   expressionIsKnownMap,
+  functionDeclaredReturnTypeMarker,
   functionReturnTypeMarker,
   mapValueMapNameMarker,
   nullableNameMarker,
@@ -30,6 +31,7 @@ import {
 } from '../expression.js';
 import { splitInlineComment } from './inline-comments.js';
 import { addMutableName } from './utils.js';
+import { nullableTypeExpressionBase } from '../expression/types.js';
 
 function topLevelColonIndex(value: string): number | null {
   let depth = 0;
@@ -150,7 +152,11 @@ export function localTupleDeclarationType(
     return tupleArrayType;
   }
   if (!pythonExpressionCouldBeTupleLiteral(pythonRight)) {
-    return null;
+    return fixedRangeTupleGeneratorDeclarationType(assignedRight, nameMap, arrayNames);
+  }
+  const literalTupleType = tupleLiteralDeclarationType(assignedRight, nameMap, arrayNames);
+  if (literalTupleType !== null) {
+    return literalTupleType;
   }
   const length = numericTupleExpressionLength(assignedRight) ?? numericOuterPythonTupleExpressionLength(pythonRight);
   if (length === null) {
@@ -158,6 +164,40 @@ export function localTupleDeclarationType(
     return returnTupleType;
   }
   return `[${Array.from({ length }, () => 'number').join(', ')}]`;
+}
+
+function tupleLiteralDeclarationType(
+  assignedRight: string,
+  nameMap: ReadonlyMap<string, string>,
+  arrayNames: ReadonlySet<string>,
+): string | null {
+  const items = parseTsArrayLiteralItems(assignedRight);
+  if (items === null || items.length < 2) {
+    return null;
+  }
+  const itemTypes = items.map((item) => inferExpressionType(item, nameMap, arrayNames));
+  return itemTypes.some((type) => type === null)
+    ? null
+    : `[${itemTypes.join(', ')}]`;
+}
+
+function fixedRangeTupleGeneratorDeclarationType(
+  assignedRight: string,
+  nameMap: ReadonlyMap<string, string>,
+  arrayNames: ReadonlySet<string>,
+): string | null {
+  const rangeMap = /^Array\.from\(\{ length: Math\.max\(0, (\d+)\) \}, \(_, i\) => i\)\.map\(\([^)]*\) => ([\s\S]+)\)$/.exec(assignedRight.trim());
+  if (rangeMap === null) {
+    return null;
+  }
+  const length = Number(rangeMap[1]);
+  if (!Number.isSafeInteger(length) || length < 2) {
+    return null;
+  }
+  const itemType = inferExpressionType(rangeMap[2], nameMap, arrayNames);
+  return itemType === null
+    ? null
+    : `[${Array.from({ length }, () => itemType).join(', ')}]`;
 }
 
 export function objectRecordDeclarationType(
@@ -269,6 +309,14 @@ function inferExpressionType(
   }
   if (translatedExpressionLooksBoolean(trimmed) || /^!\(.+\)$/.test(trimmed)) {
     return 'boolean';
+  }
+  const classInstance = /^new ([A-Z][A-Za-z0-9_$]*)\(/.exec(trimmed);
+  if (classInstance !== null) {
+    return classInstance[1];
+  }
+  const directCall = /^(?:await )?([A-Za-z_$][A-Za-z0-9_$]*)\(/.exec(trimmed);
+  if (directCall !== null) {
+    return nameMap.get(functionReturnTypeMarker(directCall[1])) ?? null;
   }
   if (translatedExpressionLooksVector(trimmed) || arrayNames.has(vectorNameMarker(trimmed))) {
     return 'Vec2';
@@ -772,8 +820,10 @@ function knownDottedFieldType(expression: string, nameMap: ReadonlyMap<string, s
   if (dotted === null) {
     return null;
   }
-  const receiverType = nameMap.get(receiverTypeNameMarker(dotted[1])) ?? knownDottedFieldType(dotted[1], nameMap);
-  return receiverType == null ? null : nameMap.get(classFieldTypeMarker(receiverType, dotted[2])) ?? null;
+  const receiverType = nullableTypeExpressionBase(
+    nameMap.get(receiverTypeNameMarker(dotted[1])) ?? knownDottedFieldType(dotted[1], nameMap),
+  );
+  return receiverType === undefined ? null : nameMap.get(classFieldTypeMarker(receiverType, dotted[2])) ?? null;
 }
 
 export function arrayElementTypeFromTypeExpression(typeExpression: string): string | null {
@@ -951,9 +1001,11 @@ export function recordLocalAssignmentMarkers(
   const callAssignment = /^(?:await )?([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\(/.exec(assignedRight);
   if (callAssignment !== null) {
     const returnType = nameMap.get(functionReturnTypeMarker(callAssignment[1]));
-    if (returnType !== undefined && /^[A-Z][A-Za-z0-9_$]*$/.test(returnType)) {
-      nameMap.set(receiverTypeNameMarker(pythonName), returnType);
-      nameMap.set(receiverTypeNameMarker(tsName), returnType);
+    const declaredReturnType = nameMap.get(functionDeclaredReturnTypeMarker(callAssignment[1]));
+    const receiverType = nullableTypeExpressionBase(declaredReturnType ?? returnType ?? null);
+    if (receiverType !== undefined && /^[A-Z][A-Za-z0-9_$]*$/.test(receiverType)) {
+      nameMap.set(receiverTypeNameMarker(pythonName), receiverType);
+      nameMap.set(receiverTypeNameMarker(tsName), receiverType);
     }
     if (returnType?.endsWith('[]') === true || returnType?.startsWith('readonly ') === true && returnType.endsWith('[]')) {
       arrayNames.add(pythonName);
@@ -1050,6 +1102,7 @@ function translatedExpressionLooksBoolean(tsExpression: string): boolean {
   }
   return trimmed === 'true'
     || trimmed === 'false'
+    || /^Boolean\(/.test(trimmed)
     || /^!/.test(trimmed)
     || expressionContainsComparisonOperator(trimmed)
     || /(?:&&|\|\||\binstanceof\b)/.test(trimmed)

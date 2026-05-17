@@ -27,7 +27,10 @@ export class TypingBuffer {
     }
   }
 
-  pushChar(ch: string): void {
+  pushChar(opts: { ch: string }): void;
+  pushChar(ch: string): void;
+  pushChar(chOrOpts: string | { ch: string }): void {
+    const ch: string = typeof chOrOpts === 'object' && chOrOpts !== null && 'ch' in chOrOpts ? chOrOpts.ch : chOrOpts as string;
     if (!ch) {
       return;
     }

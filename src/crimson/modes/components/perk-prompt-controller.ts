@@ -75,7 +75,10 @@ export class PerkPromptState {
     this.timerMs = clamp(this.timerMs + timerDelta, 0.0, PERK_PROMPT_MAX_TIMER_MS);
   }
 
-  tickPulse(dtUiMs: number): void {
+  tickPulse(opts: { dtUiMs: number }): void;
+  tickPulse(dtUiMs: number): void;
+  tickPulse(dtUiMsOrOpts: number | { dtUiMs: number }): void {
+    const dtUiMs: number = typeof dtUiMsOrOpts === 'object' && dtUiMsOrOpts !== null && 'dtUiMs' in dtUiMsOrOpts ? dtUiMsOrOpts.dtUiMs : dtUiMsOrOpts as number;
     const pulseDelta = dtUiMs * (this.hover ? 6.0 : -2.0);
     this.pulse = clamp(this.pulse + pulseDelta, 0.0, 1000.0);
   }
@@ -118,7 +121,7 @@ export class PerkPromptState {
     if (inputCodeIsPressed(pickKey, { playerIndex: 0 }) && !inputCodeIsDown(fireKey, { playerIndex: 0 })) {
       return true;
     }
-    const fireCodes = Array.from({ length: Math.max(0, 4) }, (_, i) => i).map((idx) => int(config.controls.player(idx).fireCode));
+    const fireCodes: [number, number, number, number] = Array.from({ length: Math.max(0, 4) }, (_, i) => i).map((idx) => int(config.controls.player(idx).fireCode)) as [number, number, number, number];
     return this.hover && inputPrimaryJustPressed({ fireCodes: fireCodes, playerCount: playerCount });
   }
 

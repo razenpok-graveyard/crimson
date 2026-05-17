@@ -62,14 +62,20 @@ export class BonusApplyCtx {
     this.freezeCorpseIndices = opts.freezeCorpseIndices ?? null;
   }
 
-  registerGlobal(timerKey: string): void {
+  registerGlobal(opts: { timerKey: string }): void;
+  registerGlobal(timerKey: string): void;
+  registerGlobal(timerKeyOrOpts: string | { timerKey: string }): void {
+    const timerKey: string = typeof timerKeyOrOpts === 'object' && timerKeyOrOpts !== null && 'timerKey' in timerKeyOrOpts ? timerKeyOrOpts.timerKey : timerKeyOrOpts as string;
     this.state.bonusHud.register(
       this.bonusId,
       { label: this.label, iconId: this.iconId, timerRef: new TimerRef({ kind: 'global', key: timerKey }) },
     );
   }
 
-  registerPlayer(timerKey: string): void {
+  registerPlayer(opts: { timerKey: string }): void;
+  registerPlayer(timerKey: string): void;
+  registerPlayer(timerKeyOrOpts: string | { timerKey: string }): void {
+    const timerKey: string = typeof timerKeyOrOpts === 'object' && timerKeyOrOpts !== null && 'timerKey' in timerKeyOrOpts ? timerKeyOrOpts.timerKey : timerKeyOrOpts as string;
     if (this.players.length > 1) {
       this.state.bonusHud.register(
         this.bonusId,

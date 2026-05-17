@@ -6,6 +6,248 @@ import { MovementControlType } from '@crimson/movement-controls.ts';
 import type { QuestLevel } from '@crimson/quests/level.ts';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 
+export class CrimsonDisplayConfig {
+  width: number;
+  height: number;
+  windowed: boolean;
+  bpp: number;
+  textureScale: number;
+  mouseSensitivity: number;
+  detailPreset: number;
+  fxDetail: [boolean, boolean, boolean];
+  violenceDisabled: number;
+
+  constructor(opts: {
+    width: number;
+    height: number;
+    windowed: boolean;
+    bpp: number;
+    textureScale: number;
+    mouseSensitivity: number;
+    detailPreset: number;
+    fxDetail: [boolean, boolean, boolean];
+    violenceDisabled: number;
+  }) {
+    this.width = opts.width;
+    this.height = opts.height;
+    this.windowed = opts.windowed;
+    this.bpp = opts.bpp;
+    this.textureScale = opts.textureScale;
+    this.mouseSensitivity = opts.mouseSensitivity;
+    this.detailPreset = opts.detailPreset;
+    this.fxDetail = opts.fxDetail;
+    this.violenceDisabled = opts.violenceDisabled;
+  }
+
+  fxDetailEnabled(opts: { level: number; default?: boolean }): boolean;
+  fxDetailEnabled(level: number, _default?: boolean): boolean;
+  fxDetailEnabled(levelOrOpts: number | { level: number; default?: boolean }, _defaultArg: boolean | undefined = undefined): boolean {
+    const level: number = typeof levelOrOpts === 'object' && levelOrOpts !== null && 'level' in levelOrOpts ? levelOrOpts.level : levelOrOpts as number;
+    const _default: boolean = typeof levelOrOpts === 'object' && levelOrOpts !== null && 'level' in levelOrOpts ? levelOrOpts.default ?? false : _defaultArg ?? false;
+    const _ = _default;
+    return Boolean(this.fxDetail[int(level)]);
+  }
+
+  setFxDetail(opts: { level: number; enabled: boolean }): void;
+  setFxDetail(level: number, enabled: boolean): void;
+  setFxDetail(levelOrOpts: number | { level: number; enabled: boolean }, enabledArg: boolean | undefined = undefined): void {
+    const level: number = typeof levelOrOpts === 'object' && levelOrOpts !== null && 'level' in levelOrOpts ? levelOrOpts.level : levelOrOpts as number;
+    const enabled: boolean = typeof levelOrOpts === 'object' && levelOrOpts !== null && 'level' in levelOrOpts ? levelOrOpts.enabled : enabledArg as boolean;
+    const idx = int(level);
+    const values = Array.from(this.fxDetail);
+    values[idx] = enabled;
+    this.fxDetail = [Boolean(values[0]), Boolean(values[1]), Boolean(values[2])];
+  }
+}
+
+export class CrimsonAudioConfig {
+  soundDisabled: boolean;
+  musicDisabled: boolean;
+  sfxVolume: number;
+  musicVolume: number;
+
+  constructor(opts: {
+    soundDisabled: boolean;
+    musicDisabled: boolean;
+    sfxVolume: number;
+    musicVolume: number;
+  }) {
+    this.soundDisabled = opts.soundDisabled;
+    this.musicDisabled = opts.musicDisabled;
+    this.sfxVolume = opts.sfxVolume;
+    this.musicVolume = opts.musicVolume;
+  }
+}
+
+export class CrimsonGameplayConfig {
+  mode: GameMode;
+  playerCount: number;
+  hardcore: boolean;
+  questLevel: QuestLevel | null;
+  showInfoTexts: boolean;
+
+  constructor(opts: {
+    mode: GameMode;
+    playerCount: number;
+    hardcore: boolean;
+    questLevel: QuestLevel | null;
+    showInfoTexts: boolean;
+  }) {
+    this.mode = opts.mode;
+    this.playerCount = opts.playerCount;
+    this.hardcore = opts.hardcore;
+    this.questLevel = opts.questLevel;
+    this.showInfoTexts = opts.showInfoTexts;
+  }
+}
+
+export class CrimsonProfileConfig {
+  playerName: string;
+  playerNameInputLen: number;
+  savedNameCount: number;
+  selectedSavedNameSlot: number;
+  savedNames: [string, string, string, string, string, string, string, string];
+  showInternetScores: boolean;
+  scoreDateMode: HighScoreDateMode;
+
+  constructor(opts: {
+    playerName: string;
+    playerNameInputLen: number;
+    savedNameCount: number;
+    selectedSavedNameSlot: number;
+    savedNames: [string, string, string, string, string, string, string, string];
+    showInternetScores: boolean;
+    scoreDateMode: HighScoreDateMode;
+  }) {
+    this.playerName = opts.playerName;
+    this.playerNameInputLen = opts.playerNameInputLen;
+    this.savedNameCount = opts.savedNameCount;
+    this.selectedSavedNameSlot = opts.selectedSavedNameSlot;
+    this.savedNames = opts.savedNames;
+    this.showInternetScores = opts.showInternetScores;
+    this.scoreDateMode = opts.scoreDateMode;
+  }
+
+  setPlayerNameInput(opts: { name: string }): void;
+  setPlayerNameInput(name: string): void;
+  setPlayerNameInput(nameOrOpts: string | { name: string }): void {
+    const name: string = typeof nameOrOpts === 'object' && nameOrOpts !== null && 'name' in nameOrOpts ? nameOrOpts.name : nameOrOpts as string;
+    const encoded = latin1EncodeIgnore(name).slice(0, PLAYER_NAME_MAX_BYTES);
+    const buf = new Uint8Array(PLAYER_NAME_SIZE);
+    buf.set(encoded, 0);
+    buf[Math.min(encoded.length, PLAYER_NAME_MAX_BYTES)] = 0;
+
+    const end = buf.indexOf(0);
+    let i = end - 1;
+    while (i > 0 && buf[i] === 0x20) {
+      buf[i] = 0;
+      i -= 1;
+    }
+
+    this.playerName = latin1DecodeUntilNull(bytesFrom(buf));
+    this.playerNameInputLen = encoded.length;
+  }
+
+  savedNameLabels(): readonly string[] {
+    const count = int(this.savedNameCount);
+    if (count < 1 || count > SAVED_NAME_SLOT_COUNT) {
+      throw new Error(`saved_name_count must be in 1..${SAVED_NAME_SLOT_COUNT}, got ${count}`);
+    }
+    const labels: string[] = [];
+    for (let idx = 0; idx < count; idx++) {
+      let label = (String(this.savedNames[idx])).trim();
+      if (!label) {
+        label = idx === 0 ? 'default' : `slot_${idx}`;
+      }
+      labels.push(label);
+    }
+    return Array.from(labels);
+  }
+}
+
+export class CrimsonPlayerControls {
+  movement: MovementControlType;
+  aimScheme: AimScheme;
+  showDirectionArrow: boolean;
+  moveCodes: [number, number, number, number];
+  fireCode: number;
+  keyboardAimCodes: [number, number];
+  aimAxisCodes: [number, number];
+  moveAxisCodes: [number, number];
+
+  constructor(opts: {
+    movement: MovementControlType;
+    aimScheme: AimScheme;
+    showDirectionArrow: boolean;
+    moveCodes: [number, number, number, number];
+    fireCode: number;
+    keyboardAimCodes: [number, number];
+    aimAxisCodes: [number, number];
+    moveAxisCodes: [number, number];
+  }) {
+    this.movement = opts.movement;
+    this.aimScheme = opts.aimScheme;
+    this.showDirectionArrow = opts.showDirectionArrow;
+    this.moveCodes = opts.moveCodes;
+    this.fireCode = opts.fireCode;
+    this.keyboardAimCodes = opts.keyboardAimCodes;
+    this.aimAxisCodes = opts.aimAxisCodes;
+    this.moveAxisCodes = opts.moveAxisCodes;
+  }
+}
+
+export class CrimsonControlsConfig {
+  players: [CrimsonPlayerControls, CrimsonPlayerControls, CrimsonPlayerControls, CrimsonPlayerControls];
+  pickPerkCode: number;
+  reloadCode: number;
+
+  constructor(opts: {
+    players: [CrimsonPlayerControls, CrimsonPlayerControls, CrimsonPlayerControls, CrimsonPlayerControls];
+    pickPerkCode: number;
+    reloadCode: number;
+  }) {
+    this.players = opts.players;
+    this.pickPerkCode = opts.pickPerkCode;
+    this.reloadCode = opts.reloadCode;
+  }
+
+  player(opts: { playerIndex: number }): CrimsonPlayerControls;
+  player(playerIndex: number): CrimsonPlayerControls;
+  player(playerIndexOrOpts: number | { playerIndex: number }): CrimsonPlayerControls {
+    const playerIndex: number = typeof playerIndexOrOpts === 'object' && playerIndexOrOpts !== null && 'playerIndex' in playerIndexOrOpts ? playerIndexOrOpts.playerIndex : playerIndexOrOpts as number;
+    return this.players[_playerIndex(playerIndex)];
+  }
+}
+
+export class CrimsonConfig {
+  path: string;
+  display: CrimsonDisplayConfig;
+  audio: CrimsonAudioConfig;
+  gameplay: CrimsonGameplayConfig;
+  profile: CrimsonProfileConfig;
+  controls: CrimsonControlsConfig;
+
+  constructor(opts: {
+    path: string;
+    display: CrimsonDisplayConfig;
+    audio: CrimsonAudioConfig;
+    gameplay: CrimsonGameplayConfig;
+    profile: CrimsonProfileConfig;
+    controls: CrimsonControlsConfig;
+  }) {
+    this.path = opts.path;
+    this.display = opts.display;
+    this.audio = opts.audio;
+    this.gameplay = opts.gameplay;
+    this.profile = opts.profile;
+    this.controls = opts.controls;
+  }
+
+  save(): void {
+    writeFileSync(String(this.path), encodeCrimsonCfg(this));
+  }
+}
+
 export const CRIMSON_CFG_NAME = 'crimson.cfg';
 export const CRIMSON_CFG_SIZE = 0x480;
 export const PLAYER_NAME_SIZE = 0x20;
@@ -118,6 +360,48 @@ export const DEFAULT_SAVED_NAMES: [string, string, string, string, string, strin
   'default',
   'default',
   'default',
+];
+export const DEFAULT_PLAYER_CONTROL_TEMPLATES: readonly CrimsonPlayerControls[] = [
+  new CrimsonPlayerControls({
+    movement: MovementControlType.STATIC,
+    aimScheme: AimScheme.MOUSE,
+    showDirectionArrow: true,
+    moveCodes: [0x11, 0x1F, 0x1E, 0x20],
+    fireCode: 0x100,
+    keyboardAimCodes: [0x10, 0x12],
+    aimAxisCodes: [0x13F, 0x140],
+    moveAxisCodes: [0x141, 0x153],
+  }),
+  new CrimsonPlayerControls({
+    movement: MovementControlType.STATIC,
+    aimScheme: AimScheme.MOUSE,
+    showDirectionArrow: true,
+    moveCodes: [0xC8, 0xD0, 0xCB, 0xCD],
+    fireCode: 0x9D,
+    keyboardAimCodes: [0xD3, 0xD1],
+    aimAxisCodes: [0x13F, 0x140],
+    moveAxisCodes: [0x141, 0x153],
+  }),
+  new CrimsonPlayerControls({
+    movement: MovementControlType.STATIC,
+    aimScheme: AimScheme.MOUSE,
+    showDirectionArrow: true,
+    moveCodes: [0x17, 0x25, 0x24, 0x26],
+    fireCode: 0x36,
+    keyboardAimCodes: [0x16, 0x18],
+    aimAxisCodes: [0x17E, 0x17E],
+    moveAxisCodes: [0x17E, 0x17E],
+  }),
+  new CrimsonPlayerControls({
+    movement: MovementControlType.STATIC,
+    aimScheme: AimScheme.MOUSE,
+    showDirectionArrow: true,
+    moveCodes: [0x131, 0x132, 0x133, 0x134],
+    fireCode: 0x11F,
+    keyboardAimCodes: [0x17E, 0x17E],
+    aimAxisCodes: [0x140, 0x13F],
+    moveAxisCodes: [0x153, 0x154],
+  }),
 ];
 
 interface Construct<T> {
@@ -454,247 +738,11 @@ function pythonTruthy(value: unknown): boolean {
   return true;
 }
 
-function defaultPlayerControlTemplates(): readonly CrimsonPlayerControls[] {
-  return [new CrimsonPlayerControls({ movement: MovementControlType.STATIC, aimScheme: AimScheme.MOUSE, showDirectionArrow: true, moveCodes: [0x11, 0x1F, 0x1E, 0x20], fireCode: 0x100, keyboardAimCodes: [0x10, 0x12], aimAxisCodes: [0x13F, 0x140], moveAxisCodes: [0x141, 0x153] }), new CrimsonPlayerControls({ movement: MovementControlType.STATIC, aimScheme: AimScheme.MOUSE, showDirectionArrow: true, moveCodes: [0xC8, 0xD0, 0xCB, 0xCD], fireCode: 0x9D, keyboardAimCodes: [0xD3, 0xD1], aimAxisCodes: [0x13F, 0x140], moveAxisCodes: [0x141, 0x153] }), new CrimsonPlayerControls({ movement: MovementControlType.STATIC, aimScheme: AimScheme.MOUSE, showDirectionArrow: true, moveCodes: [0x17, 0x25, 0x24, 0x26], fireCode: 0x36, keyboardAimCodes: [0x16, 0x18], aimAxisCodes: [0x17E, 0x17E], moveAxisCodes: [0x17E, 0x17E] }), new CrimsonPlayerControls({ movement: MovementControlType.STATIC, aimScheme: AimScheme.MOUSE, showDirectionArrow: true, moveCodes: [0x131, 0x132, 0x133, 0x134], fireCode: 0x11F, keyboardAimCodes: [0x17E, 0x17E], aimAxisCodes: [0x140, 0x13F], moveAxisCodes: [0x153, 0x154] })];
-}
-
 export enum HighScoreDateMode {
   ALL_TIME = 0,
   MONTH = 1,
   WEEK = 2,
   DAY = 3,
-}
-
-export class CrimsonDisplayConfig {
-  width: number;
-  height: number;
-  windowed: boolean;
-  bpp: number;
-  textureScale: number;
-  mouseSensitivity: number;
-  detailPreset: number;
-  fxDetail: [boolean, boolean, boolean];
-  violenceDisabled: number;
-
-  constructor(opts: {
-    width: number;
-    height: number;
-    windowed: boolean;
-    bpp: number;
-    textureScale: number;
-    mouseSensitivity: number;
-    detailPreset: number;
-    fxDetail: [boolean, boolean, boolean];
-    violenceDisabled: number;
-  }) {
-    this.width = opts.width;
-    this.height = opts.height;
-    this.windowed = opts.windowed;
-    this.bpp = opts.bpp;
-    this.textureScale = opts.textureScale;
-    this.mouseSensitivity = opts.mouseSensitivity;
-    this.detailPreset = opts.detailPreset;
-    this.fxDetail = opts.fxDetail;
-    this.violenceDisabled = opts.violenceDisabled;
-  }
-
-  fxDetailEnabled(opts: { level: number; default?: boolean }): boolean;
-  fxDetailEnabled(level: number, _default?: boolean): boolean;
-  fxDetailEnabled(levelOrOpts: number | { level: number; default?: boolean }, _default: boolean = false): boolean {
-    const level = typeof levelOrOpts === 'number' ? levelOrOpts : levelOrOpts.level;
-    const fallback = typeof levelOrOpts === 'number' ? _default : levelOrOpts.default ?? _default;
-    const _ = fallback;
-    return Boolean(this.fxDetail[int(level)]);
-  }
-
-  setFxDetail(level: number, enabled: boolean): void {
-    const idx = int(level);
-    const values = Array.from(this.fxDetail);
-    values[idx] = enabled;
-    this.fxDetail = [Boolean(values[0]), Boolean(values[1]), Boolean(values[2])];
-  }
-}
-
-export class CrimsonAudioConfig {
-  soundDisabled: boolean;
-  musicDisabled: boolean;
-  sfxVolume: number;
-  musicVolume: number;
-
-  constructor(opts: {
-    soundDisabled: boolean;
-    musicDisabled: boolean;
-    sfxVolume: number;
-    musicVolume: number;
-  }) {
-    this.soundDisabled = opts.soundDisabled;
-    this.musicDisabled = opts.musicDisabled;
-    this.sfxVolume = opts.sfxVolume;
-    this.musicVolume = opts.musicVolume;
-  }
-}
-
-export class CrimsonGameplayConfig {
-  mode: GameMode;
-  playerCount: number;
-  hardcore: boolean;
-  questLevel: QuestLevel | null;
-  showInfoTexts: boolean;
-
-  constructor(opts: {
-    mode: GameMode;
-    playerCount: number;
-    hardcore: boolean;
-    questLevel: QuestLevel | null;
-    showInfoTexts: boolean;
-  }) {
-    this.mode = opts.mode;
-    this.playerCount = opts.playerCount;
-    this.hardcore = opts.hardcore;
-    this.questLevel = opts.questLevel;
-    this.showInfoTexts = opts.showInfoTexts;
-  }
-}
-
-export class CrimsonProfileConfig {
-  playerName: string;
-  playerNameInputLen: number;
-  savedNameCount: number;
-  selectedSavedNameSlot: number;
-  savedNames: [string, string, string, string, string, string, string, string];
-  showInternetScores: boolean;
-  scoreDateMode: HighScoreDateMode;
-
-  constructor(opts: {
-    playerName: string;
-    playerNameInputLen: number;
-    savedNameCount: number;
-    selectedSavedNameSlot: number;
-    savedNames: [string, string, string, string, string, string, string, string];
-    showInternetScores: boolean;
-    scoreDateMode: HighScoreDateMode;
-  }) {
-    this.playerName = opts.playerName;
-    this.playerNameInputLen = opts.playerNameInputLen;
-    this.savedNameCount = opts.savedNameCount;
-    this.selectedSavedNameSlot = opts.selectedSavedNameSlot;
-    this.savedNames = opts.savedNames;
-    this.showInternetScores = opts.showInternetScores;
-    this.scoreDateMode = opts.scoreDateMode;
-  }
-
-  setPlayerNameInput(name: string): void {
-    const encoded = latin1EncodeIgnore(name).slice(0, PLAYER_NAME_MAX_BYTES);
-    const buf = new Uint8Array(PLAYER_NAME_SIZE);
-    buf.set(encoded, 0);
-    buf[Math.min(encoded.length, PLAYER_NAME_MAX_BYTES)] = 0;
-
-    const end = buf.indexOf(0);
-    let i = end - 1;
-    while (i > 0 && buf[i] === 0x20) {
-      buf[i] = 0;
-      i -= 1;
-    }
-
-    this.playerName = latin1DecodeUntilNull(bytesFrom(buf));
-    this.playerNameInputLen = encoded.length;
-  }
-
-  savedNameLabels(): readonly string[] {
-    const count = int(this.savedNameCount);
-    if (count < 1 || count > SAVED_NAME_SLOT_COUNT) {
-      throw new Error(`saved_name_count must be in 1..${SAVED_NAME_SLOT_COUNT}, got ${count}`);
-    }
-    const labels: string[] = [];
-    for (let idx = 0; idx < count; idx++) {
-      let label = (String(this.savedNames[idx])).trim();
-      if (!label) {
-        label = idx === 0 ? 'default' : `slot_${idx}`;
-      }
-      labels.push(label);
-    }
-    return Array.from(labels);
-  }
-}
-
-export class CrimsonPlayerControls {
-  movement: MovementControlType;
-  aimScheme: AimScheme;
-  showDirectionArrow: boolean;
-  moveCodes: [number, number, number, number];
-  fireCode: number;
-  keyboardAimCodes: [number, number];
-  aimAxisCodes: [number, number];
-  moveAxisCodes: [number, number];
-
-  constructor(opts: {
-    movement: MovementControlType;
-    aimScheme: AimScheme;
-    showDirectionArrow: boolean;
-    moveCodes: [number, number, number, number];
-    fireCode: number;
-    keyboardAimCodes: [number, number];
-    aimAxisCodes: [number, number];
-    moveAxisCodes: [number, number];
-  }) {
-    this.movement = opts.movement;
-    this.aimScheme = opts.aimScheme;
-    this.showDirectionArrow = opts.showDirectionArrow;
-    this.moveCodes = opts.moveCodes;
-    this.fireCode = opts.fireCode;
-    this.keyboardAimCodes = opts.keyboardAimCodes;
-    this.aimAxisCodes = opts.aimAxisCodes;
-    this.moveAxisCodes = opts.moveAxisCodes;
-  }
-}
-
-export class CrimsonControlsConfig {
-  players: [CrimsonPlayerControls, CrimsonPlayerControls, CrimsonPlayerControls, CrimsonPlayerControls];
-  pickPerkCode: number;
-  reloadCode: number;
-
-  constructor(opts: {
-    players: [CrimsonPlayerControls, CrimsonPlayerControls, CrimsonPlayerControls, CrimsonPlayerControls];
-    pickPerkCode: number;
-    reloadCode: number;
-  }) {
-    this.players = opts.players;
-    this.pickPerkCode = opts.pickPerkCode;
-    this.reloadCode = opts.reloadCode;
-  }
-
-  player(playerIndex: number): CrimsonPlayerControls {
-    return this.players[_playerIndex(playerIndex)];
-  }
-}
-
-export class CrimsonConfig {
-  path: string;
-  display: CrimsonDisplayConfig;
-  audio: CrimsonAudioConfig;
-  gameplay: CrimsonGameplayConfig;
-  profile: CrimsonProfileConfig;
-  controls: CrimsonControlsConfig;
-
-  constructor(opts: {
-    path: string;
-    display: CrimsonDisplayConfig;
-    audio: CrimsonAudioConfig;
-    gameplay: CrimsonGameplayConfig;
-    profile: CrimsonProfileConfig;
-    controls: CrimsonControlsConfig;
-  }) {
-    this.path = opts.path;
-    this.display = opts.display;
-    this.audio = opts.audio;
-    this.gameplay = opts.gameplay;
-    this.profile = opts.profile;
-    this.controls = opts.controls;
-  }
-
-  save(): void {
-    writeFileSync(String(this.path), encodeCrimsonCfg(this));
-  }
 }
 
 function _playerIndex(playerIndex: number): number {
@@ -841,7 +889,7 @@ function savedNameOrderValues(): number[] {
 }
 
 function defaultPlayerControls(playerIndex: number): CrimsonPlayerControls {
-  const defaults = defaultPlayerControlTemplates()[_playerIndex(playerIndex)];
+  const defaults = DEFAULT_PLAYER_CONTROL_TEMPLATES[_playerIndex(playerIndex)];
   return new CrimsonPlayerControls({ movement: defaults.movement, aimScheme: defaults.aimScheme, showDirectionArrow: defaults.showDirectionArrow, moveCodes: defaults.moveCodes, fireCode: defaults.fireCode, keyboardAimCodes: defaults.keyboardAimCodes, aimAxisCodes: defaults.aimAxisCodes, moveAxisCodes: defaults.moveAxisCodes });
 }
 
@@ -850,24 +898,6 @@ export function defaultCrimsonCfg(path: string = '<memory>'): CrimsonConfig {
   profile.setPlayerNameInput(_DEFAULT_PROFILE_NAME);
   profile.playerNameInputLen = 0;
   return new CrimsonConfig({ path: path, display: new CrimsonDisplayConfig({ width: 1024, height: 768, windowed: true, bpp: 32, textureScale: 1.0, mouseSensitivity: 0.5, detailPreset: 5, fxDetail: [true, true, true], violenceDisabled: 0 }), audio: new CrimsonAudioConfig({ soundDisabled: false, musicDisabled: false, sfxVolume: 1.0, musicVolume: 1.0 }), gameplay: new CrimsonGameplayConfig({ mode: GameMode.SURVIVAL, playerCount: 1, hardcore: false, questLevel: null, showInfoTexts: true }), profile: profile, controls: new CrimsonControlsConfig({ players: [defaultPlayerControls(0), defaultPlayerControls(1), defaultPlayerControls(2), defaultPlayerControls(3)], pickPerkCode: 0x101, reloadCode: 0x102 }) });
-}
-
-export const defaultCrimsonConfig = defaultCrimsonCfg;
-
-export function setPlayerNameInput(profile: CrimsonProfileConfig, name: string): void {
-  profile.setPlayerNameInput(name);
-}
-
-export function savedNameLabels(profile: CrimsonProfileConfig): readonly string[] {
-  return profile.savedNameLabels();
-}
-
-export function setFxDetail(config: CrimsonDisplayConfig, level: number, enabled: boolean): void {
-  config.setFxDetail(level, enabled);
-}
-
-export function fxDetailEnabled(config: CrimsonDisplayConfig, level: number): boolean {
-  return config.fxDetailEnabled(level);
 }
 
 export function decodeCrimsonCfg(path: string, blob: Uint8Array): CrimsonConfig {
@@ -885,7 +915,7 @@ export function decodeCrimsonCfg(path: string, blob: Uint8Array): CrimsonConfig 
     detailPreset = requireRange(detailPreset, { minimum: 1, maximum: 5, field: 'detail_preset' });
   }
 
-  const players = Array.from({ length: Math.max(0, 4) }, (_, i) => i).map((idx) => playerControlsFromParsedBindBlock(parsedPlayerBindBlock(raw, { playerIndex: idx }), { playerIndex: idx, movement: decodeMovement(raw['player_mode_flags'][idx]), aimScheme: decodeAimScheme(raw['aim_schemes'][idx]), showDirectionArrow: decodeDirectionArrow(raw, { playerIndex: idx }) })) as [CrimsonPlayerControls, CrimsonPlayerControls, CrimsonPlayerControls, CrimsonPlayerControls];
+  const players: [CrimsonPlayerControls, CrimsonPlayerControls, CrimsonPlayerControls, CrimsonPlayerControls] = Array.from({ length: Math.max(0, 4) }, (_, i) => i).map((idx) => playerControlsFromParsedBindBlock(parsedPlayerBindBlock(raw, { playerIndex: idx }), { playerIndex: idx, movement: decodeMovement(raw['player_mode_flags'][idx]), aimScheme: decodeAimScheme(raw['aim_schemes'][idx]), showDirectionArrow: decodeDirectionArrow(raw, { playerIndex: idx }) })) as [CrimsonPlayerControls, CrimsonPlayerControls, CrimsonPlayerControls, CrimsonPlayerControls];
 
   return new CrimsonConfig({ path: path, display: new CrimsonDisplayConfig({ width: int(raw['screen_width']), height: int(raw['screen_height']), windowed: Boolean(raw['windowed_flag']), bpp: int(raw['screen_bpp']), textureScale: raw['texture_scale'], mouseSensitivity: raw['mouse_sensitivity'], detailPreset: detailPreset, fxDetail: fxDetail, violenceDisabled: int(raw['violence_disabled']) }), audio: new CrimsonAudioConfig({ soundDisabled: Boolean(raw['sound_disable']), musicDisabled: Boolean(raw['music_disable']), sfxVolume: raw['sfx_volume'], musicVolume: raw['music_volume'] }), gameplay: new CrimsonGameplayConfig({ mode: decodeGameMode(raw['game_mode']), playerCount: requireRange(int(raw['player_count']), { minimum: 1, maximum: 4, field: 'player_count' }), hardcore: Boolean(raw['hardcore_flag']), questLevel: null, showInfoTexts: Boolean(raw['ui_info_texts']) }), profile: new CrimsonProfileConfig({ playerName: decodePlayerName(raw['player_name']), playerNameInputLen: requireRange(int(raw['player_name_len']), { minimum: 0, maximum: PLAYER_NAME_MAX_BYTES, field: 'player_name_len' }), savedNameCount: requireRange(int(raw['saved_name_count']), { minimum: 1, maximum: SAVED_NAME_SLOT_COUNT, field: 'saved_name_count' }), selectedSavedNameSlot: requireRange(int(raw['selected_saved_name_slot']), { minimum: 0, maximum: SAVED_NAME_SLOT_COUNT - 1, field: 'selected_saved_name_slot' }), savedNames: decodeSavedNames(raw['saved_names']), showInternetScores: Boolean(raw['score_load_gate']), scoreDateMode: decodeHighScoreDateMode(raw['highscore_date_mode']) }), controls: new CrimsonControlsConfig({ players: players, pickPerkCode: int(raw['keybind_pick_perk']), reloadCode: int(raw['keybind_reload']) }) });
 }

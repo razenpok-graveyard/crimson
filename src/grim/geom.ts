@@ -55,15 +55,24 @@ export class Vec2 {
     return new Vec2({ x: this.x - other.x, y: this.y - other.y });
   }
 
-  mul(scalar: number): Vec2 {
+  mul(opts: { scalar: number }): Vec2;
+  mul(scalar: number): Vec2;
+  mul(scalarOrOpts: number | { scalar: number }): Vec2 {
+    const scalar: number = typeof scalarOrOpts === 'object' && scalarOrOpts !== null && 'scalar' in scalarOrOpts ? scalarOrOpts.scalar : scalarOrOpts as number;
     return new Vec2({ x: this.x * scalar, y: this.y * scalar });
   }
 
-  __rmul__(scalar: number): Vec2 {
+  __rmul__(opts: { scalar: number }): Vec2;
+  __rmul__(scalar: number): Vec2;
+  __rmul__(scalarOrOpts: number | { scalar: number }): Vec2 {
+    const scalar: number = typeof scalarOrOpts === 'object' && scalarOrOpts !== null && 'scalar' in scalarOrOpts ? scalarOrOpts.scalar : scalarOrOpts as number;
     return this.mul(scalar);
   }
 
-  div(scalar: number): Vec2 {
+  div(opts: { scalar: number }): Vec2;
+  div(scalar: number): Vec2;
+  div(scalarOrOpts: number | { scalar: number }): Vec2 {
+    const scalar: number = typeof scalarOrOpts === 'object' && scalarOrOpts !== null && 'scalar' in scalarOrOpts ? scalarOrOpts.scalar : scalarOrOpts as number;
     return new Vec2({ x: this.x / scalar, y: this.y / scalar });
   }
 
@@ -162,13 +171,22 @@ export class Vec2 {
     return new Map(Object.entries({ 'x': pyRound(this.x, ndigits), 'y': pyRound(this.y, ndigits) }));
   }
 
-  rotated(theta: number): Vec2 {
+  rotated(opts: { theta: number }): Vec2;
+  rotated(theta: number): Vec2;
+  rotated(thetaOrOpts: number | { theta: number }): Vec2 {
+    const theta: number = typeof thetaOrOpts === 'object' && thetaOrOpts !== null && 'theta' in thetaOrOpts ? thetaOrOpts.theta : thetaOrOpts as number;
     const cosTheta = Math.cos(theta);
     const sinTheta = Math.sin(theta);
     return new Vec2({ x: this.x * cosTheta - this.y * sinTheta, y: this.x * sinTheta + this.y * cosTheta });
   }
 
-  clampRect(minX: number, minY: number, maxX: number, maxY: number): Vec2 {
+  clampRect(opts: { minX: number; minY: number; maxX: number; maxY: number }): Vec2;
+  clampRect(minX: number, minY: number, maxX: number, maxY: number): Vec2;
+  clampRect(minXOrOpts: number | { minX: number; minY: number; maxX: number; maxY: number }, minYArg: number | undefined = undefined, maxXArg: number | undefined = undefined, maxYArg: number | undefined = undefined): Vec2 {
+    const minX: number = typeof minXOrOpts === 'object' && minXOrOpts !== null && 'minX' in minXOrOpts ? minXOrOpts.minX : minXOrOpts as number;
+    const minY: number = typeof minXOrOpts === 'object' && minXOrOpts !== null && 'minX' in minXOrOpts ? minXOrOpts.minY : minYArg as number;
+    const maxX: number = typeof minXOrOpts === 'object' && minXOrOpts !== null && 'minX' in minXOrOpts ? minXOrOpts.maxX : maxXArg as number;
+    const maxY: number = typeof minXOrOpts === 'object' && minXOrOpts !== null && 'minX' in minXOrOpts ? minXOrOpts.maxY : maxYArg as number;
     return new Vec2({ x: clamp(this.x, minX, maxX), y: clamp(this.y, minY, maxY) });
   }
 

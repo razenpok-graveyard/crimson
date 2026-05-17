@@ -252,9 +252,8 @@ export const build5_9Nagolipoli = registerQuest({ level: '5.9', title: 'Nagolipo
 
   let trigger = 13000;
   let wave = 0;
-  let count: number;
   while (trigger < 0x96C8) {
-    count = Math.floor(wave / 8) + 1;
+    const count = Math.floor(wave / 8) + 1;
     entries.push(...[spawn(new Vec2(-64.0, -64.0), { heading: 1.0471976, spawnId: SpawnId.AI1_LIZARD_BLUE_TINT_1C, triggerMs: trigger, count: count }), spawn(new Vec2(1088.0, -64.0), { heading: -1.0471976, spawnId: SpawnId.AI1_LIZARD_BLUE_TINT_1C, triggerMs: trigger, count: count }), spawn(new Vec2(-64.0, 1088.0), { heading: -1.0471976, spawnId: SpawnId.AI1_LIZARD_BLUE_TINT_1C, triggerMs: trigger, count: count }), spawn(new Vec2(1088.0, 1088.0), { heading: 3.926991, spawnId: SpawnId.AI1_LIZARD_BLUE_TINT_1C, triggerMs: trigger, count: count })]);
     trigger += 800;
     wave += 1;

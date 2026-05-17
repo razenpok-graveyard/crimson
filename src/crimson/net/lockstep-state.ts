@@ -102,7 +102,10 @@ export class HostLockstepState {
     }
   }
 
-  _tickComplete(tickIndex: number): boolean {
+  _tickComplete(opts: { tickIndex: number }): boolean;
+  _tickComplete(tickIndex: number): boolean;
+  _tickComplete(tickIndexOrOpts: number | { tickIndex: number }): boolean {
+    const tickIndex: number = typeof tickIndexOrOpts === 'object' && tickIndexOrOpts !== null && 'tickIndex' in tickIndexOrOpts ? tickIndexOrOpts.tickIndex : tickIndexOrOpts as number;
     const tickInputs = this._inputsByTick.get(int(tickIndex)) ?? null;
     if (tickInputs === null) {
       return false;
@@ -144,7 +147,10 @@ export class HostLockstepState {
     return new PauseState({ paused: false, reason: '' });
   }
 
-  tickComplete(tickIndex: number): boolean {
+  tickComplete(opts: { tickIndex: number }): boolean;
+  tickComplete(tickIndex: number): boolean;
+  tickComplete(tickIndexOrOpts: number | { tickIndex: number }): boolean {
+    const tickIndex: number = typeof tickIndexOrOpts === 'object' && tickIndexOrOpts !== null && 'tickIndex' in tickIndexOrOpts ? tickIndexOrOpts.tickIndex : tickIndexOrOpts as number;
     return this._tickComplete(tickIndex);
   }
 }

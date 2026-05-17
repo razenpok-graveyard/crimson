@@ -33,6 +33,7 @@ import {
   parseOneLineAllNames,
   splitTopLevelComma,
 } from './common.js';
+import { tsMemberNameForPythonName } from './expression/names.js';
 import { translateExpression, tsRegExpExpression } from './expression.js';
 import { parseFunctionParameterText, tsSimpleExpression } from './parameters.js';
 
@@ -72,7 +73,7 @@ export function parseProtocolModule(trimmedPython: string): ProtocolDefinition |
     }
 
     methods.push({
-      name: tsExportNameForPythonName(method[1]),
+      name: tsMemberNameForPythonName(method[1]),
       parameters: [],
       optsParams: [{
         name: tsExportNameForPythonName(method[2]),
@@ -123,7 +124,7 @@ export function parseProtocolClass(
     const property = /^    ([A-Za-z_][A-Za-z0-9_]*): (.+)$/.exec(line);
     if (property !== null) {
       methods.push({
-        name: tsExportNameForPythonName(property[1]),
+        name: tsMemberNameForPythonName(property[1]),
         property: true,
         readonly: false,
         parameters: [],
@@ -180,7 +181,7 @@ function parseProtocolMethod(
     }
     return {
       method: {
-        name: tsExportNameForPythonName(oneLine[1]),
+        name: tsMemberNameForPythonName(oneLine[1]),
         ...parameters,
         returnType: tsTypeExpression(oneLine[3]),
       },
@@ -204,7 +205,7 @@ function parseProtocolMethod(
       }
       return {
         method: {
-          name: tsExportNameForPythonName(start[1]),
+          name: tsMemberNameForPythonName(start[1]),
           ...parameters,
           returnType: tsTypeExpression(close[1]),
         },

@@ -211,7 +211,10 @@ export class DeterministicSession {
     preparePerkAvailability(state);
   }
 
-  timingForDt(dt: number): FrameTiming {
+  timingForDt(opts: { dt: number }): FrameTiming;
+  timingForDt(dt: number): FrameTiming;
+  timingForDt(dtOrOpts: number | { dt: number }): FrameTiming {
+    const dt: number = typeof dtOrOpts === 'object' && dtOrOpts !== null && 'dt' in dtOrOpts ? dtOrOpts.dt : dtOrOpts as number;
     return sessionTiming(this.world.state, dt);
   }
 

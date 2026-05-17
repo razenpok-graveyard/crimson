@@ -273,7 +273,7 @@ export class QuestMode extends BaseGameplayMode {
   }
 
   protected _lanPrepareFrame(role: string, dtUiMs: number, session: LanSession, dtTick: number): boolean {
-    const _ = [role, dtUiMs, dtTick];
+    const _: [string, number, number] = [role, dtUiMs, dtTick];
     session.detailPreset = int(this._deterministicDetailPreset());
     session.violenceDisabled = int(this._deterministicViolenceDisabled());
     return true;

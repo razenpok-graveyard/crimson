@@ -116,7 +116,10 @@ export class CreatureSpatialHash {
     this._maxFindMargin = maxFindMargin;
   }
 
-  syncIndex(index: number): void {
+  syncIndex(opts: { index: number }): void;
+  syncIndex(index: number): void;
+  syncIndex(indexOrOpts: number | { index: number }): void {
+    const index: number = typeof indexOrOpts === 'object' && indexOrOpts !== null && 'index' in indexOrOpts ? indexOrOpts.index : indexOrOpts as number;
     if (!(int(index) >= 0 && int(index) < this.creatures.length)) {
       return;
     }
@@ -180,7 +183,11 @@ export class CreatureSpatialHash {
     return [cellX, cellY];
   }
 
-  _removeFromCell(index: number, cell: [number, number]): void {
+  _removeFromCell(opts: { index: number; cell: [number, number] }): void;
+  _removeFromCell(index: number, cell: [number, number]): void;
+  _removeFromCell(indexOrOpts: number | { index: number; cell: [number, number] }, cellArg: [number, number] | undefined = undefined): void {
+    const index: number = typeof indexOrOpts === 'object' && indexOrOpts !== null && 'index' in indexOrOpts ? indexOrOpts.index : indexOrOpts as number;
+    const cell: [number, number] = typeof indexOrOpts === 'object' && indexOrOpts !== null && 'index' in indexOrOpts ? indexOrOpts.cell : cellArg as [number, number];
     const bucket = this._cells.get(tupleKey(cell)) ?? null;
     if (bucket === null) {
       return;
@@ -199,7 +206,11 @@ export class CreatureSpatialHash {
     return this._cellForPos(pos);
   }
 
-  removeFromCell(index: number, cell: [number, number]): void {
+  removeFromCell(opts: { index: number; cell: [number, number] }): void;
+  removeFromCell(index: number, cell: [number, number]): void;
+  removeFromCell(indexOrOpts: number | { index: number; cell: [number, number] }, cellArg: [number, number] | undefined = undefined): void {
+    const index: number = typeof indexOrOpts === 'object' && indexOrOpts !== null && 'index' in indexOrOpts ? indexOrOpts.index : indexOrOpts as number;
+    const cell: [number, number] = typeof indexOrOpts === 'object' && indexOrOpts !== null && 'index' in indexOrOpts ? indexOrOpts.cell : cellArg as [number, number];
     this._removeFromCell(index, cell);
   }
 }

@@ -14,6 +14,7 @@ import {
   stringNameMarker,
   vectorNameMarker,
 } from '../expression.js';
+import { nullableTypeExpressionBase } from '../expression/types.js';
 import { tsAttributeNameForPythonName } from './names.js';
 import { lineStartsAtIndent } from './utils.js';
 
@@ -28,14 +29,15 @@ export function predeclareIfBranchAssignments(
   bodyStartIndex = index + 1,
 ): string[] {
   const innerIndent = `${indent}    `;
-  const assignedTypes = new Map<string, { directTypes: Set<string>; nestedTypes: Set<string> }>();
-  const recordAssignedType = (name: string, type: string, nested: boolean): void => {
-    const entry = assignedTypes.get(name) ?? { directTypes: new Set<string>(), nestedTypes: new Set<string>() };
+  const assignedTypes = new Map<string, { directTypes: Set<string>; nestedTypes: Set<string>; definiteAssignment: boolean }>();
+  const recordAssignedType = (name: string, type: string, nested: boolean, definiteAssignment: boolean): void => {
+    const entry = assignedTypes.get(name) ?? { directTypes: new Set<string>(), nestedTypes: new Set<string>(), definiteAssignment: false };
     if (nested) {
       entry.nestedTypes.add(type);
     } else {
       entry.directTypes.add(type);
     }
+    entry.definiteAssignment = entry.definiteAssignment || definiteAssignment;
     assignedTypes.set(name, entry);
   };
   let nextIndex = bodyStartIndex;
@@ -54,11 +56,21 @@ export function predeclareIfBranchAssignments(
         continue;
       }
       const assignment = rest.startsWith(' ') ? null : /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(rest);
-      if (assignment !== null && reassignedNames.has(assignment[1]) && !declaredNames.has(assignment[1])) {
+      if (assignment !== null && !declaredNames.has(assignment[1])) {
+        if (!reassignedNames.has(assignment[1]) && lineIndent !== innerIndent) {
+          nextIndex += 1;
+          continue;
+        }
+        const referencedAfterBlock = nameReferencedAfterBlock(lines, blockEndIndexForBranch(lines, nextIndex, indent), indent, assignment[1]);
+        if (!reassignedNames.has(assignment[1]) && !referencedAfterBlock) {
+          nextIndex += 1;
+          continue;
+        }
         recordAssignedType(
           assignment[1],
           inferPredeclaredAssignmentType(lines, nextIndex, lineIndent, assignment[2], nameMap, arrayNames, declaredNames),
           lineIndent !== innerIndent,
+          !reassignedNames.has(assignment[1]),
         );
       }
       const tupleAssignment = rest.startsWith(' ') ? null : /^([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+) = (.+)$/.exec(rest);
@@ -67,7 +79,7 @@ export function predeclareIfBranchAssignments(
           if (name === '_' || !reassignedNames.has(name) || declaredNames.has(name)) {
             continue;
           }
-          recordAssignedType(name, inferTupleElementAssignmentType(tupleAssignment[2], nameIndex, nameMap, arrayNames), lineIndent !== innerIndent);
+          recordAssignedType(name, inferTupleElementAssignmentType(tupleAssignment[2], nameIndex, nameMap, arrayNames), lineIndent !== innerIndent, false);
         }
       }
       nextIndex += 1;
@@ -83,7 +95,7 @@ export function predeclareIfBranchAssignments(
   const blockEndIndex = nextIndex;
   const bodyStartedAfterConditionContinuation = bodyStartIndex !== index + 1;
   const declarations: string[] = [];
-  for (const [name, { directTypes, nestedTypes }] of assignedTypes) {
+  for (const [name, { directTypes, nestedTypes, definiteAssignment }] of assignedTypes) {
     const referencedAfterBlock = nameReferencedAfterBlock(lines, blockEndIndex, indent, name);
     if (bodyStartedAfterConditionContinuation && !referencedAfterBlock) {
       continue;
@@ -97,11 +109,8 @@ export function predeclareIfBranchAssignments(
     if (types.size === 0) {
       continue;
     }
-    const concreteTypes = [...types].filter((type) => type !== 'any');
-    const candidateTypes = concreteTypes.length > 0 ? concreteTypes : [...types];
-    const uniqueTypes = [...new Set(candidateTypes)];
-    const type = uniqueTypes.length === 1 ? uniqueTypes[0] : uniqueTypes.join(' | ');
-    declarations.push(`let ${tsExportNameForPythonName(name)}: ${type};`);
+    const type = predeclaredTypeExpression(types);
+    declarations.push(`let ${tsExportNameForPythonName(name)}${definiteAssignment ? '!' : ''}: ${type};`);
     declaredNames.add(name);
   }
   return declarations;
@@ -166,10 +175,7 @@ export function predeclareLoopBlockAssignments(
 
   const declarations: string[] = [];
   for (const [name, types] of assignedTypes) {
-    const concreteTypes = [...types].filter((type) => type !== 'any');
-    const candidateTypes = concreteTypes.length > 0 ? concreteTypes : [...types];
-    const uniqueTypes = [...new Set(candidateTypes)];
-    const type = uniqueTypes.length === 1 ? uniqueTypes[0] : uniqueTypes.join(' | ');
+    const type = predeclaredTypeExpression(types);
     declarations.push(`let ${tsExportNameForPythonName(name)}: ${type};`);
     declaredNames.add(name);
   }
@@ -263,13 +269,22 @@ export function predeclareTryFinallyAssignments(
 
   const declarations: string[] = [];
   for (const [name, types] of assignedTypes) {
-    const concreteTypes = [...types].filter((type) => type !== 'any');
-    const candidateTypes = concreteTypes.length > 0 ? concreteTypes : [...types];
-    const uniqueTypes = [...new Set(candidateTypes)];
-    declarations.push(`let ${tsExportNameForPythonName(name)}: ${uniqueTypes.length === 1 ? uniqueTypes[0] : uniqueTypes.join(' | ')};`);
+    declarations.push(`let ${tsExportNameForPythonName(name)}: ${predeclaredTypeExpression(types)};`);
     declaredNames.add(name);
   }
   return declarations;
+}
+
+function predeclaredTypeExpression(types: Iterable<string>): string {
+  const allTypes = [...types];
+  const concreteTypes = allTypes.filter((type) => (
+    type !== 'any'
+    && type !== 'unknown'
+    && !/^ReturnType<typeof [A-Za-z_$][A-Za-z0-9_$]*>\[\d+\]$/.test(type)
+  ));
+  const candidateTypes = concreteTypes.length > 0 ? concreteTypes : allTypes;
+  const uniqueTypes = [...new Set(candidateTypes)];
+  return uniqueTypes.length === 1 ? uniqueTypes[0] : uniqueTypes.join(' | ');
 }
 
 function nameReferencedAfterBlock(lines: string[], startIndex: number, indent: string, name: string): boolean {
@@ -281,12 +296,46 @@ function nameReferencedAfterBlock(lines: string[], startIndex: number, indent: s
     if (line.trim() !== '' && !line.startsWith(indent)) {
       break;
     }
-    if (referencePattern.test(line.replace(/#.*/, ''))) {
+    const lineIndent = /^(\s*)/.exec(line)?.[1] ?? '';
+    const trimmed = line.trim();
+    if (new RegExp(`^for\\s+${escapedName}\\s+in\\b`).test(trimmed)) {
+      index = indentedBlockEndIndex(lines, index + 1, `${lineIndent}    `);
+      continue;
+    }
+    const code = line
+      .replace(/#.*/, '')
+      .replace(new RegExp(`\\b${escapedName}\\s*=`, 'g'), '')
+      .replace(new RegExp(`\\bfor\\s+${escapedName}\\s+in\\b`, 'g'), 'for  in')
+      .replace(new RegExp(`\\bas\\s+${escapedName}\\b`, 'g'), 'as ');
+    if (referencePattern.test(code)) {
       return true;
     }
     index += 1;
   }
   return false;
+}
+
+function blockEndIndexForBranch(lines: string[], startIndex: number, indent: string): number {
+  const innerIndent = `${indent}    `;
+  let nextIndex = startIndex;
+  while (nextIndex < lines.length) {
+    const line = lines[nextIndex] ?? '';
+    const trimmed = line.trim();
+    if (trimmed === '') {
+      nextIndex += 1;
+      continue;
+    }
+    if (line.startsWith(innerIndent)) {
+      nextIndex += 1;
+      continue;
+    }
+    if (line.startsWith(indent) && (/^elif .+:$/.test(trimmed) || trimmed === 'else:')) {
+      nextIndex += 1;
+      continue;
+    }
+    break;
+  }
+  return nextIndex;
 }
 
 function indentedBlockEndIndex(lines: string[], startIndex: number, indent: string): number {
@@ -352,7 +401,9 @@ function inferPredeclaredAssignmentType(
   const dottedField = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(assignedExpression.trim());
   if (dottedField !== null) {
     const receiver = nameMap.get(dottedField[1]) ?? tsExportNameForPythonName(dottedField[1]);
-    const receiverType = nameMap.get(receiverTypeNameMarker(dottedField[1])) ?? nameMap.get(receiverTypeNameMarker(receiver));
+    const receiverType = nullableTypeExpressionBase(
+      nameMap.get(receiverTypeNameMarker(dottedField[1])) ?? nameMap.get(receiverTypeNameMarker(receiver)) ?? null,
+    );
     const fieldType = receiverType === undefined ? undefined : nameMap.get(classFieldTypeMarker(receiverType, tsAttributeNameForPythonName(dottedField[2])));
     if (fieldType !== undefined) {
       return fieldType;

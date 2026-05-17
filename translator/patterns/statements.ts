@@ -5174,9 +5174,12 @@ function translateStraightLineAssignment(
       : null;
     const reassignedType = reassignedLocalTypeAnnotation(reassignedNames, localAssignment[1]);
     const declarationType = nullableType ?? tupleType ?? objectRecordType ?? widenedRuntimeType ?? reassignedType;
+    const initializer = tupleType !== null && localAssignedRight.startsWith('Array.from(')
+      ? `${localAssignedRight} as ${tupleType}`
+      : localAssignedRight;
     return {
       statements: [
-        `${reassignedNames.has(localAssignment[1]) ? 'let' : 'const'} ${localTsName}${declarationType === null ? '' : `: ${declarationType}`} = ${localAssignedRight};`,
+        `${reassignedNames.has(localAssignment[1]) ? 'let' : 'const'} ${localTsName}${declarationType === null ? '' : `: ${declarationType}`} = ${initializer};`,
       ],
       nextIndex,
     };

@@ -84,6 +84,17 @@ export function parseTopLevelAssignment(
         continue;
       }
 
+      const callItem = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(trimmed);
+      if (callItem !== null) {
+        const callValue = parseMultilineKeywordCallValueLines(lines, nextIndex + 1, callItem[1], nameMap);
+        if (callValue === null) {
+          return null;
+        }
+        valueLines.push(...callValue.valueLines.map((line) => `  ${line}`));
+        nextIndex = callValue.nextIndex;
+        continue;
+      }
+
       const tupleItem = /^(.+),$/.exec(trimmed);
       if (tupleItem === null) {
         return null;

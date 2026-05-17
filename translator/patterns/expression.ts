@@ -25,6 +25,7 @@ import {
   stringNameMarker,
   tupleElementArrayNameMarker,
   tupleKeyMapNameMarker,
+  vectorNameMarker,
 } from './expression/markers.js';
 import {
   raylibKeyboardKeyCode,
@@ -86,6 +87,7 @@ import {
 } from './expression/paths.js';
 import { stripPrimitiveCallWrappers } from './expression/primitives.js';
 import {
+  nullableTypeExpressionBase,
   typeExpressionLooksMap,
 } from './expression/types.js';
 import {
@@ -331,6 +333,11 @@ function translateBoundMethodReference(
   arrayNames: Set<string>,
   validatedTypeAliases: ReadonlySet<string>,
 ): string | null {
+  const knownMethod = knownInstanceMethodCall(pythonExpression, nameMap, arrayNames, validatedTypeAliases);
+  if (knownMethod !== null) {
+    const receiver = knownMethod.callee.slice(0, knownMethod.callee.lastIndexOf('.'));
+    return `${knownMethod.callee}.bind(${receiver})`;
+  }
   const reference = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+)$/.exec(pythonExpression.trim());
   if (reference === null) {
     return null;
@@ -3000,7 +3007,9 @@ function comparisonNeedsPythonEquality(left: string, right: string, arrayNames: 
     || (leftSubscript !== null && arrayNames.has(tupleElementArrayNameMarker(leftSubscript[1])))
     || (rightSubscript !== null && arrayNames.has(tupleElementArrayNameMarker(rightSubscript[1])))
     || arrayNames.has(objectNameMarker(left))
-    || arrayNames.has(objectNameMarker(right));
+    || arrayNames.has(objectNameMarker(right))
+    || arrayNames.has(vectorNameMarker(left))
+    || arrayNames.has(vectorNameMarker(right));
 }
 
 export function translateMapKeyExpression(
@@ -4435,7 +4444,9 @@ function knownInstanceMethodCall(
     return null;
   }
   const receiver = translateExpression(dotted[1], nameMap, arrayNames, validatedTypeAliases);
-  const receiverType = nameMap.get(receiverTypeNameMarker(dotted[1])) ?? nameMap.get(receiverTypeNameMarker(receiver));
+  const receiverType = nullableTypeExpressionBase(
+    nameMap.get(receiverTypeNameMarker(dotted[1])) ?? nameMap.get(receiverTypeNameMarker(receiver)) ?? null,
+  );
   if (receiverType === undefined) {
     return null;
   }
@@ -4451,7 +4462,7 @@ function inheritedInstanceMethodSignature(
   methodName: string,
   nameMap: Map<string, string>,
 ): string | undefined {
-  let currentType: string | undefined = receiverType;
+  let currentType: string | undefined = nullableTypeExpressionBase(receiverType) ?? receiverType;
   const seen = new Set<string>();
   while (currentType !== undefined && !seen.has(currentType)) {
     seen.add(currentType);

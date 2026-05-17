@@ -732,7 +732,7 @@ function recordPlainClassMethodHeaders(
 function plainClassMethodSignaturePositionalNames(parametersText: string, staticMethod: boolean): string[] {
   const parts = parametersText === '' ? [] : splitTopLevelComma(parametersText);
   const names: string[] = [];
-  const startIndex = staticMethod ? 0 : 1;
+  const startIndex = staticMethod || !/^self(?:: .+)?$/.test(parts[0] ?? '') ? 0 : 1;
   for (const part of parts.slice(startIndex)) {
     if (part === '*') {
       break;
@@ -1124,17 +1124,18 @@ function parsePlainClassMethod(
     return null;
   }
   const parametersText = header.parametersText;
-  if (classBindingName === null && !staticMethod && parametersText !== 'self' && !parametersText.startsWith('self, ')) {
+  const parameterParts = parametersText === '' ? [] : splitTopLevelComma(parametersText);
+  const hasSelfReceiver = parameterParts[0] !== undefined && /^self(?:: .+)?$/.test(parameterParts[0]);
+  if (classBindingName === null && !staticMethod && !hasSelfReceiver) {
     return null;
   }
-  const parameterParts = parametersText === '' ? [] : splitTopLevelComma(parametersText);
   const classReceiver = classBindingName === null ? null : parameterParts[0]?.match(/^([A-Za-z_][A-Za-z0-9_]*)(?:: .+)?$/)?.[1] ?? null;
   if (classBindingName !== null && classReceiver === null) {
     return null;
   }
   const extraParameters = staticMethod
     ? classBindingName === null ? parametersText : parameterParts.slice(1).join(', ')
-    : parametersText === 'self' ? '' : parametersText.slice('self, '.length);
+    : parameterParts.slice(1).join(', ');
   const arrayNames = new Set<string>(initialArrayNames);
   const parsedParams = parseFunctionParametersText(
     extraParameters,

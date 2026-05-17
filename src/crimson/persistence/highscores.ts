@@ -203,7 +203,10 @@ export class HighScoreRecord {
     return latin1DecodeUntilNull(raw);
   }
 
-  setName(value: string): void {
+  setName(opts: { value: string }): void;
+  setName(value: string): void;
+  setName(valueOrOpts: string | { value: string }): void {
+    const value: string = typeof valueOrOpts === 'object' && valueOrOpts !== null && 'value' in valueOrOpts ? valueOrOpts.value : valueOrOpts as string;
     const encoded = latin1EncodeIgnore(value).slice(0, NAME_SIZE - 1);
     this.data.fill(0, 0, NAME_SIZE);
     this.data.set(encoded, 0);

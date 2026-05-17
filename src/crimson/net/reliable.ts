@@ -77,7 +77,10 @@ export class ReliableLink {
     return int(this._resendCount);
   }
 
-  primeRecvSeq(seq: number): void {
+  primeRecvSeq(opts: { seq: number }): void;
+  primeRecvSeq(seq: number): void;
+  primeRecvSeq(seqOrOpts: number | { seq: number }): void {
+    const seq: number = typeof seqOrOpts === 'object' && seqOrOpts !== null && 'seq' in seqOrOpts ? seqOrOpts.seq : seqOrOpts as number;
     // Record a reliable seq as already delivered.
     //
     // Used when a trusted message is handled out-of-band (for example an

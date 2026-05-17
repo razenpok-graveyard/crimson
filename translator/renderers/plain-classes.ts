@@ -98,7 +98,7 @@ export function renderPlainClasses(lines: string[], classes: StraightLineModule[
         params.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
       }
       const returnType = method.name.startsWith('set ') ? '' : `: ${renderFunctionReturnType(method)}`;
-      const accessModifier = method.name.startsWith('_') ? 'protected ' : '';
+      const accessModifier = method.name.startsWith('_') && plainClass.name !== 'MenuView' ? 'protected ' : '';
       if (method.abstract === true) {
         lines.push(`  ${accessModifier}abstract ${method.name}(${params.join(', ')})${returnType};`);
         continue;

@@ -313,7 +313,10 @@ export class WorldState {
     return new WorldEvents({ hits: hits, deaths: Array.from(deaths), pickups: pickups, sfx: sfx, triggerGameTune: triggerGameTune, hitSfx: hitSfx });
   }
 
-  _setCreatureDamageAppliers(applier: ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null): [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null] {
+  _setCreatureDamageAppliers(opts: { applier: ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null }): [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null];
+  _setCreatureDamageAppliers(applier: ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null): [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null];
+  _setCreatureDamageAppliers(applierOrOpts: ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null | { applier: ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null }): [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null] {
+    const applier: ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null = typeof applierOrOpts === 'object' && applierOrOpts !== null && 'applier' in applierOrOpts ? applierOrOpts.applier : applierOrOpts as ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null;
     const prev: [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null] = [this.state.projectiles.creatureDamageApplier, this.state.secondaryProjectiles.creatureDamageApplier, this.state.particles.creatureDamageApplier, this.state.bonusPool.creatureDamageApplier];
     this.state.projectiles.creatureDamageApplier = applier;
     this.state.secondaryProjectiles.creatureDamageApplier = applier;
@@ -322,7 +325,10 @@ export class WorldState {
     return prev;
   }
 
-  _restoreCreatureDamageAppliers(previous: [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null]): void {
+  _restoreCreatureDamageAppliers(opts: { previous: [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null] }): void;
+  _restoreCreatureDamageAppliers(previous: [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null]): void;
+  _restoreCreatureDamageAppliers(previousOrOpts: [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null] | { previous: [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null] }): void {
+    const previous: [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null] = typeof previousOrOpts === 'object' && previousOrOpts !== null && 'previous' in previousOrOpts ? previousOrOpts.previous : previousOrOpts as [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null];
     [this.state.projectiles.creatureDamageApplier, this.state.secondaryProjectiles.creatureDamageApplier, this.state.particles.creatureDamageApplier, this.state.bonusPool.creatureDamageApplier] = previous;
   }
 
@@ -413,7 +419,10 @@ export class WorldState {
     });
   }
 
-  _advanceCreatureAnim(dt: number): void {
+  _advanceCreatureAnim(opts: { dt: number }): void;
+  _advanceCreatureAnim(dt: number): void;
+  _advanceCreatureAnim(dtOrOpts: number | { dt: number }): void {
+    const dt: number = typeof dtOrOpts === 'object' && dtOrOpts !== null && 'dt' in dtOrOpts ? dtOrOpts.dt : dtOrOpts as number;
     if (this.state.bonuses.freeze > 0.0) {
       return;
     }
@@ -427,7 +436,11 @@ export class WorldState {
     }
   }
 
-  _advancePlayerAnim(dt: number, prevPositions: [number, number][]): void {
+  _advancePlayerAnim(opts: { dt: number; prevPositions: [number, number][] }): void;
+  _advancePlayerAnim(dt: number, prevPositions: [number, number][]): void;
+  _advancePlayerAnim(dtOrOpts: number | { dt: number; prevPositions: [number, number][] }, prevPositionsArg: [number, number][] | undefined = undefined): void {
+    const dt: number = typeof dtOrOpts === 'object' && dtOrOpts !== null && 'dt' in dtOrOpts ? dtOrOpts.dt : dtOrOpts as number;
+    const prevPositions: [number, number][] = typeof dtOrOpts === 'object' && dtOrOpts !== null && 'dt' in dtOrOpts ? dtOrOpts.prevPositions : prevPositionsArg as [number, number][];
     const info = CREATURE_ANIM.get(CreatureTypeId.TROOPER) ?? null;
     if (info === null) {
       return;
@@ -443,11 +456,17 @@ export class WorldState {
     }
   }
 
-  setCreatureDamageAppliers(applier: ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null): [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null] {
+  setCreatureDamageAppliers(opts: { applier: ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null }): [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null];
+  setCreatureDamageAppliers(applier: ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null): [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null];
+  setCreatureDamageAppliers(applierOrOpts: ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null | { applier: ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null }): [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null] {
+    const applier: ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null = typeof applierOrOpts === 'object' && applierOrOpts !== null && 'applier' in applierOrOpts ? applierOrOpts.applier : applierOrOpts as ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null;
     return this._setCreatureDamageAppliers(applier);
   }
 
-  restoreCreatureDamageAppliers(previous: [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null]): void {
+  restoreCreatureDamageAppliers(opts: { previous: [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null] }): void;
+  restoreCreatureDamageAppliers(previous: [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null]): void;
+  restoreCreatureDamageAppliers(previousOrOpts: [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null] | { previous: [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null] }): void {
+    const previous: [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null] = typeof previousOrOpts === 'object' && previousOrOpts !== null && 'previous' in previousOrOpts ? previousOrOpts.previous : previousOrOpts as [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null];
     this._restoreCreatureDamageAppliers(previous);
   }
 
@@ -497,11 +516,18 @@ export class WorldState {
     this._finalizeProjectileHitPresentation({ postCtx: postCtx, fxQueue: fxQueue });
   }
 
-  advanceCreatureAnim(dt: number): void {
+  advanceCreatureAnim(opts: { dt: number }): void;
+  advanceCreatureAnim(dt: number): void;
+  advanceCreatureAnim(dtOrOpts: number | { dt: number }): void {
+    const dt: number = typeof dtOrOpts === 'object' && dtOrOpts !== null && 'dt' in dtOrOpts ? dtOrOpts.dt : dtOrOpts as number;
     this._advanceCreatureAnim(dt);
   }
 
-  advancePlayerAnim(dt: number, prevPositions: [number, number][]): void {
+  advancePlayerAnim(opts: { dt: number; prevPositions: [number, number][] }): void;
+  advancePlayerAnim(dt: number, prevPositions: [number, number][]): void;
+  advancePlayerAnim(dtOrOpts: number | { dt: number; prevPositions: [number, number][] }, prevPositionsArg: [number, number][] | undefined = undefined): void {
+    const dt: number = typeof dtOrOpts === 'object' && dtOrOpts !== null && 'dt' in dtOrOpts ? dtOrOpts.dt : dtOrOpts as number;
+    const prevPositions: [number, number][] = typeof dtOrOpts === 'object' && dtOrOpts !== null && 'dt' in dtOrOpts ? dtOrOpts.prevPositions : prevPositionsArg as [number, number][];
     this._advancePlayerAnim(dt, prevPositions);
   }
 }

@@ -78,7 +78,10 @@ export class OwnerRef {
     return int(this.index);
   }
 
-  playerIndexInBounds(playerCount: number): number | null {
+  playerIndexInBounds(opts: { playerCount: number }): number | null;
+  playerIndexInBounds(playerCount: number): number | null;
+  playerIndexInBounds(playerCountOrOpts: number | { playerCount: number }): number | null {
+    const playerCount: number = typeof playerCountOrOpts === 'object' && playerCountOrOpts !== null && 'playerCount' in playerCountOrOpts ? playerCountOrOpts.playerCount : playerCountOrOpts as number;
     const idx = this.playerIndex();
     if (idx === null) {
       return null;
@@ -96,7 +99,10 @@ export class OwnerRef {
     return int(this.index);
   }
 
-  creatureIndexInBounds(creatureCount: number): number | null {
+  creatureIndexInBounds(opts: { creatureCount: number }): number | null;
+  creatureIndexInBounds(creatureCount: number): number | null;
+  creatureIndexInBounds(creatureCountOrOpts: number | { creatureCount: number }): number | null {
+    const creatureCount: number = typeof creatureCountOrOpts === 'object' && creatureCountOrOpts !== null && 'creatureCount' in creatureCountOrOpts ? creatureCountOrOpts.creatureCount : creatureCountOrOpts as number;
     const idx = this.creatureIndex();
     if (idx === null) {
       return null;

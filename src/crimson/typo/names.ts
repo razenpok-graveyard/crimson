@@ -86,7 +86,10 @@ export class CreatureNameTable {
     return new CreatureNameTable({ names: Array.from({ length: int(size) }, () => '') });
   }
 
-  clear(idx: number): void {
+  clear(opts: { idx: number }): void;
+  clear(idx: number): void;
+  clear(idxOrOpts: number | { idx: number }): void {
+    const idx: number = typeof idxOrOpts === 'object' && idxOrOpts !== null && 'idx' in idxOrOpts ? idxOrOpts.idx : idxOrOpts as number;
     if (int(idx) >= 0 && int(idx) < this.names.length) {
       this.names[int(idx)] = '';
     }

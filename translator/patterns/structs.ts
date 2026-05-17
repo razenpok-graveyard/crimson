@@ -936,10 +936,11 @@ function parseStructMethod(
     return null;
   }
   const parametersText = header.parametersText;
-  if (classBindingName === null && !staticMethod && parametersText !== 'self' && !parametersText.startsWith('self, ')) {
+  const parameterParts = parametersText === '' ? [] : splitTopLevelComma(parametersText);
+  const hasSelfReceiver = parameterParts[0] !== undefined && /^self(?:: .+)?$/.test(parameterParts[0]);
+  if (classBindingName === null && !staticMethod && !hasSelfReceiver) {
     return null;
   }
-  const parameterParts = parametersText === '' ? [] : splitTopLevelComma(parametersText);
   const classReceiver = classBindingName === null ? null : parameterParts[0]?.match(/^([A-Za-z_][A-Za-z0-9_]*)(?:: .+)?$/)?.[1] ?? null;
   if (classBindingName !== null && classReceiver === null) {
     return null;
@@ -954,7 +955,7 @@ function parseStructMethod(
     ? parameterParts.slice(1).join(', ')
     : staticMethod
     ? parametersText
-    : parametersText === 'self' ? '' : parametersText.slice('self, '.length);
+    : parameterParts.slice(1).join(', ');
   let keywordOnly = false;
   if (extraParameters !== '') {
     for (const parameterText of splitTopLevelComma(extraParameters)) {
@@ -1121,7 +1122,7 @@ function recordStructClassMethodSignatures(
       continue;
     }
     const parameterParts = header.parametersText === '' ? [] : splitTopLevelComma(header.parametersText);
-    const effectiveParameters = parameterParts[0] === 'self' || parameterParts[0]?.match(/^[A-Za-z_][A-Za-z0-9_]*(?:: .+)?$/) !== null && trimmed === '@classmethod'
+    const effectiveParameters = /^self(?:: .+)?$/.test(parameterParts[0] ?? '') || parameterParts[0]?.match(/^[A-Za-z_][A-Za-z0-9_]*(?:: .+)?$/) !== null && trimmed === '@classmethod'
       ? parameterParts.slice(1)
       : parameterParts;
     const positional: string[] = [];

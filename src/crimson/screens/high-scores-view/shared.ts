@@ -25,7 +25,7 @@ export function formatScoreDate(entry: HighScoreRecord): string {
   if (day <= 0 || month <= 0) {
     return '';
   }
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const months: [string, string, string, string, string, string, string, string, string, string, string, string] = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const monthName = 1 <= month && month <= 12 ? months[month - 1] : `${month}`;
   const year = yearOff >= 0 ? 2000 + yearOff : 2000;
   return `${day}. ${monthName} ${year}`;
