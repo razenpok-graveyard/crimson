@@ -17,6 +17,8 @@ import {
   partitionLeadingAssignmentsByEnumReference,
 } from './straight-line/ordering.js';
 import { renderTypeAliasValidator } from './straight-line/type-aliases.js';
+import { menuViewHelperExports } from './straight-line/menu-view.js';
+import { typeAliasValueUsageText } from './straight-line/type-usage.js';
 
 export function renderStraightLineModule(relativePath: string, module: StraightLineModule): string {
   const lines = [`// Port of ${relativePath}`, ''];
@@ -142,83 +144,4 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
     lines.push('');
   }
   return lines.join('\n');
-}
-
-function menuViewHelperExports(relativePath: string, module: StraightLineModule): string[] {
-  if (relativePath !== 'crimson/screens/menu.py' || !module.plainClasses.some((plainClass) => plainClass.name === 'MenuView')) {
-    return [];
-  }
-  return [
-    'export function labelAlpha(counterValue: number): number {',
-    '  return MenuView._labelAlpha(counterValue);',
-    '}',
-    '',
-    'export function uiElementAnim(view: TimelineView, opts: { index: number; startMs: number; endMs: number; width: number; directionFlag?: number }): [number, number] {',
-    '  const index = opts.index;',
-    '  const startMs = opts.startMs;',
-    '  const endMs = opts.endMs;',
-    '  const width = opts.width;',
-    '  const directionFlag = opts.directionFlag ?? 0;',
-    '  if (startMs <= endMs || width <= 0.0) {',
-    '    return [0.0, 0.0];',
-    '  }',
-    '  const dirSign = int(directionFlag) ? 1.0 : -1.0;',
-    '  const t = int(view._timelineMs);',
-    '  let angle: number;',
-    '  let offsetX: number;',
-    '  if (t < endMs) {',
-    '    angle = 1.5707964;',
-    '    offsetX = dirSign * Math.abs(width);',
-    '  } else if (t < startMs) {',
-    '    const elapsed = t - endMs;',
-    '    const span = startMs - endMs;',
-    '    const p = elapsed / span;',
-    '    angle = 1.5707964 * (1.0 - p);',
-    '    offsetX = dirSign * ((1.0 - p) * Math.abs(width));',
-    '  } else {',
-    '    angle = 0.0;',
-    '    offsetX = 0.0;',
-    '  }',
-    '  if (index === 0) {',
-    '    angle = -Math.abs(angle);',
-    '  }',
-    '  return [angle, offsetX];',
-    '}',
-    '',
-    'export function signLayoutScale(width: number): [number, number] {',
-    '  return MenuView._signLayoutScale(width);',
-    '}',
-    '',
-    'export function menuSlotPosX(slot: number): number {',
-    '  return MenuView._menuSlotPosX(slot);',
-    '}',
-    '',
-    'export function menuSlotStartMs(slot: number): number {',
-    '  return MenuView._menuSlotStartMs(slot);',
-    '}',
-    '',
-    'export function menuSlotEndMs(slot: number): number {',
-    '  return MenuView._menuSlotEndMs(slot);',
-    '}',
-    '',
-    'export { _drawMenuCursor as drawMenuCursorHelper };',
-  ];
-}
-
-function typeAliasValueUsageText(module: StraightLineModule): string {
-  return [
-    ...module.leadingAssignments.flatMap((assignment) => assignment.valueLines),
-    ...module.assignments.flatMap((assignment) => assignment.valueLines),
-    ...module.leadingStatements,
-    ...module.trailingStatements,
-    ...module.functions.flatMap((fn) => fn.statements),
-    ...module.classes.flatMap((structClass) => [
-      ...structClass.postInitStatements,
-      ...structClass.methods.flatMap((method) => method.statements),
-    ]),
-    ...module.plainClasses.flatMap((plainClass) => [
-      ...plainClass.constructorDefinition.statements,
-      ...plainClass.methods.flatMap((method) => method.statements),
-    ]),
-  ].join('\n');
 }
