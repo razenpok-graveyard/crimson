@@ -115,6 +115,9 @@ export async function translateFile(job: TranslationJob): Promise<string> {
   if (existingExcludedRuntimePort !== null) {
     return existingExcludedRuntimePort;
   }
+  if (usesUnsupportedRuntimeIo(futureStripped) && isExcludedRuntimeModule(job.relativePath)) {
+    return renderEmptyModule(job.relativePath);
+  }
 
   const simpleExportModule = parseSimpleExportModule(futureStripped, job.relativePath);
   if (simpleExportModule !== null) {
@@ -181,6 +184,10 @@ function usesUnsupportedRuntimeIo(trimmedPython: string): boolean {
     /\brl\.begin_shader_mode\(/m,
     /\brl\.rl_begin\(/m,
   ].some((pattern) => pattern.test(trimmedPython));
+}
+
+function isExcludedRuntimeModule(relativePath: string): boolean {
+  return /(?:^|\/)(?:dbg|replay|net)(?:\/|$)/.test(relativePath);
 }
 
 async function readPythonProjectVersion(packageName: string): Promise<string> {
