@@ -2495,6 +2495,33 @@ export function translateStraightLineStatement(
         mapNames,
       ), trailingComment);
     }
+    const multilineSubscriptAssignment = /^(.+)\[$/.exec(assignment[3]);
+    if (multilineSubscriptAssignment !== null) {
+      const subscriptExpression = collectMultilineSubscriptExpression(
+        lines,
+        index + 1,
+        multilineSubscriptAssignment[1],
+        nameMap,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+      );
+      if (subscriptExpression === null) {
+        return null;
+      }
+      return appendTrailingCommentToResult(translateStraightLineAssignment(
+        assignment[1],
+        assignment[2],
+        subscriptExpression.expression,
+        subscriptExpression.nextIndex,
+        nameMap,
+        declaredNames,
+        reassignedNames,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+      ), trailingComment);
+    }
     if (parenthesisDelta(assignment[3]) > 0) {
       const expression = collectMultilineParenthesizedExpression(lines, index, assignment[3]);
       if (expression !== null) {
@@ -4822,8 +4849,23 @@ function collectMultilineSubscriptExpression(
       if (indexLines.length === 0) {
         return null;
       }
+      const indexText = indexLines.join(' ');
+      const slice = /^(.*):(.*)$/.exec(indexText);
+      if (slice !== null) {
+        const receiver = translateExpression(pythonReceiver, nameMap, arrayNames, validatedTypeAliases, mapNames);
+        const start = slice[1].trim() === ''
+          ? '0'
+          : translateExpression(slice[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+        const end = slice[2].trim() === ''
+          ? null
+          : translateExpression(slice[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+        return {
+          expression: end === null ? `${receiver}.slice(${start})` : `${receiver}.slice(${start}, ${end})`,
+          nextIndex: nextIndex + 1,
+        };
+      }
       return {
-        expression: `${translateExpression(pythonReceiver, nameMap, arrayNames, validatedTypeAliases, mapNames)}[${translateExpression(indexLines.join(' '), nameMap, arrayNames, validatedTypeAliases, mapNames)}]`,
+        expression: `${translateExpression(pythonReceiver, nameMap, arrayNames, validatedTypeAliases, mapNames)}[${translateExpression(indexText, nameMap, arrayNames, validatedTypeAliases, mapNames)}]`,
         nextIndex: nextIndex + 1,
       };
     }

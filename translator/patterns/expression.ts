@@ -414,7 +414,8 @@ function translateCallCalleeExpression(
   }
   return translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases)
     .replace(/\.append$/, '.push')
-    .replace(/\.extend$/, '.push');
+    .replace(/\.extend$/, '.push')
+    .replace(/\.index$/, '.indexOf');
 }
 
 function translateMapDefaultExpression(
@@ -544,6 +545,20 @@ function translateConditionalTestExpression(
   return translated;
 }
 
+function arrayElementTypeFromTypeExpression(typeExpression: string | null): string | null {
+  const trimmed = typeExpression?.trim() ?? '';
+  const readonlyArray = /^readonly (.+)\[\]$/.exec(trimmed);
+  if (readonlyArray !== null) {
+    return readonlyArray[1].trim();
+  }
+  const mutableArray = /^(.+)\[\]$/.exec(trimmed);
+  if (mutableArray !== null) {
+    return mutableArray[1].trim();
+  }
+  const readonlyGeneric = /^ReadonlyArray<(.+)>$/.exec(trimmed);
+  return readonlyGeneric?.[1]?.trim() ?? null;
+}
+
 function parseRaylibMethodCall(
   pythonExpression: string,
   methodNames: readonly string[],
@@ -627,6 +642,11 @@ export function translateExpression(
     return `readFileSync(String(${translateExpression(pathlibReadText[1] ?? pathlibReadText[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}), 'utf8')`;
   }
 
+  const notStripCall = /^not (.+\.strip\(\))$/.exec(trimmed);
+  if (notStripCall !== null && delimitersBalanced(notStripCall[1])) {
+    return `!${translateExpression(notStripCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
+  }
+
   const lstripCall = /^(.+)\.lstrip\(\)$/.exec(trimmed);
   if (lstripCall !== null) {
     return `pythonLstrip(${translateExpression(lstripCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
@@ -638,6 +658,18 @@ export function translateExpression(
   const findCall = /^(.+)\.find\((.+)\)$/.exec(trimmed);
   if (findCall !== null) {
     return `${translateExpression(findCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.indexOf(${translateExpression(findCall[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+  const indexCall = /^(.+)\.index\((.*)\)$/.exec(trimmed);
+  if (indexCall !== null) {
+    const args = splitTopLevelComma(indexCall[2]);
+    if (args.length === 1 && !/^[A-Za-z_][A-Za-z0-9_]*=/.test(args[0])) {
+      const receiver = translateExpression(indexCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const elementType = arrayElementTypeFromTypeExpression(
+        knownClassFieldType(indexCall[1], nameMap) ?? knownClassFieldType(receiver, nameMap),
+      );
+      const item = translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      return `${receiver}.indexOf(${elementType === null ? item : `${item} as ${elementType}`})`;
+    }
   }
 
   const toBytesCall = /^(.+)\.tobytes\(\)$/.exec(trimmed);
@@ -1017,6 +1049,16 @@ export function translateExpression(
     return `/^\\p{L}+$/u.test(${translateExpression(isAlphaCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
+  const isAlnumCall = /^(.+)\.isalnum\(\)$/.exec(trimmed);
+  if (isAlnumCall !== null) {
+    return `/^[\\p{L}\\p{N}]+$/u.test(${translateExpression(isAlnumCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
+  const isDigitCall = /^(.+)\.isdigit\(\)$/.exec(trimmed);
+  if (isDigitCall !== null) {
+    return `/^\\d+$/u.test(${translateExpression(isDigitCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
   const vec2FromXyCall = /^Vec2\.from_xy\((.*)\)$/.exec(trimmed);
   if (vec2FromXyCall !== null) {
     return `Vec2.fromXY(${translateExpression(vec2FromXyCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
@@ -1026,7 +1068,9 @@ export function translateExpression(
   if (stringJoinCall !== null) {
     const separator = parsePythonStringExpression(stringJoinCall[1]);
     if (separator !== null) {
-      return `${translateExpression(stringJoinCall[3], nameMap, arrayNames, validatedTypeAliases, mapNames)}.join(${JSON.stringify(separator.content)})`;
+      const generatorArray = generatorExpressionToArray(stringJoinCall[3], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const chunks = generatorArray ?? translateExpression(stringJoinCall[3], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      return `${chunks}.join(${JSON.stringify(separator.content)})`;
     }
   }
 
@@ -1684,6 +1728,9 @@ export function translateExpression(
   if (strCall !== null && strCall.rest === '.strip().lower()') {
     return `${tsPropertyAccessBase(translateExpression(strCall.argsText, nameMap, arrayNames, validatedTypeAliases))}.trim().toLowerCase()`;
   }
+  if (strCall !== null && strCall.rest === '.lower()') {
+    return `String(${translateExpression(strCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)}).toLowerCase()`;
+  }
   if (strCall !== null && strCall.rest === '.strip()') {
     return `${tsPropertyAccessBase(translateExpression(strCall.argsText, nameMap, arrayNames, validatedTypeAliases))}.trim()`;
   }
@@ -1797,6 +1844,14 @@ export function translateExpression(
     const translated = translateExpression(argText, nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (arrayNames.has(booleanNameMarker(argText)) || arrayNames.has(booleanNameMarker(translated)) || translatedExpressionLooksBooleanForInt(translated)) {
       return `(${translated} ? 1 : 0)`;
+    }
+    if (
+      arrayNames.has(stringNameMarker(argText))
+      || arrayNames.has(stringNameMarker(translated))
+      || knownClassFieldType(argText, nameMap) === 'string'
+      || knownClassFieldType(translated, nameMap) === 'string'
+    ) {
+      return `int(Number(${translated}))`;
     }
     return `int(${translated})`;
   }
@@ -2480,6 +2535,18 @@ export function translateExpression(
       .join(' || ');
   }
 
+  const earlyFullSlice = /^(.+)\[(.*):(.*)\]$/.exec(trimmed);
+  if (earlyFullSlice !== null && splitTopLevelSpacedOperator(trimmed, 'in') === null) {
+    const receiver = translateExpression(earlyFullSlice[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const start = earlyFullSlice[2].trim() === ''
+      ? '0'
+      : translateExpression(earlyFullSlice[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const end = earlyFullSlice[3].trim() === ''
+      ? undefined
+      : translateExpression(earlyFullSlice[3], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return end === undefined ? `${receiver}.slice(${start})` : `${receiver}.slice(${start}, ${end})`;
+  }
+
   const slicedNotMembership = /^(.+?) not in (.+\[[^\]]*:[^\]]*\])$/.exec(trimmed);
   if (slicedNotMembership !== null) {
     const container = translateExpression(slicedNotMembership[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -2753,6 +2820,7 @@ export function translateExpression(
     })
     .replaceAll(/\.append\(/g, '.push(')
     .replaceAll(/\.extend\(/g, '.push(...')
+    .replaceAll(/\.index\(/g, '.indexOf(')
     .replaceAll(/\.strip\(\)/g, '.trim()')
     .replaceAll(/\.lower\(\)/g, '.toLowerCase()')
     .replaceAll(/\bmath\.pi\b/g, 'Math.PI')
