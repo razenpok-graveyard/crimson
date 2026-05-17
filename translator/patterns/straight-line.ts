@@ -137,6 +137,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   const allNames: string[] = [];
   const moduleNameMap = new Map<string, string>();
   const mapNames = new Set<string>();
+  const topLevelArrayNames = new Set<string>();
   const structConstructorFields = new Map<string, string[]>();
   const structMapConstructorFields = new Map<string, Set<string>>();
   const typeVarNames = new Set<string>();
@@ -305,7 +306,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
 
-    const plainClass = parsePlainClass(lines, index, moduleNameMap, relativePath, imports);
+    const plainClass = parsePlainClass(lines, index, moduleNameMap, relativePath, imports, topLevelArrayNames);
     if (plainClass !== null) {
       plainClasses.push(plainClass.plainClass);
       index = plainClass.nextIndex;
@@ -534,6 +535,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     if (namedAssignment !== null) {
       moduleNameMap.set(namedAssignment[1], assignment.assignment.name);
       recordTopLevelMapAssignmentMarkers(assignment.assignment, moduleNameMap, mapNames);
+      recordTopLevelArrayAssignmentMarkers(assignment.assignment, topLevelArrayNames);
       if (assignment.assignment.typeExpression?.startsWith('Set<') === true || assignment.assignment.typeExpression?.startsWith('ReadonlySet<') === true) {
         setReturnFunctionNames.add(assignment.assignment.name);
       }
@@ -603,6 +605,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       if (namedAssignment !== null) {
         moduleNameMap.set(namedAssignment[1], interleavedAssignment.assignment.name);
         recordTopLevelMapAssignmentMarkers(interleavedAssignment.assignment, moduleNameMap, mapNames);
+        recordTopLevelArrayAssignmentMarkers(interleavedAssignment.assignment, topLevelArrayNames);
         if (interleavedAssignment.assignment.typeExpression?.startsWith('Set<') === true || interleavedAssignment.assignment.typeExpression?.startsWith('ReadonlySet<') === true) {
           setReturnFunctionNames.add(interleavedAssignment.assignment.name);
         }
@@ -655,7 +658,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         continue;
       }
 
-      const plainClass = parsePlainClass(lines, index, moduleNameMap, relativePath, imports);
+      const plainClass = parsePlainClass(lines, index, moduleNameMap, relativePath, imports, topLevelArrayNames);
       if (plainClass !== null) {
         plainClasses.push(plainClass.plainClass);
         index = plainClass.nextIndex;
@@ -675,7 +678,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     const optsParams: OptionalFunctionParameter[] = [];
     const signaturePositionalNames: string[] = [];
     const objectAnnotatedParameters: { pythonName: string; tsName: string }[] = [];
-    const arrayNames = new Set<string>();
+    const arrayNames = new Set<string>(topLevelArrayNames);
     const functionMapNames = new Set(mapNames);
     for (const name of setReturnFunctionNames) {
       arrayNames.add(setNameMarker(name));
@@ -2471,6 +2474,26 @@ function recordTopLevelMapAssignmentMarkers(
     if (valueType.startsWith('Map<') || valueType.startsWith('ReadonlyMap<')) {
       mapNames.add(mapValueMapNameMarker(name));
     }
+  }
+}
+
+function recordTopLevelArrayAssignmentMarkers(
+  assignment: SimpleModuleAssignment,
+  arrayNames: Set<string>,
+): void {
+  const typeExpression = assignment.typeExpression?.trim() ?? '';
+  const valueText = assignment.valueLines.join('\n').trim();
+  const looksArray = typeExpression.endsWith('[]')
+    || typeExpression.startsWith('readonly ') && typeExpression.endsWith('[]')
+    || typeExpression.startsWith('ReadonlyArray<')
+    || valueText.startsWith('[')
+    || valueText.startsWith('Array.from(');
+  if (!looksArray) {
+    return;
+  }
+  arrayNames.add(assignment.name);
+  if (assignment.pythonName !== undefined) {
+    arrayNames.add(assignment.pythonName);
   }
 }
 

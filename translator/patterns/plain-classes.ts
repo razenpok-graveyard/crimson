@@ -145,6 +145,7 @@ export function parsePlainClass(
   moduleNameMap: ReadonlyMap<string, string> = new Map(),
   relativePath: string | null = null,
   imports: ImportDefinition[] | null = null,
+  initialArrayNames: ReadonlySet<string> = new Set(),
 ): { plainClass: PlainClassDefinition; nextIndex: number } | null {
   const header = /^class ([A-Za-z_][A-Za-z0-9_]*)(?:\(([A-Za-z_][A-Za-z0-9_]*)\))?:$/.exec(lines[index] ?? '');
   if (header === null) {
@@ -187,7 +188,7 @@ export function parsePlainClass(
 
   const fieldMap = new Map<string, PlainClassDefinition['fields'][number]>();
   const fieldNameMap = new Map<string, string>();
-  const fieldArrayNames = new Set<string>();
+  const fieldArrayNames = new Set<string>(initialArrayNames);
   const fieldMapNames = new Set<string>();
   while (nextIndex < lines.length) {
     const classField = parsePlainClassFieldAssignment(lines, nextIndex, moduleNameMap);

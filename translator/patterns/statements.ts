@@ -26,6 +26,7 @@ import {
   arrayElementTypeMarker,
   arrayValueMapNameMarker,
   booleanNameMarker,
+  classBaseTypeMarker,
   classFieldTypeMarker,
   colorNameMarker,
   dateNameMarker,
@@ -1014,6 +1015,19 @@ export function translateStraightLineStatement(
     const enumValueFallback = translateEnumValueFallbackStatement(lines, index, indent, nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (enumValueFallback !== null) {
       return enumValueFallback;
+    }
+    const listIndexFallback = translateListIndexValueErrorFallbackStatement(
+      lines,
+      index,
+      indent,
+      nameMap,
+      declaredNames,
+      arrayNames,
+      validatedTypeAliases,
+      mapNames,
+    );
+    if (listIndexFallback !== null) {
+      return listIndexFallback;
     }
 
     const innerIndent = `${indent}    `;
@@ -3540,6 +3554,58 @@ function translateEnumValueFallbackStatement(
   };
 }
 
+function translateListIndexValueErrorFallbackStatement(
+  lines: string[],
+  index: number,
+  indent: string,
+  nameMap: Map<string, string>,
+  declaredNames: Set<string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): { statements: string[]; nextIndex: number } | null {
+  const innerIndent = `${indent}    `;
+  const tryAssignmentLine = lines[index + 1] ?? '';
+  const exceptLine = lines[index + 2] ?? '';
+  const fallbackLine = lines[index + 3] ?? '';
+  if (
+    !tryAssignmentLine.startsWith(innerIndent)
+    || !lineStartsAtIndent(exceptLine, indent)
+    || !fallbackLine.startsWith(innerIndent)
+    || exceptLine.trim() !== 'except ValueError:'
+  ) {
+    return null;
+  }
+
+  const tryAssignment = /^([A-Za-z_][A-Za-z0-9_]*) = (.+)\.index\((.+)\)$/.exec(tryAssignmentLine.trim());
+  if (tryAssignment === null) {
+    return null;
+  }
+  const fallbackAssignment = new RegExp(`^${tryAssignment[1]} = (.+)$`).exec(fallbackLine.trim());
+  if (fallbackAssignment === null) {
+    return null;
+  }
+
+  const pythonName = tryAssignment[1];
+  const tsName = nameMap.get(pythonName) ?? tsExportNameForPythonName(pythonName);
+  const receiver = translateExpression(tryAssignment[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const value = translateExpression(tryAssignment[3], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const fallback = translateExpression(fallbackAssignment[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const declaration = nameMap.has(pythonName) || declaredNames.has(pythonName) ? '' : 'let ';
+  declaredNames.add(pythonName);
+  arrayNames.add(numberNameMarker(pythonName));
+  arrayNames.add(numberNameMarker(tsName));
+  return {
+    statements: [
+      `${declaration}${tsName} = ${receiver}.indexOf(${value});`,
+      `if (${tsName} < 0) {`,
+      `  ${tsName} = ${fallback};`,
+      '}',
+    ],
+    nextIndex: index + 4,
+  };
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -4164,11 +4230,11 @@ function translateKeywordCallArgumentExpression(
 }
 
 function keywordNameLooksLikeCallback(pythonKeywordName: string): boolean {
-  return /^(?:build|consume|create|draw|handle|measure|on|play|process|registry|reset|sync|update)(?:_|$)/.test(pythonKeywordName);
+  return /^(?:build|consume|create|draw|handle|measure|on|play|process|registry|reset|sync|ui|update)(?:_|$)/.test(pythonKeywordName);
 }
 
 function keywordNameLooksLikeLocalCallback(pythonKeywordName: string): boolean {
-  return /^(?:apply|build|consume|create|draw|handle|measure|on|play|process|registry|reset|sync|update)(?:_|$)/.test(pythonKeywordName);
+  return /^(?:apply|build|consume|create|draw|handle|measure|on|play|process|registry|reset|sync|ui|update)(?:_|$)/.test(pythonKeywordName);
 }
 
 function translateDetachedMethodReference(
@@ -4247,7 +4313,10 @@ function translateMultilineCallWithLocalSignature(
   const args = callParts.positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
   for (const pythonName of signature.positional.slice(args.length)) {
     const keywordPart = callParts.keywordArgParts.find((part) => (
-      part.pythonName === pythonName || tsExportNameForPythonName(part.pythonName) === pythonName
+      part.pythonName === pythonName
+      || tsExportNameForPythonName(part.pythonName) === pythonName
+      || `_${part.pythonName}` === pythonName
+      || `_${tsExportNameForPythonName(part.pythonName)}` === pythonName
     ));
     if (keywordPart === undefined) {
       break;
@@ -4287,13 +4356,31 @@ function parseKnownFunctionCallSignature(
   const methodName = tsAttributeNameForPythonName(dotted[2]);
   if (receiverType !== undefined) {
     const receiverSignature = parseFunctionCallSignatureText(
-      nameMap.get(instanceMethodSignatureMarker(receiverType, methodName)),
+      inheritedInstanceMethodSignatureText(receiverType, methodName, nameMap),
     );
     if (receiverSignature !== null) {
       return receiverSignature;
     }
   }
   return knownMethodCallSignature(methodName);
+}
+
+function inheritedInstanceMethodSignatureText(
+  receiverType: string,
+  methodName: string,
+  nameMap: ReadonlyMap<string, string>,
+): string | undefined {
+  let currentType: string | undefined = receiverType;
+  const seen = new Set<string>();
+  while (currentType !== undefined && !seen.has(currentType)) {
+    seen.add(currentType);
+    const signature = nameMap.get(instanceMethodSignatureMarker(currentType, methodName));
+    if (signature !== undefined) {
+      return signature;
+    }
+    currentType = nameMap.get(classBaseTypeMarker(currentType));
+  }
+  return undefined;
 }
 
 function knownMethodCallSignature(methodName: string): FunctionCallSignature | null {

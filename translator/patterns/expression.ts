@@ -4288,11 +4288,30 @@ function translateKeywordArgumentExpression(
   if (localReference !== null && localReference[1].startsWith('_') && keywordNameLooksLikeCallback(pythonKeywordName)) {
     return tsMemberNameForPythonName(localReference[1]);
   }
-  return translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const callbackReference = keywordNameLooksLikeCallback(pythonKeywordName)
+    ? translateKeywordDetachedMethodReference(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames)
+    : null;
+  return callbackReference ?? translateCallArgumentExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
 }
 
 function keywordNameLooksLikeCallback(pythonKeywordName: string): boolean {
-  return /^(?:apply|build|consume|create|draw|handle|measure|on|play|process|registry|reset|sync|update)(?:_|$)/.test(pythonKeywordName);
+  return /^(?:apply|build|consume|create|draw|handle|measure|on|play|process|registry|reset|sync|ui|update)(?:_|$)/.test(pythonKeywordName);
+}
+
+function translateKeywordDetachedMethodReference(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  const reference = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+)$/.exec(pythonExpression.trim());
+  if (reference === null) {
+    return null;
+  }
+  const parts = reference[1].split('.');
+  const receiver = translateExpression(parts.slice(0, -1).join('.'), nameMap, arrayNames, validatedTypeAliases, mapNames);
+  return `${receiver}.${tsMemberNameForPythonName(parts[parts.length - 1])}.bind(${receiver})`;
 }
 
 function translateMixedKeywordCallWithKnownInstanceSignature(
