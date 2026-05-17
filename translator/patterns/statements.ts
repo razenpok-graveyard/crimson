@@ -1442,17 +1442,26 @@ export function translateStraightLineStatement(
     };
   }
 
-  const enumerateStatement = /^for ([A-Za-z_][A-Za-z0-9_]*), ([A-Za-z_][A-Za-z0-9_]*) in enumerate\((.+)\):$/.exec(statement);
+  const enumerateStatement = /^for (.+) in enumerate\((.+)\):$/.exec(statement);
   if (enumerateStatement !== null) {
-    const enumerateArgs = parseEnumerateCallArgs(enumerateStatement[3]);
+    const enumerateTarget = parseForTargetPattern(enumerateStatement[1]);
+    if (enumerateTarget === null) {
+      return null;
+    }
+    const enumerateParts = splitTopLevelComma(enumerateStatement[1]);
+    if (enumerateParts.length !== 2) {
+      return null;
+    }
+    const enumerateArgs = parseEnumerateCallArgs(enumerateStatement[2]);
     if (enumerateArgs === null) {
       return null;
     }
     const innerIndent = `${indent}    `;
     const innerStatements: string[] = [];
     const branchDeclaredNames = new Set(declaredNames);
-    branchDeclaredNames.add(enumerateStatement[1]);
-    branchDeclaredNames.add(enumerateStatement[2]);
+    for (const pythonName of enumerateTarget.pythonNames) {
+      branchDeclaredNames.add(pythonName);
+    }
     let nextIndex = index + 1;
     while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, innerIndent)) {
       if (lines[nextIndex].trim() === '') {
@@ -1484,7 +1493,7 @@ export function translateStraightLineStatement(
     }
     return {
       statements: [
-        `for (const [${tsExportNameForPythonName(enumerateStatement[1])}, ${tsExportNameForPythonName(enumerateStatement[2])}] of ${enumerateForOfExpression(enumerateArgs, nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`,
+        `for (const ${enumerateTarget.pattern} of ${enumerateForOfExpression(enumerateArgs, nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`,
         ...innerStatements,
         '}',
       ],
@@ -1669,10 +1678,17 @@ export function translateStraightLineStatement(
     const innerIndent = `${indent}    `;
     const innerStatements: string[] = [];
     const targets = tupleForOfStatement[1].split(', ');
+    const iterableExpression = translateExpression(tupleForOfStatement[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
     const branchDeclaredNames = new Set(declaredNames);
     for (const target of targets) {
       branchDeclaredNames.add(target);
     }
+    applyTupleTargetTypeMarkers(
+      targets,
+      nameMap.get(arrayElementTypeMarker(tupleForOfStatement[2])) ?? nameMap.get(arrayElementTypeMarker(iterableExpression)) ?? null,
+      nameMap,
+      arrayNames,
+    );
     let nextIndex = index + 1;
     while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, innerIndent)) {
       if (lines[nextIndex].trim() === '') {
@@ -1726,7 +1742,7 @@ export function translateStraightLineStatement(
     }
     return {
       statements: [
-        `for (let [${targets.map(tsExportNameForPythonName).join(', ')}] of ${translateExpression(tupleForOfStatement[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`,
+        `for (let [${targets.map(tsExportNameForPythonName).join(', ')}] of ${iterableExpression}) {`,
         ...innerStatements,
         '}',
       ],
@@ -2235,6 +2251,11 @@ export function translateStraightLineStatement(
     if (typeExpression.endsWith('[]')) {
       arrayNames.add(annotatedAssignment[1]);
       arrayNames.add(tsName);
+      const elementType = arrayElementTypeFromTypeExpression(typeExpression);
+      if (elementType !== null) {
+        nameMap.set(arrayElementTypeMarker(annotatedAssignment[1]), elementType);
+        nameMap.set(arrayElementTypeMarker(tsName), elementType);
+      }
       if (pythonListTypeIsNumeric(annotation)) {
         arrayNames.add(numberArrayNameMarker(annotatedAssignment[1]));
         arrayNames.add(numberArrayNameMarker(tsName));
@@ -3440,6 +3461,32 @@ function iterableExpressionForIteration(
 function parseEnumerateIterableExpression(pythonExpression: string): EnumerateCallArgs | null {
   const enumerateCall = /^enumerate\((.+)\)$/.exec(pythonExpression.trim());
   return enumerateCall === null ? null : parseEnumerateCallArgs(enumerateCall[1]);
+}
+
+function parseForTargetPattern(pythonTarget: string): { pattern: string; pythonNames: string[] } | null {
+  const target = pythonTarget.trim();
+  const simpleTarget = /^[A-Za-z_][A-Za-z0-9_]*$/.exec(target);
+  if (simpleTarget !== null) {
+    return {
+      pattern: target === '_' ? '_' : tsExportNameForPythonName(target),
+      pythonNames: target === '_' ? [] : [target],
+    };
+  }
+
+  const wrappedTarget = /^\((.*)\)$|^\[(.*)\]$/.exec(target);
+  const innerTarget = wrappedTarget?.[1] ?? wrappedTarget?.[2] ?? target;
+  const parts = splitTopLevelComma(innerTarget);
+  if (parts.length < 2) {
+    return null;
+  }
+  const parsedParts = parts.map(parseForTargetPattern);
+  if (parsedParts.some((part) => part === null)) {
+    return null;
+  }
+  return {
+    pattern: `[${parsedParts.map((part) => part?.pattern ?? '').join(', ')}]`,
+    pythonNames: parsedParts.flatMap((part) => part?.pythonNames ?? []),
+  };
 }
 
 function enumerateForOfExpression(
@@ -5291,7 +5338,8 @@ function translateStraightLineAssignment(
     const localAssignedRight = assignedRightAsKnownVector(localAssignment[1], localTsName, assignedRight, arrayNames);
     recordLocalAssignmentMarkers(localAssignment[1], localTsName, localAssignedRight, nameMap, arrayNames, mapNames);
     const nullableType = nullableLocalDeclarationType(localAssignment[1], localTsName, localAssignedRight, arrayNames);
-    const tupleType = localTupleDeclarationType(localAssignedRight, pythonRight, nameMap);
+    const tupleType = localTupleDeclarationType(localAssignedRight, pythonRight, nameMap, arrayNames);
+    recordLocalTupleDeclarationMarkers(localAssignment[1], localTsName, tupleType, nameMap, arrayNames);
     const widenedRuntimeType = reassignedNames.has(localAssignment[1]) && /^new Crand\(/.test(localAssignedRight)
       ? 'CrandLike'
       : null;
@@ -5469,7 +5517,16 @@ function nullableLocalDeclarationType(
   return null;
 }
 
-function localTupleDeclarationType(assignedRight: string, pythonRight: string | null, nameMap: ReadonlyMap<string, string>): string | null {
+function localTupleDeclarationType(
+  assignedRight: string,
+  pythonRight: string | null,
+  nameMap: ReadonlyMap<string, string>,
+  arrayNames: ReadonlySet<string>,
+): string | null {
+  const tupleArrayType = homogeneousTupleArrayDeclarationType(assignedRight, nameMap, arrayNames);
+  if (tupleArrayType !== null) {
+    return tupleArrayType;
+  }
   if (!pythonExpressionCouldBeTupleLiteral(pythonRight)) {
     return null;
   }
@@ -5479,6 +5536,214 @@ function localTupleDeclarationType(assignedRight: string, pythonRight: string | 
     return returnTupleType;
   }
   return `[${Array.from({ length }, () => 'number').join(', ')}]`;
+}
+
+function homogeneousTupleArrayDeclarationType(
+  assignedRight: string,
+  nameMap: ReadonlyMap<string, string>,
+  arrayNames: ReadonlySet<string>,
+): string | null {
+  const rows = parseTsArrayLiteralItems(assignedRight);
+  if (rows === null || rows.length === 0) {
+    return null;
+  }
+  const rowItems = rows.map(parseTsArrayLiteralItems);
+  if (rowItems.some((items) => items === null)) {
+    return null;
+  }
+  const firstLength = rowItems[0]?.length ?? 0;
+  if (firstLength < 2 || rowItems.some((items) => items?.length !== firstLength)) {
+    return null;
+  }
+
+  const elementTypes: string[] = [];
+  for (let itemIndex = 0; itemIndex < firstLength; itemIndex += 1) {
+    const itemTypes = rowItems.map((items) => inferExpressionType(items?.[itemIndex] ?? '', nameMap, arrayNames));
+    if (itemTypes.some((type) => type === null)) {
+      return null;
+    }
+    const commonType = commonTupleElementType(itemTypes.filter((type): type is string => type !== null));
+    if (commonType === null) {
+      return null;
+    }
+    elementTypes.push(commonType);
+  }
+  return `[${elementTypes.join(', ')}][]`;
+}
+
+function parseTsArrayLiteralItems(expression: string): string[] | null {
+  const trimmed = expression.trim();
+  if (!trimmed.startsWith('[') || !trimmed.endsWith(']')) {
+    return null;
+  }
+  return splitTopLevelComma(trimmed.slice(1, -1));
+}
+
+function commonTupleElementType(types: string[]): string | null {
+  const unique = [...new Set(types)];
+  return unique.length === 1 ? unique[0] : null;
+}
+
+function inferExpressionType(
+  expression: string,
+  nameMap: ReadonlyMap<string, string>,
+  arrayNames: ReadonlySet<string>,
+): string | null {
+  const trimmed = expression.trim();
+  if (/^(?:'[^']*'|"[^"]*"|`[^`]*`)$/.test(trimmed)) {
+    return 'string';
+  }
+  if (translatedExpressionLooksNumber(trimmed) || /^[A-Z][A-Z0-9_]*(?:_X|_Y|_W|_H|_COUNT|_INDEX|_MS)$/.test(trimmed)) {
+    return 'number';
+  }
+  if (translatedExpressionLooksBoolean(trimmed) || /^!\(.+\)$/.test(trimmed)) {
+    return 'boolean';
+  }
+  if (translatedExpressionLooksVector(trimmed) || arrayNames.has(vectorNameMarker(trimmed))) {
+    return 'Vec2';
+  }
+  const fieldType = knownDottedFieldType(trimmed, nameMap);
+  if (fieldType !== null) {
+    return fieldType;
+  }
+  const identifier = /^[A-Za-z_$][A-Za-z0-9_$]*$/.exec(trimmed);
+  if (identifier !== null) {
+    if (arrayNames.has(numberNameMarker(trimmed))) {
+      return 'number';
+    }
+    if (arrayNames.has(booleanNameMarker(trimmed))) {
+      return 'boolean';
+    }
+    if (arrayNames.has(stringNameMarker(trimmed))) {
+      return 'string';
+    }
+    if (arrayNames.has(vectorNameMarker(trimmed))) {
+      return 'Vec2';
+    }
+    const elementType = nameMap.get(arrayElementTypeMarker(trimmed));
+    if (elementType !== undefined) {
+      return `${elementType}[]`;
+    }
+  }
+
+  const arrayFrom = /^Array\.from\((.+)\)$/.exec(trimmed);
+  if (arrayFrom !== null) {
+    const elementType = nameMap.get(arrayElementTypeMarker(arrayFrom[1].trim()));
+    return elementType === undefined ? null : `${elementType}[]`;
+  }
+
+  const tupleMap = /^([A-Za-z_$][A-Za-z0-9_$]*)\.map\(\(\[([^\]]+)\]\) => ([A-Za-z_$][A-Za-z0-9_$]*)\)$/.exec(trimmed);
+  if (tupleMap !== null) {
+    const sourceElementType = nameMap.get(arrayElementTypeMarker(tupleMap[1]));
+    const tupleTypes = tupleTypeElements(sourceElementType);
+    if (tupleTypes !== null) {
+      const names = tupleMap[2].split(',').map((name) => name.trim());
+      const nameIndex = names.indexOf(tupleMap[3]);
+      if (nameIndex >= 0 && tupleTypes[nameIndex] !== undefined) {
+        return `${tupleTypes[nameIndex]}[]`;
+      }
+    }
+  }
+
+  const arrayItems = parseTsArrayLiteralItems(trimmed);
+  if (arrayItems !== null) {
+    const itemTypes = arrayItems.map((item) => inferExpressionType(item, nameMap, arrayNames));
+    if (itemTypes.length === 0 || itemTypes.some((type) => type === null)) {
+      return null;
+    }
+    const itemType = commonTupleElementType(itemTypes.filter((type): type is string => type !== null));
+    return itemType === null ? null : `${itemType}[]`;
+  }
+
+  return null;
+}
+
+function inferredArrayElementType(
+  expression: string,
+  nameMap: ReadonlyMap<string, string>,
+  arrayNames: ReadonlySet<string>,
+): string | null {
+  const typeExpression = inferExpressionType(expression, nameMap, arrayNames);
+  return arrayElementTypeFromTypeExpression(typeExpression ?? '');
+}
+
+function tupleTypeElements(typeExpression: string | null | undefined): string[] | null {
+  if (typeExpression === undefined || typeExpression === null) {
+    return null;
+  }
+  const trimmed = typeExpression.trim();
+  if (!trimmed.startsWith('[') || !trimmed.endsWith(']')) {
+    return null;
+  }
+  return splitTopLevelComma(trimmed.slice(1, -1));
+}
+
+function recordLocalTupleDeclarationMarkers(
+  pythonName: string,
+  tsName: string,
+  tupleType: string | null,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+): void {
+  const elementType = arrayElementTypeFromTypeExpression(tupleType ?? '');
+  if (elementType === null) {
+    return;
+  }
+  arrayNames.add(pythonName);
+  arrayNames.add(tsName);
+  nameMap.set(arrayElementTypeMarker(pythonName), elementType);
+  nameMap.set(arrayElementTypeMarker(tsName), elementType);
+}
+
+function applyTupleTargetTypeMarkers(
+  targets: string[],
+  elementType: string | null,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+): void {
+  const tupleTypes = tupleTypeElements(elementType);
+  if (tupleTypes === null || tupleTypes.length !== targets.length) {
+    return;
+  }
+  for (const [targetIndex, target] of targets.entries()) {
+    applyLocalTypeMarkers(target, tupleTypes[targetIndex], nameMap, arrayNames);
+  }
+}
+
+function applyLocalTypeMarkers(
+  pythonName: string,
+  typeExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+): void {
+  const tsName = tsExportNameForPythonName(pythonName);
+  if (typeExpression === 'number') {
+    arrayNames.add(numberNameMarker(pythonName));
+    arrayNames.add(numberNameMarker(tsName));
+    return;
+  }
+  if (typeExpression === 'boolean') {
+    arrayNames.add(booleanNameMarker(pythonName));
+    arrayNames.add(booleanNameMarker(tsName));
+    return;
+  }
+  if (typeExpression === 'string') {
+    arrayNames.add(stringNameMarker(pythonName));
+    arrayNames.add(stringNameMarker(tsName));
+    return;
+  }
+  if (typeExpression === 'Vec2' || typeExpression === 'wgl.Vector2') {
+    arrayNames.add(vectorNameMarker(pythonName));
+    arrayNames.add(vectorNameMarker(tsName));
+    return;
+  }
+  const elementType = arrayElementTypeFromTypeExpression(typeExpression);
+  if (elementType !== null) {
+    arrayNames.add(pythonName);
+    arrayNames.add(tsName);
+    nameMap.set(arrayElementTypeMarker(pythonName), elementType);
+    nameMap.set(arrayElementTypeMarker(tsName), elementType);
+  }
 }
 
 function tupleFunctionReturnTypeForOuterPythonTuple(
@@ -5826,12 +6091,12 @@ function assignedArrayElementType(assignedRight: string, nameMap: Map<string, st
   return arrayElementTypeFromExpression(assignedRight, nameMap);
 }
 
-function arrayElementTypeFromExpression(expression: string, nameMap: Map<string, string>): string | null {
+function arrayElementTypeFromExpression(expression: string, nameMap: ReadonlyMap<string, string>): string | null {
   const fieldType = knownDottedFieldType(expression.trim(), nameMap);
   return fieldType === null ? null : arrayElementTypeFromTypeExpression(fieldType);
 }
 
-function knownDottedFieldType(expression: string, nameMap: Map<string, string>): string | null {
+function knownDottedFieldType(expression: string, nameMap: ReadonlyMap<string, string>): string | null {
   const dotted = /^(.+)\.([A-Za-z_$][A-Za-z0-9_$]*)$/.exec(expression);
   if (dotted === null) {
     return null;
@@ -5930,6 +6195,11 @@ function recordLocalAssignmentMarkers(
   if (assignedRight.startsWith('[') || (assignedRight.startsWith('Array.from(') && !isArrayFromBooleanChain) || /^[A-Za-z_$][A-Za-z0-9_.$()]+\.(?:filter|map)\(/.test(assignedRight)) {
     arrayNames.add(pythonName);
     arrayNames.add(tsName);
+    const elementType = inferredArrayElementType(assignedRight, nameMap, arrayNames);
+    if (elementType !== null) {
+      nameMap.set(arrayElementTypeMarker(pythonName), elementType);
+      nameMap.set(arrayElementTypeMarker(tsName), elementType);
+    }
   }
   if (assignedRight.startsWith('_pathJoin(')) {
     arrayNames.add(pathNameMarker(pythonName));
@@ -5995,6 +6265,11 @@ function recordLocalAssignmentMarkers(
     if (returnType?.endsWith('[]') === true || returnType?.startsWith('readonly ') === true && returnType.endsWith('[]')) {
       arrayNames.add(pythonName);
       arrayNames.add(tsName);
+      const elementType = arrayElementTypeFromTypeExpression(returnType);
+      if (elementType !== null) {
+        nameMap.set(arrayElementTypeMarker(pythonName), elementType);
+        nameMap.set(arrayElementTypeMarker(tsName), elementType);
+      }
     }
   }
   if (assignedRight.startsWith('new Set(') || (callAssignment !== null && arrayNames.has(setNameMarker(callAssignment[1])))) {
