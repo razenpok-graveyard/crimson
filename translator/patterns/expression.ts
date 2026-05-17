@@ -29,7 +29,17 @@ import {
 import {
   raylibKeyboardKeyCode,
   raylibNamedColor,
+  replaceTranslatedRaylibConstructors,
 } from './expression/raylib.js';
+import { parseBytesLiteral } from './expression/literals.js';
+import type { FunctionCallSignature } from './expression/function-signatures.js';
+import { parseFunctionCallSignature } from './expression/function-signatures.js';
+import {
+  parseSimpleGeneratorExpression,
+  parseTopLevelConditionalExpression,
+  parseTupleTargetGeneratorExpression,
+  type TupleTargetGeneratorExpression,
+} from './expression/generators.js';
 import {
   translatedDottedTokenMember,
   translateAttributeRest,
@@ -469,27 +479,6 @@ function translateConditionalTestExpression(
       : `${translated}.length > 0`;
   }
   return translated;
-}
-
-type FunctionCallSignature = {
-  positional: string[];
-};
-
-function parseFunctionCallSignature(signatureText: string | undefined): FunctionCallSignature | null {
-  if (signatureText === undefined) {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(signatureText) as Partial<FunctionCallSignature>;
-    if (!Array.isArray(parsed.positional) || !parsed.positional.every((name) => typeof name === 'string')) {
-      return null;
-    }
-    return {
-      positional: parsed.positional,
-    };
-  } catch {
-    return null;
-  }
 }
 
 function parseRaylibMethodCall(
@@ -2878,105 +2867,8 @@ function translateAggregateGeneratorCall(
   return null;
 }
 
-function parseTopLevelConditionalExpression(
-  pythonExpression: string,
-): { trueExpression: string; condition: string; falseExpression: string } | null {
-  const ifIndex = findTopLevelToken(pythonExpression, ' if ');
-  if (ifIndex === null) {
-    return null;
-  }
-  const elseIndex = findTopLevelToken(pythonExpression, ' else ', ifIndex + ' if '.length);
-  if (elseIndex === null) {
-    return null;
-  }
-  const trueExpression = pythonExpression.slice(0, ifIndex).trim();
-  const condition = pythonExpression.slice(ifIndex + ' if '.length, elseIndex).trim();
-  const falseExpression = pythonExpression.slice(elseIndex + ' else '.length).trim();
-  return trueExpression === '' || condition === '' || falseExpression === ''
-    ? null
-    : { trueExpression, condition, falseExpression };
-}
-
-function findTopLevelToken(value: string, token: string, startIndex = 0): number | null {
-  let depth = 0;
-  let quote: string | null = null;
-  for (let index = startIndex; index <= value.length - token.length; index += 1) {
-    const char = value[index];
-    if (quote !== null) {
-      if (char === quote && value[index - 1] !== '\\') {
-        quote = null;
-      }
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      continue;
-    }
-    if (char === '(' || char === '[' || char === '{') {
-      depth += 1;
-      continue;
-    }
-    if (char === ')' || char === ']' || char === '}') {
-      depth = Math.max(0, depth - 1);
-      continue;
-    }
-    if (depth === 0 && value.slice(index, index + token.length) === token) {
-      return index;
-    }
-  }
-  return null;
-}
-
-function parseSimpleGeneratorExpression(pythonExpression: string): { expression: string; itemName: string; iterable: string; condition: string | null } | null {
-  const trimmed = stripBalancedOuterParens(pythonExpression.trim());
-  const forIndex = findTopLevelToken(trimmed, ' for ');
-  if (forIndex === null) {
-    return null;
-  }
-  const expression = trimmed.slice(0, forIndex).replace(/,$/, '').trim();
-  const rest = trimmed.slice(forIndex + ' for '.length).trim();
-  const ifIndex = findTopLevelToken(rest, ' if ');
-  const forClause = ifIndex === null ? rest : rest.slice(0, ifIndex).trim();
-  const condition = ifIndex === null ? null : rest.slice(ifIndex + ' if '.length).trim();
-  const generator = /^([A-Za-z_][A-Za-z0-9_]*) in (.+)$/.exec(forClause);
-  if (expression === '' || generator === null || condition === '') {
-    return null;
-  }
-  return {
-    expression,
-    itemName: generator[1],
-    iterable: generator[2],
-    condition,
-  };
-}
-
-function parseTupleTargetGeneratorExpression(
-  pythonExpression: string,
-): { expression: string; targetNames: string[]; iterable: string; condition: string | null } | null {
-  const trimmed = stripBalancedOuterParens(pythonExpression.trim());
-  const forIndex = findTopLevelToken(trimmed, ' for ');
-  if (forIndex === null) {
-    return null;
-  }
-  const expression = trimmed.slice(0, forIndex).replace(/,$/, '').trim();
-  const rest = trimmed.slice(forIndex + ' for '.length).trim();
-  const ifIndex = findTopLevelToken(rest, ' if ');
-  const forClause = ifIndex === null ? rest : rest.slice(0, ifIndex).trim();
-  const condition = ifIndex === null ? null : rest.slice(ifIndex + ' if '.length).trim();
-  const generator = /^([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+) in (.+)$/.exec(forClause);
-  if (expression === '' || generator === null || condition === '') {
-    return null;
-  }
-  return {
-    expression,
-    targetNames: generator[1].split(', '),
-    iterable: generator[2],
-    condition,
-  };
-}
-
 function tupleTargetGeneratorExpressionToArray(
-  generator: { expression: string; targetNames: string[]; iterable: string; condition: string | null },
+  generator: TupleTargetGeneratorExpression,
   nameMap: Map<string, string>,
   arrayNames: Set<string>,
   validatedTypeAliases: ReadonlySet<string>,
@@ -3450,41 +3342,6 @@ function expressionLooksCallResult(tsExpression: string): boolean {
     || /^new [A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*\(.*\)$/.test(trimmed);
 }
 
-function replaceTranslatedRaylibConstructors(value: string): string {
-  let output = '';
-  let index = 0;
-  const constructorPattern = /(r[dl]|wgl)\.(Color|Vector2|Rectangle)\(/g;
-  while (index < value.length) {
-    constructorPattern.lastIndex = index;
-    const match = constructorPattern.exec(value);
-    if (match === null) {
-      output += value.slice(index);
-      break;
-    }
-
-    const argsStart = constructorPattern.lastIndex;
-    const closeIndex = matchingCloseParen(value, argsStart - 1);
-    if (closeIndex === null) {
-      output += value.slice(index);
-      break;
-    }
-
-    output += value.slice(index, match.index);
-    const args = splitTopLevelComma(value.slice(argsStart, closeIndex));
-    if (match[2] === 'Color' && args.length === 4) {
-      output += `${match[1]}.makeColor(${args.map((arg) => /\.[rgba]$/.test(arg.trim()) ? arg.trim() : `${arg.trim()} / 255`).join(', ')})`;
-    } else if (match[2] === 'Vector2' && args.length === 2) {
-      output += `${match[1]}.makeVector2(${args.map((arg) => arg.trim()).join(', ')})`;
-    } else if (match[2] === 'Rectangle' && args.length === 4) {
-      output += `${match[1]}.makeRectangle(${args.map((arg) => arg.trim()).join(', ')})`;
-    } else {
-      output += value.slice(match.index, closeIndex + 1);
-    }
-    index = closeIndex + 1;
-  }
-  return output;
-}
-
 function translateInlineDictMapExpression(
   pythonExpression: string,
   nameMap: Map<string, string>,
@@ -3624,59 +3481,6 @@ function translateMsgspecStructsReplace(
 
   const updateText = updates.length === 0 ? '' : `, ${updates.join(', ')}`;
   return `(() => { const value = ${value}; return new (value.constructor as new (opts: typeof value) => typeof value)({ ...value${updateText} }); })()`;
-}
-
-function parseBytesLiteral(value: string): number[] | null {
-  const literal = /^b(["'])([\s\S]*)\1$/.exec(value);
-  if (literal === null) {
-    return null;
-  }
-  const bytes: number[] = [];
-  const content = literal[2];
-  for (let index = 0; index < content.length; index += 1) {
-    const char = content[index];
-    if (char !== '\\') {
-      bytes.push(content.charCodeAt(index));
-      continue;
-    }
-    const next = content[index + 1];
-    if (next === 'x') {
-      const hex = content.slice(index + 2, index + 4);
-      if (!/^[0-9a-fA-F]{2}$/.test(hex)) {
-        return null;
-      }
-      bytes.push(Number.parseInt(hex, 16));
-      index += 3;
-      continue;
-    }
-    if (next === '0') {
-      bytes.push(0);
-      index += 1;
-      continue;
-    }
-    if (next === 'n') {
-      bytes.push(10);
-      index += 1;
-      continue;
-    }
-    if (next === 'r') {
-      bytes.push(13);
-      index += 1;
-      continue;
-    }
-    if (next === 't') {
-      bytes.push(9);
-      index += 1;
-      continue;
-    }
-    if (next === '\\' || next === '"' || next === "'") {
-      bytes.push(next.charCodeAt(0));
-      index += 1;
-      continue;
-    }
-    return null;
-  }
-  return bytes;
 }
 
 function parseConstructFieldExpression(

@@ -1,3 +1,6 @@
+import { splitTopLevelComma } from '../common.js';
+import { matchingCloseParen } from './scanners.js';
+
 export function raylibKeyboardKeyCode(name: string): number | null {
   const keyCodes: Record<string, number> = {
     KEY_NULL: 0,
@@ -137,4 +140,39 @@ export function raylibNamedColor(name: string): [number, number, number, number]
     RAYWHITE: [245 / 255, 245 / 255, 245 / 255, 1],
   };
   return colors[name] ?? null;
+}
+
+export function replaceTranslatedRaylibConstructors(value: string): string {
+  let output = '';
+  let index = 0;
+  const constructorPattern = /(r[dl]|wgl)\.(Color|Vector2|Rectangle)\(/g;
+  while (index < value.length) {
+    constructorPattern.lastIndex = index;
+    const match = constructorPattern.exec(value);
+    if (match === null) {
+      output += value.slice(index);
+      break;
+    }
+
+    const argsStart = constructorPattern.lastIndex;
+    const closeIndex = matchingCloseParen(value, argsStart - 1);
+    if (closeIndex === null) {
+      output += value.slice(index);
+      break;
+    }
+
+    output += value.slice(index, match.index);
+    const args = splitTopLevelComma(value.slice(argsStart, closeIndex));
+    if (match[2] === 'Color' && args.length === 4) {
+      output += `${match[1]}.makeColor(${args.map((arg) => /\.[rgba]$/.test(arg.trim()) ? arg.trim() : `${arg.trim()} / 255`).join(', ')})`;
+    } else if (match[2] === 'Vector2' && args.length === 2) {
+      output += `${match[1]}.makeVector2(${args.map((arg) => arg.trim()).join(', ')})`;
+    } else if (match[2] === 'Rectangle' && args.length === 4) {
+      output += `${match[1]}.makeRectangle(${args.map((arg) => arg.trim()).join(', ')})`;
+    } else {
+      output += value.slice(match.index, closeIndex + 1);
+    }
+    index = closeIndex + 1;
+  }
+  return output;
 }
