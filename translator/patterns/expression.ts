@@ -1515,6 +1515,17 @@ export function translateExpression(
   if (listRepeat !== null) {
     return `Array.from({ length: ${translateExpression(listRepeat[2], nameMap, arrayNames, validatedTypeAliases, mapNames)} }, () => ${translateExpression(listRepeat[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
+  const stringRepeat = splitTopLevelMultiplicative(trimmed);
+  if (stringRepeat !== null) {
+    const left = stripBalancedOuterParens(stringRepeat.left);
+    const right = stripBalancedOuterParens(stringRepeat.right);
+    if (parsePythonStringExpression(left) !== null) {
+      return `${translateExpression(left, nameMap, arrayNames, validatedTypeAliases, mapNames)}.repeat(${translateExpression(right, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
+    if (parsePythonStringExpression(right) !== null) {
+      return `${translateExpression(right, nameMap, arrayNames, validatedTypeAliases, mapNames)}.repeat(${translateExpression(left, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
+  }
 
   const fStringLiteral = /^f(["'])([\s\S]*)\1$/.exec(trimmed);
   if (fStringLiteral !== null) {

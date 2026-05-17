@@ -1,4 +1,4 @@
-import { matchingCloseParen } from '../common.js';
+import { matchingCloseParen, splitTopLevelComma } from '../common.js';
 import {
   nullableNameMarker,
   setNameMarker,
@@ -26,8 +26,12 @@ export function translateConditionExpression(
   }
   const topLevelAndParts = splitTopLevelLogicalOperator(trimmed, 'and');
   if (topLevelAndParts !== null) {
+    const arrayGuardedExpressions = collectArrayGuardedExpressions(topLevelAndParts, nameMap, arrayNames, validatedTypeAliases, mapNames);
     return topLevelAndParts
-      .map((part) => parenthesizeAndConditionOperand(translateConditionExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)))
+      .map((part) => {
+        const guardedTruthiness = translateArrayGuardedTruthiness(part, arrayGuardedExpressions, nameMap, arrayNames, validatedTypeAliases, mapNames);
+        return parenthesizeAndConditionOperand(guardedTruthiness ?? translateConditionExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
+      })
       .join(' && ');
   }
   if (isSimpleReferenceExpression(trimmed)) {
@@ -51,4 +55,57 @@ export function translateConditionExpression(
 
 function parenthesizeAndConditionOperand(value: string): string {
   return value.includes(' || ') && matchingCloseParen(value, 0) !== value.length - 1 ? `(${value})` : value;
+}
+
+function collectArrayGuardedExpressions(
+  parts: readonly string[],
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): Set<string> {
+  const result = new Set<string>();
+  for (const part of parts) {
+    const expression = arrayGuardedExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (expression !== null) {
+      result.add(expression);
+    }
+  }
+  return result;
+}
+
+function arrayGuardedExpression(
+  part: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  const trimmed = part.trim();
+  const isinstanceCall = /^isinstance\(([\s\S]+)\)$/.exec(trimmed);
+  if (isinstanceCall !== null) {
+    const args = splitTopLevelComma(isinstanceCall[1]);
+    if (args.length === 2 && /^(?:list|tuple)(?:\[.+\])?$/.test(args[1].trim())) {
+      return translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    }
+  }
+  const translated = translateExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const arrayIsArray = /^Array\.isArray\((.+)\)$/.exec(translated);
+  return arrayIsArray === null ? null : arrayIsArray[1].trim();
+}
+
+function translateArrayGuardedTruthiness(
+  part: string,
+  arrayGuardedExpressions: ReadonlySet<string>,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  const trimmed = part.trim();
+  if (!isSimpleReferenceExpression(trimmed)) {
+    return null;
+  }
+  const translated = translateExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  return arrayGuardedExpressions.has(translated) ? `${translated}.length > 0` : null;
 }

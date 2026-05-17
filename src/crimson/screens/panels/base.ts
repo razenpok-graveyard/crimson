@@ -60,7 +60,7 @@ export class PanelMenuView {
   protected _closing: boolean = false;
   protected _closeAction: string | null = null;
   protected _pendingAction: string | null = null;
-  private _panelOpenSfxPlayed: boolean = false;
+  protected _panelOpenSfxPlayed: boolean = false;
 
   constructor(
     state: GameState,
