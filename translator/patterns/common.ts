@@ -547,6 +547,9 @@ export function inferPythonExpressionType(pythonExpression: string): string {
   if (/^(?:self\.)?(?:camera|focus|screen_size)$/.test(trimmed) || trimmed === 'screenSize') {
     return 'Vec2';
   }
+  if (/\.(?:aim|pos|vel)\b/.test(trimmed) && /\s(?:\+|-|\*)\s/.test(trimmed)) {
+    return 'Vec2';
+  }
   if (/\b(?:camera|focus|screen_size|screenSize)\b/.test(trimmed) && /\s(?:\+|-|\*)\s/.test(trimmed)) {
     return 'Vec2';
   }

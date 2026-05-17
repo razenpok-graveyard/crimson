@@ -2,6 +2,7 @@ import { tsExportNameForPythonName } from '../../naming.js';
 import {
   inferPythonExpressionType,
   isIndentedBlockLine,
+  splitTopLevelComma,
 } from '../common.js';
 import {
   classFieldTypeMarker,
@@ -19,10 +20,11 @@ export function predeclareIfBranchAssignments(
   declaredNames: Set<string>,
   reassignedNames: Set<string>,
   nameMap: ReadonlyMap<string, string>,
+  bodyStartIndex = index + 1,
 ): string[] {
   const innerIndent = `${indent}    `;
   const assignedTypes = new Map<string, Set<string>>();
-  let nextIndex = index + 1;
+  let nextIndex = bodyStartIndex;
   while (nextIndex < lines.length) {
     const line = lines[nextIndex] ?? '';
     const trimmed = line.trim();
@@ -40,12 +42,12 @@ export function predeclareIfBranchAssignments(
       }
       const tupleAssignment = rest.startsWith(' ') ? null : /^([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+) = (.+)$/.exec(rest);
       if (tupleAssignment !== null) {
-        for (const name of tupleAssignment[1].split(', ')) {
+        for (const [nameIndex, name] of tupleAssignment[1].split(', ').entries()) {
           if (name === '_' || !reassignedNames.has(name) || declaredNames.has(name)) {
             continue;
           }
           const types = assignedTypes.get(name) ?? new Set<string>();
-          types.add(inferPythonExpressionType(tupleAssignment[2]));
+          types.add(inferTupleElementAssignmentType(tupleAssignment[2], nameIndex, nameMap));
           assignedTypes.set(name, types);
         }
       }
@@ -59,8 +61,13 @@ export function predeclareIfBranchAssignments(
     break;
   }
 
+  const blockEndIndex = nextIndex;
+  const bodyStartedAfterConditionContinuation = bodyStartIndex !== index + 1;
   const declarations: string[] = [];
   for (const [name, types] of assignedTypes) {
+    if (bodyStartedAfterConditionContinuation && !nameReferencedAfterBlock(lines, blockEndIndex, indent, name)) {
+      continue;
+    }
     const concreteTypes = [...types].filter((type) => type !== 'any');
     const candidateTypes = concreteTypes.length > 0 ? concreteTypes : [...types];
     const uniqueTypes = [...new Set(candidateTypes)];
@@ -69,6 +76,23 @@ export function predeclareIfBranchAssignments(
     declaredNames.add(name);
   }
   return declarations;
+}
+
+function inferTupleElementAssignmentType(
+  assignedExpression: string,
+  elementIndex: number,
+  nameMap: ReadonlyMap<string, string>,
+): string {
+  const trimmed = assignedExpression.trim();
+  if (/\.normalized_with_length\(\)$/.test(trimmed) || /\.normalizedWithLength\(\)$/.test(trimmed)) {
+    return elementIndex === 0 ? 'Vec2' : 'number';
+  }
+  const inferredType = inferPredeclaredAssignmentType([], 0, '', assignedExpression, nameMap);
+  const tupleType = /^\[([\s\S]+)\]$/.exec(inferredType);
+  if (tupleType !== null) {
+    return splitTopLevelComma(tupleType[1])[elementIndex]?.trim() ?? 'any';
+  }
+  return inferredType;
 }
 
 export function predeclareLoopBlockAssignments(

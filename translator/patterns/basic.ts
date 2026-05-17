@@ -84,7 +84,7 @@ export function parseProtocolModule(trimmedPython: string): ProtocolDefinition |
     index += 1;
   }
 
-  return methods.length > 0 ? { name: header[1], methods } : null;
+  return methods.length > 0 ? { name: tsExportNameForPythonName(header[1]), methods } : null;
 }
 
 export function parseProtocolClass(
@@ -159,7 +159,7 @@ export function parseProtocolClass(
   return methods.length > 0
     ? {
       protocol: {
-        name: header[1],
+        name: tsExportNameForPythonName(header[1]),
         ...(extendsNames.length === 0 ? {} : { extendsNames }),
         methods,
       },

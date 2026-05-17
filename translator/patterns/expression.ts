@@ -2303,6 +2303,11 @@ export function translateExpression(
     return `${translateExpression(vectorAdditive.parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames)} ${vectorAdditive.operators[0]} ${translateExpression(vectorAdditive.parts[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
   }
 
+  const unaryNegativeCall = /^-([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?\(.+\))$/.exec(trimmed);
+  if (unaryNegativeCall !== null && delimitersBalanced(unaryNegativeCall[1])) {
+    return `-${parenthesizeForMultiplicative(translateExpression(unaryNegativeCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames))}`;
+  }
+
   const mixedKeywordCall = translateMixedKeywordCall(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
   if (mixedKeywordCall !== null) {
     return mixedKeywordCall;
@@ -3928,19 +3933,34 @@ function translateAdditiveOperand(
   mapNames: ReadonlySet<string>,
 ): string {
   const translated = translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
-  const expression = pythonExpressionLooksBooleanNumericOperand(pythonExpression)
+  const expression = pythonExpressionLooksBooleanNumericOperand(pythonExpression, nameMap, arrayNames)
     ? `Number(${translated})`
     : translated;
   return parenthesizeForAdditive(expression);
 }
 
-function pythonExpressionLooksBooleanNumericOperand(pythonExpression: string): boolean {
+function pythonExpressionLooksBooleanNumericOperand(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: ReadonlySet<string>,
+): boolean {
   const trimmed = stripBalancedOuterParens(pythonExpression.trim());
   const primitiveWrapped = /^(?:float|int|bool)\(([\s\S]+)\)$/.exec(trimmed);
   const unwrapped = primitiveWrapped === null
     ? trimmed
     : stripBalancedOuterParens(primitiveWrapped[1].trim());
-  return /^(?:input_code_is_down|input_code_is_pressed)\(/.test(unwrapped);
+  if (/^(?:input_code_is_down|input_code_is_pressed)\(/.test(unwrapped)) {
+    return true;
+  }
+  const identifier = /^[A-Za-z_][A-Za-z0-9_]*$/.exec(unwrapped);
+  if (identifier !== null) {
+    const translated = translateIdentifierName(identifier[0], nameMap);
+    return arrayNames.has(booleanNameMarker(identifier[0]))
+      || arrayNames.has(booleanNameMarker(translated))
+      || /(?:_pressed|_down|_active|_enabled|_ok)$/.test(identifier[0])
+      || /(?:Pressed|Down|Active|Enabled|Ok)$/.test(translated);
+  }
+  return false;
 }
 
 function translateMixedKeywordCall(

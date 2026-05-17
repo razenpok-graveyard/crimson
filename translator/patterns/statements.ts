@@ -943,7 +943,7 @@ export function translateStraightLineStatement(
       return branchStatements.length === 0 ? null : { statements: branchStatements, nextIndex };
     };
 
-    const branchDeclarations = predeclareIfBranchAssignments(lines, index, indent, declaredNames, reassignedNames, nameMap);
+    const branchDeclarations = predeclareIfBranchAssignments(lines, index, indent, declaredNames, reassignedNames, nameMap, ifBodyStartIndex);
     const initialBranch = translateBranch(ifBodyStartIndex);
     if (initialBranch === null) {
       return null;

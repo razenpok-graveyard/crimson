@@ -1277,7 +1277,7 @@ function parseSimpleProtocolClass(
   return methods.length > 0
     ? {
       protocol: {
-        name: header[1],
+        name: tsExportNameForPythonName(header[1]),
         ...(extendsNames.length === 0 ? {} : { extendsNames }),
         methods,
       },
