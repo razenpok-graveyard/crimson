@@ -46,6 +46,7 @@ import {
   arrayValueMapNameMarker,
   classFieldTypeMarker,
   functionReturnTypeMarker,
+  instanceMethodSignatureMarker,
   mapValueMapNameMarker,
   mapValueTypeMarker,
   nullableNameMarker,
@@ -93,9 +94,11 @@ import {
   pathStemHelperStatements,
   pythonEqualsHelperStatements,
   pythonFloatHelperStatements,
+  pythonProfileHelperStatements,
   pythonIdHelperStatements,
   pythonJsonDumpsHelperStatements,
   pythonCompareKeysHelperStatements,
+  pythonStatisticsHelperStatements,
   pythonRoundHelperStatements,
   pythonReprHelperStatements,
   pythonRuntimeIntrospectionHelperStatements,
@@ -103,10 +106,12 @@ import {
   pythonStructFormatHelperStatements,
   pythonStringCountHelperStatements,
   pythonTruthyHelperStatements,
+  renderTelemetryChartsFallbackHelperStatements,
   secretsTokenHexHelperStatements,
   strftimeUtcNowHelperStatements,
   structFloatBufferStatements,
   tupleKeyHelperStatements,
+  tqdmHelperStatements,
   zipHelperStatements,
 } from './runtime-helpers.js';
 import {
@@ -195,6 +200,21 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       index += 1;
       continue;
     }
+    if (trimmed === 'import cProfile') {
+      moduleNameMap.set('cProfile.Profile', 'PythonProfile');
+      index += 1;
+      continue;
+    }
+    if (trimmed === 'import pstats') {
+      moduleNameMap.set(functionReturnTypeMarker('pythonProfileStats'), 'PythonProfileStats');
+      moduleNameMap.set(classFieldTypeMarker('PythonProfileStats', 'stats'), 'Map<[string, number, string], [number, number, number, number, unknown]>');
+      index += 1;
+      continue;
+    }
+    if (trimmed === 'import statistics') {
+      index += 1;
+      continue;
+    }
     if (trimmed === 'import datetime' || trimmed === 'import datetime as dt') {
       index += 1;
       continue;
@@ -234,6 +254,17 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       || trimmed === 'import zlib'
       || trimmed === 'import zstandard as zstd'
     ) {
+      index += 1;
+      continue;
+    }
+    const simpleNamespaceImport = /^import ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)$/.exec(trimmed);
+    if (simpleNamespaceImport !== null) {
+      const alias = tsLocalNameForPythonAlias(simpleNamespaceImport[1]);
+      pushUniqueNamespaceImport(namespaceImports, {
+        alias,
+        modulePath: tsImportPathForPythonImport(simpleNamespaceImport[1], relativePath),
+      });
+      moduleNameMap.set(simpleNamespaceImport[1], alias);
       index += 1;
       continue;
     }
@@ -286,6 +317,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     const protocolClass = parseProtocolClass(lines, index);
     if (protocolClass !== null) {
       protocols.push(protocolClass.protocol);
+      recordProtocolMethodSignatures(protocolClass.protocol, moduleNameMap);
       index = protocolClass.nextIndex;
       continue;
     }
@@ -395,6 +427,15 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       for (const name of names) {
         moduleNameMap.set(name, 'wgl');
       }
+      index += 1;
+      continue;
+    }
+
+    if (trimmed === 'from tqdm import tqdm') {
+      index += 1;
+      continue;
+    }
+    if (trimmed === 'from .render_telemetry_charts import write_render_telemetry_charts') {
       index += 1;
       continue;
     }
@@ -648,6 +689,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       const protocolClass = parseProtocolClass(lines, index);
       if (protocolClass !== null) {
         protocols.push(protocolClass.protocol);
+        recordProtocolMethodSignatures(protocolClass.protocol, moduleNameMap);
         index = protocolClass.nextIndex;
         continue;
       }
@@ -988,6 +1030,37 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   }
   if (moduleValueText.includes('pythonCompareKeys(')) {
     const helperStatements = pythonCompareKeysHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
+  if (moduleValueText.includes('pythonFmean(') || moduleValueText.includes('pythonStdev(')) {
+    const helperStatements = pythonStatisticsHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
+  if (moduleValueText.includes('new PythonProfile(') || moduleValueText.includes('pythonProfileStats(')) {
+    const helperStatements = pythonProfileHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
+  if (moduleValueText.includes('tqdm(')) {
+    const helperStatements = tqdmHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
+  if (
+    moduleValueText.includes('writeRenderTelemetryCharts(')
+    && !imports.some((importDefinition) => importDefinition.names.some((name) => importedBindingName(name) === 'writeRenderTelemetryCharts'))
+  ) {
+    const helperStatements = renderTelemetryChartsFallbackHelperStatements();
     if (leadingStatements.length > 0) {
       helperStatements.push('');
     }
@@ -1768,6 +1841,20 @@ function recordParameterReceiverTypes(
         arrayNames.add(objectNameMarker(tsExportNameForPythonName(parameter.name)));
       }
     }
+  }
+}
+
+function recordProtocolMethodSignatures(
+  protocol: StraightLineModule['protocols'][number],
+  nameMap: Map<string, string>,
+): void {
+  for (const method of protocol.methods) {
+    if (method.property === true) {
+      continue;
+    }
+    nameMap.set(instanceMethodSignatureMarker(protocol.name, method.name), JSON.stringify({
+      positional: method.parameters.map((parameter) => parameter.name),
+    }));
   }
 }
 

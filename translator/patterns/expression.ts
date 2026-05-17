@@ -251,6 +251,10 @@ export function translatePositionalCallExpression(
   const reorderedArgs = (callee === 'rl.rlSetBlendFactorsSeparate' || callee === 'wgl.rlSetBlendFactorsSeparate') && args.length === 6
     ? [args[0], args[1], args[4], args[2], args[3], args[5]]
     : args;
+  const raylibWindowCall = /^(r[dl]|wgl)\.(setConfigFlags|initWindow|closeWindow|beginDrawing|endDrawing)$/.exec(callee);
+  if (raylibWindowCall !== null) {
+    return `(${raylibWindowCall[1]} as any).${raylibWindowCall[2]}(${reorderedArgs.join(', ')})`;
+  }
   const callPrefix = constructUppercase && /^[A-Z][A-Za-z0-9_]*$/.test(callee) ? `new ${callee}` : callee;
   return `${callPrefix}(${reorderedArgs.join(', ')})`;
 }
@@ -963,6 +967,29 @@ export function translateExpression(
     return `/^\\d+$/u.test(${translateExpression(isDigitCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
+  if (trimmed === 'cProfile.Profile()') {
+    return 'new PythonProfile()';
+  }
+
+  if (/^(?:r[dl]|wgl)\.ConfigFlags\.FLAG_WINDOW_HIDDEN$/.test(trimmed)) {
+    return '0';
+  }
+
+  const pstatsStatsCall = /^pstats\.Stats\((.+)\)$/.exec(trimmed);
+  if (pstatsStatsCall !== null) {
+    return `pythonProfileStats(${translateExpression(pstatsStatsCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
+  const statisticsFmeanCall = /^statistics\.fmean\((.+)\)$/.exec(trimmed);
+  if (statisticsFmeanCall !== null) {
+    return `pythonFmean(${translateExpression(statisticsFmeanCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
+  const statisticsStdevCall = /^statistics\.stdev\((.+)\)$/.exec(trimmed);
+  if (statisticsStdevCall !== null) {
+    return `pythonStdev(${translateExpression(statisticsStdevCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+
   const vec2FromXyCall = /^Vec2\.from_xy\((.*)\)$/.exec(trimmed);
   if (vec2FromXyCall !== null) {
     return `Vec2.fromXY(${translateExpression(vec2FromXyCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
@@ -999,6 +1026,11 @@ export function translateExpression(
     const enumName = tsExportNameForPythonName(enumCastName[1]);
     const value = translateExpression(enumCastName[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
     return `${enumName}[${value}]`;
+  }
+
+  const stringLowerCall = /^(.+)\.lower\(\)$/.exec(trimmed);
+  if (stringLowerCall !== null) {
+    return `${translateExpression(stringLowerCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.toLowerCase()`;
   }
 
   const stringReplaceCall = /^(.+)\.replace\((.*)\)$/.exec(trimmed);
@@ -1228,12 +1260,23 @@ export function translateExpression(
   const listLiteral = /^\[([\s\S]*)\]$/.exec(trimmed);
   if (listLiteral !== null) {
     const items = splitTopLevelComma(listLiteral[1]).filter((item) => item.trim() !== '');
-    return `[${items.map((item) => {
+    const tupleArray = items.length > 0 && items.every((item) => {
+      const stripped = item.trim();
+      if (stripped.startsWith('(') && matchingCloseParen(stripped, 0) === stripped.length - 1) {
+        return splitTopLevelComma(stripped.slice(1, -1)).length > 1;
+      }
+      if (stripped.startsWith('[') && stripped.endsWith(']')) {
+        return splitTopLevelComma(stripped.slice(1, -1)).length > 1;
+      }
+      return false;
+    });
+    const expression = `[${items.map((item) => {
       const stripped = item.trim();
       return stripped.startsWith('*')
         ? `...${translateExpression(stripped.slice(1), nameMap, arrayNames, validatedTypeAliases, mapNames)}`
         : translateExpression(stripped, nameMap, arrayNames, validatedTypeAliases, mapNames);
     }).join(', ')}]`;
+    return tupleArray ? `${expression} as const` : expression;
   }
 
   const aggregateGenerator = translateAggregateGeneratorCall(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -2460,6 +2503,34 @@ export function translateExpression(
       .join(' || ');
   }
 
+  const tupleLiteral = /^\((.*)\)$/.exec(trimmed);
+  if (tupleLiteral !== null && matchingCloseParen(trimmed, 0) === trimmed.length - 1) {
+    const tupleParts = splitTopLevelComma(tupleLiteral[1]);
+    if (tupleParts.length === 1) {
+      return `(${translateExpression(tupleLiteral[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
+    const values = tupleParts
+      .map((part) => part.trim())
+      .filter((part) => part !== '')
+      .map((part) => (part.startsWith('*')
+        ? `...${translateExpression(part.slice(1), nameMap, arrayNames, validatedTypeAliases, mapNames)}`
+        : translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)));
+    const expression = `[${values.join(', ')}]`;
+    return translatedItemsLookLikeLabelTupleArray(values) ? `${expression} as const` : expression;
+  }
+
+  const topLevelTupleParts = splitTopLevelComma(trimmed);
+  if (topLevelTupleParts.length > 1) {
+    const values = topLevelTupleParts.map((part) => {
+      const stripped = part.trim();
+      return stripped.startsWith('*')
+        ? `...${translateExpression(stripped.slice(1), nameMap, arrayNames, validatedTypeAliases, mapNames)}`
+        : translateExpression(stripped, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    });
+    const expression = `[${values.join(', ')}]`;
+    return translatedItemsLookLikeLabelTupleArray(values) ? `${expression} as const` : expression;
+  }
+
   const earlyFullSlice = /^(.+)\[(.*):(.*)\]$/.exec(trimmed);
   if (earlyFullSlice !== null && splitTopLevelSpacedOperator(trimmed, 'in') === null) {
     const receiver = translateExpression(earlyFullSlice[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -2488,31 +2559,6 @@ export function translateExpression(
     return container.includes('.slice(')
       ? `${container}.includes(${value})`
       : pythonContainsExpression(container, value);
-  }
-
-  const tupleLiteral = /^\((.*)\)$/.exec(trimmed);
-  if (tupleLiteral !== null && matchingCloseParen(trimmed, 0) === trimmed.length - 1) {
-    const tupleParts = splitTopLevelComma(tupleLiteral[1]);
-    if (tupleParts.length === 1) {
-      return `(${translateExpression(tupleLiteral[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
-    }
-    const values = tupleParts
-      .map((part) => part.trim())
-      .filter((part) => part !== '')
-      .map((part) => (part.startsWith('*')
-        ? `...${translateExpression(part.slice(1), nameMap, arrayNames, validatedTypeAliases, mapNames)}`
-        : translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)));
-    return `[${values.join(', ')}]`;
-  }
-
-  const topLevelTupleParts = splitTopLevelComma(trimmed);
-  if (topLevelTupleParts.length > 1) {
-    return `[${topLevelTupleParts.map((part) => {
-      const stripped = part.trim();
-      return stripped.startsWith('*')
-        ? `...${translateExpression(stripped.slice(1), nameMap, arrayNames, validatedTypeAliases, mapNames)}`
-        : translateExpression(stripped, nameMap, arrayNames, validatedTypeAliases, mapNames);
-    }).join(', ')}]`;
   }
 
   const parenthesizedLeftFloorDivision = splitTopLevelFloorDivision(trimmed);
@@ -3261,6 +3307,19 @@ function parseTupleTargetListComprehension(pythonExpression: string): TupleTarge
 function tupleListComprehensionItemExpression(pythonExpression: string, itemExpression: string): string {
   const tupleLength = pythonTupleExpressionLength(pythonExpression);
   return tupleLength === null ? itemExpression : `${itemExpression} as [${Array.from({ length: tupleLength }, () => 'any').join(', ')}]`;
+}
+
+function translatedItemsLookLikeLabelTupleArray(items: readonly string[]): boolean {
+  return items.length > 0 && items.every((item) => {
+    const trimmed = item.trim();
+    const tupleArray = /^\[([\s\S]*)\](?: as const)?$/.exec(trimmed);
+    if (tupleArray === null) {
+      return false;
+    }
+    const parts = splitTopLevelComma(tupleArray[1]);
+    const label = parts[parts.length - 1]?.trim() ?? '';
+    return parts.length > 1 && /^['"`]/.test(label);
+  });
 }
 
 function pythonTupleExpressionLength(pythonExpression: string | null): number | null {
@@ -4420,6 +4479,9 @@ function knownFunctionCall(
     ?? nameMap.get(functionSignatureMarker(callee))
     ?? nameMap.get(functionSignatureMarker(tsExportNameForPythonName(pythonCallee)));
   if (signatureText === undefined) {
+    if (pythonCallee === 'create_console' || pythonCallee === 'createConsole') {
+      return { callee, signature: { positional: ['base_dir', 'assets_dir'] } };
+    }
     return null;
   }
   try {

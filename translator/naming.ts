@@ -187,6 +187,12 @@ export function tsTypeExpression(pythonType: string): string {
   if (trimmed === 'msgspec.msgpack.Decoder') {
     return 'MsgpackDecoder<any>';
   }
+  if (trimmed === 'cProfile.Profile') {
+    return 'PythonProfile';
+  }
+  if (trimmed === 'pstats.Stats') {
+    return 'PythonProfileStats';
+  }
   if (/^_+[A-Z][A-Z0-9_]*$/.test(trimmed)) {
     return tsPublicNameForPythonName(trimmed);
   }

@@ -110,6 +110,9 @@ export function hoistTryBlockDeclarations(statements: string[]): { declarations:
   const declarations: string[] = [];
   const rewritten = statements.map((statement) => {
     const destructuringDeclaration = /^(\s*)const \[([A-Za-z_$][A-Za-z0-9_$]*(?:, [A-Za-z_$][A-Za-z0-9_$]*)*)\] = (.+);$/.exec(statement);
+    if (destructuringDeclaration !== null && destructuringDeclaration[1].length > 2) {
+      return statement;
+    }
     if (destructuringDeclaration !== null) {
       const typeExpression = tsTypeForAssignedExpression(destructuringDeclaration[3]);
       if (typeExpression !== null) {
@@ -120,7 +123,18 @@ export function hoistTryBlockDeclarations(statements: string[]): { declarations:
         return `${destructuringDeclaration[1]}[${destructuringDeclaration[2]}] = ${destructuringDeclaration[3]};`;
       }
     }
+    const typedDeclaration = /^(\s*)(?:const|let) ([A-Za-z_$][A-Za-z0-9_$]*): ([^=]+) = (.+);$/.exec(statement);
+    if (typedDeclaration !== null && typedDeclaration[1].length > 2) {
+      return statement;
+    }
+    if (typedDeclaration !== null) {
+      declarations.push(`let ${typedDeclaration[2]}: ${typedDeclaration[3].trim()};`);
+      return `${typedDeclaration[1]}${typedDeclaration[2]} = ${typedDeclaration[4]};`;
+    }
     const declaration = /^(\s*)(?:const|let) ([A-Za-z_$][A-Za-z0-9_$]*) = (.+);$/.exec(statement);
+    if (declaration !== null && declaration[1].length > 2) {
+      return statement;
+    }
     if (declaration === null) {
       return statement;
     }

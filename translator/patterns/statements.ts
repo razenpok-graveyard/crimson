@@ -61,6 +61,7 @@ import {
   parseFunctionParameterText,
   pythonParameterNames,
 } from './parameters.js';
+import { nullableTypeExpressionBase } from './expression/types.js';
 import {
   isSimpleReferenceExpression,
   translateConditionExpression,
@@ -806,11 +807,13 @@ export function translateStraightLineStatement(
       if (finallyBlock === null) {
         return null;
       }
+      const hoistedTry = hoistTryBlockDeclarations(tryBlock.statements);
       return {
         statements: [
           ...tryFinallyPredeclarations,
+          ...hoistedTry.declarations,
           'try {',
-          ...tryBlock.statements,
+          ...hoistedTry.statements,
           '} finally {',
           ...finallyBlock.statements,
           '}',
@@ -1001,6 +1004,28 @@ export function translateStraightLineStatement(
           ];
           continue;
         }
+        if (/^[A-Za-z_$][A-Za-z0-9_.$]*$/.test(item.expression.trim())) {
+          wrappedAnyItem = true;
+          const managerName = `_withManager${index}_${itemIndex}`;
+          wrappedStatements = [
+            `const ${managerName} = ${item.expression} as unknown as { __enter__?: () => unknown; __exit__?: (excType: unknown, exc: unknown, tb: unknown) => unknown; start?: () => unknown; stop?: () => unknown };`,
+            `if (${managerName}.__enter__ !== undefined) {`,
+            `  ${managerName}.__enter__();`,
+            `} else {`,
+            `  ${managerName}.start?.();`,
+            `}`,
+            'try {',
+            ...wrappedStatements,
+            '} finally {',
+            `  if (${managerName}.__exit__ !== undefined) {`,
+            `    ${managerName}.__exit__(null, null, null);`,
+            `  } else {`,
+            `    ${managerName}.stop?.();`,
+            `  }`,
+            '}',
+          ];
+          continue;
+        }
         if (!/^[A-Za-z_$][A-Za-z0-9_.$]*\(/.test(item.expression.trim())) {
           continue;
         }
@@ -1018,8 +1043,9 @@ export function translateStraightLineStatement(
       if (!wrappedAnyItem) {
         return {
           statements: [
+            ...hoistedBlock.declarations,
             '{',
-            ...blockStatements,
+            ...hoistedBlock.statements,
             '}',
           ],
           nextIndex,
@@ -2007,6 +2033,11 @@ export function translateStraightLineStatement(
   if (annotatedAssignment !== null) {
     const tsName = tsExportNameForPythonName(annotatedAssignment[1]);
     const typeExpression = tsTypeExpression(annotatedAssignment[2]);
+    const receiverType = nullableTypeExpressionBase(typeExpression);
+    if (receiverType !== undefined && /^[A-Z][A-Za-z0-9_$]*$/.test(receiverType)) {
+      nameMap.set(receiverTypeNameMarker(annotatedAssignment[1]), receiverType);
+      nameMap.set(receiverTypeNameMarker(tsName), receiverType);
+    }
     const alreadyDeclared = declaredNames.has(annotatedAssignment[1]);
     const continuedRight = parenthesisDelta(annotatedAssignment[3]) > 0
       ? collectMultilineParenthesizedExpression(lines, index, annotatedAssignment[3])
@@ -2192,21 +2223,20 @@ export function translateStraightLineStatement(
         validatedTypeAliases,
         mapNames,
       );
-      if (callExpression === null) {
-        return null;
+      if (callExpression !== null) {
+        return appendTrailingCommentToResult(translateStraightLineAssignment(
+          assignment[1],
+          assignment[2],
+          callExpression.expression,
+          callExpression.nextIndex,
+          nameMap,
+          declaredNames,
+          reassignedNames,
+          arrayNames,
+          validatedTypeAliases,
+          mapNames,
+        ), trailingComment);
       }
-      return appendTrailingCommentToResult(translateStraightLineAssignment(
-        assignment[1],
-        assignment[2],
-        callExpression.expression,
-        callExpression.nextIndex,
-        nameMap,
-        declaredNames,
-        reassignedNames,
-        arrayNames,
-        validatedTypeAliases,
-        mapNames,
-      ), trailingComment);
     }
     if (assignment[3] === '{') {
       const setComprehension = parseMultilineSetComprehensionExpression(
@@ -2324,10 +2354,16 @@ export function translateStraightLineStatement(
       if (listLiteral === null) {
         return null;
       }
+      const localName = /^([A-Za-z_][A-Za-z0-9_]*)$/.exec(assignment[1]);
+      if (localName !== null && listLiteralItemsLookLikeTupleArray(listLiteral.items)) {
+        const tsName = tsExportNameForPythonName(localName[1]);
+        arrayNames.add(tupleElementArrayNameMarker(localName[1]));
+        arrayNames.add(tupleElementArrayNameMarker(tsName));
+      }
       return translateStraightLineAssignment(
         assignment[1],
         assignment[2],
-        `[${listLiteral.items.join(', ')}]`,
+        multilineListLiteralExpression(listLiteral.items),
         listLiteral.nextIndex,
         nameMap,
         declaredNames,
@@ -2514,6 +2550,16 @@ export function translateStraightLineStatement(
       mapNames,
     );
     if (signatureCallParts !== null) {
+      const pathlibWriteText = /^(.+)\.write_text$/.exec(multilineKeywordCall[1]);
+      if (pathlibWriteText !== null && signatureCallParts.positionalParts.length >= 1) {
+        const target = translateExpression(pathlibWriteText[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+        const text = translateCallArgumentExpression(signatureCallParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+        const encoding = signatureCallParts.keywordArgParts.find((part) => part.pythonName === 'encoding')?.expression ?? null;
+        return {
+          statements: [`writeFileSync(String(${target}), ${text}${encoding === null ? '' : `, { encoding: ${encoding} }`});`],
+          nextIndex: signatureCallParts.nextIndex,
+        };
+      }
       const callee = translateExpression(multilineKeywordCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
       const signatureCall = translateMultilineCallWithLocalSignature(
         multilineKeywordCall[1],
@@ -2807,6 +2853,20 @@ export function translateStraightLineStatement(
         nextIndex: index + 1,
       };
     }
+    const pathlibWriteText = /^(?:Path\((.+)\)|(.+))\.write_text\((.*)\)$/.exec(callStatement[1]);
+    if (pathlibWriteText !== null) {
+      const args = splitTopLevelComma(pathlibWriteText[3]);
+      if (args.length >= 1) {
+        const target = translateExpression(pathlibWriteText[1] ?? pathlibWriteText[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+        const text = translateCallArgumentExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+        const encodingArg = args.find((arg) => arg.trim().startsWith('encoding='));
+        const encoding = encodingArg === undefined ? null : translateExpression(encodingArg.trim().slice('encoding='.length), nameMap, arrayNames, validatedTypeAliases, mapNames);
+        return {
+          statements: [`writeFileSync(String(${target}), ${text}${encoding === null ? '' : `, { encoding: ${encoding} }`});`],
+          nextIndex: index + 1,
+        };
+      }
+    }
     const listInsertCall = /^(.+)\.insert\((.*)\)$/.exec(callStatement[1]);
     if (listInsertCall !== null) {
       const args = splitTopLevelComma(listInsertCall[2]);
@@ -2859,6 +2919,26 @@ export function translateStraightLineStatement(
         statements: [`${target}.delete(${translateExpression(discardCall[2], nameMap, arrayNames, validatedTypeAliases, mapNames)});`],
         nextIndex: index + 1,
       };
+    }
+    const sortKeyCall = /^(.+)\.sort\((.*)\)$/.exec(callStatement[1]);
+    if (sortKeyCall !== null) {
+      const args = splitTopLevelComma(sortKeyCall[2]);
+      const keyArg = args.find((arg) => arg.trim().startsWith('key='));
+      if (keyArg !== undefined) {
+        const lambda = /^key=lambda ([A-Za-z_][A-Za-z0-9_]*): (.+)$/.exec(keyArg.trim());
+        if (lambda !== null) {
+          const target = translateExpression(sortKeyCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+          const paramName = tsExportNameForPythonName(lambda[1]);
+          const keyNameMap = new Map(nameMap);
+          keyNameMap.set(lambda[1], paramName);
+          const keyExpression = translateExpression(lambda[2], keyNameMap, arrayNames, validatedTypeAliases, mapNames);
+          const reverse = args.some((arg) => /^reverse=True$/.test(arg.trim()));
+          return {
+            statements: [`${target}.sort((left, right) => ${reverse ? '-1 * ' : ''}pythonCompareKeys(((${paramName}) => ${keyExpression})(left), ((${paramName}) => ${keyExpression})(right)));`],
+            nextIndex: index + 1,
+          };
+        }
+      }
     }
     const sortCall = /^(.+)\.sort\(\)$/.exec(callStatement[1]);
     if (sortCall !== null) {
@@ -3525,6 +3605,19 @@ function collectMultilineListLiteral(
   return null;
 }
 
+function multilineListLiteralExpression(items: string[]): string {
+  const expression = `[${items.join(', ')}]`;
+  return listLiteralItemsLookLikeTupleArray(items) ? `${expression} as const` : expression;
+}
+
+function listLiteralItemsLookLikeTupleArray(items: readonly string[]): boolean {
+  return items.length > 0 && items.every((item) => {
+    const trimmed = item.trim();
+    const tupleArray = /^\[([\s\S]*)\](?: as const)?$/.exec(trimmed);
+    return tupleArray !== null && splitTopLevelComma(tupleArray[1]).length > 1;
+  });
+}
+
 export function collectMultilineSequenceLiteral(
   lines: string[],
   startIndex: number,
@@ -3880,6 +3973,10 @@ function translateMultilineCallExpressionFromParts(
   }
   if (pythonCallee === 'subprocess.check_output') {
     return 'new Uint8Array()';
+  }
+  if (pythonCallee === 'cast' && callParts.positionalParts.length === 2 && callParts.keywordParts.length === 0) {
+    const typeText = callParts.positionalParts[0].trim();
+    return `${translateExpression(callParts.positionalParts[1], nameMap, arrayNames, validatedTypeAliases, mapNames)} as ${tsTypeExpression(typeText)}`;
   }
   if (
     /^[A-Z][A-Za-z0-9_]*(?:Id|Type|Flags)$/.test(pythonCallee)
@@ -4319,6 +4416,12 @@ function knownExternalFunctionCallSignature(pythonCallee: string): FunctionCallS
     },
     tickQuestModeSpawns: {
       positional: ['entries', 'quest_spawn_timeline_ms', 'frame_dt_ms'],
+    },
+    create_console: {
+      positional: ['base_dir', 'assets_dir'],
+    },
+    createConsole: {
+      positional: ['base_dir', 'assets_dir'],
     },
   };
   return signatures[pythonCallee] ?? null;

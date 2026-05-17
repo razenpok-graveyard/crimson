@@ -548,6 +548,78 @@ export function pythonFloatHelperStatements(): string[] {
   ];
 }
 
+export function pythonStatisticsHelperStatements(): string[] {
+  return [
+    'function pythonFmean(values: readonly number[]): number {',
+    '  if (values.length === 0) {',
+    "    throw new Error('fmean requires at least one data point');",
+    '  }',
+    '  return values.reduce((total, value) => total + value, 0) / values.length;',
+    '}',
+    '',
+    'function pythonStdev(values: readonly number[]): number {',
+    '  if (values.length < 2) {',
+    "    throw new Error('stdev requires at least two data points');",
+    '  }',
+    '  const mean = pythonFmean(values);',
+    '  const variance = values.reduce((total, value) => total + (value - mean) ** 2, 0) / (values.length - 1);',
+    '  return Math.sqrt(variance);',
+    '}',
+  ];
+}
+
+export function pythonProfileHelperStatements(): string[] {
+  return [
+    'class PythonProfile {',
+    '  readonly stats = new Map<[string, number, string], [number, number, number, number, unknown]>();',
+    '',
+    '  enable(): void {}',
+    '',
+    '  disable(): void {}',
+    '',
+    '  dumpStats(_path: string): void {}',
+    '}',
+    '',
+    'class PythonProfileStats {',
+    '  readonly stats: Map<[string, number, string], [number, number, number, number, unknown]>;',
+    '',
+    '  constructor(profile: PythonProfile) {',
+    '    this.stats = profile.stats;',
+    '  }',
+    '}',
+    '',
+    'function pythonProfileStats(profile: PythonProfile): PythonProfileStats {',
+    '  return new PythonProfileStats(profile);',
+    '}',
+  ];
+}
+
+export function tqdmHelperStatements(): string[] {
+  return [
+    'function tqdm(_opts: { total?: number; unit?: string; desc?: string; leave?: boolean }): { update(value: number): void; setPostfixStr(s: string, refresh?: boolean): void; close(): void } {',
+    '  return {',
+    '    update(_value: number): void {},',
+    '    setPostfixStr(_s: string, _refresh = true): void {},',
+    '    close(): void {},',
+    '  };',
+    '}',
+  ];
+}
+
+export function renderTelemetryChartsFallbackHelperStatements(): string[] {
+  return [
+    'function writeRenderTelemetryCharts(opts: { frames: readonly unknown[]; outDir: string; telemetryJsonPath?: string | null }): Map<string, string> {',
+    '  const outDir = String(opts.outDir).replace(/\\/+$/g, \'\');',
+    '  return new Map([',
+    "    ['frame_timing_svg', `${outDir}/frame_timing.svg`],",
+    "    ['draw_calls_svg', `${outDir}/draw_calls.svg`],",
+    "    ['pass_timing_stacked_svg', `${outDir}/pass_timing_stacked.svg`],",
+    "    ['report_md', `${outDir}/report.md`],",
+    '  ]);',
+    '}',
+  ];
+}
+
 export function tupleKeyHelperStatements(): string[] {
   return [
     'function tupleKey(value: readonly unknown[] | string): string {',

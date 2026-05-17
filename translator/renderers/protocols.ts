@@ -1,8 +1,8 @@
 import type { FunctionParameter, ProtocolDefinition } from '../model.js';
 
-function renderParameter(param: FunctionParameter): string {
-  const defaultValue = param.defaultValue === undefined || param.defaultValue === null ? '' : ` = ${param.defaultValue}`;
-  return `${param.name}: ${param.typeExpression}${defaultValue}`;
+function renderProtocolParameter(param: FunctionParameter): string {
+  const optional = param.defaultValue !== undefined && param.defaultValue !== null;
+  return `${param.name}${optional ? '?' : ''}: ${param.typeExpression}`;
 }
 
 export function renderProtocolModule(relativePath: string, protocol: ProtocolDefinition): string {
@@ -14,7 +14,7 @@ export function renderProtocolModule(relativePath: string, protocol: ProtocolDef
 export function renderProtocolDefinition(lines: string[], protocol: ProtocolDefinition): void {
   if (isCallableProtocol(protocol)) {
     const method = protocol.methods[0];
-    const params = method.parameters.map(renderParameter);
+    const params = method.parameters.map(renderProtocolParameter);
     if (method.optsParams.length > 0) {
       if (method.parameters.length === 0 && method.optsParams.length > 2) {
         lines.push(`export type ${protocol.name} = (opts: {`);
@@ -43,7 +43,7 @@ export function renderProtocolDefinition(lines: string[], protocol: ProtocolDefi
       lines.push(`  ${readonlyPrefix}${method.name}: ${method.returnType};`);
       continue;
     }
-    const params = method.parameters.map(renderParameter);
+    const params = method.parameters.map(renderProtocolParameter);
     if (method.optsParams.length > 0) {
       const optsType = method.optsParams
         .map((param) => renderProtocolOptsParam(param, method.optsOptional))

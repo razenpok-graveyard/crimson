@@ -126,7 +126,12 @@ function nonlocalNames(lines: string[], startIndex: number, indent: string): Set
   const names = new Set<string>();
   let index = startIndex;
   while (index < lines.length && isIndentedBlockLine(lines, index, indent)) {
-    const statement = lines[index].slice(indent.length).trim();
+    const rest = lines[index].slice(indent.length);
+    if (rest.startsWith(' ')) {
+      index += 1;
+      continue;
+    }
+    const statement = rest.trim();
     const nonlocalStatement = /^nonlocal ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(statement);
     if (nonlocalStatement !== null) {
       for (const name of nonlocalStatement[1].split(', ')) {

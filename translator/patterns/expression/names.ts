@@ -57,9 +57,7 @@ function translatedMemberNameForReceiver(
   const ownReceiver = pythonReceiver === 'self' || tsReceiver === 'this';
   if (
     publicMember !== null
-    && receiverType !== undefined
     && !ownReceiver
-    && nameMap.has(classFieldTypeMarker(receiverType, publicMember))
   ) {
     return publicMember;
   }
