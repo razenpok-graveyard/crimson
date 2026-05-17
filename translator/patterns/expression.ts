@@ -546,6 +546,10 @@ export function translateExpression(
   if (bytesLiteral !== null) {
     return `new Uint8Array([${bytesLiteral.join(', ')}])`;
   }
+  const vectorOffsetKeywordCall = translateVectorOffsetKeywordCall(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (vectorOffsetKeywordCall !== null) {
+    return vectorOffsetKeywordCall;
+  }
 
   const pathlibReadBytes = /^(?:Path\((.+)\)|(.+))\.read_bytes\(\)$/.exec(trimmed);
   if (pathlibReadBytes !== null) {
@@ -2133,6 +2137,10 @@ export function translateExpression(
   const mixedKeywordCall = translateMixedKeywordCall(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
   if (mixedKeywordCall !== null) {
     return mixedKeywordCall;
+  }
+  const complexKeywordMethodCall = translateComplexKeywordMethodCall(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (complexKeywordMethodCall !== null) {
+    return complexKeywordMethodCall;
   }
   const mixedKeywordCallWithRest = translateMixedKeywordCallWithRest(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
   if (mixedKeywordCallWithRest !== null) {
@@ -3743,6 +3751,128 @@ function translateMixedKeywordCall(
     ...positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)),
     optsExpression,
   ].join(', ')})`;
+}
+
+function translateComplexKeywordMethodCall(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  if (splitTopLevelComma(pythonExpression).length > 1) {
+    return null;
+  }
+  const callOpenIndex = finalCallOpenIndex(pythonExpression);
+  if (callOpenIndex === null) {
+    return null;
+  }
+  const member = /^(.*)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(pythonExpression.slice(0, callOpenIndex));
+  if (member === null) {
+    return null;
+  }
+  const argsText = pythonExpression.slice(callOpenIndex + 1, -1);
+  if (!argsText.includes('=')) {
+    return null;
+  }
+  const receiverText = member[1];
+  if (/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/.test(receiverText) || !delimitersBalanced(receiverText)) {
+    return null;
+  }
+  const parts = splitTopLevelComma(argsText);
+  const keywordParts: string[] = [];
+  const positionalParts: string[] = [];
+  let sawKeyword = false;
+  for (const part of parts) {
+    const keyword = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(part);
+    if (keyword === null) {
+      if (sawKeyword) {
+        return null;
+      }
+      positionalParts.push(part);
+      continue;
+    }
+    sawKeyword = true;
+    keywordParts.push(`${tsExportNameForPythonName(keyword[1])}: ${translateExpression(keyword[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
+  }
+  if (keywordParts.length === 0) {
+    return null;
+  }
+  const receiver = translateExpression(receiverText, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const methodName = tsMemberNameForPythonName(member[2]);
+  const optsExpression = `{ ${keywordParts.join(', ')} }`;
+  return `${receiver}.${methodName}(${[
+    ...positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)),
+    optsExpression,
+  ].join(', ')})`;
+}
+
+function translateVectorOffsetKeywordCall(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  const methodCall = finalKeywordMethodCall(pythonExpression);
+  if (methodCall === null || methodCall.method !== 'offset') {
+    return null;
+  }
+  const keywordParts = keywordObjectParts(methodCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (keywordParts === null) {
+    return null;
+  }
+  return `${translateExpression(methodCall.receiver, nameMap, arrayNames, validatedTypeAliases, mapNames)}.offset({ ${keywordParts.join(', ')} })`;
+}
+
+function finalCallOpenIndex(pythonExpression: string): number | null {
+  for (let index = 0; index < pythonExpression.length; index += 1) {
+    if (pythonExpression[index] === '(' && matchingCloseParen(pythonExpression, index) === pythonExpression.length - 1) {
+      return index;
+    }
+  }
+  return null;
+}
+
+function finalKeywordMethodCall(pythonExpression: string): { receiver: string; method: string; argsText: string } | null {
+  if (splitTopLevelComma(pythonExpression).length > 1) {
+    return null;
+  }
+  const callOpenIndex = finalCallOpenIndex(pythonExpression);
+  if (callOpenIndex === null) {
+    return null;
+  }
+  const member = /^(.*)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(pythonExpression.slice(0, callOpenIndex));
+  if (member === null) {
+    return null;
+  }
+  const argsText = pythonExpression.slice(callOpenIndex + 1, -1);
+  return argsText.includes('=') && delimitersBalanced(member[1])
+    ? { receiver: member[1], method: member[2], argsText }
+    : null;
+}
+
+function keywordObjectParts(
+  argsText: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string[] | null {
+  const keywordParts: string[] = [];
+  let sawKeyword = false;
+  for (const part of splitTopLevelComma(argsText)) {
+    const keyword = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(part);
+    if (keyword === null) {
+      if (sawKeyword) {
+        return null;
+      }
+      continue;
+    }
+    sawKeyword = true;
+    keywordParts.push(`${tsExportNameForPythonName(keyword[1])}: ${translateExpression(keyword[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
+  }
+  return keywordParts.length === 0 ? null : keywordParts;
 }
 
 function translateMixedKeywordCallWithKnownInstanceSignature(

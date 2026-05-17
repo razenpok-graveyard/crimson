@@ -192,6 +192,7 @@ function finalVectorMethodCall(tsExpression: string): boolean {
   const vectorMethods = new Set([
     'add',
     'sub',
+    'offset',
     'mul',
     'rotated',
     'normalized',
