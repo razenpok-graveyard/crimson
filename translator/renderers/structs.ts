@@ -2,6 +2,7 @@ import type {
   FunctionParameter,
   SimpleModuleFunction,
   StructModule,
+  TypeAlias,
 } from '../model.js';
 import {
   arrayRemoveHelperStatements,
@@ -49,9 +50,7 @@ export function renderMsgspecStructModule(relativePath: string, module: StructMo
     lines.push('');
   }
 
-  for (const alias of module.typeAliases) {
-    lines.push(`${alias.exported === false ? '' : 'export '}type ${alias.name} = ${alias.typeExpression};`);
-  }
+  renderStructTypeAliases(lines, module.typeAliases, module.classes);
   if (module.typeAliases.length > 0 && module.functions.length + module.classes.length + interfaceProtocols.length > 0) {
     lines.push('');
   }
@@ -79,6 +78,76 @@ export function renderMsgspecStructModule(relativePath: string, module: StructMo
   }
   lines.push('');
   return lines.join('\n');
+}
+
+export function renderStructTypeAliases(
+  lines: string[],
+  typeAliases: readonly TypeAlias[],
+  classes: readonly StructModule['classes'][number][] = [],
+  valueText = '',
+): void {
+  for (const alias of typeAliases) {
+    lines.push(`${alias.exported === false ? '' : 'export '}type ${alias.name} = ${alias.typeExpression};`);
+  }
+  const taggedUnionConstructors = taggedUnionTypeAliasConstructors(typeAliases, classes, valueText);
+  if (taggedUnionConstructors.length > 0) {
+    if (typeAliases.length > 0) {
+      lines.push('');
+    }
+    lines.push(...taggedUnionConstructors);
+  }
+}
+
+function taggedUnionTypeAliasConstructors(
+  typeAliases: readonly TypeAlias[],
+  classes: readonly StructModule['classes'][number][],
+  valueText: string,
+): string[] {
+  const classByName = new Map(classes.map((structClass) => [structClass.name, structClass]));
+  const statements: string[] = [];
+  for (const alias of typeAliases) {
+    if (!typeAliasHasValueUsage(alias.name, valueText)) {
+      continue;
+    }
+    const members = alias.typeExpression.split('|').map((part) => part.trim());
+    if (members.length < 2) {
+      continue;
+    }
+    const memberClasses = members.map((member) => classByName.get(member));
+    if (memberClasses.some((structClass) => structClass === undefined || !structClass.tagged)) {
+      continue;
+    }
+    statements.push(`const ${alias.name} = function ${alias.name}TaggedUnion(opts: Record<string, unknown>) {`);
+    statements.push(`  const tag = String(${tagLookupExpression(memberClasses)});`);
+    statements.push('  switch (tag) {');
+    for (const structClass of memberClasses) {
+      if (structClass === undefined) {
+        continue;
+      }
+      statements.push(`    case ${JSON.stringify(structClass.tagValue ?? structClass.name)}:`);
+      statements.push(`      return new ${structClass.name}(opts as ConstructorParameters<typeof ${structClass.name}>[0]);`);
+    }
+    statements.push('    default:');
+    statements.push(`      throw new Error(\`unsupported ${alias.name} tag: \${tag}\`);`);
+    statements.push('  }');
+    statements.push(`} as unknown as new (opts: Record<string, unknown>) => ${alias.name};`);
+    statements.push('');
+  }
+  if (statements[statements.length - 1] === '') {
+    statements.pop();
+  }
+  return statements;
+}
+
+function typeAliasHasValueUsage(aliasName: string, valueText: string): boolean {
+  const escaped = aliasName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return [
+    new RegExp(`\\btype\\s*:\\s*${escaped}\\b`),
+    new RegExp(`\\bnew\\s+${escaped}\\s*\\(`),
+    new RegExp(`(^|[^A-Za-z0-9_.$])${escaped}\\s*\\(`),
+    new RegExp(`=\\s*${escaped}\\b`),
+    new RegExp(`\\breturn\\s+${escaped}\\b`),
+  ].some((pattern) => pattern.test(valueText));
 }
 
 function structModuleHelperStatements(module: StructModule): string[] {
@@ -125,7 +194,7 @@ export function renderStructClasses(lines: string[], classes: StructModule['clas
     const extendsClause = structClass.extendsName === undefined ? '' : ` extends ${structClass.extendsName}`;
     lines.push(`export class ${structClass.name}${typeParams}${extendsClause} {`);
     if (structClass.tagged) {
-      lines.push(`  readonly tag = '${structClass.tagValue ?? structClass.name}';`);
+      lines.push(`  readonly ${structClass.tagField ?? 'tag'} = '${structClass.tagValue ?? structClass.name}';`);
     }
     const postInitAssignedFields = fieldsAssignedByPostInit(structClass.postInitStatements);
     for (const field of structClass.fields) {
@@ -169,7 +238,8 @@ export function renderStructClasses(lines: string[], classes: StructModule['clas
         lines.push('  }');
       }
     }
-    for (const method of structClass.methods) {
+    const methods = structClass.methods.filter((method) => method.name !== `get ${structClass.tagField ?? 'tag'}`);
+    for (const method of methods) {
       lines.push('');
       const generator = method.statements.some((statement) => /^\s*yield\*? /.test(statement));
       const params = method.parameters.map(renderParameter);
@@ -200,6 +270,18 @@ export function renderStructClasses(lines: string[], classes: StructModule['clas
       lines.push('');
     }
   }
+}
+
+function tagLookupExpression(memberClasses: readonly (StructModule['classes'][number] | undefined)[]): string {
+  const tagFields = new Set(memberClasses.map((structClass) => structClass?.tagField ?? 'tag'));
+  const lookups = Array.from(tagFields)
+    .sort((left, right) => left === 'tag' ? 1 : right === 'tag' ? -1 : left.localeCompare(right))
+    .map((field) => `opts[${JSON.stringify(field)}]`);
+  if (!tagFields.has('tag')) {
+    lookups.push(`opts['tag']`);
+  }
+  lookups.push(`''`);
+  return lookups.join(' ?? ');
 }
 
 function shouldRenderPositionalConstructor(structClass: StructModule['classes'][number]): boolean {

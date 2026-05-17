@@ -140,6 +140,7 @@ export interface StructClassDefinition {
   docstring: string | null;
   tagged: boolean;
   tagValue?: string;
+  tagField?: string;
   readonlyFields: boolean;
   positionalConstructor?: boolean;
   typeParams?: string[];

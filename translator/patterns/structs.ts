@@ -428,24 +428,25 @@ export function parseStructClass(
 ): { structClass: StructModule['classes'][number]; nextIndex: number } | null {
   const dataclass = /^@dataclass\((?<options>[^)]*)\)$/.exec(lines[index] ?? '');
   const classIndex = dataclass === null ? index : index + 1;
-  const header = /^class ([A-Za-z_][A-Za-z0-9_]*)(?:\((?<bases>[^)]*)\))?:$/.exec(lines[classIndex] ?? '');
-  if (header === null || (dataclass !== null && header.groups?.bases !== undefined)) {
+  const header = parseStructClassHeader(lines, classIndex);
+  if (header === null || (dataclass !== null && header.basesText !== '')) {
     return null;
   }
-  const parsedBases = dataclass === null ? parseStructClassBases(header.groups?.bases ?? '', moduleNameMap) : { extendsName: undefined, options: dataclass.groups?.options ?? '' };
+  const parsedBases = dataclass === null ? parseStructClassBases(header.basesText, moduleNameMap) : { extendsName: undefined, options: dataclass.groups?.options ?? '' };
   if (parsedBases === null) {
     return null;
   }
   const options = dataclass?.groups?.options ?? parsedBases.options;
   const readonlyFields = options.includes('frozen=True');
   const tagString = /(?:^|, )tag=(["'])(.*?)\1/.exec(options);
+  const tagFieldString = /(?:^|, )tag_field=(["'])(.*?)\1/.exec(options);
   const tagged = options.includes('tag=True') || tagString !== null;
   const genericBase = /(?:^|, )Generic\[([^\]]+)\]/.exec(options);
   const typeParams = genericBase === null
     ? undefined
     : genericBase[1].split(', ').map(tsExportNameForPythonName);
-  const className = tsExportNameForPythonName(header[1]);
-  let nextIndex = classIndex + 1;
+  const className = tsExportNameForPythonName(header.name);
+  let nextIndex = header.nextIndex;
 
   const docstring = parseIndentedDocstring(lines, nextIndex);
   if (docstring !== null) {
@@ -635,6 +636,7 @@ export function parseStructClass(
       docstring: docstring?.value ?? null,
       tagged,
       ...(tagString === null ? {} : { tagValue: tagString[2] }),
+      ...(tagFieldString === null ? {} : { tagField: tsAttributeNameForPythonName(tagFieldString[2]) }),
       readonlyFields,
       ...(positionalConstructor ? { positionalConstructor: true } : {}),
       typeParams,
@@ -644,6 +646,49 @@ export function parseStructClass(
     },
     nextIndex,
   };
+}
+
+function parseStructClassHeader(
+  lines: string[],
+  index: number,
+): { name: string; basesText: string; nextIndex: number } | null {
+  const singleLine = /^class ([A-Za-z_][A-Za-z0-9_]*)(?:\((?<bases>[^)]*)\))?:$/.exec(lines[index] ?? '');
+  if (singleLine !== null) {
+    return {
+      name: singleLine[1],
+      basesText: singleLine.groups?.bases ?? '',
+      nextIndex: index + 1,
+    };
+  }
+
+  const multilineStart = /^class ([A-Za-z_][A-Za-z0-9_]*)\($/.exec(lines[index] ?? '');
+  if (multilineStart === null) {
+    return null;
+  }
+
+  const bases: string[] = [];
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length) {
+    const line = lines[nextIndex] ?? '';
+    const trimmed = line.trim();
+    if (trimmed === '') {
+      nextIndex += 1;
+      continue;
+    }
+    if (trimmed === '):') {
+      return {
+        name: multilineStart[1],
+        basesText: bases.join(', '),
+        nextIndex: nextIndex + 1,
+      };
+    }
+    if (!line.startsWith('    ') || !trimmed.endsWith(',')) {
+      return null;
+    }
+    bases.push(trimmed.slice(0, -1));
+    nextIndex += 1;
+  }
+  return null;
 }
 
 function recordStructMethodReturnType(
@@ -1290,6 +1335,9 @@ function tsStructFieldDefaultValue(pythonValue: string): string | null {
   }
 
   if (trimmed === 'msgspec.field(default_factory=list)') {
+    return '[]';
+  }
+  if (trimmed === 'msgspec.field(default_factory=tuple)') {
     return '[]';
   }
   if (trimmed === 'msgspec.field(default_factory=deque)') {

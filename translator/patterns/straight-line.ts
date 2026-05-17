@@ -2135,6 +2135,7 @@ function markTypeOnlyImports(
     ]),
     ...classes.map((structClass) => structClass.extendsName ?? ''),
     ...classes.flatMap((structClass) => structClass.fields.map((field) => field.defaultValue ?? '')),
+    ...classes.flatMap((structClass) => structClass.postInitStatements),
     ...classes.flatMap((structClass) => structClass.methods.flatMap((method) => method.statements)),
     ...protocols.flatMap((protocol) => protocol.methods.flatMap((method) => [
       ...method.parameters.map((parameter) => parameter.defaultValue ?? ''),

@@ -5,6 +5,7 @@ import {
   renderPlainClasses,
   renderSimpleModuleFunctions,
   renderStructClasses,
+  renderStructTypeAliases,
 } from './structs.js';
 import {
   renderLeadingStatements,
@@ -41,9 +42,7 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
     lines.push('');
   }
 
-  for (const alias of module.typeAliases) {
-    lines.push(`${alias.exported === false ? '' : 'export '}type ${alias.name} = ${alias.typeExpression};`);
-  }
+  renderStructTypeAliases(lines, module.typeAliases, module.classes, typeAliasValueUsageText(module));
   const validatedAliases = module.typeAliases.filter((alias) => alias.validation !== undefined);
   if (validatedAliases.length > 0) {
     lines.push('');
@@ -138,4 +137,22 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
     lines.push('');
   }
   return lines.join('\n');
+}
+
+function typeAliasValueUsageText(module: StraightLineModule): string {
+  return [
+    ...module.leadingAssignments.flatMap((assignment) => assignment.valueLines),
+    ...module.assignments.flatMap((assignment) => assignment.valueLines),
+    ...module.leadingStatements,
+    ...module.trailingStatements,
+    ...module.functions.flatMap((fn) => fn.statements),
+    ...module.classes.flatMap((structClass) => [
+      ...structClass.postInitStatements,
+      ...structClass.methods.flatMap((method) => method.statements),
+    ]),
+    ...module.plainClasses.flatMap((plainClass) => [
+      ...plainClass.constructorDefinition.statements,
+      ...plainClass.methods.flatMap((method) => method.statements),
+    ]),
+  ].join('\n');
 }
