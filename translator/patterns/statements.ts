@@ -70,7 +70,13 @@ import {
   translateConditionExpression,
 } from './statements/conditions.js';
 import {
+  exceptBlocksHaveSameBody,
+  parseZipLoopSources,
+} from './statements/control-flow.js';
+import {
   parseExceptClause,
+  translateKeyErrorLookupStatement,
+  translateRaiseExpression,
   tsExceptGuardExpression,
 } from './statements/exceptions.js';
 import { splitInlineComment } from './statements/inline-comments.js';
@@ -87,6 +93,12 @@ import {
   predeclareMatchCaseAssignments,
   predeclareTryFinallyAssignments,
 } from './statements/predeclare.js';
+import {
+  pythonListTypeIsNumeric,
+  pythonMapTypeHasTupleKey,
+  pythonMapValueIsList,
+  pythonMapValueIsMap,
+} from './statements/python-types.js';
 import { reassignedLocalNames } from './statements/reassigned-locals.js';
 import {
   addMutableName,
@@ -99,6 +111,11 @@ import {
   parenthesisDelta,
   pushImportDefinition,
 } from './statements/utils.js';
+import {
+  parseWithItems,
+  type WithItem,
+  withItemExpressionIsIterator,
+} from './statements/with-items.js';
 
 export {
   functionSignatureMarker,
@@ -169,17 +186,6 @@ export function addReassignedLocalTypeAnnotations(
     }
   }
 }
-
-type WithItem = {
-  pythonName: string;
-  name: string;
-  expression: string;
-  close: true;
-  iterator?: boolean;
-} | {
-  expression: string;
-  close: false;
-};
 
 type FunctionReturnMarker = 'array' | 'map' | 'object' | 'rectangle' | 'set' | 'string' | 'vector';
 
@@ -6079,173 +6085,6 @@ function translateMapDefaultExpression(
     return valueType?.startsWith('Map<') === true ? `new ${valueType}()` : 'new Map()';
   }
   return translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
-}
-
-function translateRaiseExpression(
-  pythonCallee: string,
-  argsText: string,
-  nameMap: Map<string, string>,
-  arrayNames: Set<string>,
-  validatedTypeAliases: ReadonlySet<string>,
-  mapNames: ReadonlySet<string>,
-  argsAlreadyTranslated = false,
-): string {
-  const args = argsAlreadyTranslated ? [argsText] : splitTopLevelComma(argsText);
-  const message = args[0] === undefined || args[0] === ''
-    ? `'${pythonCallee}'`
-    : argsAlreadyTranslated ? args[0] : translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
-  const translatedCallee = translateExpression(pythonCallee, nameMap, arrayNames, validatedTypeAliases, mapNames);
-  if (translatedCallee === 'TypeError') {
-    return `new TypeError(${message})`;
-  }
-  if (translatedCallee === 'IndexError') {
-    return `new RangeError(${message})`;
-  }
-  if (
-    translatedCallee.includes('.')
-    || ['Exception', 'RuntimeError', 'UserWarning', 'ValueError', 'KeyError', 'OSError', 'FileNotFoundError', 'AttributeError', 'NotImplementedError'].includes(translatedCallee)
-  ) {
-    return `new Error(${message})`;
-  }
-  return `new ${translatedCallee}(${message})`;
-}
-
-function translateKeyErrorLookupStatement(
-  lines: string[],
-  index: number,
-  indent: string,
-  nameMap: Map<string, string>,
-  arrayNames: Set<string>,
-  validatedTypeAliases: ReadonlySet<string>,
-  mapNames: ReadonlySet<string>,
-): { statements: string[]; nextIndex: number } | null {
-  const innerIndent = `${indent}    `;
-  const returnLine = lines[index + 1] ?? '';
-  const exceptLine = lines[index + 2] ?? '';
-  const raiseLine = lines[index + 3] ?? '';
-  if (
-    !returnLine.startsWith(innerIndent)
-    || !lineStartsAtIndent(exceptLine, indent)
-    || !raiseLine.startsWith(innerIndent)
-  ) {
-    return null;
-  }
-
-  const lookup = /^return ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[(.+)\]$/.exec(returnLine.trim());
-  const exceptClause = /^except KeyError as ([A-Za-z_][A-Za-z0-9_]*):$/.exec(exceptLine.trim());
-  const raise = /^raise ValueError\((.+)\) from ([A-Za-z_][A-Za-z0-9_]*)$/.exec(raiseLine.trim());
-  if (lookup === null || exceptClause === null || raise === null || raise[2] !== exceptClause[1]) {
-    return null;
-  }
-
-  const receiver = translateExpression(lookup[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
-  const key = translateExpression(lookup[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
-  const errorExpression = translateRaiseExpression(
-    'ValueError',
-    raise[1],
-    nameMap,
-    arrayNames,
-    validatedTypeAliases,
-    mapNames,
-  );
-  return {
-    statements: [
-      `if (!Object.prototype.hasOwnProperty.call(${receiver}, ${key})) {`,
-      `  throw ${errorExpression};`,
-      '}',
-      `return (${receiver} as Record<string, number>)[${key}];`,
-    ],
-    nextIndex: index + 4,
-  };
-}
-
-function parseWithItems(
-  itemsText: string,
-  nameMap: Map<string, string>,
-  arrayNames: Set<string>,
-  validatedTypeAliases: ReadonlySet<string>,
-  mapNames: ReadonlySet<string>,
-): WithItem[] | null {
-  const items: WithItem[] = [];
-  for (const itemText of splitTopLevelComma(itemsText)) {
-    const item = /^(.+) as ([A-Za-z_][A-Za-z0-9_]*)$/.exec(itemText);
-    if (item !== null) {
-      const expression = translateExpression(item[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
-      items.push({
-        pythonName: item[2],
-        name: tsExportNameForPythonName(item[2]),
-        expression,
-        close: true,
-        iterator: withItemExpressionIsIterator(expression, nameMap),
-      });
-      continue;
-    }
-    items.push({
-      expression: translateExpression(itemText, nameMap, arrayNames, validatedTypeAliases, mapNames),
-      close: false,
-    });
-  }
-  return items.length === 0 ? null : items;
-}
-
-function withItemExpressionIsIterator(expression: string, nameMap: ReadonlyMap<string, string>): boolean {
-  const call = /^([A-Za-z_$][A-Za-z0-9_.$]*)\(/.exec(expression.trim());
-  if (call === null) {
-    return false;
-  }
-  const returnType = nameMap.get(functionReturnTypeMarker(call[1]));
-  return returnType?.startsWith('IterableIterator<') === true || returnType?.startsWith('Generator<') === true;
-}
-
-function parseZipLoopSources(iterableText: string): string[] | null {
-  const zipCall = /^zip\((.+)\)$/.exec(iterableText.trim());
-  if (zipCall === null) {
-    return null;
-  }
-  const parts = splitTopLevelComma(zipCall[1]);
-  const strictArgument = /^strict\s*=\s*(True|False)$/.exec(parts.at(-1)?.trim() ?? '');
-  if (strictArgument !== null) {
-    if (strictArgument[1] !== 'False') {
-      return null;
-    }
-    parts.pop();
-  }
-  return parts.length === 0 ? null : parts;
-}
-
-function exceptBlocksHaveSameBody(blocks: Array<{ statements: string[] }>): boolean {
-  if (blocks.length <= 1) {
-    return true;
-  }
-  const [first, ...rest] = blocks;
-  const firstText = first.statements.join('\n');
-  return rest.every((block) => block.statements.join('\n') === firstText);
-}
-
-function pythonListTypeIsNumeric(pythonType: string): boolean {
-  return /^list\[(?:int|float)\]$/.test(pythonType.trim());
-}
-
-function pythonMapTypeArgs(pythonType: string): string[] | null {
-  const mapType = /^(?:dict|OrderedDict|defaultdict)\[(.+)\]$/.exec(pythonType.trim());
-  if (mapType !== null) {
-    return splitTopLevelComma(mapType[1]);
-  }
-  const counterType = /^Counter\[(.+)\]$/.exec(pythonType.trim());
-  return counterType === null ? null : [counterType[1], 'int'];
-}
-
-function pythonMapTypeHasTupleKey(pythonType: string): boolean {
-  return pythonMapTypeArgs(pythonType)?.[0]?.trim().startsWith('tuple[') === true;
-}
-
-function pythonMapValueIsList(pythonType: string): boolean {
-  const valueType = pythonMapTypeArgs(pythonType)?.[1]?.trim();
-  return valueType?.startsWith('list[') === true || valueType?.startsWith('tuple[') === true;
-}
-
-function pythonMapValueIsMap(pythonType: string): boolean {
-  return pythonMapTypeArgs(pythonType)?.[1]?.trim().startsWith('dict[') === true;
 }
 
 function iterableIsPathArray(

@@ -1,4 +1,6 @@
+import { splitTopLevelComma } from '../common.js';
 import { translateExpression } from '../expression.js';
+import { lineStartsAtIndent } from './utils.js';
 
 export function parseExceptClause(statement: string): { name: string | null; types: string[] } | null {
   const typeNamePattern = '[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*';
@@ -37,4 +39,82 @@ function tsExceptionTypeIsGuardable(tsType: string): boolean {
     return false;
   }
   return !new Set(['Exception', 'RuntimeError', 'ValueError', 'KeyError', 'OSError', 'FileNotFoundError']).has(tsType);
+}
+
+export function translateRaiseExpression(
+  pythonCallee: string,
+  argsText: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+  argsAlreadyTranslated = false,
+): string {
+  const args = argsAlreadyTranslated ? [argsText] : splitTopLevelComma(argsText);
+  const message = args[0] === undefined || args[0] === ''
+    ? `'${pythonCallee}'`
+    : argsAlreadyTranslated ? args[0] : translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const translatedCallee = translateExpression(pythonCallee, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (translatedCallee === 'TypeError') {
+    return `new TypeError(${message})`;
+  }
+  if (translatedCallee === 'IndexError') {
+    return `new RangeError(${message})`;
+  }
+  if (
+    translatedCallee.includes('.')
+    || ['Exception', 'RuntimeError', 'UserWarning', 'ValueError', 'KeyError', 'OSError', 'FileNotFoundError', 'AttributeError', 'NotImplementedError'].includes(translatedCallee)
+  ) {
+    return `new Error(${message})`;
+  }
+  return `new ${translatedCallee}(${message})`;
+}
+
+export function translateKeyErrorLookupStatement(
+  lines: string[],
+  index: number,
+  indent: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): { statements: string[]; nextIndex: number } | null {
+  const innerIndent = `${indent}    `;
+  const returnLine = lines[index + 1] ?? '';
+  const exceptLine = lines[index + 2] ?? '';
+  const raiseLine = lines[index + 3] ?? '';
+  if (
+    !returnLine.startsWith(innerIndent)
+    || !lineStartsAtIndent(exceptLine, indent)
+    || !raiseLine.startsWith(innerIndent)
+  ) {
+    return null;
+  }
+
+  const lookup = /^return ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[(.+)\]$/.exec(returnLine.trim());
+  const exceptClause = /^except KeyError as ([A-Za-z_][A-Za-z0-9_]*):$/.exec(exceptLine.trim());
+  const raise = /^raise ValueError\((.+)\) from ([A-Za-z_][A-Za-z0-9_]*)$/.exec(raiseLine.trim());
+  if (lookup === null || exceptClause === null || raise === null || raise[2] !== exceptClause[1]) {
+    return null;
+  }
+
+  const receiver = translateExpression(lookup[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const key = translateExpression(lookup[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const errorExpression = translateRaiseExpression(
+    'ValueError',
+    raise[1],
+    nameMap,
+    arrayNames,
+    validatedTypeAliases,
+    mapNames,
+  );
+  return {
+    statements: [
+      `if (!Object.prototype.hasOwnProperty.call(${receiver}, ${key})) {`,
+      `  throw ${errorExpression};`,
+      '}',
+      `return (${receiver} as Record<string, number>)[${key}];`,
+    ],
+    nextIndex: index + 4,
+  };
 }
