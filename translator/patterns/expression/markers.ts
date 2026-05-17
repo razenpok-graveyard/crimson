@@ -6,6 +6,10 @@ export function vectorArrayNameMarker(name: string): string {
   return `__vector_array__:${name}`;
 }
 
+export function arrayElementTypeMarker(name: string): string {
+  return `__array_element_type__:${name}`;
+}
+
 export function stringNameMarker(name: string): string {
   return `__string__:${name}`;
 }

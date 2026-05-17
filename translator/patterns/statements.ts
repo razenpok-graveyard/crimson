@@ -23,7 +23,9 @@ import {
   translateExpression,
   translateMapKeyExpression,
   translatePositionalCallExpression,
+  arrayElementTypeMarker,
   arrayValueMapNameMarker,
+  classFieldTypeMarker,
   colorNameMarker,
   dateNameMarker,
   functionReturnTypeMarker,
@@ -2171,6 +2173,14 @@ export function translateStraightLineStatement(
         continue;
       }
       if (arg === '(' || arg === '[') {
+        if (arg === '(') {
+          const parenthesized = collectMultilineParenthesizedExpression(lines, nextIndex, arg);
+          if (parenthesized !== null) {
+            positionalParts.push(translateExpression(parenthesized.expression.replace(/,$/, ''), nameMap, arrayNames, validatedTypeAliases, mapNames));
+            nextIndex = parenthesized.nextIndex;
+            continue;
+          }
+        }
         const sequenceLiteral = collectMultilineSequenceLiteral(
           lines,
           nextIndex + 1,
@@ -3632,6 +3642,14 @@ function parseMultilineCallParts(
       if (sawKeyword) {
         return null;
       }
+      if (arg === '(') {
+        const parenthesized = collectMultilineParenthesizedExpression(lines, nextIndex, arg);
+        if (parenthesized !== null) {
+          positionalParts.push(translateExpression(parenthesized.expression.replace(/,$/, ''), nameMap, arrayNames, validatedTypeAliases, mapNames));
+          nextIndex = parenthesized.nextIndex;
+          continue;
+        }
+      }
       const sequenceLiteral = collectMultilineSequenceLiteral(
         lines,
         nextIndex + 1,
@@ -3753,11 +3771,23 @@ function parseMultilineCallParts(
           consumedNestedCall = true;
           break;
         }
-        if (keywordArg[2] === '[' || keywordArg[2] === '(') {
+        if (keywordArg[2] === '(') {
+          const parenthesized = collectMultilineParenthesizedExpression(lines, nextIndex, keywordArg[2]);
+          if (parenthesized === null) {
+            return null;
+          }
+          const expression = translateExpression(parenthesized.expression.replace(/,$/, ''), nameMap, arrayNames, validatedTypeAliases, mapNames);
+          keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${expression}`);
+          keywordArgParts.push({ pythonName: keywordArg[1], expression });
+          nextIndex = parenthesized.nextIndex;
+          consumedNestedCall = true;
+          break;
+        }
+        if (keywordArg[2] === '[') {
           const sequenceLiteral = collectMultilineSequenceLiteral(
             lines,
             nextIndex + 1,
-            keywordArg[2] === '(' ? ')' : ']',
+            ']',
             nameMap,
             arrayNames,
             validatedTypeAliases,
@@ -4209,6 +4239,44 @@ function charIsEscaped(value: string, index: number): boolean {
   return slashCount % 2 === 1;
 }
 
+function assignedArrayElementType(assignedRight: string, nameMap: Map<string, string>): string | null {
+  for (const match of assignedRight.matchAll(/Array\.from\(([^)]+)\)/g)) {
+    const elementType = arrayElementTypeFromExpression(match[1], nameMap);
+    if (elementType !== null) {
+      return elementType;
+    }
+  }
+  return arrayElementTypeFromExpression(assignedRight, nameMap);
+}
+
+function arrayElementTypeFromExpression(expression: string, nameMap: Map<string, string>): string | null {
+  const fieldType = knownDottedFieldType(expression.trim(), nameMap);
+  return fieldType === null ? null : arrayElementTypeFromTypeExpression(fieldType);
+}
+
+function knownDottedFieldType(expression: string, nameMap: Map<string, string>): string | null {
+  const dotted = /^(.+)\.([A-Za-z_$][A-Za-z0-9_$]*)$/.exec(expression);
+  if (dotted === null) {
+    return null;
+  }
+  const receiverType = nameMap.get(receiverTypeNameMarker(dotted[1]));
+  return receiverType === undefined ? null : nameMap.get(classFieldTypeMarker(receiverType, dotted[2])) ?? null;
+}
+
+function arrayElementTypeFromTypeExpression(typeExpression: string): string | null {
+  const trimmed = typeExpression.trim();
+  const mutableArray = /^(.+)\[\]$/.exec(trimmed);
+  if (mutableArray !== null) {
+    return mutableArray[1].trim();
+  }
+  const readonlyArray = /^readonly (.+)\[\]$/.exec(trimmed);
+  if (readonlyArray !== null) {
+    return readonlyArray[1].trim();
+  }
+  const readonlyGeneric = /^ReadonlyArray<(.+)>$/.exec(trimmed);
+  return readonlyGeneric?.[1]?.trim() ?? null;
+}
+
 function assignedRightAsKnownVector(
   pythonName: string,
   tsName: string,
@@ -4269,6 +4337,11 @@ function recordLocalAssignmentMarkers(
   if (/^Array\.from\(/.test(assignedRight)) {
     arrayNames.add(pythonName);
     arrayNames.add(tsName);
+  }
+  const arrayElementType = assignedArrayElementType(assignedRight, nameMap);
+  if (arrayElementType !== null) {
+    nameMap.set(arrayElementTypeMarker(pythonName), arrayElementType);
+    nameMap.set(arrayElementTypeMarker(tsName), arrayElementType);
   }
   if (assignedRight.startsWith('[') || assignedRight.startsWith('Array.from(') || /^[A-Za-z_$][A-Za-z0-9_.$()]+\.(?:filter|map)\(/.test(assignedRight)) {
     arrayNames.add(pythonName);

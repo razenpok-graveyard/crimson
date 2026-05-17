@@ -8,6 +8,7 @@ import {
 import {
   classBaseTypeMarker,
   classFieldTypeMarker,
+  arrayElementTypeMarker,
   colorNameMarker,
   dateNameMarker,
   functionReturnTypeMarker,
@@ -72,6 +73,7 @@ import {
 
 export {
   arrayValueMapNameMarker,
+  arrayElementTypeMarker,
   classBaseTypeMarker,
   classFieldTypeMarker,
   colorNameMarker,
@@ -707,6 +709,14 @@ export function translateExpression(
   if (enumMemberValue !== null) {
     return translateExpression(enumMemberValue[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
   }
+  const enumVariableValue = /^([A-Za-z_][A-Za-z0-9_]*)\.value$/.exec(trimmed);
+  if (enumVariableValue !== null) {
+    const receiver = translateIdentifierName(enumVariableValue[1], nameMap);
+    const receiverType = nameMap.get(receiverTypeNameMarker(enumVariableValue[1])) ?? nameMap.get(receiverTypeNameMarker(receiver));
+    if (receiverType !== undefined && typeExpressionLooksTsEnum(receiverType)) {
+      return receiver;
+    }
+  }
 
   const superMethodCall = /^super\(\)\.([A-Za-z_][A-Za-z0-9_]*)\((.*)\)$/.exec(trimmed);
   if (superMethodCall !== null) {
@@ -741,6 +751,15 @@ export function translateExpression(
     const receiver = translateExpression(pathNameAttribute[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (arrayNames.has(pathNameMarker(pathNameAttribute[1])) || arrayNames.has(pathNameMarker(receiver))) {
       return `_basename(String(${receiver}))`;
+    }
+  }
+
+  const pathWithNameCall = /^(?:Path\((.+)\)|(.+))\.with_name\((.+)\)$/.exec(trimmed);
+  if (pathWithNameCall !== null) {
+    const pathExpression = pathWithNameCall[1] ?? pathWithNameCall[2];
+    const receiver = translateExpression(pathExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (pathWithNameCall[1] !== undefined || arrayNames.has(pathNameMarker(pathExpression)) || arrayNames.has(pathNameMarker(receiver))) {
+      return `_pathJoin(_dirname(String(${receiver})), ${translateExpression(pathWithNameCall[3], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
     }
   }
 
@@ -1067,6 +1086,11 @@ export function translateExpression(
     const itemNameMap = new Map(nameMap);
     itemNameMap.set(listComprehension.itemName, itemName);
     const iterable = arrayMethodIterableExpression(listComprehension.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const elementType = iterableElementType(listComprehension.iterable, iterable, nameMap);
+    if (elementType !== null) {
+      itemNameMap.set(receiverTypeNameMarker(listComprehension.itemName), elementType);
+      itemNameMap.set(receiverTypeNameMarker(itemName), elementType);
+    }
     const translatedItem = translateExpression(listComprehension.expression, itemNameMap, arrayNames, validatedTypeAliases, mapNames);
     const filtered = listComprehension.condition === null
       ? iterable
@@ -1209,13 +1233,13 @@ export function translateExpression(
     }
   }
 
-  const startsWithCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.startswith\((.*)\)$/.exec(trimmed);
-  if (startsWithCall !== null) {
+  const startsWithCall = /^(.+)\.startswith\((.*)\)$/.exec(trimmed);
+  if (startsWithCall !== null && !startsWithCall[1].trim().startsWith('not ') && delimitersBalanced(startsWithCall[1])) {
     return `pythonStartsWith(${translateExpression(startsWithCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(startsWithCall[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
-  const endsWithCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.endswith\((.*)\)$/.exec(trimmed);
-  if (endsWithCall !== null) {
+  const endsWithCall = /^(.+)\.endswith\((.*)\)$/.exec(trimmed);
+  if (endsWithCall !== null && !endsWithCall[1].trim().startsWith('not ') && delimitersBalanced(endsWithCall[1])) {
     return `pythonEndsWith(${translateExpression(endsWithCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(endsWithCall[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
@@ -3778,6 +3802,55 @@ function knownClassFieldType(tsExpression: string, nameMap: Map<string, string>)
   const receiverType = nameMap.get(receiverTypeNameMarker(dottedField[1]))
     ?? nullableTypeExpressionBase(knownClassFieldType(dottedField[1], nameMap));
   return receiverType === undefined ? null : nameMap.get(classFieldTypeMarker(receiverType, dottedField[2])) ?? null;
+}
+
+function iterableElementType(pythonExpression: string, tsExpression: string, nameMap: Map<string, string>): string | null {
+  const sources = [
+    pythonExpression,
+    tsExpression,
+    stripIterableSlice(pythonExpression),
+    stripIterableSlice(tsExpression),
+  ].filter((source): source is string => source !== null);
+  for (const source of sources) {
+    const direct = nameMap.get(arrayElementTypeMarker(source));
+    if (direct !== undefined) {
+      return direct;
+    }
+    const fieldType = knownClassFieldType(source, nameMap);
+    const fieldElementType = fieldType === null ? null : arrayElementTypeExpression(fieldType);
+    if (fieldElementType !== null) {
+      return fieldElementType;
+    }
+  }
+  return null;
+}
+
+function stripIterableSlice(expression: string): string | null {
+  const trimmed = expression.trim();
+  const pythonSlice = /^(.+)\[[^\]]*:[^\]]*\]$/.exec(trimmed);
+  if (pythonSlice !== null) {
+    return pythonSlice[1].trim();
+  }
+  const tsSlice = /^(.+)\.slice\([^)]*\)$/.exec(trimmed);
+  return tsSlice?.[1]?.trim() ?? null;
+}
+
+function arrayElementTypeExpression(typeExpression: string): string | null {
+  const mutableArray = /^(.+)\[\]$/.exec(typeExpression.trim());
+  if (mutableArray !== null) {
+    return mutableArray[1].trim();
+  }
+  const readonlyArray = /^readonly (.+)\[\]$/.exec(typeExpression.trim());
+  if (readonlyArray !== null) {
+    return readonlyArray[1].trim();
+  }
+  const readonlyGeneric = /^ReadonlyArray<(.+)>$/.exec(typeExpression.trim());
+  return readonlyGeneric?.[1]?.trim() ?? null;
+}
+
+function typeExpressionLooksTsEnum(typeExpression: string): boolean {
+  const baseType = nullableTypeExpressionBase(typeExpression) ?? typeExpression;
+  return /^[A-Z][A-Za-z0-9_$]*(?:Id|Mode|Type|Flags)$/.test(baseType.trim());
 }
 
 function finalVectorMethodCall(tsExpression: string): boolean {

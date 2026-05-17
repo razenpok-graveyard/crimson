@@ -1135,7 +1135,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         ...(moduleValueText.includes('appendFileSync(') || moduleValueText.includes('_openTextFile(') ? ['appendFileSync'] : []),
         ...(moduleValueText.includes('existsSync(') ? ['existsSync'] : []),
         ...(moduleValueText.includes('statSync(') ? ['statSync'] : []),
-        ...(moduleValueText.includes('_mkdirParents(') ? ['mkdirSync'] : []),
+        ...(moduleValueText.includes('_mkdirParents(') || moduleValueText.includes('_dirname(') ? ['mkdirSync'] : []),
         ...(moduleValueText.includes('_globPath(') ? ['readdirSync'] : []),
       ],
     });
@@ -1561,7 +1561,14 @@ function recordTypeCheckingImportClassFieldTypes(
 }
 
 function simpleClassTypeName(typeExpression: string): string | null {
-  const typeName = /^([A-Z][A-Za-z0-9_$]*)$/.exec(typeExpression.trim());
+  const parts = typeExpression
+    .split('|')
+    .map((part) => part.trim())
+    .filter((part) => part !== 'null' && part !== 'undefined');
+  if (parts.length !== 1) {
+    return null;
+  }
+  const typeName = /^([A-Z][A-Za-z0-9_$]*)$/.exec(parts[0]);
   return typeName?.[1] ?? null;
 }
 
