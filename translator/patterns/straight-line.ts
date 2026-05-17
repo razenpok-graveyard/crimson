@@ -154,6 +154,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   const objectReturnFunctionNames = new Set<string>();
   const stringReturnFunctionNames = new Set<string>();
   const pendingAssignmentComments: string[] = [];
+  let needsTqdmHelper = false;
   let index = 0;
 
   prerecordTopLevelFunctionNames(moduleNameMap, lines, privateFunctionNameCollisions);
@@ -431,6 +432,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
 
     if (trimmed === 'from tqdm import tqdm') {
+      needsTqdmHelper = true;
       index += 1;
       continue;
     }
@@ -1048,7 +1050,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     leadingStatements.unshift(...helperStatements);
   }
-  if (moduleValueText.includes('tqdm(')) {
+  if (needsTqdmHelper || moduleValueText.includes('tqdm(')) {
     const helperStatements = tqdmHelperStatements();
     if (leadingStatements.length > 0) {
       helperStatements.push('');
@@ -1960,6 +1962,8 @@ export function parseTyperCliModule(trimmedPython: string): TyperCliModule | nul
   const lines = flattenFromImportBlocks(trimmedPython.split(/\r?\n/));
   let sawTyperImport = false;
   let appName: string | null = null;
+  const helperFunctions: TyperCliModule['helperFunctions'] = [];
+  const helperFunctionNames = new Set<string>();
   const commands: TyperCliModule['commands'] = [];
   let index = 0;
 
@@ -1979,12 +1983,31 @@ export function parseTyperCliModule(trimmedPython: string): TyperCliModule | nul
       continue;
     }
     const appAssignment = /^([A-Za-z_][A-Za-z0-9_]*) = typer\.Typer\(.+\)$/.exec(trimmed);
-    if (appAssignment === null) {
-      return null;
+    if (appAssignment !== null) {
+      appName = tsPublicNameForPythonName(appAssignment[1]);
+      index += 1;
+      break;
     }
-    appName = tsPublicNameForPythonName(appAssignment[1]);
-    index += 1;
-    break;
+
+    const skippedTypeCheckingBlock = skipTyperCliTypeCheckingBlock(lines, index);
+    if (skippedTypeCheckingBlock !== null) {
+      index = skippedTypeCheckingBlock;
+      continue;
+    }
+
+    const skippedDefinition = skipTyperCliHelperDefinition(lines, index);
+    if (skippedDefinition !== null) {
+      addTyperCliHelperFunction(helperFunctions, helperFunctionNames, skippedDefinition.functionName);
+      index = skippedDefinition.nextIndex;
+      continue;
+    }
+
+    if (isTyperCliHelperAssignment(trimmed)) {
+      index += 1;
+      continue;
+    }
+
+    return null;
   }
 
   if (!sawTyperImport || appName === null) {
@@ -2024,22 +2047,49 @@ export function parseTyperCliModule(trimmedPython: string): TyperCliModule | nul
       continue;
     }
 
-    const skippedDefinitionIndex = skipTyperCliHelperDefinition(lines, index);
-    if (skippedDefinitionIndex !== null) {
-      index = skippedDefinitionIndex;
+    const skippedTypeCheckingBlock = skipTyperCliTypeCheckingBlock(lines, index);
+    if (skippedTypeCheckingBlock !== null) {
+      index = skippedTypeCheckingBlock;
+      continue;
+    }
+
+    const skippedDefinition = skipTyperCliHelperDefinition(lines, index);
+    if (skippedDefinition !== null) {
+      addTyperCliHelperFunction(helperFunctions, helperFunctionNames, skippedDefinition.functionName);
+      index = skippedDefinition.nextIndex;
+      continue;
+    }
+
+    if (isTyperCliHelperAssignment(trimmed)) {
+      index += 1;
       continue;
     }
 
     return null;
   }
 
-  return commands.length > 0 ? { appName, commands } : null;
+  return commands.length > 0 ? { appName, helperFunctions, commands } : null;
 }
 
 function isTyperCliIgnorableTopLevelLine(trimmed: string): boolean {
   return trimmed.startsWith('#')
     || /^import [A-Za-z_][A-Za-z0-9_.]*(?: as [A-Za-z_][A-Za-z0-9_]*)?(?:, [A-Za-z_][A-Za-z0-9_.]*(?: as [A-Za-z_][A-Za-z0-9_]*)?)*$/.test(trimmed)
     || /^from \.*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)* import .+$/.test(trimmed);
+}
+
+function isTyperCliHelperAssignment(trimmed: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_]*\s*(?::\s*[^=]+)?\s*=\s*.+$/.test(trimmed);
+}
+
+function skipTyperCliTypeCheckingBlock(lines: string[], index: number): number | null {
+  if ((lines[index]?.trim() ?? '') !== 'if TYPE_CHECKING:') {
+    return null;
+  }
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, '    ')) {
+    nextIndex += 1;
+  }
+  return nextIndex;
 }
 
 function typerCliCommandDecoratorName(trimmed: string, appName: string): string | null {
@@ -2060,18 +2110,51 @@ function skipTyperCliCommandBody(lines: string[], index: number, appName: string
   return nextIndex;
 }
 
-function skipTyperCliHelperDefinition(lines: string[], index: number): number | null {
+function addTyperCliHelperFunction(
+  helperFunctions: TyperCliModule['helperFunctions'],
+  helperFunctionNames: Set<string>,
+  pythonName: string | null,
+): void {
+  if (pythonName === null || helperFunctionNames.has(pythonName)) {
+    return;
+  }
+  helperFunctionNames.add(pythonName);
+  const name = tsExportNameForPythonName(pythonName);
+  const privateCompatName = pythonName.startsWith('_')
+    ? `_${tsExportNameForPythonName(pythonName.replace(/^_+/, ''))}`
+    : null;
+  helperFunctions.push({
+    pythonName,
+    name,
+    privateCompatName: privateCompatName !== null && privateCompatName !== name ? privateCompatName : null,
+  });
+}
+
+function skipTyperCliHelperDefinition(
+  lines: string[],
+  index: number,
+): { nextIndex: number; functionName: string | null } | null {
   let headerIndex = index;
   while (/^@[A-Za-z_][A-Za-z0-9_.]*(?:\(.*\))?$/.test(lines[headerIndex]?.trim() ?? '')) {
     headerIndex += 1;
   }
-  if (!/^(?:def|class) [A-Za-z_][A-Za-z0-9_]*(?:\(|[:(])/.test(lines[headerIndex]?.trim() ?? '')) {
+  const header = lines[headerIndex]?.trim() ?? '';
+  if (!/^(?:def|class) [A-Za-z_][A-Za-z0-9_]*(?:\(|[:(])/.test(header)) {
     return null;
   }
+  const functionName = /^def ([A-Za-z_][A-Za-z0-9_]*)\(/.exec(header)?.[1] ?? null;
 
   let nextIndex = headerIndex + 1;
   while (nextIndex < lines.length && !/:\s*$/.test(lines[nextIndex - 1] ?? '')) {
-    if (lines[nextIndex] === undefined || (!lines[nextIndex].startsWith('    ') && lines[nextIndex].trim() !== '')) {
+    const line = lines[nextIndex];
+    if (line === undefined) {
+      return null;
+    }
+    if (/^\)\s*(?:->\s*[^:]+)?:$/.test(line.trim())) {
+      nextIndex += 1;
+      break;
+    }
+    if (!line.startsWith('    ') && line.trim() !== '') {
       return null;
     }
     nextIndex += 1;
@@ -2079,7 +2162,7 @@ function skipTyperCliHelperDefinition(lines: string[], index: number): number | 
   while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, '    ')) {
     nextIndex += 1;
   }
-  return nextIndex;
+  return { nextIndex, functionName };
 }
 
 function parseTyperCliFunctionHeader(

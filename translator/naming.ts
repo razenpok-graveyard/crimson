@@ -42,10 +42,7 @@ export function tsTypeExpression(pythonType: string): string {
   }
   const literalType = /^Literal\[(.+)\]$/.exec(trimmed);
   if (literalType !== null) {
-    return literalType[1]
-      .split(topLevelCommaPattern())
-      .map(tsLiteralExpression)
-      .join(' | ');
+    return splitTopLevelComma(literalType[1]).map(tsLiteralExpression).join(' | ');
   }
   const unionParts = splitTopLevelUnion(trimmed);
   if (unionParts.length > 1) {

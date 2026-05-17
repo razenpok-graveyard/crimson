@@ -15,6 +15,17 @@ export function renderTyperCliModule(relativePath: string, module: TyperCliModul
     '};',
   ];
 
+  for (const helperFunction of module.helperFunctions) {
+    lines.push('');
+    lines.push(`export function ${helperFunction.name}(..._args: any[]): any {`);
+    lines.push('  void _args;');
+    lines.push(`  throw new DesktopCliUnavailableError('${module.appName.replace(/App$/, '')} ${helperFunction.pythonName}');`);
+    lines.push('}');
+    if (helperFunction.privateCompatName !== null) {
+      lines.push(`export const ${helperFunction.privateCompatName} = ${helperFunction.name};`);
+    }
+  }
+
   for (const command of module.commands) {
     lines.push('');
     const optsType = command.optsParams.length === 0

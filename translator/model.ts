@@ -270,7 +270,14 @@ export interface StraightLineModule {
 
 export interface TyperCliModule {
   appName: string;
+  helperFunctions: TyperCliHelperFunction[];
   commands: TyperCliCommand[];
+}
+
+export interface TyperCliHelperFunction {
+  pythonName: string;
+  name: string;
+  privateCompatName: string | null;
 }
 
 export interface TyperCliCommand {

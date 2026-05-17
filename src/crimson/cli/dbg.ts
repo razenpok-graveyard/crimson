@@ -10,6 +10,12 @@ export const dbgApp = {
   },
 };
 
+export function asDict(..._args: any[]): any {
+  void _args;
+  throw new DesktopCliUnavailableError('dbg _as_dict');
+}
+export const _asDict = asDict;
+
 export function cmdDbgRecord(_opts: { replayFile?: string; out?: string; impl?: "python" | "zig"; chunkTicks?: number } = {}): void {
   void _opts;
   throw new DesktopCliUnavailableError('dbg record');
