@@ -955,6 +955,12 @@ export function translateExpression(
     return `pythonSplitlines(${translateExpression(stringSplitlinesCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
+  const stringWhitespaceSplitCall = /^(.+)\.split\(\)$/.exec(trimmed);
+  if (stringWhitespaceSplitCall !== null) {
+    const value = translateExpression(stringWhitespaceSplitCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return `(() => { const value = ${value}; const text = String(value).trim(); return text === '' ? [] : text.split(/\\s+/); })()`;
+  }
+
   const stringIsIdentifierCall = /^(.+)\.isidentifier\(\)$/.exec(trimmed);
   if (stringIsIdentifierCall !== null) {
     return `pythonIsIdentifier(${translateExpression(stringIsIdentifierCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
@@ -2130,9 +2136,12 @@ export function translateExpression(
 
   const topLevelOrParts = splitTopLevelLogicalOperator(trimmed, 'or');
   if (topLevelOrParts !== null) {
-    return topLevelOrParts
-      .map((part) => parenthesizeForLogicalOr(translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)))
-      .join(' || ');
+    const translatedParts = topLevelOrParts
+      .map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
+    if (translatedParts.length === 2 && translatedParts[0].startsWith('pythonSplitlines(')) {
+      return `(() => { const value = ${translatedParts[0]}; return value.length > 0 ? value : ${translatedParts[1]}; })()`;
+    }
+    return translatedParts.map(parenthesizeForLogicalOr).join(' || ');
   }
 
   const topLevelAndParts = splitTopLevelLogicalOperator(trimmed, 'and');

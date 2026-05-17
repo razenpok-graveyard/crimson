@@ -636,6 +636,11 @@ export function translateStraightLineStatement(
     return { statements: [], nextIndex: index + 1 };
   }
 
+  const localDeleteStatement = /^del [A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*$/.exec(statement);
+  if (localDeleteStatement !== null) {
+    return { statements: [], nextIndex: index + 1 };
+  }
+
   const assertStatement = /^assert (.+?)(?:, (.+))?$/.exec(statement);
   if (assertStatement !== null) {
     const condition = translateConditionExpression(assertStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
