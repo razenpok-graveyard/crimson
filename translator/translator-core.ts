@@ -172,6 +172,7 @@ function usesUnsupportedRuntimeIo(trimmedPython: string): boolean {
     /\bshutil\.(?:copy|copy2|copyfileobj|copytree|move|rmtree)\(/m,
     /^import tempfile$/m,
     /^import structlog$/m,
+    /^\s*import hashlib$/m,
     /^import urllib\.(?:error|request)$/m,
     /^from PIL import /m,
     /^import ast$/m,

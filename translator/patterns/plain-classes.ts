@@ -161,6 +161,23 @@ export function parsePlainClass(
   while (nextIndex < lines.length && lines[nextIndex].trim() === '') {
     nextIndex += 1;
   }
+  if ((lines[nextIndex] ?? '').startsWith('    ') && lines[nextIndex].trim() === 'pass') {
+    return {
+      plainClass: {
+        name: className,
+        ...(extendsName === undefined ? {} : { extendsName }),
+        docstring: docstring?.value ?? null,
+        fields: [],
+        constructorDefinition: {
+          parameters: [],
+          optsParams: [],
+          statements: [],
+        },
+        methods: [],
+      },
+      nextIndex: nextIndex + 1,
+    };
+  }
 
   const fieldMap = new Map<string, PlainClassDefinition['fields'][number]>();
   const fieldNameMap = new Map<string, string>();

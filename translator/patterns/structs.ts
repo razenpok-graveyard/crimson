@@ -826,7 +826,7 @@ function parseStructClassBases(
 }
 
 function isMsgspecClassOption(baseText: string): boolean {
-  return /^(?:tag|forbid_unknown_fields|frozen)=/.test(baseText.trim());
+  return /^(?:tag|forbid_unknown_fields|frozen|kw_only)=/.test(baseText.trim());
 }
 
 function splitInlineComment(line: string): { code: string; comment: string | null } {
