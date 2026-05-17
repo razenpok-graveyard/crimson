@@ -1,4 +1,4 @@
-import type { StraightLineModule, TypeAlias } from '../model.js';
+import type { StraightLineModule } from '../model.js';
 import { renderEnumDefinition } from './enums.js';
 import { renderProtocolDefinition } from './protocols.js';
 import {
@@ -6,6 +6,16 @@ import {
   renderSimpleModuleFunctions,
   renderStructClasses,
 } from './structs.js';
+import {
+  renderLeadingStatements,
+  renderStraightLineAssignments,
+} from './straight-line/assignments.js';
+import {
+  leadingAssignmentsReferenceClass,
+  leadingAssignmentsReferenceLeadingStatementClass,
+  partitionLeadingAssignmentsByEnumReference,
+} from './straight-line/ordering.js';
+import { renderTypeAliasValidator } from './straight-line/type-aliases.js';
 
 export function renderStraightLineModule(relativePath: string, module: StraightLineModule): string {
   const lines = [`// Port of ${relativePath}`, ''];
@@ -128,128 +138,4 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
     lines.push('');
   }
   return lines.join('\n');
-}
-
-function partitionLeadingAssignmentsByEnumReference(module: StraightLineModule): {
-  beforeEnums: StraightLineModule['leadingAssignments'];
-  afterEnums: StraightLineModule['leadingAssignments'];
-} {
-  if (module.enums.length === 0 || module.leadingAssignments.length === 0) {
-    return { beforeEnums: module.leadingAssignments, afterEnums: [] };
-  }
-
-  const enumPatterns = module.enums.map((enumDefinition) => identifierPattern(enumDefinition.name));
-  const afterEnumAssignmentNames = new Set<string>();
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const assignment of module.leadingAssignments) {
-      if (afterEnumAssignmentNames.has(assignment.name)) {
-        continue;
-      }
-      const referenceText = [
-        assignment.typeExpression ?? '',
-        ...assignment.valueLines,
-      ].join('\n');
-      const referencesEnum = enumPatterns.some((pattern) => pattern.test(referenceText));
-      const referencesAfterEnumAssignment = [...afterEnumAssignmentNames]
-        .some((name) => identifierPattern(name).test(referenceText));
-      if (referencesEnum || referencesAfterEnumAssignment) {
-        afterEnumAssignmentNames.add(assignment.name);
-        changed = true;
-      }
-    }
-  }
-
-  const beforeEnums: StraightLineModule['leadingAssignments'] = [];
-  const afterEnums: StraightLineModule['leadingAssignments'] = [];
-  for (const assignment of module.leadingAssignments) {
-    (afterEnumAssignmentNames.has(assignment.name) ? afterEnums : beforeEnums).push(assignment);
-  }
-  return { beforeEnums, afterEnums };
-}
-
-function leadingAssignmentsReferenceClass(module: StraightLineModule): boolean {
-  if (module.classes.length === 0 || module.leadingAssignments.length === 0) {
-    return false;
-  }
-  const assignmentText = module.leadingAssignments.flatMap((assignment) => assignment.valueLines).join('\n');
-  return module.classes.some((structClass) => identifierPattern(structClass.name).test(assignmentText));
-}
-
-function leadingAssignmentsReferenceLeadingStatementClass(module: StraightLineModule): boolean {
-  if (module.leadingStatements.length === 0 || module.leadingAssignments.length === 0) {
-    return false;
-  }
-  const classNames = new Set<string>();
-  for (const statement of module.leadingStatements) {
-    const classDeclaration = /^class ([A-Za-z_][A-Za-z0-9_]*)\b/.exec(statement);
-    if (classDeclaration !== null) {
-      classNames.add(classDeclaration[1]);
-    }
-  }
-  if (classNames.size === 0) {
-    return false;
-  }
-  const assignmentText = module.leadingAssignments.flatMap((assignment) => assignment.valueLines).join('\n');
-  return [...classNames].some((className) => identifierPattern(className).test(assignmentText));
-}
-
-function identifierPattern(identifier: string): RegExp {
-  return new RegExp(`\\b${identifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
-}
-
-function renderLeadingStatements(lines: string[], statements: string[]): void {
-  for (const statement of statements) {
-    lines.push(statement);
-  }
-}
-
-function renderTypeAliasValidator(lines: string[], alias: TypeAlias): void {
-  const checks: string[] = [];
-  if (alias.validation?.minLength !== undefined) {
-    checks.push(`value.length < ${alias.validation.minLength}`);
-  }
-  if (alias.validation?.maxLength !== undefined) {
-    checks.push(`value.length > ${alias.validation.maxLength}`);
-  }
-  if (alias.validation?.pattern !== undefined) {
-    checks.push(`!${alias.validation.pattern}.test(value)`);
-  }
-  if (alias.validation?.ge !== undefined) {
-    checks.push(`value < ${alias.validation.ge}`);
-  }
-  if (alias.validation?.le !== undefined) {
-    checks.push(`value > ${alias.validation.le}`);
-  }
-
-  lines.push(`function validate${alias.name}(value: ${alias.typeExpression}): ${alias.name} {`);
-  if (checks.length > 0) {
-    lines.push(`  if (${checks.join(' || ')}) {`);
-    lines.push(`    throw new Error('invalid ${alias.name}');`);
-    lines.push('  }');
-  }
-  lines.push('  return value;');
-  lines.push('}');
-}
-
-function renderStraightLineAssignments(lines: string[], assignments: StraightLineModule['assignments']): void {
-  for (const assignment of assignments) {
-    for (const comment of assignment.comments ?? []) {
-      lines.push(comment === '' ? '//' : `// ${comment}`);
-    }
-    const exportPrefix = assignment.exported ? 'export ' : '';
-    const typeSuffix = assignment.typeExpression === undefined ? '' : `: ${assignment.typeExpression}`;
-    if (assignment.valueLines.length === 1) {
-      const trailingComment = assignment.trailingComment === undefined ? '' : ` // ${assignment.trailingComment}`;
-      lines.push(`${exportPrefix}${assignment.declaration} ${assignment.name}${typeSuffix} = ${assignment.valueLines[0]};${trailingComment}`);
-      continue;
-    }
-
-    lines.push(`${exportPrefix}${assignment.declaration} ${assignment.name}${typeSuffix} = ${assignment.valueLines[0]}`);
-    for (const valueLine of assignment.valueLines.slice(1, -1)) {
-      lines.push(valueLine);
-    }
-    lines.push(`${assignment.valueLines.at(-1)};`);
-  }
 }
