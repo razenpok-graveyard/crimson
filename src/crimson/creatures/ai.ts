@@ -126,6 +126,7 @@ export function creatureAiUpdateTarget(creature: CreatureAIStateLike, opts: { pl
 
   let aiMode = creature.aiMode;
   let link: CreatureAIStateLike | null;
+  let distToTarget: number;
   if (aiMode === CreatureAiMode.ORBIT_PLAYER) {
     if (distToPlayer > 800.0) {
       creature.target = f32Vec2(playerPos);
@@ -149,7 +150,6 @@ export function creatureAiUpdateTarget(creature: CreatureAIStateLike, opts: { pl
     }
   } else if (aiMode === CreatureAiMode.FOLLOW_LINK_TETHERED) {
     link = resolveLiveLink(creatures, creature.linkIndex);
-    let distToTarget: number;
     if (link !== null) {
       creature.target = linkTargetF32({ linkPos: link.pos, offset: (creature.targetOffset || new Vec2()) });
       distToTarget = distanceF32(creature.pos, creature.target);
@@ -193,7 +193,7 @@ export function creatureAiUpdateTarget(creature: CreatureAIStateLike, opts: { pl
     }
   }
 
-  let distToTarget = distanceF32(creature.pos, creature.target);
+  distToTarget = distanceF32(creature.pos, creature.target);
   if (distToTarget < 40.0 || distToTarget > 400.0) {
     creature.forceTarget = 1;
   }

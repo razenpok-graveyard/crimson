@@ -258,10 +258,10 @@ export class UnlockedPerksDatabaseView extends DatabaseBaseView {
       const inTrack = trackX <= mouse.x && mouse.x < trackX + 10.0 * scale && trackY <= mouse.y && mouse.y < trackY + trackH;
       const inThumb = thumbX <= mouse.x && mouse.x < thumbX + thumbW && thumbTop <= mouse.y && mouse.y < thumbTop + thumbH + 1.0 * scale;
 
+      let travel: number;
+      let target: number;
       if (click && inTrack) {
         this._navFocusIndex = 1;
-        let travel: number;
-        let target: number;
         if (inThumb) {
           this._scrollDragActive = true;
           this._scrollDragOffset = (mouse.y - thumbTop);
@@ -276,8 +276,6 @@ export class UnlockedPerksDatabaseView extends DatabaseBaseView {
       }
 
       if (this._scrollDragActive) {
-        let travel: number;
-        let target: number;
         if (down) {
           travel = Math.max(1.0, trackH - 3.0 * scale - thumbH);
           target = (mouse.y - trackY - 1.0 * scale - this._scrollDragOffset);

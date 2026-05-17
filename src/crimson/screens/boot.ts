@@ -213,8 +213,8 @@ export class BootView {
   }
 
   protected _logoState(t: number): [TextureId, number] | null {
+    let alpha: number;
     if (LOGO_10_IN_START <= t && t < LOGO_10_OUT_END) {
-      let alpha: number;
       if (t < LOGO_10_IN_END) {
         alpha = t - LOGO_10_IN_START;
       } else if (t < LOGO_10_HOLD_END) {
@@ -225,7 +225,6 @@ export class BootView {
       return [TextureId.SPLASH_10TONS, BootView._clamp01(alpha)];
     }
     if (LOGO_REF_IN_START <= t && t < LOGO_REF_OUT_END) {
-      let alpha: number;
       if (t < LOGO_REF_IN_END) {
         alpha = t - LOGO_REF_IN_START;
       } else if (t < LOGO_REF_HOLD_END) {

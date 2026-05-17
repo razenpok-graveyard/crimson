@@ -197,6 +197,7 @@ export class LocalInputInterpreter {
 
     let axisY: any;
     let axisX: any;
+    let delta: Vec2;
     if (computerMoveActive) {
       if (creatures !== null && creatures.length > 0) {
         computerTargetIndex = this._selectComputerTarget({ playerIndex: idx, player: player, creatures: creatures });
@@ -229,7 +230,6 @@ export class LocalInputInterpreter {
       if (moveToCursorPressed) {
         state.moveTarget = mouseWorld;
       }
-      let delta: Vec2;
       if (state.moveTarget.x >= 0.0 && state.moveTarget.y >= 0.0) {
         delta = state.moveTarget.sub(player.pos);
         const [dir, dist] = delta.normalizedWithLength();
@@ -257,7 +257,6 @@ export class LocalInputInterpreter {
     }
     let aim = new Vec2(player.aim.x, player.aim.y);
     let computerAutoFire = false;
-    let delta: Vec2;
     let targetIndex: typeof computerTargetIndex;
     if (aimScheme === AimScheme.MOUSE) {
       aim = mouseWorld;

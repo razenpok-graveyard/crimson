@@ -101,17 +101,21 @@ export function drawPlayerTrooperSprite(renderCtx: WorldRenderCtx, texture: rl.T
   );
 
   let atlas: any;
+  let atlasFrame: number;
+  let col: number;
+  let row: number;
+  let cellW: number;
+  let cellH: number;
+  let src: wgl.Rectangle;
+  let t: number;
+  let size: number;
+  let dst: wgl.Rectangle;
+  let origin: wgl.Vector2;
+  let tint: wgl.Color;
   if (perkActive(player, PerkId.RADIOACTIVE) && alpha > 1e-3) {
     atlas = EFFECT_ID_ATLAS_TABLE_BY_ID.get(int(EffectId.AURA)) ?? null;
     if (atlas !== null) {
       const auraGrid = SIZE_CODE_GRID.get(int(atlas.sizeCode)) ?? null;
-      let atlasFrame: number;
-      let col: number;
-      let row: number;
-      let cellW: number;
-      let cellH: number;
-      let src: wgl.Rectangle;
-      let t: number;
       if (auraGrid) {
         atlasFrame = int(atlas.frame);
         col = atlasFrame % auraGrid;
@@ -121,10 +125,6 @@ export function drawPlayerTrooperSprite(renderCtx: WorldRenderCtx, texture: rl.T
         src = wgl.makeRectangle(cellW * col, cellH * row, Math.max(0.0, cellW - 2.0), Math.max(0.0, cellH - 2.0));
         t = renderFrame.elapsedMs * 0.001;
         const auraAlpha = ((Math.sin(t) + 1.0) * 0.1875 + 0.25) * alpha;
-        let size: number;
-        let dst: wgl.Rectangle;
-        let origin: wgl.Vector2;
-        let tint: wgl.Color;
         if (auraAlpha > 1e-3) {
           size = 100.0 * scale;
           dst = wgl.makeRectangle(screenPos.x, screenPos.y, size, size);
@@ -138,7 +138,7 @@ export function drawPlayerTrooperSprite(renderCtx: WorldRenderCtx, texture: rl.T
     }
   }
 
-  let tint = wgl.makeColor(240 / 255, 240 / 255, 255 / 255, int(255 * alpha + 0.5) / 255);
+  tint = wgl.makeColor(240 / 255, 240 / 255, 255 / 255, int(255 * alpha + 0.5) / 255);
   const shadowTint = wgl.makeColor(0 / 255, 0 / 255, 0 / 255, int(90 * alpha + 0.5) / 255);
   let overlayTint = tint;
   if (renderFrame.players.length > 1) {
@@ -196,13 +196,6 @@ export function drawPlayerTrooperSprite(renderCtx: WorldRenderCtx, texture: rl.T
       atlas = EFFECT_ID_ATLAS_TABLE_BY_ID.get(int(EffectId.SHIELD_RING)) ?? null;
       if (atlas !== null) {
         const shieldGrid = SIZE_CODE_GRID.get(int(atlas.sizeCode)) ?? null;
-        let atlasFrame: number;
-        let col: number;
-        let row: number;
-        let cellW: number;
-        let cellH: number;
-        let src: wgl.Rectangle;
-        let t: number;
         let strength: number;
         if (shieldGrid) {
           atlasFrame = int(atlas.frame);
@@ -219,9 +212,6 @@ export function drawPlayerTrooperSprite(renderCtx: WorldRenderCtx, texture: rl.T
           }
           strength = Math.min(1.0, strength) * alpha;
           let half: number;
-          let size: number;
-          let dst: wgl.Rectangle;
-          let origin: wgl.Vector2;
           if (strength > 1e-3) {
             const offsetDir = player.aimHeading - Math.PI / 2.0;
             const center = screenPos.add(Vec2.fromPolar(offsetDir, 3.0 * scale));
@@ -256,10 +246,6 @@ export function drawPlayerTrooperSprite(renderCtx: WorldRenderCtx, texture: rl.T
       const flags = weapon.flags !== null ? int(weapon.flags) : 0;
       if ((flags & 0x8) === 0) {
         const flashAlpha = clamp(player.muzzleFlashAlpha * 0.8, 0.0, 1.0) * alpha;
-        let size: number;
-        let src: wgl.Rectangle;
-        let dst: wgl.Rectangle;
-        let origin: wgl.Vector2;
         if (flashAlpha > 1e-3) {
           size = baseSize * ((flags & 0x4) ? 0.5 : 1.0);
           const heading = player.aimHeading + Math.PI / 2.0;

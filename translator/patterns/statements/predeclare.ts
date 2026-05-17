@@ -28,7 +28,16 @@ export function predeclareIfBranchAssignments(
   bodyStartIndex = index + 1,
 ): string[] {
   const innerIndent = `${indent}    `;
-  const assignedTypes = new Map<string, Set<string>>();
+  const assignedTypes = new Map<string, { directTypes: Set<string>; nestedTypes: Set<string> }>();
+  const recordAssignedType = (name: string, type: string, nested: boolean): void => {
+    const entry = assignedTypes.get(name) ?? { directTypes: new Set<string>(), nestedTypes: new Set<string>() };
+    if (nested) {
+      entry.nestedTypes.add(type);
+    } else {
+      entry.directTypes.add(type);
+    }
+    assignedTypes.set(name, entry);
+  };
   let nextIndex = bodyStartIndex;
   while (nextIndex < lines.length) {
     const line = lines[nextIndex] ?? '';
@@ -38,12 +47,19 @@ export function predeclareIfBranchAssignments(
       continue;
     }
     if (line.startsWith(innerIndent)) {
-      const rest = line.slice(innerIndent.length);
+      const lineIndent = /^(\s*)/.exec(line)?.[1] ?? innerIndent;
+      const rest = line.slice(lineIndent.length);
+      if (/^(?:class|def) [A-Za-z_][A-Za-z0-9_]*/.test(rest)) {
+        nextIndex = indentedBlockEndIndex(lines, nextIndex + 1, `${lineIndent}    `);
+        continue;
+      }
       const assignment = rest.startsWith(' ') ? null : /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(rest);
       if (assignment !== null && reassignedNames.has(assignment[1]) && !declaredNames.has(assignment[1])) {
-        const types = assignedTypes.get(assignment[1]) ?? new Set<string>();
-        types.add(inferPredeclaredAssignmentType(lines, nextIndex, innerIndent, assignment[2], nameMap, arrayNames, declaredNames));
-        assignedTypes.set(assignment[1], types);
+        recordAssignedType(
+          assignment[1],
+          inferPredeclaredAssignmentType(lines, nextIndex, lineIndent, assignment[2], nameMap, arrayNames, declaredNames),
+          lineIndent !== innerIndent,
+        );
       }
       const tupleAssignment = rest.startsWith(' ') ? null : /^([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+) = (.+)$/.exec(rest);
       if (tupleAssignment !== null) {
@@ -51,9 +67,7 @@ export function predeclareIfBranchAssignments(
           if (name === '_' || !reassignedNames.has(name) || declaredNames.has(name)) {
             continue;
           }
-          const types = assignedTypes.get(name) ?? new Set<string>();
-          types.add(inferTupleElementAssignmentType(tupleAssignment[2], nameIndex, nameMap, arrayNames));
-          assignedTypes.set(name, types);
+          recordAssignedType(name, inferTupleElementAssignmentType(tupleAssignment[2], nameIndex, nameMap, arrayNames), lineIndent !== innerIndent);
         }
       }
       nextIndex += 1;
@@ -69,8 +83,18 @@ export function predeclareIfBranchAssignments(
   const blockEndIndex = nextIndex;
   const bodyStartedAfterConditionContinuation = bodyStartIndex !== index + 1;
   const declarations: string[] = [];
-  for (const [name, types] of assignedTypes) {
-    if (bodyStartedAfterConditionContinuation && !nameReferencedAfterBlock(lines, blockEndIndex, indent, name)) {
+  for (const [name, { directTypes, nestedTypes }] of assignedTypes) {
+    const referencedAfterBlock = nameReferencedAfterBlock(lines, blockEndIndex, indent, name);
+    if (bodyStartedAfterConditionContinuation && !referencedAfterBlock) {
+      continue;
+    }
+    const types = new Set(directTypes);
+    if (referencedAfterBlock) {
+      for (const type of nestedTypes) {
+        types.add(type);
+      }
+    }
+    if (types.size === 0) {
       continue;
     }
     const concreteTypes = [...types].filter((type) => type !== 'any');
@@ -90,6 +114,10 @@ function inferTupleElementAssignmentType(
   arrayNames: ReadonlySet<string> = new Set(),
 ): string {
   const trimmed = assignedExpression.trim();
+  const parts = splitTopLevelComma(trimmed);
+  if (parts.length > 1 && parts.length > elementIndex) {
+    return inferPredeclaredAssignmentType([], 0, '', parts[elementIndex], nameMap, arrayNames);
+  }
   if (/\.normalized_with_length\(\)$/.test(trimmed) || /\.normalizedWithLength\(\)$/.test(trimmed)) {
     return elementIndex === 0 ? 'Vec2' : 'number';
   }

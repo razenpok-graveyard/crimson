@@ -534,6 +534,8 @@ export class ProjectilePool {
         continue;
       }
 
+      let creatureRadius: ReturnType<typeof hitRadiusFor>;
+      let hitR: any;
       if (proj.lifeTimer < 0.4) {
         let damage: number;
         let radius: number;
@@ -544,8 +546,8 @@ export class ProjectilePool {
             if (creature.hp <= 0.0) {
               continue;
             }
-            let creatureRadius = hitRadiusFor(creature);
-            let hitR = radius + creatureRadius;
+            creatureRadius = hitRadiusFor(creature);
+            hitR = radius + creatureRadius;
             if (Vec2.distanceSq(proj.pos, creature.pos) <= hitR * hitR) {
               creature.hp -= damage;
             }
@@ -557,8 +559,8 @@ export class ProjectilePool {
             if (creature.hp <= 0.0) {
               continue;
             }
-            let creatureRadius = hitRadiusFor(creature);
-            let hitR = radius + creatureRadius;
+            creatureRadius = hitRadiusFor(creature);
+            hitR = radius + creatureRadius;
             if (Vec2.distanceSq(proj.pos, creature.pos) <= hitR * hitR) {
               creature.hp -= damage;
             }
@@ -582,8 +584,8 @@ export class ProjectilePool {
         if (creature.hp <= 0.0) {
           continue;
         }
-        let creatureRadius = hitRadiusFor(creature);
-        let hitR = proj.hitRadius + creatureRadius;
+        creatureRadius = hitRadiusFor(creature);
+        hitR = proj.hitRadius + creatureRadius;
         if (Vec2.distanceSq(proj.pos, creature.pos) <= hitR * hitR) {
           hitIdx = idx;
           break;

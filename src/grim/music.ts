@@ -413,10 +413,11 @@ export function updateMusic(state: MusicState, dt: number): void {
   }
 
   const targetVolume = state.volume;
+  let pb: any;
   if (targetVolume <= 0.0) {
     // Original behavior: global music volume at 0 stops playback immediately.
     for (const trackKey of Array.from(state.playbacks.keys())) {
-      let pb = state.playbacks.get(trackKey) ?? null;
+      pb = state.playbacks.get(trackKey) ?? null;
       state.playbacks.delete(trackKey);
       if (pb === null) {
         continue;
@@ -428,7 +429,7 @@ export function updateMusic(state: MusicState, dt: number): void {
   }
 
   for (const trackKey of Array.from(state.playbacks.keys())) {
-    let pb = state.playbacks.get(trackKey) ?? null;
+    pb = state.playbacks.get(trackKey) ?? null;
     if (pb === null) {
       continue;
     }

@@ -273,12 +273,12 @@ function drawCreatureOverlays(renderCtx: WorldRenderCtx, creature: CreatureState
   const lifecycleStage = opts.lifecycleStage;
   const ctx = opts.ctx;
   const fade = monsterVisionFadeAlpha(lifecycleStage);
+  let size: number;
+  let dst: wgl.Rectangle;
+  let origin: wgl.Vector2;
+  let tint: wgl.Color;
   if (ctx.monsterVision && ctx.particlesTexture !== null && ctx.monsterVisionSrc !== null) {
     const mvAlpha = fade * ctx.entityAlpha;
-    let size: number;
-    let dst: wgl.Rectangle;
-    let origin: wgl.Vector2;
-    let tint: wgl.Color;
     if (mvAlpha > 1e-3) {
       size = 90.0 * ctx.scale;
       dst = wgl.makeRectangle(screen.x, screen.y, size, size);
@@ -291,10 +291,6 @@ function drawCreatureOverlays(renderCtx: WorldRenderCtx, creature: CreatureState
   if (ctx.particlesTexture !== null && ctx.poisonSrc !== null && creature.plagueInfected) {
     // creature_render_all: collision_flag overlay (black 80x80 aura), drawn before red poison flag.
     const plagueAlpha = fade * ctx.entityAlpha;
-    let size: number;
-    let dst: wgl.Rectangle;
-    let origin: wgl.Vector2;
-    let tint: wgl.Color;
     if (plagueAlpha > 1e-3) {
       size = 80.0 * ctx.scale;
       dst = wgl.makeRectangle(screen.x, screen.y, size, size);
@@ -306,10 +302,6 @@ function drawCreatureOverlays(renderCtx: WorldRenderCtx, creature: CreatureState
 
   if (ctx.particlesTexture !== null && ctx.poisonSrc !== null && (creature.flags & CreatureFlags.SELF_DAMAGE_TICK)) {
     const poisonAlpha = fade * ctx.entityAlpha;
-    let size: number;
-    let dst: wgl.Rectangle;
-    let origin: wgl.Vector2;
-    let tint: wgl.Color;
     if (poisonAlpha > 1e-3) {
       size = 60.0 * ctx.scale;
       dst = wgl.makeRectangle(screen.x, screen.y, size, size);

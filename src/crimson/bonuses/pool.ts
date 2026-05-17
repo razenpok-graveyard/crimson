@@ -220,10 +220,10 @@ export class BonusPool {
 
     const rng = state.rng;
     // Native special-case: while any player has Pistol, 3/4 chance to force a Weapon drop.
+    let entry: any;
+    let weaponId: ReturnType<typeof weaponPickRandomAvailable>;
+    let matches: any;
     if (players.length > 0 && players.some((player) => player.weapon.weaponId === WeaponId.PISTOL)) {
-      let entry: any;
-      let weaponId: ReturnType<typeof weaponPickRandomAvailable>;
-      let matches: any;
       if ((rng.rand({ caller: RngCallerStatic.BONUS_TRY_SPAWN_ON_KILL_PISTOL_FORCE_WEAPON }) & 3) < 3) {
         entry = this.spawnAtPos(pos, { state: state, players: players, worldWidth: worldWidth, worldHeight: worldHeight });
 
@@ -290,7 +290,7 @@ export class BonusPool {
       }
     }
 
-    let entry = this.spawnAtPos(pos, { state: state, players: players, worldWidth: worldWidth, worldHeight: worldHeight });
+    entry = this.spawnAtPos(pos, { state: state, players: players, worldWidth: worldWidth, worldHeight: worldHeight });
 
     let nearPlayer: boolean;
     if (entry.bonusId === BonusId.WEAPON) {
@@ -310,7 +310,6 @@ export class BonusPool {
       }
     }
 
-    let matches: any;
     if (entry.bonusId !== BonusId.POINTS) {
       matches = this._entries.filter((bonus) => bonus.bonusId === entry.bonusId).reduce((total, bonus) => total + 1, 0);
       if (matches > 1) {
@@ -320,7 +319,6 @@ export class BonusPool {
     }
 
     if (players.length > 0) {
-      let weaponId: any;
       if (Boolean(state.preserveBugs)) {
         weaponId = players[0].weapon.weaponId;
         const suppressionWeaponId = weaponIdFromNativeAmount(entry.amount);

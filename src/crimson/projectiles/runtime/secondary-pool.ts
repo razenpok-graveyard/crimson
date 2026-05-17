@@ -222,6 +222,7 @@ export class SecondaryProjectilePool {
 
       let radius: number;
       let damage: number;
+      let creature: any;
       if (rule instanceof DetonationRule) {
         if (runtimeState !== null) {
           runtimeState.cameraShakePulses = 4;
@@ -248,7 +249,7 @@ export class SecondaryProjectilePool {
         const radiusSq = radius * radius;
         damage = dt * scale * 700.0;
         for (const creatureIdx of creatureSpatial.candidateIndices({ pos: entry.pos, radius: radius })) {
-          let creature = creatures[int(creatureIdx)];
+          creature = creatures[int(creatureIdx)];
           if (!_creatureIsCollidable(creature)) {
             continue;
           }
@@ -357,7 +358,7 @@ export class SecondaryProjectilePool {
       // projectile_update uses creature_find_in_radius(..., 8.0, ...)
       let hitIdx: number | null = null;
       for (const idx of creatureSpatial.candidateIndices({ pos: entry.pos, radius: 8.0 })) {
-        let creature = creatures[int(idx)];
+        creature = creatures[int(idx)];
         if (!_creatureIsCollidable(creature)) {
           continue;
         }
@@ -438,10 +439,11 @@ export class SecondaryProjectilePool {
           extraRadius = ruleExtraRadius;
           freezeShardTargetPos = Boolean(ruleFreezeShardTargetPos);
         }
+        let shardAngle: number;
         if (freezeActive) {
           if (effects !== null) {
             for (let i = 0; i < 4; i++) {
-              let shardAngle = rng.rand({ caller: RngCallerStatic.SECONDARY_PROJECTILE_UPDATE_PRE_HIT_FREEZE_SHARD_ANGLE }) % 612 * 0.01;
+              shardAngle = rng.rand({ caller: RngCallerStatic.SECONDARY_PROJECTILE_UPDATE_PRE_HIT_FREEZE_SHARD_ANGLE }) % 612 * 0.01;
               effects.spawnFreezeShard({
                 pos: entry.pos,
                 angle: shardAngle,
@@ -501,7 +503,7 @@ export class SecondaryProjectilePool {
               shardPos = creatures[hitIdx].pos;
             }
             for (let i = 0; i < 8; i++) {
-              let shardAngle = rng.rand({ caller: freezeAngleCaller }) % 612 * 0.01;
+              shardAngle = rng.rand({ caller: freezeAngleCaller }) % 612 * 0.01;
               effects.spawnFreezeShard({
                 pos: shardPos,
                 angle: shardAngle,

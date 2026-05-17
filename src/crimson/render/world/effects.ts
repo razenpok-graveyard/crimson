@@ -58,6 +58,11 @@ export function drawParticlePool(renderCtx: WorldRenderCtx, opts: { camera: Vec2
 
   let alphaByte: number;
   let tint: wgl.Color;
+  let radius: number;
+  let size: number;
+  let screen: any;
+  let dst: wgl.Rectangle;
+  let origin: wgl.Vector2;
   if (fxDetail1 && srcLarge !== null) {
     alphaByte = int(clamp(alpha * 0.065, 0.0, 1.0) * 255.0 + 0.5);
     tint = wgl.makeColor(255 / 255, 255 / 255, 255 / 255, alphaByte / 255);
@@ -65,15 +70,15 @@ export function drawParticlePool(renderCtx: WorldRenderCtx, opts: { camera: Vec2
       if (!entry.active || (idx % 2) || int(entry.styleId) === int(ParticleStyleId.BUBBLEGUN)) {
         continue;
       }
-      let radius = (Math.sin((1.0 - entry.intensity) * 1.5707964) + 0.1) * 55.0 + 4.0;
+      radius = (Math.sin((1.0 - entry.intensity) * 1.5707964) + 0.1) * 55.0 + 4.0;
       radius = Math.max(radius, 16.0);
-      let size = Math.max(0.0, radius * 2.0 * scale);
+      size = Math.max(0.0, radius * 2.0 * scale);
       if (size <= 0.0) {
         continue;
       }
-      let screen = WorldRenderCtx._worldToScreenWith(entry.pos, { camera: camera, viewScale: viewScale });
-      let dst = wgl.makeRectangle(screen.x, screen.y, size, size);
-      let origin = wgl.makeVector2(size * 0.5, size * 0.5);
+      screen = WorldRenderCtx._worldToScreenWith(entry.pos, { camera: camera, viewScale: viewScale });
+      dst = wgl.makeRectangle(screen.x, screen.y, size, size);
+      origin = wgl.makeVector2(size * 0.5, size * 0.5);
       wgl.drawTexturePro(texture, srcLarge, dst, origin, 0.0, tint);
     }
   }
@@ -82,18 +87,18 @@ export function drawParticlePool(renderCtx: WorldRenderCtx, opts: { camera: Vec2
     if (!entry.active || int(entry.styleId) === int(ParticleStyleId.BUBBLEGUN)) {
       continue;
     }
-    let radius = Math.sin((1.0 - entry.intensity) * 1.5707964) * 24.0;
+    radius = Math.sin((1.0 - entry.intensity) * 1.5707964) * 24.0;
     if (int(entry.styleId) === int(ParticleStyleId.BLOW_TORCH)) {
       radius *= 0.8;
     }
     radius = Math.max(radius, 2.0);
-    let size = Math.max(0.0, radius * 2.0 * scale);
+    size = Math.max(0.0, radius * 2.0 * scale);
     if (size <= 0.0) {
       continue;
     }
-    let screen = WorldRenderCtx._worldToScreenWith(entry.pos, { camera: camera, viewScale: viewScale });
-    let dst = wgl.makeRectangle(screen.x, screen.y, size, size);
-    let origin = wgl.makeVector2(size * 0.5, size * 0.5);
+    screen = WorldRenderCtx._worldToScreenWith(entry.pos, { camera: camera, viewScale: viewScale });
+    dst = wgl.makeRectangle(screen.x, screen.y, size, size);
+    origin = wgl.makeVector2(size * 0.5, size * 0.5);
     const rotationDeg = entry.spin * RAD_TO_DEG;
     tint = new RGBA(entry.scaleX, entry.scaleY, entry.scaleZ, entry.age * alpha).toRl();
     wgl.drawTexturePro(texture, srcNormal, dst, origin, rotationDeg, tint);
@@ -112,9 +117,9 @@ export function drawParticlePool(renderCtx: WorldRenderCtx, opts: { camera: Vec2
     if (w <= 0.0 || h <= 0.0) {
       continue;
     }
-    let screen = WorldRenderCtx._worldToScreenWith(entry.pos, { camera: camera, viewScale: viewScale });
-    let dst = wgl.makeRectangle(screen.x, screen.y, w, h);
-    let origin = wgl.makeVector2(w * 0.5, h * 0.5);
+    screen = WorldRenderCtx._worldToScreenWith(entry.pos, { camera: camera, viewScale: viewScale });
+    dst = wgl.makeRectangle(screen.x, screen.y, w, h);
+    origin = wgl.makeVector2(w * 0.5, h * 0.5);
     tint = wgl.makeColor(255 / 255, 255 / 255, 255 / 255, int(entry.age * alphaByte + 0.5) / 255);
     wgl.drawTexturePro(texture, srcStyle8, dst, origin, 0.0, tint);
   }

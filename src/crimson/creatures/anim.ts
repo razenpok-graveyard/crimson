@@ -140,8 +140,8 @@ export function creatureAnimSelectFrame(phase: number, opts: { baseFrame: number
   const flags = opts.flags ?? 0;
   const flagsBits = int(flags);
   const isLongStrip = (flagsBits & _FLAG_ANIM_PING_PONG) === 0 || (flagsBits & _FLAG_ANIM_LONG_STRIP) !== 0;
+  let frame: number;
   if (isLongStrip) {
-    let frame: number;
     let mirrored: boolean;
     if (phase < 0.0) {
       // Negative anim_phase is used as a special render state in the game; keep the
@@ -173,7 +173,7 @@ export function creatureAnimSelectFrame(phase: number, opts: { baseFrame: number
   if (idx > 7) {
     idx = 0x0F - idx;
   }
-  let frame = baseFrame + 0x10 + idx;
+  frame = baseFrame + 0x10 + idx;
   return [frame, false, 'ping-pong'];
 }
 
