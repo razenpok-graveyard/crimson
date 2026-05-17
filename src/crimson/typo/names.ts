@@ -239,7 +239,7 @@ function pickUniqueWords(rng: CrandLike, words: readonly string[], count: number
   const used: Set<number> = new Set();
   while (picked.length < count) {
     const idx = draw(rng) % words.length;
-    if (used.has(idx)) {
+    if ((used as ReadonlySet<unknown>).has(idx)) {
       continue;
     }
     used.add(idx);
@@ -290,7 +290,7 @@ export function loadTypoDictionary(path: string): string[] {
     if (Array.from(text).length >= NAME_MAX_CHARS) {
       continue;
     }
-    if (seen.has(text)) {
+    if ((seen as ReadonlySet<unknown>).has(text)) {
       continue;
     }
     words.push(text);
@@ -314,7 +314,7 @@ export function loadTypoHighscoreNames(path: string): string[] {
     if (!name) {
       continue;
     }
-    if (seen.has(name)) {
+    if ((seen as ReadonlySet<unknown>).has(name)) {
       continue;
     }
     if (!Array.from(name).every((ch) => /^\p{L}+$/u.test(ch) || ch === '.')) {

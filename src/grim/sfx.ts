@@ -337,7 +337,7 @@ export function setSfxVolume(state: SfxState | null, volume: number): void {
   const seen: Set<number> = new Set();
   for (const sample of state.samples.values()) {
     const sampleId = pythonId(sample);
-    if (seen.has(sampleId)) {
+    if ((seen as ReadonlySet<unknown>).has(sampleId)) {
       continue;
     }
     seen.add(sampleId);
@@ -354,7 +354,7 @@ export function shutdownSfx(state: SfxState): void {
   const seen: Set<number> = new Set();
   for (const sample of state.samples.values()) {
     const sampleId = pythonId(sample);
-    if (seen.has(sampleId)) {
+    if ((seen as ReadonlySet<unknown>).has(sampleId)) {
       continue;
     }
     seen.add(sampleId);

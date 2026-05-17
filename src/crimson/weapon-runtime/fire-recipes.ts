@@ -177,7 +177,7 @@ export function resolveFireRecipe(weaponId: WeaponId, opts: { pelletCount: numbe
   }
 
   let speedScale: SpeedScaleRule = new NoSpeedScale();
-  if (pellets > 1 && SHOTGUN_SPEED_RANDOMIZE_WEAPONS.has(weaponId)) {
+  if (pellets > 1 && (SHOTGUN_SPEED_RANDOMIZE_WEAPONS as ReadonlySet<unknown>).has(weaponId)) {
     speedScale = _DEFAULT_SPEED_SCALE;
   }
 

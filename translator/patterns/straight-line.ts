@@ -193,6 +193,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       || isTypingOnlyImport(trimmed)
       || isEnumOnlyImport(trimmed)
       || isDataclassOnlyImport(trimmed)
+      || trimmed === 'from collections import Counter'
       || trimmed === 'from collections import OrderedDict'
       || trimmed === 'from collections import defaultdict'
       || trimmed === 'from collections import deque'
@@ -705,6 +706,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
 
     const statements: string[] = [];
     const nameMap = new Map(moduleNameMap);
+    nameMap.set(functionReturnTypeMarker('__current__'), tsFunctionReturnTypeExpression(header.returnType));
     recordParameterReceiverTypes(nameMap, arrayNames, [...parameters, ...optsParams]);
     const declaredNames = new Set<string>(pythonParameterNames(header.parametersText));
     const docstring = parseIndentedDocstring(lines, index);

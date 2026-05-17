@@ -180,7 +180,7 @@ function headPointsAtReleaseTag(opts: { version: string; repoRoot: string; gitEx
 
   const tagsOut = new Uint8Array();
   const tags = new Set(Array.from(pythonSplitlines(new TextDecoder('utf-8').decode(tagsOut))).filter((line) => line.trim()).map((line) => line.trim()));
-  return tags.has(version) || tags.has(`v${version}`);
+  return (tags as ReadonlySet<unknown>).has(version) || (tags as ReadonlySet<unknown>).has(`v${version}`);
 }
 
 export function currentReplayGameVersion(): string {

@@ -185,12 +185,12 @@ export function perkGenerateChoices(state: GameplayState, player: PlayerState, o
         continue;
       }
 
-      if (deathClockActive && DEATH_CLOCK_BLOCKED.has(perkId)) {
+      if (deathClockActive && (DEATH_CLOCK_BLOCKED as ReadonlySet<unknown>).has(perkId)) {
         continue;
       }
 
       // Global rarity gate: certain perks have a 25% chance to be rejected.
-      if (PERK_RARITY_GATE.has(perkId) && (state.rng.rand({ caller: RngCallerStatic.PERKS_GENERATE_CHOICES_RARITY_GATE }) & 3) === 1) {
+      if ((PERK_RARITY_GATE as ReadonlySet<unknown>).has(perkId) && (state.rng.rand({ caller: RngCallerStatic.PERKS_GENERATE_CHOICES_RARITY_GATE }) & 3) === 1) {
         continue;
       }
 

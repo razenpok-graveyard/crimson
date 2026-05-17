@@ -107,8 +107,8 @@ export function diffTraces(opts: { expectedTracePath: string; actualTracePath: s
     actualChannels = new Set(Array.from(actualTrace.meta.channels).map((channel) => String(channel)));
     for (const requiredChannel of TRACE_REQUIRED_CHANNELS) {
       channelName = String(requiredChannel);
-      if (!expectedChannels.has(channelName) || !actualChannels.has(channelName)) {
-        return new TraceDiffReport({ ok: false, checkedCount: 0, tickStart: tickStart, tickEnd: tickEnd, mismatch: new TraceMismatch({ kind: 'missing_channel', tickIndex: -1, detail: { "channel": channelName, "expected_has": expectedChannels.has(channelName), "actual_has": actualChannels.has(channelName) } }) });
+      if (!(expectedChannels as ReadonlySet<unknown>).has(channelName) || !(actualChannels as ReadonlySet<unknown>).has(channelName)) {
+        return new TraceDiffReport({ ok: false, checkedCount: 0, tickStart: tickStart, tickEnd: tickEnd, mismatch: new TraceMismatch({ kind: 'missing_channel', tickIndex: -1, detail: { "channel": channelName, "expected_has": (expectedChannels as ReadonlySet<unknown>).has(channelName), "actual_has": (actualChannels as ReadonlySet<unknown>).has(channelName) } }) });
       }
     }
     pairs = loadPairs({ expectedTrace: expectedTrace, actualTrace: actualTrace, tickStart: tickStart, tickEnd: tickEnd });

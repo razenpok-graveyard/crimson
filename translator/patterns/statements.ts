@@ -400,6 +400,9 @@ function parseNestedFunctionStatement(
   }
   const statements: string[] = [];
   const declaredNames = parsedParams.declaredNames;
+  for (const name of nonlocalNames(lines, header.nextIndex, `${indent}    `)) {
+    declaredNames.add(name);
+  }
   const reassignedNames = reassignedLocalNames(lines, header.nextIndex);
   addReassignedLocalTypeAnnotations(lines, header.nextIndex, reassignedNames, nestedNameMap, arrayNames, validatedTypeAliases, mapNames);
   const innerIndent = `${indent}    `;
@@ -441,6 +444,22 @@ function parseNestedFunctionStatement(
     ],
     nextIndex,
   };
+}
+
+function nonlocalNames(lines: string[], startIndex: number, indent: string): Set<string> {
+  const names = new Set<string>();
+  let index = startIndex;
+  while (index < lines.length && isIndentedBlockLine(lines, index, indent)) {
+    const statement = lines[index].slice(indent.length).trim();
+    const nonlocalStatement = /^nonlocal ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(statement);
+    if (nonlocalStatement !== null) {
+      for (const name of nonlocalStatement[1].split(', ')) {
+        names.add(name);
+      }
+    }
+    index += 1;
+  }
+  return names;
 }
 
 function parseNestedFunctionParameters(
@@ -608,6 +627,11 @@ export function translateStraightLineStatement(
     for (const name of globalStatement[1].split(', ')) {
       nameMap.set(name, tsMutableNameForPythonName(name));
     }
+    return { statements: [], nextIndex: index + 1 };
+  }
+
+  const nonlocalStatement = /^nonlocal ([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)*)$/.exec(statement);
+  if (nonlocalStatement !== null) {
     return { statements: [], nextIndex: index + 1 };
   }
 
@@ -1785,6 +1809,38 @@ export function translateStraightLineStatement(
     return { statements: ['throw exc;'], nextIndex: index + 1 };
   }
 
+  const annotatedMultilineDictAssignment = /^([A-Za-z_][A-Za-z0-9_]*): (.+?) = \{$/.exec(statement);
+  if (annotatedMultilineDictAssignment !== null) {
+    const tsName = tsExportNameForPythonName(annotatedMultilineDictAssignment[1]);
+    const typeExpression = tsTypeExpression(annotatedMultilineDictAssignment[2]);
+    const dictLiteral = collectMultilineDictLiteral(
+      lines,
+      index + 1,
+      nameMap,
+      arrayNames,
+      validatedTypeAliases,
+      mapNames,
+    );
+    if (dictLiteral === null) {
+      return null;
+    }
+    declaredNames.add(annotatedMultilineDictAssignment[1]);
+    if (typeExpression === 'BuiltinObject' || typeExpression.startsWith('Record<')) {
+      arrayNames.add(objectNameMarker(annotatedMultilineDictAssignment[1]));
+      arrayNames.add(objectNameMarker(tsName));
+    }
+    if (typeExpression.startsWith('Map<')) {
+      addMutableName(mapNames, annotatedMultilineDictAssignment[1]);
+      addMutableName(mapNames, tsName);
+    }
+    return appendTrailingCommentToResult({
+      statements: [
+        `${reassignedNames.has(annotatedMultilineDictAssignment[1]) ? 'let' : 'const'} ${tsName}: ${typeExpression} = ${dictLiteral.expression};`,
+      ],
+      nextIndex: dictLiteral.nextIndex,
+    }, trailingComment);
+  }
+
   const annotatedAssignment = /^([A-Za-z_][A-Za-z0-9_]*): (.+?) = (.+)$/.exec(statement);
   if (annotatedAssignment !== null) {
     const tsName = tsExportNameForPythonName(annotatedAssignment[1]);
@@ -2325,6 +2381,22 @@ export function translateStraightLineStatement(
         positionalParts.push(arg);
       } else {
         sawKeyword = true;
+        if (keywordArg[2] === '{') {
+          const dictLiteral = collectMultilineDictLiteral(
+            lines,
+            nextIndex + 1,
+            nameMap,
+            arrayNames,
+            validatedTypeAliases,
+            mapNames,
+          );
+          if (dictLiteral === null) {
+            return null;
+          }
+          keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${dictLiteral.expression}`);
+          nextIndex = dictLiteral.nextIndex;
+          continue;
+        }
         const nestedCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(keywordArg[2]);
         if (nestedCall !== null) {
           const callExpression = parseMultilineCallExpression(
@@ -2574,6 +2646,9 @@ function translateReturnExpression(
   const returnType = nameMap.get(functionReturnTypeMarker('__current__'));
   const trimmed = translated.trim();
   if (returnType?.startsWith('Map<') === true && trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    return `new Map(Object.entries(${translated}))`;
+  }
+  if (returnType?.startsWith('Map<') === true && trimmed.startsWith('Object.fromEntries(')) {
     return `new Map(Object.entries(${translated}))`;
   }
   return translated;
@@ -4927,7 +5002,11 @@ function pythonListTypeIsNumeric(pythonType: string): boolean {
 
 function pythonMapTypeArgs(pythonType: string): string[] | null {
   const mapType = /^(?:dict|OrderedDict|defaultdict)\[(.+)\]$/.exec(pythonType.trim());
-  return mapType === null ? null : splitTopLevelComma(mapType[1]);
+  if (mapType !== null) {
+    return splitTopLevelComma(mapType[1]);
+  }
+  const counterType = /^Counter\[(.+)\]$/.exec(pythonType.trim());
+  return counterType === null ? null : [counterType[1], 'int'];
 }
 
 function pythonMapTypeHasTupleKey(pythonType: string): boolean {

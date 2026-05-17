@@ -1189,7 +1189,7 @@ export function translateExpression(
       return `!${mapName}.has(${key})`;
     }
     if (arrayNames.has(setNameMarker(mapNotMembership[2])) || arrayNames.has(setNameMarker(mapName))) {
-      return `!${mapName}.has(${value})`;
+      return `!(${mapName} as ReadonlySet<unknown>).has(${value})`;
     }
     return `!${pythonContainsExpression(mapName, value)}`;
   }
@@ -1203,7 +1203,7 @@ export function translateExpression(
       return `${mapName}.has(${key})`;
     }
     if (arrayNames.has(setNameMarker(mapMembership[2])) || arrayNames.has(setNameMarker(mapName))) {
-      return `${mapName}.has(${value})`;
+      return `(${mapName} as ReadonlySet<unknown>).has(${value})`;
     }
     return pythonContainsExpression(mapName, value);
   }
@@ -1804,6 +1804,10 @@ export function translateExpression(
   }
 
   if (trimmed === 'OrderedDict()') {
+    return 'new Map()';
+  }
+
+  if (trimmed === 'Counter()') {
     return 'new Map()';
   }
 

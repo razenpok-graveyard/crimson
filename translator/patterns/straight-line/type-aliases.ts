@@ -66,7 +66,32 @@ export function parseTypeAliasStatement(
       if (trimmed === '' || !lines[nextIndex].startsWith('    ')) {
         return null;
       }
-      parts.push(trimmed);
+      parts.push(trimmed.replace(/,$/, ''));
+      nextIndex += 1;
+    }
+    return null;
+  }
+
+  const multilineLiteralAlias = /^([A-Za-z_][A-Za-z0-9_]*) = Literal\[$/.exec(lines[index]?.trim() ?? '');
+  if (multilineLiteralAlias !== null) {
+    const parts: string[] = [];
+    let nextIndex = index + 1;
+    while (nextIndex < lines.length) {
+      const trimmed = lines[nextIndex].trim();
+      if (trimmed === ']') {
+        const expression = `Literal[${parts.join(', ')}]`;
+        if (!isBareTypeAliasExpression(expression)) {
+          return null;
+        }
+        return {
+          alias: { name: tsExportNameForPythonName(multilineLiteralAlias[1]), typeExpression: tsTypeExpression(expression) },
+          nextIndex: nextIndex + 1,
+        };
+      }
+      if (trimmed === '' || !lines[nextIndex].startsWith('    ')) {
+        return null;
+      }
+      parts.push(trimmed.replace(/,$/, ''));
       nextIndex += 1;
     }
     return null;

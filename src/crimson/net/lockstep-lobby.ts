@@ -81,7 +81,7 @@ export class HostLobby {
       used.add(int(peer.slotIndex));
     }
     for (let slot = 1; slot < int(this.playerCount); slot++) {
-      if (!used.has(slot)) {
+      if (!(used as ReadonlySet<unknown>).has(slot)) {
         return int(slot);
       }
     }
