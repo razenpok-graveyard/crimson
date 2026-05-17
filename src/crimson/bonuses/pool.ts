@@ -56,6 +56,10 @@ export class BonusPool {
   protected _sentinel: BonusEntry;
   protected _creatureDamageApplier: CreatureDamageApplier | null;
 
+  get sentinel(): BonusEntry {
+    return this._sentinel;
+  }
+
   constructor(opts: { size?: number } = {}) {
     const size = opts.size ?? BONUS_POOL_SIZE;
     this._entries = Array.from({ length: Math.max(0, int(size)) }, (_, i) => i).map((_) => new BonusEntry());

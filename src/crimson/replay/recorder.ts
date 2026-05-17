@@ -40,6 +40,13 @@ export class ReplayRecorder {
   protected _tickIndex: number;
   protected _ticks: ReplayTick[];
 
+  get defaultDt(): number {
+    return this._defaultDt;
+  }
+  get ticks(): ReplayTick[] {
+    return this._ticks;
+  }
+
   constructor(header: ReplayHeader) {
     if (header.replayFormatVersion !== REPLAY_FORMAT_VERSION) {
       throw new Error(`unsupported replay format version: ${header.replayFormatVersion}`);

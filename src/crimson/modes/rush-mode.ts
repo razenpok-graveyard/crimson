@@ -37,6 +37,10 @@ export const UI_ERROR_COLOR = wgl.makeColor(240 / 255, 80 / 255, 80 / 255, 255 /
 export class RushMode extends BaseGameplayMode {
   protected _spawnState: RushSpawnState;
 
+  get spawnState(): RushSpawnState {
+    return this._spawnState;
+  }
+
   constructor(ctx: ViewContext, opts: { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand });
   constructor(opts: { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean });
   constructor(ctxOrOpts: ViewContext | { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean }, maybeOpts?: { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand }) {

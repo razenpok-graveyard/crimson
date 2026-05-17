@@ -126,6 +126,55 @@ export class AlienZooKeeperView {
   protected _resetButton: UiButtonState;
   protected _backButton: UiButtonState;
 
+  get isOpen(): boolean {
+    return this._isOpen;
+  }
+  get ground(): GroundRenderer | null {
+    return this._ground;
+  }
+  get cursorPulseTime(): number {
+    return this._cursorPulseTime;
+  }
+  get widescreenYShift(): number {
+    return this._widescreenYShift;
+  }
+  get timelineMaxMs(): number {
+    return this._timelineMaxMs;
+  }
+  get closing(): boolean {
+    return this._closing;
+  }
+  get closeAction(): string | null {
+    return this._closeAction;
+  }
+  get pendingAction(): string | null {
+    return this._pendingAction;
+  }
+  get action(): string | null {
+    return this._action;
+  }
+  get board(): number[] {
+    return this._board;
+  }
+  get selectedIndex(): number {
+    return this._selectedIndex;
+  }
+  get timerMs(): number {
+    return this._timerMs;
+  }
+  get animTimeMs(): number {
+    return this._animTimeMs;
+  }
+  get score(): number {
+    return this._score;
+  }
+  get resetButton(): UiButtonState {
+    return this._resetButton;
+  }
+  get backButton(): UiButtonState {
+    return this._backButton;
+  }
+
   constructor(state: GameState) {
     this.state = state;
     this._isOpen = false;

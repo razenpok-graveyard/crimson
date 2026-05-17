@@ -131,6 +131,10 @@ export class RecordingState {
 export class RecordingCrand {
   protected _shared: RecordingState;
 
+  get shared(): RecordingState {
+    return this._shared;
+  }
+
   constructor(base: CrandLike, shared: RecordingState | null = null) {
     this._shared = shared === null ? new RecordingState(base) : shared;
   }

@@ -90,6 +90,61 @@ export class CreditsView {
   protected _backButton: UiButtonState;
   protected _secretButton: UiButtonState;
 
+  get isOpen(): boolean {
+    return this._isOpen;
+  }
+  get ground(): GroundRenderer | null {
+    return this._ground;
+  }
+  get cursorPulseTime(): number {
+    return this._cursorPulseTime;
+  }
+  get widescreenYShift(): number {
+    return this._widescreenYShift;
+  }
+  get timelineMaxMs(): number {
+    return this._timelineMaxMs;
+  }
+  get closing(): boolean {
+    return this._closing;
+  }
+  get closeAction(): string | null {
+    return this._closeAction;
+  }
+  get pendingAction(): string | null {
+    return this._pendingAction;
+  }
+  get action(): string | null {
+    return this._action;
+  }
+  get lines(): CreditsLine[] {
+    return this._lines;
+  }
+  get lineMaxIndex(): number {
+    return this._lineMaxIndex;
+  }
+  get secretLineBaseIndex(): number {
+    return this._secretLineBaseIndex;
+  }
+  get secretUnlock(): boolean {
+    return this._secretUnlock;
+  }
+  get scrollTimeS(): number {
+    return this._scrollTimeS;
+  }
+  get scrollLineStartIndex(): number {
+    return this._scrollLineStartIndex;
+  }
+  get scrollLineEndIndex(): number {
+    return this._scrollLineEndIndex;
+  }
+  get backButton(): UiButtonState {
+    return this._backButton;
+  }
+  get secretButton(): UiButtonState {
+    return this._secretButton;
+  }
+
   constructor(state: GameState) {
     this.state = state;
     this._isOpen = false;

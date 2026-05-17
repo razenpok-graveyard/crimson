@@ -42,6 +42,16 @@ export class UnlockedWeaponsDatabaseView extends DatabaseBaseView {
   protected _selectedWeaponId: number | null;
   protected _listScrollIndex: number;
 
+  get weaponIds(): number[] {
+    return this._weaponIds;
+  }
+  get selectedWeaponId(): number | null {
+    return this._selectedWeaponId;
+  }
+  get listScrollIndex(): number {
+    return this._listScrollIndex;
+  }
+
   constructor(state: GameState) {
     super(state);
     this._weaponIds = [];

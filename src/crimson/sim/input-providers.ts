@@ -155,6 +155,28 @@ export class LocalInputProvider {
   protected _edgeInputs: PlayerInput[];
   protected _firstTickPending: boolean;
 
+  get playerCount(): number {
+    return this._playerCount;
+  }
+  get buildInputs(): LocalInputBuilder {
+    return this._buildInputs;
+  }
+  get pendingCommands(): GameCommand[] {
+    return this._pendingCommands;
+  }
+  get commandsForNextTick(): GameCommand[] {
+    return this._commandsForNextTick;
+  }
+  get frameInputs(): PlayerInput[] {
+    return this._frameInputs;
+  }
+  get edgeInputs(): PlayerInput[] {
+    return this._edgeInputs;
+  }
+  get firstTickPending(): boolean {
+    return this._firstTickPending;
+  }
+
   constructor(opts: { playerCount: number; buildInputs: LocalInputBuilder }) {
     const playerCount = opts.playerCount;
     const buildInputs = opts.buildInputs;

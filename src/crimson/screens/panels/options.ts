@@ -67,6 +67,34 @@ export class OptionsMenuView extends PanelMenuView {
   protected _activeSlider: string | null;
   protected _dirty: boolean;
 
+  get LABELS(): string[] {
+    return this._LABELS;
+  }
+  get controlsButton(): UiButtonState {
+    return this._controlsButton;
+  }
+  get sliderSfx(): SliderState {
+    return this._sliderSfx;
+  }
+  get sliderMusic(): SliderState {
+    return this._sliderMusic;
+  }
+  get sliderDetail(): SliderState {
+    return this._sliderDetail;
+  }
+  get sliderMouse(): SliderState {
+    return this._sliderMouse;
+  }
+  get uiInfoTexts(): boolean {
+    return this._uiInfoTexts;
+  }
+  get activeSlider(): string | null {
+    return this._activeSlider;
+  }
+  get dirty(): boolean {
+    return this._dirty;
+  }
+
   constructor(state: GameState) {
     super(state, { title: 'Options', backAction: 'open_pause_menu' });
     this._controlsButton = new UiButtonState({ label: 'Controls', forceWide: true });

@@ -39,6 +39,16 @@ export class TickRunner {
   protected _inputProvider: InputProvider;
   protected _config: TickRunnerConfig;
 
+  get session(): DeterministicSession {
+    return this._session;
+  }
+  get inputProvider(): InputProvider {
+    return this._inputProvider;
+  }
+  get config(): TickRunnerConfig {
+    return this._config;
+  }
+
   constructor(opts: { session: DeterministicSession; inputProvider: InputProvider; config?: TickRunnerConfig | null }) {
     const session = opts.session;
     const inputProvider = opts.inputProvider;

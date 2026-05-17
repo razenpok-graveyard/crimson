@@ -15,6 +15,13 @@ export class WindowSink {
   protected _presentFrame: RenderPresent | null;
   protected _opened: boolean;
 
+  get presentFrame(): RenderPresent | null {
+    return this._presentFrame;
+  }
+  get opened(): boolean {
+    return this._opened;
+  }
+
   constructor(opts: { presentFrame?: RenderPresent | null } = {}) {
     const presentFrame = opts.presentFrame ?? null;
     this._presentFrame = presentFrame;
@@ -50,6 +57,31 @@ export class RenderPipeline {
   protected _opened: boolean;
   protected _width: number;
   protected _height: number;
+
+  get sink(): RenderSink {
+    return this._sink;
+  }
+  get onResize(): ((arg0: number, arg1: number) => void) | null {
+    return this._onResize;
+  }
+  get beginEndDrawing(): boolean {
+    return this._beginEndDrawing;
+  }
+  get beginDraw(): (() => void) | null {
+    return this._beginDraw;
+  }
+  get endDraw(): (() => void) | null {
+    return this._endDraw;
+  }
+  get opened(): boolean {
+    return this._opened;
+  }
+  get width(): number {
+    return this._width;
+  }
+  get height(): number {
+    return this._height;
+  }
 
   constructor(opts: { sink: RenderSink; onResize?: ((arg0: number, arg1: number) => void) | null; beginEndDrawing?: boolean; beginDraw?: (() => void) | null; endDraw?: (() => void) | null }) {
     const sink = opts.sink;

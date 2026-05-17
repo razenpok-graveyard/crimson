@@ -54,6 +54,13 @@ export class LocalInputInterpreter {
   protected _states: PerPlayerInputState[];
   protected _preserveBugs: boolean;
 
+  get states(): PerPlayerInputState[] {
+    return this._states;
+  }
+  get preserveBugs(): boolean {
+    return this._preserveBugs;
+  }
+
   constructor(opts: { preserveBugs?: boolean } = {}) {
     const preserveBugs = opts.preserveBugs ?? false;
     this._states = Array.from({ length: Math.max(0, 4) }, (_, i) => i).map((_) => new PerPlayerInputState());

@@ -39,6 +39,25 @@ export class TutorialMode extends BaseGameplayMode {
   protected _frameInputState: PlayerInput | null;
   protected _perkPickPending: boolean;
 
+  get perkMenu(): PerkMenuController {
+    return this._perkMenu;
+  }
+  get skipButton(): UiButtonState {
+    return this._skipButton;
+  }
+  get playButton(): UiButtonState {
+    return this._playButton;
+  }
+  get repeatButton(): UiButtonState {
+    return this._repeatButton;
+  }
+  get frameInputState(): PlayerInput | null {
+    return this._frameInputState;
+  }
+  get perkPickPending(): boolean {
+    return this._perkPickPending;
+  }
+
   constructor(ctx: ViewContext, opts: { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand });
   constructor(opts: { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean });
   constructor(ctxOrOpts: ViewContext | { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean }, maybeOpts?: { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand }) {

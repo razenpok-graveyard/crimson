@@ -124,6 +124,22 @@ export class PlayGameMenuView extends PanelMenuView {
   protected _tooltipMs: Map<string, number>;
   protected _modeButtons: Map<string, UiButtonState>;
 
+  get PLAYER_COUNT_LABELS(): string[] {
+    return this._PLAYER_COUNT_LABELS;
+  }
+  get playerListOpen(): boolean {
+    return this._playerListOpen;
+  }
+  get dirty(): boolean {
+    return this._dirty;
+  }
+  get tooltipMs(): Map<string, number> {
+    return this._tooltipMs;
+  }
+  get modeButtons(): Map<string, UiButtonState> {
+    return this._modeButtons;
+  }
+
   constructor(state: GameState) {
     super(state, { title: 'Play Game', panelOffset: new Vec2(-63.0, MENU_PANEL_OFFSET_Y), panelHeight: 278.0, backPos: new Vec2(-55.0, 462.0) });
     this._playerListOpen = false;

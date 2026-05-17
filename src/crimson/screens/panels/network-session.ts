@@ -55,6 +55,46 @@ export class NetworkSessionPanelView extends PanelMenuView {
   protected _activeField: string;
   protected _error: string;
 
+  get MODES(): readonly NetworkSessionMode[] {
+    return this._MODES;
+  }
+  get backButton(): UiButtonState {
+    return this._backButton;
+  }
+  get role(): string {
+    return this._role;
+  }
+  get modeIdx(): number {
+    return this._modeIdx;
+  }
+  get playerCount(): number {
+    return this._playerCount;
+  }
+  get questLevel(): string {
+    return this._questLevel;
+  }
+  get bindHost(): string {
+    return this._bindHost;
+  }
+  get host(): string {
+    return this._host;
+  }
+  get roomCode(): string {
+    return this._roomCode;
+  }
+  get netcodeMode(): NetcodeMode {
+    return this._netcodeMode;
+  }
+  get portText(): string {
+    return this._portText;
+  }
+  get activeField(): string {
+    return this._activeField;
+  }
+  get error(): string {
+    return this._error;
+  }
+
   constructor(state: GameState) {
     super(state, { title: 'Network Session', panelOffset: new Vec2(-63.0, MENU_PANEL_OFFSET_Y), panelHeight: 278.0, backAction: 'open_play_game' });
     this._backButton = new UiButtonState({ label: 'Back', forceWide: false });

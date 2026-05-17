@@ -37,6 +37,43 @@ export class QuestFailedView {
   protected _questListButton: UiButtonState;
   protected _mainMenuButton: UiButtonState;
 
+  get ground(): GroundRenderer | null {
+    return this._ground;
+  }
+  get outcome(): QuestRunOutcome | null {
+    return this._outcome;
+  }
+  get record(): HighScoreRecord | null {
+    return this._record;
+  }
+  get questTitle(): string {
+    return this._questTitle;
+  }
+  get action(): string | null {
+    return this._action;
+  }
+  get cursorPulseTime(): number {
+    return this._cursorPulseTime;
+  }
+  get introMs(): number {
+    return this._introMs;
+  }
+  get closing(): boolean {
+    return this._closing;
+  }
+  get closeAction(): string | null {
+    return this._closeAction;
+  }
+  get retryButton(): UiButtonState {
+    return this._retryButton;
+  }
+  get questListButton(): UiButtonState {
+    return this._questListButton;
+  }
+  get mainMenuButton(): UiButtonState {
+    return this._mainMenuButton;
+  }
+
   constructor(state: GameState) {
     this.state = state;
     this._ground = null;

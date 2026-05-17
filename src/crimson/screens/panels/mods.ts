@@ -90,6 +90,10 @@ export class ModsContentLayout {
 export class ModsMenuView extends PanelMenuView {
   protected _lines: string[];
 
+  get lines(): string[] {
+    return this._lines;
+  }
+
   constructor(state: GameState) {
     super(state, { title: 'Mods' });
     this._lines = [];

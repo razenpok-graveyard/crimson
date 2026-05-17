@@ -123,6 +123,25 @@ export class PlaybackDriver {
   tickLimit: number;
   modeId!: GameMode;
 
+  get providedWorldSize(): number | null {
+    return this._providedWorldSize;
+  }
+  get questSpawnEntries(): SpawnEntry[] | null {
+    return this._questSpawnEntries;
+  }
+  get questStartWeaponId(): WeaponId | null {
+    return this._questStartWeaponId;
+  }
+  get questSpawnEntriesResolved(): SpawnEntry[] {
+    return this._questSpawnEntriesResolved;
+  }
+  get questStartWeaponResolved(): WeaponId | null {
+    return this._questStartWeaponResolved;
+  }
+  get lastTickRngRows(): RngTraceDraw[] {
+    return this._lastTickRngRows;
+  }
+
   constructor(replay: Replay, opts: { maxTicks?: number | null; traceRng?: boolean; strictRngTrace?: boolean; versionMismatchAction?: string | null; worldSize?: number | null; interTickRandDraws?: number; interTickRandDrawsByTick?: Map<number, number> | null; spawnEntries?: readonly SpawnEntry[] | null; startWeaponId?: WeaponId | null } = {}) {
     const maxTicks = opts.maxTicks ?? null;
     const traceRng = opts.traceRng ?? false;

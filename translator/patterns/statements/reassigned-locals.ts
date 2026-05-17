@@ -42,6 +42,20 @@ export function reassignedLocalNames(lines: string[], startIndex: number): Set<s
         }
       }
     }
+    const mixedTupleAssignment = /^\s+(.+,.+) = /.exec(line);
+    if (mixedTupleAssignment !== null) {
+      const targets = splitTopLevelComma(mixedTupleAssignment[1]);
+      if (!targets.some((target) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(target.trim()))) {
+        index += 1;
+        continue;
+      }
+      for (const target of targets) {
+        const name = /^([A-Za-z_][A-Za-z0-9_]*)$/.exec(target.trim())?.[1] ?? null;
+        if (name !== null && name !== '_') {
+          counts.set(name, (counts.get(name) ?? 0) + 1);
+        }
+      }
+    }
     index += 1;
   }
   return new Set(
@@ -104,6 +118,19 @@ function countNonlocalAssignments(
     if (tupleAssignment !== null) {
       for (const name of tupleAssignment[1].split(', ')) {
         if (names.has(name)) {
+          counts.set(name, (counts.get(name) ?? 0) + 1);
+        }
+      }
+    }
+    const mixedTupleAssignment = /^\s+(.+,.+) = /.exec(line);
+    if (mixedTupleAssignment !== null) {
+      const targets = splitTopLevelComma(mixedTupleAssignment[1]);
+      if (!targets.some((target) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(target.trim()))) {
+        continue;
+      }
+      for (const target of targets) {
+        const name = /^([A-Za-z_][A-Za-z0-9_]*)$/.exec(target.trim())?.[1] ?? null;
+        if (name !== null && names.has(name)) {
           counts.set(name, (counts.get(name) ?? 0) + 1);
         }
       }

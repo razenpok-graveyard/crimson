@@ -36,6 +36,25 @@ export class DemoTrialOverlayUi {
   protected _purchaseButton: UiButtonState;
   protected _maybeLaterButton: UiButtonState;
 
+  get assetsRoot(): string {
+    return this._assetsRoot;
+  }
+  get font(): ReturnType<typeof loadSmallFont> {
+    return this._font;
+  }
+  get resources(): ReturnType<typeof runtimeResourcesFor> {
+    return this._resources;
+  }
+  get cursorPulseTime(): number {
+    return this._cursorPulseTime;
+  }
+  get purchaseButton(): UiButtonState {
+    return this._purchaseButton;
+  }
+  get maybeLaterButton(): UiButtonState {
+    return this._maybeLaterButton;
+  }
+
   constructor(assetsRoot: string) {
     this._assetsRoot = assetsRoot;
 

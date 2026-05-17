@@ -73,6 +73,58 @@ export class SpawnPlanView {
   protected _simSlots: SpawnSlotInit[];
   protected _simEvents: string[];
 
+  get assetsRoot(): string {
+    return this._assetsRoot;
+  }
+  get missingAssets(): string[] {
+    return this._missingAssets;
+  }
+  get small(): SmallFontData | null {
+    return this._small;
+  }
+  get templateIds(): any[] {
+    return this._templateIds;
+  }
+  get index(): number {
+    return this._index;
+  }
+  get seed(): number {
+    return this._seed;
+  }
+  get worldScale(): number {
+    return this._worldScale;
+  }
+  get hardcore(): boolean {
+    return this._hardcore;
+  }
+  get questFailRetryCount(): number {
+    return this._questFailRetryCount;
+  }
+  get demoModeActive(): boolean {
+    return this._demoModeActive;
+  }
+  get plan(): any {
+    return this._plan;
+  }
+  get planSummary(): PlanSummary | null {
+    return this._planSummary;
+  }
+  get error(): any {
+    return this._error;
+  }
+  get simRunning(): boolean {
+    return this._simRunning;
+  }
+  get simTime(): number {
+    return this._simTime;
+  }
+  get simSlots(): SpawnSlotInit[] {
+    return this._simSlots;
+  }
+  get simEvents(): string[] {
+    return this._simEvents;
+  }
+
   constructor(ctx: ViewContext) {
     this._assetsRoot = ctx.assetsDir;
     this._missingAssets = [];

@@ -90,6 +90,55 @@ export class ArsenalDebugView {
   protected _screenshotRequested: boolean;
   protected _tickHarness: StandaloneTickHarness;
 
+  get assetsRoot(): string {
+    return this._assetsRoot;
+  }
+  get missingAssets(): string[] {
+    return this._missingAssets;
+  }
+  get small(): SmallFontData | null {
+    return this._small;
+  }
+  get audioRng(): Crand {
+    return this._audioRng;
+  }
+  get runtime(): WorldRuntime {
+    return this._runtime;
+  }
+  get player(): any {
+    return this._player;
+  }
+  get aimTexture(): rl.Texture | null {
+    return this._aimTexture;
+  }
+  get audio(): AudioState | null {
+    return this._audio;
+  }
+  get console(): ConsoleState | null {
+    return this._console;
+  }
+  get weaponIds(): number[] {
+    return this._weaponIds;
+  }
+  get weaponIndex(): number {
+    return this._weaponIndex;
+  }
+  get spawnIds(): any[] {
+    return this._spawnIds;
+  }
+  get spawnRingRadius(): number {
+    return this._spawnRingRadius;
+  }
+  get paused(): boolean {
+    return this._paused;
+  }
+  get screenshotRequested(): boolean {
+    return this._screenshotRequested;
+  }
+  get tickHarness(): StandaloneTickHarness {
+    return this._tickHarness;
+  }
+
   constructor(ctx: ViewContext) {
     this._assetsRoot = ctx.assetsDir;
     this._missingAssets = [];

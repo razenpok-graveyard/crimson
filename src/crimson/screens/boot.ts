@@ -68,6 +68,34 @@ export class BootView {
   protected _themeStarted: boolean;
   protected _loadingHoldRemaining: number;
 
+  get bootTime(): number {
+    return this._bootTime;
+  }
+  get fadeOutReady(): boolean {
+    return this._fadeOutReady;
+  }
+  get fadeOutDone(): boolean {
+    return this._fadeOutDone;
+  }
+  get logoDelayTicks(): number {
+    return this._logoDelayTicks;
+  }
+  get logoSkip(): boolean {
+    return this._logoSkip;
+  }
+  get logoActive(): boolean {
+    return this._logoActive;
+  }
+  get introStarted(): boolean {
+    return this._introStarted;
+  }
+  get themeStarted(): boolean {
+    return this._themeStarted;
+  }
+  get loadingHoldRemaining(): number {
+    return this._loadingHoldRemaining;
+  }
+
   constructor(state: GameState) {
     this.state = state;
     this._bootTime = 0.5;

@@ -45,6 +45,25 @@ export class VideoSink {
   protected _opened: boolean;
   protected _flushed: boolean;
 
+  get openTransport(): (() => void) | null {
+    return this._openTransport;
+  }
+  get presentFrame(): RenderPresent | null {
+    return this._presentFrame;
+  }
+  get flushTransport(): (() => void) | null {
+    return this._flushTransport;
+  }
+  get closeTransport(): (() => void) | null {
+    return this._closeTransport;
+  }
+  get opened(): boolean {
+    return this._opened;
+  }
+  get flushed(): boolean {
+    return this._flushed;
+  }
+
   constructor(opts: { outputPath: string; openTransport?: (() => void) | null; presentFrame?: RenderPresent | null; flushTransport?: (() => void) | null; closeTransport?: (() => void) | null }) {
     const outputPath = opts.outputPath;
     const openTransport = opts.openTransport ?? null;

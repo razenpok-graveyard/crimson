@@ -54,6 +54,46 @@ export class QuestsMenuView {
   protected _closeAction: string | null;
   protected _panelOpenSfxPlayed: boolean;
 
+  get isOpen(): boolean {
+    return this._isOpen;
+  }
+  get ground(): GroundRenderer | null {
+    return this._ground;
+  }
+  get backButton(): UiButtonState {
+    return this._backButton;
+  }
+  get menuScreenWidth(): number {
+    return this._menuScreenWidth;
+  }
+  get widescreenYShift(): number {
+    return this._widescreenYShift;
+  }
+  get stage(): number {
+    return this._stage;
+  }
+  get action(): string | null {
+    return this._action;
+  }
+  get dirty(): boolean {
+    return this._dirty;
+  }
+  get cursorPulseTime(): number {
+    return this._cursorPulseTime;
+  }
+  get timelineMaxMs(): number {
+    return this._timelineMaxMs;
+  }
+  get closing(): boolean {
+    return this._closing;
+  }
+  get closeAction(): string | null {
+    return this._closeAction;
+  }
+  get panelOpenSfxPlayed(): boolean {
+    return this._panelOpenSfxPlayed;
+  }
+
   constructor(state: GameState) {
     this.state = state;
     this._isOpen = false;

@@ -78,6 +78,25 @@ export class SurvivalMode extends BaseGameplayMode {
   protected _spawnState: SurvivalSpawnState;
   protected _lanLastTickIndex: number;
 
+  get perkPrompt(): PerkPromptState {
+    return this._perkPrompt;
+  }
+  get perkMenu(): PerkMenuController {
+    return this._perkMenu;
+  }
+  get hudFadeMs(): number {
+    return this._hudFadeMs;
+  }
+  get cursorTime(): number {
+    return this._cursorTime;
+  }
+  get spawnState(): SurvivalSpawnState {
+    return this._spawnState;
+  }
+  get lanLastTickIndex(): number {
+    return this._lanLastTickIndex;
+  }
+
   constructor(ctx: ViewContext, opts: { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand });
   constructor(opts: { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean });
   constructor(ctxOrOpts: ViewContext | { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean }, maybeOpts?: { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand }) {

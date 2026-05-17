@@ -62,6 +62,28 @@ export class QuestResultsView {
   protected _ui: QuestResultsUi | null;
   protected _action: string | null;
 
+  get ground(): GroundRenderer | null {
+    return this._ground;
+  }
+  get questLevel(): QuestLevel | null {
+    return this._questLevel;
+  }
+  get questTitle(): string {
+    return this._questTitle;
+  }
+  get unlockWeaponName(): string {
+    return this._unlockWeaponName;
+  }
+  get unlockPerkName(): string {
+    return this._unlockPerkName;
+  }
+  get ui(): QuestResultsUi | null {
+    return this._ui;
+  }
+  get action(): string | null {
+    return this._action;
+  }
+
   constructor(state: GameState) {
     this.state = state;
     this._ground = null;

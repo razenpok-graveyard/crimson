@@ -37,6 +37,37 @@ export class EndNoteView {
   protected _typoButton: UiButtonState;
   protected _mainMenuButton: UiButtonState;
 
+  get ground(): GroundRenderer | null {
+    return this._ground;
+  }
+  get action(): string | null {
+    return this._action;
+  }
+  get cursorPulseTime(): number {
+    return this._cursorPulseTime;
+  }
+  get timelineMaxMs(): number {
+    return this._timelineMaxMs;
+  }
+  get closing(): boolean {
+    return this._closing;
+  }
+  get closeAction(): string | null {
+    return this._closeAction;
+  }
+  get survivalButton(): UiButtonState {
+    return this._survivalButton;
+  }
+  get rushButton(): UiButtonState {
+    return this._rushButton;
+  }
+  get typoButton(): UiButtonState {
+    return this._typoButton;
+  }
+  get mainMenuButton(): UiButtonState {
+    return this._mainMenuButton;
+  }
+
   constructor(state: GameState) {
     this.state = state;
     this._ground = null;

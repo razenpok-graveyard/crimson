@@ -9,6 +9,16 @@ export class RuntimeResourcesView {
   protected _assetsDir: string;
   protected _resources: RuntimeResources | null;
 
+  get view(): View {
+    return this._view;
+  }
+  get assetsDir(): string {
+    return this._assetsDir;
+  }
+  get resources(): RuntimeResources | null {
+    return this._resources;
+  }
+
   constructor(view: View, opts: { assetsDir: string }) {
     const assetsDir = opts.assetsDir;
     this._view = view;

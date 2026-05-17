@@ -65,6 +65,49 @@ export class StatisticsMenuView {
   protected _btnCredits: UiButtonState;
   protected _btnBack: UiButtonState;
 
+  get isOpen(): boolean {
+    return this._isOpen;
+  }
+  get ground(): GroundRenderer | null {
+    return this._ground;
+  }
+  get cursorPulseTime(): number {
+    return this._cursorPulseTime;
+  }
+  get widescreenYShift(): number {
+    return this._widescreenYShift;
+  }
+  get timelineMaxMs(): number {
+    return this._timelineMaxMs;
+  }
+  get closing(): boolean {
+    return this._closing;
+  }
+  get closeAction(): string | null {
+    return this._closeAction;
+  }
+  get pendingAction(): string | null {
+    return this._pendingAction;
+  }
+  get action(): string | null {
+    return this._action;
+  }
+  get btnHighScores(): UiButtonState {
+    return this._btnHighScores;
+  }
+  get btnWeapons(): UiButtonState {
+    return this._btnWeapons;
+  }
+  get btnPerks(): UiButtonState {
+    return this._btnPerks;
+  }
+  get btnCredits(): UiButtonState {
+    return this._btnCredits;
+  }
+  get btnBack(): UiButtonState {
+    return this._btnBack;
+  }
+
   constructor(state: GameState) {
     this.state = state;
     this._isOpen = false;

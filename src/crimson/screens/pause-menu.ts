@@ -32,6 +32,46 @@ export class PauseMenuView {
   protected _pendingAction: string | null;
   protected _panelOpenSfxPlayed: boolean;
 
+  get isOpen(): boolean {
+    return this._isOpen;
+  }
+  get menuEntries(): MenuEntry[] {
+    return this._menuEntries;
+  }
+  get selectedIndex(): number {
+    return this._selectedIndex;
+  }
+  get focusTimerMs(): number {
+    return this._focusTimerMs;
+  }
+  get hoveredIndex(): number | null {
+    return this._hoveredIndex;
+  }
+  get timelineMaxMs(): number {
+    return this._timelineMaxMs;
+  }
+  get cursorPulseTime(): number {
+    return this._cursorPulseTime;
+  }
+  get widescreenYShift(): number {
+    return this._widescreenYShift;
+  }
+  get menuScreenWidth(): number {
+    return this._menuScreenWidth;
+  }
+  get closing(): boolean {
+    return this._closing;
+  }
+  get closeAction(): string | null {
+    return this._closeAction;
+  }
+  get pendingAction(): string | null {
+    return this._pendingAction;
+  }
+  get panelOpenSfxPlayed(): boolean {
+    return this._panelOpenSfxPlayed;
+  }
+
   constructor(state: GameState) {
     this.state = state;
     this._isOpen = false;

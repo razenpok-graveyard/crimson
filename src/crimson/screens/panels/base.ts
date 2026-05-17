@@ -62,6 +62,64 @@ export class PanelMenuView {
   protected _pendingAction: string | null;
   protected _panelOpenSfxPlayed: boolean;
 
+  get isOpen(): boolean {
+    return this._isOpen;
+  }
+  get title(): string {
+    return this._title;
+  }
+  get bodyLines(): string[] {
+    return this._bodyLines;
+  }
+  get panelPos(): Vec2 {
+    return this._panelPos;
+  }
+  get panelOffset(): Vec2 {
+    return this._panelOffset;
+  }
+  get panelHeight(): number {
+    return this._panelHeight;
+  }
+  get backPos(): Vec2 {
+    return this._backPos;
+  }
+  get backAction(): string {
+    return this._backAction;
+  }
+  get ground(): GroundRenderer | null {
+    return this._ground;
+  }
+  get entry(): MenuEntry | null {
+    return this._entry;
+  }
+  get hovered(): boolean {
+    return this._hovered;
+  }
+  get menuScreenWidth(): number {
+    return this._menuScreenWidth;
+  }
+  get widescreenYShift(): number {
+    return this._widescreenYShift;
+  }
+  get timelineMaxMs(): number {
+    return this._timelineMaxMs;
+  }
+  get cursorPulseTime(): number {
+    return this._cursorPulseTime;
+  }
+  get closing(): boolean {
+    return this._closing;
+  }
+  get closeAction(): string | null {
+    return this._closeAction;
+  }
+  get pendingAction(): string | null {
+    return this._pendingAction;
+  }
+  get panelOpenSfxPlayed(): boolean {
+    return this._panelOpenSfxPlayed;
+  }
+
   constructor(state: GameState, opts: { title: string; body?: string | null; panelPos?: Vec2; panelOffset?: Vec2; panelHeight?: number; backPos?: Vec2; backAction?: string }) {
     const title = opts.title;
     const body = opts.body ?? null;

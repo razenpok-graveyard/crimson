@@ -69,6 +69,55 @@ export class UnlockedPerksDatabaseView extends DatabaseBaseView {
   protected _scrollDragOffset: number;
   protected _wrappedDescCache: Map<string, string>;
 
+  get VISIBLE_ROWS(): number {
+    return this._VISIBLE_ROWS;
+  }
+  get LIST_WIDTH(): number {
+    return this._LIST_WIDTH;
+  }
+  get LIST_FRAME_X(): number {
+    return this._LIST_FRAME_X;
+  }
+  get LIST_FRAME_Y(): number {
+    return this._LIST_FRAME_Y;
+  }
+  get LIST_ROW_HEIGHT(): number {
+    return this._LIST_ROW_HEIGHT;
+  }
+  get LIST_TEXT_X(): number {
+    return this._LIST_TEXT_X;
+  }
+  get LIST_TEXT_Y(): number {
+    return this._LIST_TEXT_Y;
+  }
+  get DESC_WRAP_WIDTH_PX(): number {
+    return this._DESC_WRAP_WIDTH_PX;
+  }
+  get perkIds(): PerkId[] {
+    return this._perkIds;
+  }
+  get listScrollIndex(): number {
+    return this._listScrollIndex;
+  }
+  get selectedRowIndex(): number {
+    return this._selectedRowIndex;
+  }
+  get hoveredRowIndex(): number {
+    return this._hoveredRowIndex;
+  }
+  get navFocusIndex(): number {
+    return this._navFocusIndex;
+  }
+  get scrollDragActive(): boolean {
+    return this._scrollDragActive;
+  }
+  get scrollDragOffset(): number {
+    return this._scrollDragOffset;
+  }
+  get wrappedDescCache(): Map<string, string> {
+    return this._wrappedDescCache;
+  }
+
   constructor(state: GameState) {
     super(state);
     this._perkIds = [];

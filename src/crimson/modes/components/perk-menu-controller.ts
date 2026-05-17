@@ -63,6 +63,25 @@ export class PerkMenuController {
   protected _open!: boolean;
   protected _wrappedDescCache!: Map<string, string>;
 
+  get DESC_WRAP_WIDTH_PX(): number {
+    return this._DESC_WRAP_WIDTH_PX;
+  }
+  get cancelLabel(): string {
+    return this._cancelLabel;
+  }
+  get onClose(): OnCloseFn | null {
+    return this._onClose;
+  }
+  get layout(): PerkMenuLayout {
+    return this._layout;
+  }
+  get cancelButton(): UiButtonState {
+    return this._cancelButton;
+  }
+  get wrappedDescCache(): Map<string, string> {
+    return this._wrappedDescCache;
+  }
+
   constructor(opts: { cancelLabel?: string; onClose?: OnCloseFn | null } = {}) {
     const cancelLabel = opts.cancelLabel ?? 'Cancel';
     const onClose = opts.onClose ?? null;

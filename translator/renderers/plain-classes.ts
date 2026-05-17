@@ -2,6 +2,7 @@ import type {
   FunctionParameter,
   StraightLineModule,
 } from '../model.js';
+import { tsExportNameForPythonName } from '../naming.js';
 
 function renderParameter(param: FunctionParameter): string {
   const defaultValue = param.defaultValue === undefined || param.defaultValue === null ? '' : ` = ${param.defaultValue}`;
@@ -32,6 +33,28 @@ export function renderPlainClasses(lines: string[], classes: StraightLineModule[
           lines.push(`  ${valueLine}`);
         }
         lines.push(`  ${field.defaultValueLines.at(-1)};`);
+      }
+    }
+    const methodNames = new Set(plainClass.methods.map((method) => method.name));
+    const accessorFields = plainClass.fields
+      .filter((field) => field.private)
+      .map((field) => ({
+        field,
+        accessorName: publicAccessorNameForPrivateField(field.name),
+      }))
+      .filter((entry) => (
+        entry.accessorName !== null
+        && !plainClass.fields.some((field) => field.name === entry.accessorName)
+        && !methodNames.has(entry.accessorName)
+        && !methodNames.has(`get ${entry.accessorName}`)
+        && !methodNames.has(`set ${entry.accessorName}`)
+      ));
+    if (accessorFields.length > 0) {
+      lines.push('');
+      for (const { field, accessorName } of accessorFields) {
+        lines.push(`  get ${accessorName}(): ${field.typeExpression} {`);
+        lines.push(`    return this.${field.name};`);
+        lines.push('  }');
       }
     }
     const shouldRenderConstructor = (
@@ -126,6 +149,14 @@ export function renderPlainClasses(lines: string[], classes: StraightLineModule[
 
 function renderFunctionReturnType(fn: { async?: boolean; returnType: string }): string {
   return fn.async === true ? `Promise<${fn.returnType}>` : fn.returnType;
+}
+
+function publicAccessorNameForPrivateField(fieldName: string): string | null {
+  if (!fieldName.startsWith('_') || /^__.*__$/.test(fieldName)) {
+    return null;
+  }
+  const stripped = fieldName.replace(/^_+/, '');
+  return stripped === '' ? null : tsExportNameForPythonName(stripped);
 }
 
 function functionBodyAssignsName(statements: string[], name: string): boolean {

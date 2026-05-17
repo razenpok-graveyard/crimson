@@ -126,6 +126,31 @@ export class QuestMode extends BaseGameplayMode {
   protected _perkMenu: PerkMenuController;
   protected _questSpawnState: QuestSpawnState;
 
+  get questDef(): QuestDefinition | null {
+    return this._questDef;
+  }
+  get questLevel(): QuestLevel | null {
+    return this._questLevel;
+  }
+  get questTotalSpawnCount(): number {
+    return this._questTotalSpawnCount;
+  }
+  get outcome(): QuestRunOutcome | null {
+    return this._outcome;
+  }
+  get grimMono(): GrimMonoFont | null {
+    return this._grimMono;
+  }
+  get perkPrompt(): PerkPromptState {
+    return this._perkPrompt;
+  }
+  get perkMenu(): PerkMenuController {
+    return this._perkMenu;
+  }
+  get questSpawnState(): QuestSpawnState {
+    return this._questSpawnState;
+  }
+
   constructor(ctx: ViewContext, opts: { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand });
   constructor(opts: { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean });
   constructor(ctxOrOpts: ViewContext | { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean }, maybeOpts?: { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand }) {

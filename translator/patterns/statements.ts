@@ -5203,7 +5203,12 @@ function translateStraightLineAssignment(
   const hasNonLocalTupleTarget = tupleTargets.some((target) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(target.trim()));
   if (tupleTargets.length > 1 && hasLocalTupleTarget && hasNonLocalTupleTarget) {
     const markerNames = tupleTargets.map((target) => (/^[A-Za-z_][A-Za-z0-9_]*$/.test(target.trim()) ? target.trim() : '_'));
+    const hasExistingLocalTarget = tupleTargets.some((target) => {
+      const localTarget = /^([A-Za-z_][A-Za-z0-9_]*)$/.exec(target.trim());
+      return localTarget !== null && declaredNames.has(localTarget[1]);
+    });
     const bindings: string[] = [];
+    const preDeclarations: string[] = [];
     const postAssignments: string[] = [];
     for (const [targetIndex, rawTarget] of tupleTargets.entries()) {
       const target = rawTarget.trim();
@@ -5212,23 +5217,32 @@ function translateStraightLineAssignment(
         continue;
       }
       const localTarget = /^([A-Za-z_][A-Za-z0-9_]*)$/.exec(target);
-      if (localTarget !== null && !declaredNames.has(localTarget[1])) {
+      if (localTarget !== null) {
         const tsName = tsExportNameForPythonName(localTarget[1]);
         bindings.push(tsName);
-        declaredNames.add(localTarget[1]);
+        if (!declaredNames.has(localTarget[1])) {
+          if (hasExistingLocalTarget) {
+            preDeclarations.push(`let ${tsName}: any;`);
+          }
+          declaredNames.add(localTarget[1]);
+        }
         continue;
       }
       const binding = tupleAssignmentBindingName(target, targetIndex);
       bindings.push(binding);
-      postAssignments.push(`${translateExpression(target, nameMap, arrayNames, validatedTypeAliases, mapNames)} = ${binding};`);
-      if (localTarget !== null) {
-        declaredNames.add(localTarget[1]);
+      if (hasExistingLocalTarget) {
+        preDeclarations.push(`let ${binding}: any;`);
       }
+      postAssignments.push(`${translateExpression(target, nameMap, arrayNames, validatedTypeAliases, mapNames)} = ${binding};`);
     }
     applyTupleAssignmentReturnMarkers(markerNames, assignedRight, nameMap, arrayNames, mapNames);
+    const declaration = hasExistingLocalTarget
+      ? ''
+      : markerNames.some((name) => name !== '_' && reassignedNames.has(name)) ? 'let ' : 'const ';
     return {
       statements: [
-        `const [${bindings.join(', ')}] = ${assignedRight};`,
+        ...preDeclarations,
+        `${declaration}[${bindings.join(', ')}] = ${assignedRight};`,
         ...postAssignments,
       ],
       nextIndex,

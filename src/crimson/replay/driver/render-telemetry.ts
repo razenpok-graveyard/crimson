@@ -57,6 +57,10 @@ export class RenderTelemetryFrameSnapshot {
 export class SessionSink {
   protected _session: RenderTelemetrySession;
 
+  get session(): RenderTelemetrySession {
+    return this._session;
+  }
+
   constructor(session: RenderTelemetrySession) {
     this._session = session;
   }
@@ -91,6 +95,40 @@ export class RenderTelemetrySession {
   protected _passMs: Map<string, number>;
   protected _sink: SessionSink;
   protected _prevSink: profileHooks.RenderProfileSink | null;
+
+  get INTERCEPT_APIS(): readonly [string, string][] {
+    return this._INTERCEPT_APIS;
+  }
+  get active(): boolean {
+    return this._active;
+  }
+  get originals(): Map<string, (...args: any[]) => unknown> {
+    return this._originals;
+  }
+  get currentFrameIndex(): number | null {
+    return this._currentFrameIndex;
+  }
+  get currentTickBeforeUpdate(): number | null {
+    return this._currentTickBeforeUpdate;
+  }
+  get drawCallsTotal(): number {
+    return this._drawCallsTotal;
+  }
+  get drawCallsByApi(): Map<string, number> {
+    return this._drawCallsByApi;
+  }
+  get drawCallsByPass(): Map<string, number> {
+    return this._drawCallsByPass;
+  }
+  get passMs(): Map<string, number> {
+    return this._passMs;
+  }
+  get sink(): SessionSink {
+    return this._sink;
+  }
+  get prevSink(): profileHooks.RenderProfileSink | null {
+    return this._prevSink;
+  }
 
   constructor() {
     this._active = false;

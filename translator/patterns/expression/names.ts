@@ -99,11 +99,14 @@ export function tsMemberNameForPythonName(pythonName: string): string {
   if (pythonName.startsWith('__') && pythonName.endsWith('__')) {
     return pythonName;
   }
+  if (pythonName === 'from_xy') {
+    return 'fromXY';
+  }
   return pythonName.startsWith('_')
     ? `_${tsExportNameForPythonName(pythonName.replace(/^_+/, ''))}`
     : tsExportNameForPythonName(pythonName);
 }
 
 export function translateAttributeRest(rest: string): string {
-  return rest.replaceAll(/\b[A-Za-z_][A-Za-z0-9_]*\b/g, tsExportNameForPythonName);
+  return rest.replaceAll(/\b[A-Za-z_][A-Za-z0-9_]*\b/g, tsMemberNameForPythonName);
 }

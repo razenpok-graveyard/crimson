@@ -46,6 +46,13 @@ export class NetworkLobbyPanelView extends PanelMenuView {
   protected _backButton: UiButtonState;
   protected _error: string;
 
+  get backButton(): UiButtonState {
+    return this._backButton;
+  }
+  get error(): string {
+    return this._error;
+  }
+
   constructor(state: GameState) {
     super(state, { title: 'Network Lobby', panelOffset: new Vec2(-63.0, MENU_PANEL_OFFSET_Y), panelHeight: 278.0, backAction: 'open_play_game' });
     this._backButton = new UiButtonState({ label: 'Back', forceWide: false });
