@@ -3919,17 +3919,14 @@ function translateMixedKeywordCallWithKnownInstanceSignature(
   }
   const consumedKeywords = new Set<string>();
   const args = positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
-  for (const positionalName of knownMethod.signature.positional.slice(args.length)) {
-    const keywordPart = keywordParts.find((part) => (
-      !consumedKeywords.has(part.pythonName)
-      && (
-        part.pythonName === positionalName
-        || part.tsName === positionalName
-        || `_${part.pythonName}` === positionalName
-        || `_${part.tsName}` === positionalName
-      )
-    ));
+  const positionalNames = knownMethod.signature.positional.slice(args.length);
+  for (let index = 0; index < positionalNames.length; index += 1) {
+    const keywordPart = findKeywordPartForPositional(keywordParts, consumedKeywords, positionalNames[index]);
     if (keywordPart === undefined) {
+      if (remainingPositionalNamesHaveKeyword(keywordParts, consumedKeywords, positionalNames.slice(index + 1))) {
+        args.push('undefined');
+        continue;
+      }
       break;
     }
     args.push(keywordPart.expression);
@@ -3962,17 +3959,14 @@ function translateMixedKeywordCallWithKnownFunctionSignature(
   }
   const consumedKeywords = new Set<string>();
   const args = positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
-  for (const positionalName of knownFunction.signature.positional.slice(args.length)) {
-    const keywordPart = keywordParts.find((part) => (
-      !consumedKeywords.has(part.pythonName)
-      && (
-        part.pythonName === positionalName
-        || part.tsName === positionalName
-        || `_${part.pythonName}` === positionalName
-        || `_${part.tsName}` === positionalName
-      )
-    ));
+  const positionalNames = knownFunction.signature.positional.slice(args.length);
+  for (let index = 0; index < positionalNames.length; index += 1) {
+    const keywordPart = findKeywordPartForPositional(keywordParts, consumedKeywords, positionalNames[index]);
     if (keywordPart === undefined) {
+      if (remainingPositionalNamesHaveKeyword(keywordParts, consumedKeywords, positionalNames.slice(index + 1))) {
+        args.push('undefined');
+        continue;
+      }
       break;
     }
     args.push(keywordPart.expression);
@@ -3988,6 +3982,32 @@ function translateMixedKeywordCallWithKnownFunctionSignature(
     args.push(`{ ${remainingKeywordParts.join(', ')} }`);
   }
   return `${knownFunction.callee}(${args.join(', ')})`;
+}
+
+function findKeywordPartForPositional(
+  keywordParts: { pythonName: string; tsName: string; expression: string }[],
+  consumedKeywords: ReadonlySet<string>,
+  positionalName: string,
+): { pythonName: string; tsName: string; expression: string } | undefined {
+  return keywordParts.find((part) => (
+    !consumedKeywords.has(part.pythonName)
+    && (
+      part.pythonName === positionalName
+      || part.tsName === positionalName
+      || `_${part.pythonName}` === positionalName
+      || `_${part.tsName}` === positionalName
+    )
+  ));
+}
+
+function remainingPositionalNamesHaveKeyword(
+  keywordParts: { pythonName: string; tsName: string; expression: string }[],
+  consumedKeywords: ReadonlySet<string>,
+  positionalNames: string[],
+): boolean {
+  return positionalNames.some((positionalName) => (
+    findKeywordPartForPositional(keywordParts, consumedKeywords, positionalName) !== undefined
+  ));
 }
 
 function knownFunctionCall(
