@@ -42,7 +42,7 @@ export class RushMode extends BaseGameplayMode {
     const console = opts.console ?? null;
     const audio = opts.audio ?? null;
     const audioRng = opts.audioRng;
-    super(ctx, { worldSize: WORLD_SIZE, defaultGameModeId: GameMode.RUSH, demoModeActive: false, questFailRetryCount: 0, hardcore: false, config: config, console: console, audio: audio, audioRng: audioRng });
+    super({ worldSize: WORLD_SIZE, defaultGameModeId: GameMode.RUSH, demoModeActive: false, questFailRetryCount: 0, hardcore: false, config: config, console: console, audio: audio, audioRng: audioRng });
     this._replayRecorder = null;
     this._spawnState = new RushSpawnState();
     this._simSession = this._newSimSession();

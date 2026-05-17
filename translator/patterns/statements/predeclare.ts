@@ -258,13 +258,16 @@ function inferPredeclaredAssignmentType(
       return returnType;
     }
   }
-  const dottedField = /^(.+)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(assignedExpression.trim());
+  const dottedField = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(assignedExpression.trim());
   if (dottedField !== null) {
     const receiver = nameMap.get(dottedField[1]) ?? tsExportNameForPythonName(dottedField[1]);
     const receiverType = nameMap.get(receiverTypeNameMarker(dottedField[1])) ?? nameMap.get(receiverTypeNameMarker(receiver));
     const fieldType = receiverType === undefined ? undefined : nameMap.get(classFieldTypeMarker(receiverType, tsAttributeNameForPythonName(dottedField[2])));
     if (fieldType !== undefined) {
       return fieldType;
+    }
+    if (dottedField[1] === 'self' || dottedField[1].startsWith('self.')) {
+      return `typeof ${translateDottedTypeQueryExpression(assignedExpression.trim(), nameMap)}`;
     }
   }
   if (assignedExpression !== '(') {
@@ -286,4 +289,16 @@ function inferPredeclaredAssignmentType(
     nextIndex += 1;
   }
   return 'any';
+}
+
+function translateDottedTypeQueryExpression(
+  pythonExpression: string,
+  nameMap: ReadonlyMap<string, string>,
+): string {
+  const parts = pythonExpression.split('.');
+  const root = nameMap.get(parts[0]) ?? tsExportNameForPythonName(parts[0]);
+  return [
+    root,
+    ...parts.slice(1).map(tsAttributeNameForPythonName),
+  ].join('.');
 }

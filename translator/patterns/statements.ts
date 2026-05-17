@@ -2524,7 +2524,7 @@ export function translateStraightLineStatement(
           nextIndex = callExpression.nextIndex;
           continue;
         }
-        keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${translateCallArgumentExpression(keywordArg[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
+        keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${translateKeywordCallArgumentExpression(keywordArg[1], keywordArg[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
       }
       nextIndex = logicalArg.nextIndex;
     }
@@ -2563,8 +2563,11 @@ export function translateStraightLineStatement(
     if (callParts === null) {
       return null;
     }
+    const positionalParts = callParts.keywordParts.length > 0 && callParts.positionalParts.length === 1 && callParts.positionalParts[0].trim() === 'ctx'
+      ? []
+      : callParts.positionalParts;
     const args = [
-      ...callParts.positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)),
+      ...positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)),
       ...(callParts.keywordParts.length === 0 ? [] : [`{ ${callParts.keywordParts.join(', ')} }`]),
     ];
     return {
@@ -3577,7 +3580,7 @@ function parseInlineCallParts(
       arrayNames,
       validatedTypeAliases,
       mapNames,
-    ) ?? translateCallArgumentExpression(keywordArg[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    ) ?? translateKeywordCallArgumentExpression(keywordArg[1], keywordArg[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
     keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${expression}`);
     keywordArgParts.push({ pythonName: keywordArg[1], expression });
   }
@@ -3613,6 +3616,40 @@ function translateInlineCallArgumentIfNeeded(
     validatedTypeAliases,
     mapNames,
   );
+}
+
+function translateKeywordCallArgumentExpression(
+  pythonKeywordName: string,
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string {
+  const callbackReference = keywordNameLooksLikeCallback(pythonKeywordName)
+    ? translateDetachedMethodReference(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames)
+    : null;
+  return callbackReference ?? translateCallArgumentExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+}
+
+function keywordNameLooksLikeCallback(pythonKeywordName: string): boolean {
+  return /^(?:build|consume|create|draw|handle|measure|on|play|process|registry|reset|sync|update)(?:_|$)/.test(pythonKeywordName);
+}
+
+function translateDetachedMethodReference(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  const reference = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+)$/.exec(pythonExpression.trim());
+  if (reference === null) {
+    return null;
+  }
+  const parts = reference[1].split('.');
+  const receiver = translateExpression(parts.slice(0, -1).join('.'), nameMap, arrayNames, validatedTypeAliases, mapNames);
+  return `${receiver}.${tsAttributeNameForPythonName(parts[parts.length - 1])}.bind(${receiver})`;
 }
 
 function parseFullCallExpression(pythonExpression: string): { pythonCallee: string; argsText: string } | null {
@@ -4150,6 +4187,21 @@ function parseMultilineCallParts(
       continue;
     }
 
+    const inlineLambdaKeywordArg = /^([A-Za-z_][A-Za-z0-9_]*)=(lambda(?:\s+[^:]+)?:\s*.+)$/.exec(arg);
+    if (inlineLambdaKeywordArg !== null) {
+      const expression = translateCallArgumentExpression(inlineLambdaKeywordArg[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      sawKeyword = true;
+      keywordParts.push(`${tsExportNameForPythonName(inlineLambdaKeywordArg[1])}: ${expression}`);
+      keywordArgParts.push({ pythonName: inlineLambdaKeywordArg[1], expression });
+      nextIndex = logicalArg.nextIndex;
+      continue;
+    }
+    if (!sawKeyword && /^lambda(?:\s+[^:]+)?:\s*.+$/.test(arg)) {
+      positionalParts.push(translateCallArgumentExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames));
+      nextIndex = logicalArg.nextIndex;
+      continue;
+    }
+
     const argParts = splitTopLevelComma(arg);
     let consumedNestedCall = false;
     for (const argPart of argParts) {
@@ -4273,7 +4325,7 @@ function parseMultilineCallParts(
           consumedNestedCall = true;
           break;
         }
-        const expression = translateCallArgumentExpression(keywordArg[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+        const expression = translateKeywordCallArgumentExpression(keywordArg[1], keywordArg[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
         keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${expression}`);
         keywordArgParts.push({ pythonName: keywordArg[1], expression });
       }

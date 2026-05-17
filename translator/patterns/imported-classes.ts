@@ -94,7 +94,10 @@ export function recordImportedFunctionReturnTypes(
       moduleNameMap.set(functionReturnTypeMarker(name.localName), `ReturnType<typeof ${name.localName}>`);
       moduleNameMap.set(functionReturnTypeMarker(name.importedName), `ReturnType<typeof ${name.importedName}>`);
     }
-    const signatureJson = JSON.stringify({ positional: signature.positional });
+    const signatureJson = JSON.stringify({
+      positional: signature.positional,
+      returnTupleMarkers: signature.returnTupleMarkers,
+    });
     moduleNameMap.set(functionSignatureMarker(name.localName), signatureJson);
     moduleNameMap.set(functionSignatureMarker(name.importedName), signatureJson);
   }
@@ -255,11 +258,17 @@ function uniqueFieldNames(fields: string[]): string[] {
   return unique;
 }
 
+type ImportedFunctionSignature = {
+  returnType: string | null;
+  positional: string[];
+  returnTupleMarkers?: ('array' | 'map' | 'object' | 'rectangle' | 'set' | 'string' | null)[];
+};
+
 function importedFunctionSignature(
   modulePath: string,
   functionName: string,
   relativePath: string,
-): { returnType: string | null; positional: string[] } | null {
+): ImportedFunctionSignature | null {
   const sourcePath = tsSourcePathForImportPath(modulePath, relativePath);
   if (sourcePath === null || !fs.existsSync(sourcePath)) {
     return null;
@@ -282,7 +291,41 @@ function importedFunctionSignature(
   return {
     returnType: returnType === undefined || returnType === '' ? null : returnType,
     positional,
+    returnTupleMarkers: returnType === undefined ? undefined : returnTupleMarkersForTsType(returnType),
   };
+}
+
+function returnTupleMarkersForTsType(
+  typeExpression: string,
+): ('array' | 'map' | 'object' | 'rectangle' | 'set' | 'string' | null)[] | undefined {
+  const tupleType = /^(?:readonly\s+)?\[([\s\S]+)\]$/.exec(typeExpression.trim());
+  if (tupleType === null) {
+    return undefined;
+  }
+  return splitTopLevelComma(tupleType[1]).map(returnMarkerForTsType);
+}
+
+function returnMarkerForTsType(typeExpression: string): 'array' | 'map' | 'object' | 'rectangle' | 'set' | 'string' | null {
+  const trimmed = typeExpression.trim();
+  if (/^(?:r[dl]|wgl)\.Rectangle$/.test(trimmed)) {
+    return 'rectangle';
+  }
+  if (trimmed === 'string') {
+    return 'string';
+  }
+  if (trimmed.endsWith('[]') || /^readonly\s+/.test(trimmed)) {
+    return 'array';
+  }
+  if (/^(?:Map|ReadonlyMap)</.test(trimmed)) {
+    return 'map';
+  }
+  if (/^(?:Set|ReadonlySet)</.test(trimmed)) {
+    return 'set';
+  }
+  if (/^(?:Record|BuiltinObject)\b/.test(trimmed)) {
+    return 'object';
+  }
+  return null;
 }
 
 function matchingCloseParen(source: string, openIndex: number): number | null {

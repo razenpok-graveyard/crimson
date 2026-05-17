@@ -766,7 +766,10 @@ export function translateExpression(
       mapNames,
     );
     if (superMethodCall[1] === '__init__') {
-      return `super(${args.join(', ')})`;
+      const superArgs = args.length >= 2 && args[0] === 'ctx' && args[1].startsWith('{')
+        ? args.slice(1)
+        : args;
+      return `super(${superArgs.join(', ')})`;
     }
     return `super.${tsMemberNameForPythonName(superMethodCall[1])}(${args.join(', ')})`;
   }
@@ -3693,11 +3696,34 @@ function joinTranslatedAdditive(
   validatedTypeAliases: ReadonlySet<string>,
   mapNames: ReadonlySet<string>,
 ): string {
-  let output = parenthesizeForAdditive(translateExpression(additive.parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames));
+  let output = translateAdditiveOperand(additive.parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
   for (let index = 0; index < additive.operators.length; index += 1) {
-    output += ` ${additive.operators[index]} ${parenthesizeForAdditive(translateExpression(additive.parts[index + 1], nameMap, arrayNames, validatedTypeAliases, mapNames))}`;
+    output += ` ${additive.operators[index]} ${translateAdditiveOperand(additive.parts[index + 1], nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
   }
   return output;
+}
+
+function translateAdditiveOperand(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string {
+  const translated = translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const expression = pythonExpressionLooksBooleanNumericOperand(pythonExpression)
+    ? `Number(${translated})`
+    : translated;
+  return parenthesizeForAdditive(expression);
+}
+
+function pythonExpressionLooksBooleanNumericOperand(pythonExpression: string): boolean {
+  const trimmed = stripBalancedOuterParens(pythonExpression.trim());
+  const primitiveWrapped = /^(?:float|int|bool)\(([\s\S]+)\)$/.exec(trimmed);
+  const unwrapped = primitiveWrapped === null
+    ? trimmed
+    : stripBalancedOuterParens(primitiveWrapped[1].trim());
+  return /^(?:input_code_is_down|input_code_is_pressed)\(/.test(unwrapped);
 }
 
 function translateMixedKeywordCall(

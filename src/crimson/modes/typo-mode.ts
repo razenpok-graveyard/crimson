@@ -58,7 +58,7 @@ export class TypoShooterMode extends BaseGameplayMode {
     const console = opts.console ?? null;
     const audio = opts.audio ?? null;
     const audioRng = opts.audioRng;
-    super(ctx, { worldSize: WORLD_SIZE, defaultGameModeId: GameMode.TYPO, demoModeActive: false, questFailRetryCount: 0, hardcore: false, config: config, console: console, audio: audio, audioRng: audioRng });
+    super({ worldSize: WORLD_SIZE, defaultGameModeId: GameMode.TYPO, demoModeActive: false, questFailRetryCount: 0, hardcore: false, config: config, console: console, audio: audio, audioRng: audioRng });
     this._simSession = this._newSimSession();
   }
 

@@ -52,7 +52,7 @@ import type { WorldEvents } from '@crimson/sim/world-state.ts';
 interface ReplayRecorder {
   tickIndex: number;
   recordedTickCount: number;
-  recordTick(inputs: readonly PlayerInput[], commands?: readonly GameCommand[]): number;
+  recordTick(inputs: readonly PlayerInput[], opts?: { commands?: GameCommand[] | null; dt?: number | null }): number;
   finish(): object;
 }
 
@@ -1495,7 +1495,7 @@ export class BaseGameplayMode {
       if (replayTickIndex === null && recorder !== null) {
         replayTickIndex = recorder.recordTick(
           [...tickResult.sourceTick.inputs],
-          tickResult.sourceTick.commands,
+          { commands: Array.from(tickResult.sourceTick.commands) },
         );
         tickResult.replayTickIndex = replayTickIndex;
       }

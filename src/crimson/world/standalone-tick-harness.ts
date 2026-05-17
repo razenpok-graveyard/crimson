@@ -81,7 +81,7 @@ export class StandaloneTickHarness {
     }
 
     session = new DeterministicSession({ world: worldState, worldSize: runtime.worldSize, damageScaleByType: runtime.simWorld.damageScaleByType, gameMode: this.gameMode, detailPreset: int(detailPreset), violenceDisabled: int(violenceDisabled), gameTuneStarted: runtime.simWorld.gameTuneStarted, demoModeActive: runtime.demoModeActive, perkProgressionEnabled: false, applyWorldDtSteps: true });
-    const provider = new LocalInputProvider({ playerCount: int(playerCount), buildInputs: this.buildInputs });
+    const provider = new LocalInputProvider({ playerCount: int(playerCount), buildInputs: this.buildInputs.bind(this) });
     runner = new TickRunner({ session: session, inputProvider: provider, config: new TickRunnerConfig() });
     this.session = session;
     this.runner = runner;
