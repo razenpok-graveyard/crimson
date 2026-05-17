@@ -181,6 +181,7 @@ function usesUnsupportedRuntimeIo(trimmedPython: string): boolean {
     /^import urllib\.(?:error|request)$/m,
     /^from PIL import /m,
     /^import ast$/m,
+    /^import importlib$/m,
     /^class RGBA\(msgspec\.Struct, frozen=True\):$/m,
     /\brl\.load_shader_from_memory\(/m,
     /\brl\.begin_shader_mode\(/m,
