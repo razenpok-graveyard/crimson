@@ -1385,7 +1385,7 @@ export function translateExpression(
   if (mappingConstantSubscript !== null && looksLikeMappingConstantName(mappingConstantSubscript[1])) {
     const mapName = translateExpression(mappingConstantSubscript[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
     const key = translateMapKeyExpression(mapName, translateExpression(mappingConstantSubscript[2], nameMap, arrayNames, validatedTypeAliases, mapNames), mapNames);
-    return `${mapName}.get(${key})!`;
+    return `mapGetOrThrow(${mapName}, ${key})`;
   }
 
   const mappingSubscriptAttribute = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[(.+)\]\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmed);
@@ -1393,7 +1393,7 @@ export function translateExpression(
     const mapName = translateExpression(mappingSubscriptAttribute[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (expressionIsKnownMap(mapName, nameMap, mapNames) || looksLikeMappingConstantName(mappingSubscriptAttribute[1])) {
       const key = translateMapKeyExpression(mapName, translateExpression(mappingSubscriptAttribute[2], nameMap, arrayNames, validatedTypeAliases, mapNames), mapNames);
-      return `${mapName}.get(${key})!.${tsExportNameForPythonName(mappingSubscriptAttribute[3])}`;
+      return `mapGetOrThrow(${mapName}, ${key}).${tsExportNameForPythonName(mappingSubscriptAttribute[3])}`;
     }
   }
 
@@ -1406,7 +1406,7 @@ export function translateExpression(
     }
     if (expressionIsKnownMap(mapName, nameMap, mapNames)) {
       const key = translateMapKeyExpression(mapName, translateExpression(mapSubscript[2], nameMap, arrayNames, validatedTypeAliases, mapNames), mapNames);
-      return `${mapName}.get(${key})!`;
+      return `mapGetOrThrow(${mapName}, ${key})`;
     }
   }
 
@@ -2875,6 +2875,10 @@ export function expressionIsKnownMap(
   }
   const mapGet = /^([A-Za-z_$][A-Za-z0-9_.$]*)\.get\(.*\)!?(?: \?\? null)?$/.exec(tsExpression);
   if (mapGet !== null && mapNames.has(mapValueMapNameMarker(mapGet[1]))) {
+    return true;
+  }
+  const mapGetOrThrow = /^mapGetOrThrow\(([A-Za-z_$][A-Za-z0-9_.$]*), .+\)$/.exec(tsExpression);
+  if (mapGetOrThrow !== null && mapNames.has(mapValueMapNameMarker(mapGetOrThrow[1]))) {
     return true;
   }
   const dottedField = /^(.+)\.([A-Za-z_$][A-Za-z0-9_$]*)$/.exec(tsExpression);

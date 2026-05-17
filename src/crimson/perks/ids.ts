@@ -27,6 +27,14 @@ export class PerkMeta {
 export const QUICK_LEARNER_NAME = 'Quick Learner';
 export const QUICK_LEARNER_DESCRIPTION = 'You learn things faster than a regular Joe from now on gaining 30% more experience points from everything you do.';
 
+function mapGetOrThrow<K, V>(map: ReadonlyMap<K, V>, key: unknown): V {
+  const typedKey = key as K;
+  if (!map.has(typedKey)) {
+    throw new Error(`missing map key: ${String(key)}`);
+  }
+  return map.get(typedKey) as V;
+}
+
 export enum PerkFlags {
   // `perk_can_offer` uses these bits as mode-specific allow-lists:
   // - in quest mode, only perks with QUEST_MODE_ALLOWED are eligible
@@ -526,7 +534,7 @@ export function perkDisplayName(perkId: PerkId, opts: { violenceDisabled?: numbe
   if (perkId === PerkId.BLOODY_MESS_QUICK_LEARNER && int(violenceDisabled) !== 0) {
     return QUICK_LEARNER_NAME;
   }
-  const entry = PERK_BY_ID.get(perkId)!;
+  const entry = mapGetOrThrow(PERK_BY_ID, perkId);
   if (!preserveBugs) {
     const fixed = _PERK_FIXED_NAMES.get(perkId) ?? null;
     if (fixed !== null) {
@@ -542,7 +550,7 @@ export function perkDisplayDescription(perkId: PerkId, opts: { violenceDisabled?
   if (perkId === PerkId.BLOODY_MESS_QUICK_LEARNER && int(violenceDisabled) !== 0) {
     return QUICK_LEARNER_DESCRIPTION;
   }
-  const entry = PERK_BY_ID.get(perkId)!;
+  const entry = mapGetOrThrow(PERK_BY_ID, perkId);
   if (!preserveBugs) {
     const fixed = _PERK_FIXED_DESCRIPTIONS.get(perkId) ?? null;
     if (fixed !== null) {

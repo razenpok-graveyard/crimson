@@ -4,6 +4,14 @@ import { View } from '@grim/view.ts';
 
 export const VIEW_REGISTRY: Map<string, ViewDefinition> = new Map();
 
+function mapGetOrThrow<K, V>(map: ReadonlyMap<K, V>, key: unknown): V {
+  const typedKey = key as K;
+  if (!map.has(typedKey)) {
+    throw new Error(`missing map key: ${String(key)}`);
+  }
+  return map.get(typedKey) as V;
+}
+
 export class ViewDefinition {
   readonly name: string;
   readonly title: string;
@@ -33,7 +41,7 @@ export function registerView(name: string, title: string): (arg0: (...args: any[
 }
 
 export function allViews(): ViewDefinition[] {
-  return Array.from(VIEW_REGISTRY.keys()).sort((left, right) => left.toLowerCase().localeCompare(right.toLowerCase())).map((name) => VIEW_REGISTRY.get(name)!);
+  return Array.from(VIEW_REGISTRY.keys()).sort((left, right) => left.toLowerCase().localeCompare(right.toLowerCase())).map((name) => mapGetOrThrow(VIEW_REGISTRY, name));
 }
 
 export function viewByName(name: string): ViewDefinition | null {

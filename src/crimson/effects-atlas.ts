@@ -16,7 +16,7 @@ export class EffectAtlasEntry {
   }
 
   get grid(): number {
-    return SIZE_CODE_GRID.get(this.sizeCode)!;
+    return mapGetOrThrow(SIZE_CODE_GRID, this.sizeCode);
   }
 }
 
@@ -49,6 +49,14 @@ export const EFFECT_ID_ATLAS_TABLE: readonly EffectAtlasEntry[] = [
   new EffectAtlasEntry({ effectId: 0x12, sizeCode: 0x10, frame: 0x26 }),
 ];
 export const EFFECT_ID_ATLAS_TABLE_BY_ID: Map<number, EffectAtlasEntry> = new Map(Array.from(EFFECT_ID_ATLAS_TABLE, (entry) => [entry.effectId, entry] as const));
+
+function mapGetOrThrow<K, V>(map: ReadonlyMap<K, V>, key: unknown): V {
+  const typedKey = key as K;
+  if (!map.has(typedKey)) {
+    throw new Error(`missing map key: ${String(key)}`);
+  }
+  return map.get(typedKey) as V;
+}
 
 export enum EffectId {
   BURST = 0x00,

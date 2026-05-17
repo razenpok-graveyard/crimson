@@ -7,6 +7,14 @@ let neutralInput: PackedPlayerInput = [0.0, 0.0, 0.0, 0.0, 0];
 const _MAX_SENT_HISTORY_TICKS = 256;
 const _MAX_RESEND_SAMPLES = 64;
 
+function mapGetOrThrow<K, V>(map: ReadonlyMap<K, V>, key: unknown): V {
+  const typedKey = key as K;
+  if (!map.has(typedKey)) {
+    throw new Error(`missing map key: ${String(key)}`);
+  }
+  return map.get(typedKey) as V;
+}
+
 function pythonEquals(left: object | string | number | boolean | null | undefined, right: object | string | number | boolean | null | undefined): boolean {
   if (left === right) {
     return true;
@@ -134,14 +142,14 @@ export class RollbackController {
 
   queueLocalInput(packedInput: PackedPlayerInput): RbInputBatch {
     const targetTick = int(this._captureTick) + int(this.inputDelayTicks);
-    this._knownBySlot.get(int(this.localSlotIndex))!.set(int(targetTick), Array.from(packedInput));
+    mapGetOrThrow(this._knownBySlot, int(this.localSlotIndex)).set(int(targetTick), Array.from(packedInput));
 
     const history = Math.max(1, int(this.maxSentHistoryTicks));
     const oldest = Math.max(int(this._nextEmitTick), int(targetTick) - int(history) + 1);
     const maxSamples = Math.max(1, int(this.maxResendSamples));
 
     const samples: RbInputSample[] = [];
-    const slotMap = this._knownBySlot.get(int(this.localSlotIndex))!;
+    const slotMap = mapGetOrThrow(this._knownBySlot, int(this.localSlotIndex));
     let count = 0;
     for (let tick = int(targetTick); -1 >= 0 ? tick < int(oldest) - 1 : tick > int(oldest) - 1; tick += -1) {
       const value = slotMap.get(int(tick)) ?? null;
@@ -176,7 +184,7 @@ export class RollbackController {
     if (slot === int(this.localSlotIndex)) {
       return;
     }
-    const known = this._knownBySlot.get(int(slot))!;
+    const known = mapGetOrThrow(this._knownBySlot, int(slot));
     for (const sample of samples) {
       const tick = int(sample.tickIndex);
       if (tick < 0) {
@@ -261,7 +269,7 @@ export class RollbackController {
   }
 
   _emitReadyFrames(): void {
-    const localKnown = this._knownBySlot.get(int(this.localSlotIndex))!;
+    const localKnown = mapGetOrThrow(this._knownBySlot, int(this.localSlotIndex));
     while (localKnown.has(int(this._nextEmitTick))) {
       const tick = int(this._nextEmitTick);
       const predictedSlots: number[] = [];
@@ -282,11 +290,11 @@ export class RollbackController {
   }
 
   _knownForTick(slot: number, tick: number): PackedPlayerInput | null {
-    return this._knownBySlot.get(int(slot))!.get(int(tick)) ?? null;
+    return mapGetOrThrow(this._knownBySlot, int(slot)).get(int(tick)) ?? null;
   }
 
   _predictForTick(slot: number, tick: number): PackedPlayerInput {
-    const known = this._knownBySlot.get(int(slot))!;
+    const known = mapGetOrThrow(this._knownBySlot, int(slot));
     for (let back = int(tick) - 1; -1 >= 0 ? back < -1 : back > -1; back += -1) {
       const value = known.get(int(back)) ?? null;
       if (value !== null) {

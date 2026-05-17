@@ -16,6 +16,14 @@ import { buildWeaponAvailability } from '@crimson/weapon-runtime/availability.ts
 import { weaponUsageSlotForWeaponId } from '@crimson/weapon-usage.ts';
 import * as wgl from '@wgl';
 
+function mapGetOrThrow<K, V>(map: ReadonlyMap<K, V>, key: unknown): V {
+  const typedKey = key as K;
+  if (!map.has(typedKey)) {
+    throw new Error(`missing map key: ${String(key)}`);
+  }
+  return map.get(typedKey) as V;
+}
+
 function pyRound(value: number, ndigits = 0): number {
   const factor = 10 ** ndigits;
   const scaled = value * factor;
@@ -207,7 +215,7 @@ export class UnlockedWeaponsDatabaseView extends DatabaseBaseView {
 
   protected _weaponEntry(weaponId: number): Weapon {
 
-    return WEAPON_BY_ID.get(weaponId)!;
+    return mapGetOrThrow(WEAPON_BY_ID, weaponId);
   }
 
   protected _weaponRpm(weapon: Weapon): number {
@@ -235,7 +243,7 @@ export class UnlockedWeaponsDatabaseView extends DatabaseBaseView {
 
   protected _weaponLabelAndIcon(weaponId: number): [string, number | null] {
 
-    const weapon = WEAPON_BY_ID.get(weaponId)!;
+    const weapon = mapGetOrThrow(WEAPON_BY_ID, weaponId);
     const name = weaponDisplayName(weapon.weaponId, { preserveBugs: this.state.preserveBugs });
     return [name, weapon.iconIndex];
   }

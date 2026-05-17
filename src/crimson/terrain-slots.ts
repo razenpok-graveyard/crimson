@@ -28,6 +28,14 @@ const TEXTURE_ID_BY_TERRAIN_SLOT: Map<number, TextureId> = new Map([
   [7, TextureId.TER_Q4_OVERLAY],
 ]);
 
+function mapGetOrThrow<K, V>(map: ReadonlyMap<K, V>, key: unknown): V {
+  const typedKey = key as K;
+  if (!map.has(typedKey)) {
+    throw new Error(`missing map key: ${String(key)}`);
+  }
+  return map.get(typedKey) as V;
+}
+
 export function terrainSlotsForQuest(level: QuestLevel): TerrainSlotTriplet {
   if (level.major <= 4) {
     const base = (level.major - 1) * 2;
@@ -61,7 +69,7 @@ export function chooseUnlockTerrainSlots(opts: { unlockIndex: number; rng: Crand
 }
 
 export function terrainSlotsToTextureIds(slots: TerrainSlotTriplet): [TextureId, TextureId, TextureId] {
-  return [TEXTURE_ID_BY_TERRAIN_SLOT.get(slots[0])!, TEXTURE_ID_BY_TERRAIN_SLOT.get(slots[1])!, TEXTURE_ID_BY_TERRAIN_SLOT.get(slots[2])!];
+  return [mapGetOrThrow(TEXTURE_ID_BY_TERRAIN_SLOT, slots[0]), mapGetOrThrow(TEXTURE_ID_BY_TERRAIN_SLOT, slots[1]), mapGetOrThrow(TEXTURE_ID_BY_TERRAIN_SLOT, slots[2])];
 }
 
 export function resolveTerrainSlots<T>(slots: TerrainSlotTriplet, lookup: (arg0: TextureId) => T): [T, T, T] {

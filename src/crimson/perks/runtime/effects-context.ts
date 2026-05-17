@@ -7,6 +7,14 @@ import type { FxQueue } from '@crimson/effects.ts';
 import type { GameplayState, PlayerState } from '@crimson/sim/state-types.ts';
 import type { CreatureState } from '@crimson/creatures/runtime.ts';
 
+function mapGetOrThrow<K, V>(map: ReadonlyMap<K, V>, key: unknown): V {
+  const typedKey = key as K;
+  if (!map.has(typedKey)) {
+    throw new Error(`missing map key: ${String(key)}`);
+  }
+  return map.get(typedKey) as V;
+}
+
 export function creatureFindInRadius(creatures: readonly CreatureState[], opts: { pos: Vec2; radius: number; startIndex: number }): number {
   // Find the first active creature intersecting an aim radius.
   //
@@ -68,7 +76,7 @@ export class PerksUpdateEffectsCtx {
   aimTargetForPlayer(playerIndex: number): number {
     playerIndex = int(playerIndex);
     if (this._aimTargetByPlayerIndex.has(playerIndex)) {
-      return int(this._aimTargetByPlayerIndex.get(playerIndex)!);
+      return int(mapGetOrThrow(this._aimTargetByPlayerIndex, playerIndex));
     }
 
     let target = -1;

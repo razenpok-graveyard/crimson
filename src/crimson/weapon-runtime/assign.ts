@@ -9,6 +9,14 @@ import { WEAPON_BY_ID, Weapon, WeaponId } from '@crimson/weapons.ts';
 
 export type WeaponAssignClipModifier = (arg0: WeaponAssignCtx) => void;
 
+function mapGetOrThrow<K, V>(map: ReadonlyMap<K, V>, key: unknown): V {
+  const typedKey = key as K;
+  if (!map.has(typedKey)) {
+    throw new Error(`missing map key: ${String(key)}`);
+  }
+  return map.get(typedKey) as V;
+}
+
 export class WeaponAssignCtx {
   player: PlayerState;
   clipSize: number;
@@ -23,7 +31,7 @@ export class WeaponAssignCtx {
 }
 
 export function weaponEntry(weaponId: WeaponId): Weapon {
-  return WEAPON_BY_ID.get(weaponId)!;
+  return mapGetOrThrow(WEAPON_BY_ID, weaponId);
 }
 
 function weaponAssignClipAmmoManiac(ctx: WeaponAssignCtx): void {
@@ -89,11 +97,11 @@ export function mostUsedWeaponIdForPlayer(state: GameplayState, opts: { playerIn
       const start = counts.length > 1 ? 1 : 0;
       const best = Array.from({ length: Math.max(0, counts.length - start) }, (_, i) => start + i).reduce((best, candidate) => int(counts[candidate]) > int(counts[best]) ? candidate : best);
       if (int(counts[best]) > 0) {
-        return best;
+        return best as unknown as WeaponId;
       }
     }
   }
-  return fallbackWeaponId;
+  return fallbackWeaponId as unknown as WeaponId;
 }
 
 export function playerSwapAltWeapon(player: PlayerState): boolean {

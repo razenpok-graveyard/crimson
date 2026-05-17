@@ -162,6 +162,10 @@ function tsTypeForAssignedExpression(expression: string): string | null {
   if (enumMode !== null) {
     return enumMode[1];
   }
+  const strictMapGet = /^mapGetOrThrow\(([A-Za-z_$][A-Za-z0-9_.$]*),/.exec(trimmed);
+  if (strictMapGet !== null) {
+    return `NonNullable<ReturnType<typeof ${strictMapGet[1]}.get>>`;
+  }
   const call = /^([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\(/.exec(trimmed);
   if (call !== null) {
     return `ReturnType<typeof ${call[1]}>`;

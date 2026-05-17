@@ -49,6 +49,14 @@ function _pathExtname(path: string): string {
   return dot <= 0 ? '' : base.slice(dot);
 }
 
+function mapGetOrThrow<K, V>(map: ReadonlyMap<K, V>, key: unknown): V {
+  const typedKey = key as K;
+  if (!map.has(typedKey)) {
+    throw new Error(`missing map key: ${String(key)}`);
+  }
+  return map.get(typedKey) as V;
+}
+
 const _pythonObjectIds = new WeakMap<object, number>();
 let _pythonNextObjectId = 1;
 
@@ -157,7 +165,7 @@ export class SfxState {
   sample(sfxId: SfxId): SfxSample {
     const sample = this.samples.get(sfxId) ?? null;
     if (sample === null) {
-      const entryName = SFX_SPECS.get(sfxId)!.entryName;
+      const entryName = mapGetOrThrow(SFX_SPECS, sfxId).entryName;
       throw new Error(`runtime sfx is not available: ${entryName}`);
     }
     return sample;
@@ -282,7 +290,7 @@ export function loadSfxIndex(state: SfxState, assetsDir: string, console: Consol
   for (let [sfxId, spec] of SFX_SPECS.entries()) {
     let sample = loadedByEntryName.get(spec.entryName) ?? null;
     if (sample === null) {
-      sample = loadSampleFromData(state, { entryName: spec.entryName, data: paqEntries.get(spec.entryName)! });
+      sample = loadSampleFromData(state, { entryName: spec.entryName, data: mapGetOrThrow(paqEntries, spec.entryName) });
       loadedByEntryName.set(spec.entryName, sample);
     }
     state.samples.set(sfxId, sample);

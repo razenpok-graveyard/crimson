@@ -2777,6 +2777,10 @@ function translateReturnExpression(
   const translated = translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
   const returnType = nameMap.get(functionReturnTypeMarker('__current__'));
   const trimmed = translated.trim();
+  const enumReturnCast = /^([A-Z][A-Za-z0-9_]*(?:Id|Mode|Type|Flags))\((.+)\)$/.exec(pythonExpression.trim());
+  if (enumReturnCast !== null && returnType === tsExportNameForPythonName(enumReturnCast[1])) {
+    return `${translateExpression(enumReturnCast[2], nameMap, arrayNames, validatedTypeAliases, mapNames)} as unknown as ${returnType}`;
+  }
   if (returnType?.startsWith('Map<') === true && trimmed.startsWith('{') && trimmed.endsWith('}')) {
     return `new Map(Object.entries(${translated}))`;
   }
@@ -5077,6 +5081,8 @@ function recordLocalAssignmentMarkers(
     addMutableName(mapNames, tsName);
   }
   const mapGetAssignment = /^([A-Za-z_$][A-Za-z0-9_.$]*)\.get\(.*\)!?(?: \?\? null)?$/.exec(assignedRight);
+  const mapGetOrThrowAssignment = /^mapGetOrThrow\(([A-Za-z_$][A-Za-z0-9_.$]*), .+\)(?: \?\? null)?$/.exec(assignedRight);
+  const mapGetSource = mapGetAssignment?.[1] ?? mapGetOrThrowAssignment?.[1] ?? null;
   const mapDefaultAssignment = /^([A-Za-z_$][A-Za-z0-9_.$]*)\.get\(.*\) \?\? new Map(?:<[^)]*>)?\(\)$/.exec(assignedRight);
   const mapGetOrInitMapAssignment = /^mapGetOrInit\([A-Za-z_$][A-Za-z0-9_.$]*, .+, \(\) => new Map(?:<[^)]*>)?\(\)\)$/.exec(assignedRight);
   if (mapDefaultAssignment !== null || mapGetOrInitMapAssignment !== null) {
@@ -5087,7 +5093,7 @@ function recordLocalAssignmentMarkers(
     arrayNames.add(objectNameMarker(pythonName));
     arrayNames.add(objectNameMarker(tsName));
   }
-  if (mapGetAssignment !== null && mapNames.has(arrayValueMapNameMarker(mapGetAssignment[1]))) {
+  if (mapGetSource !== null && mapNames.has(arrayValueMapNameMarker(mapGetSource))) {
     arrayNames.add(pythonName);
     arrayNames.add(tsName);
     if (assignedRight.endsWith(' ?? null')) {
@@ -5095,7 +5101,7 @@ function recordLocalAssignmentMarkers(
       arrayNames.add(nullableNameMarker(tsName));
     }
   }
-  if (mapGetAssignment !== null && mapNames.has(mapValueMapNameMarker(mapGetAssignment[1]))) {
+  if (mapGetSource !== null && mapNames.has(mapValueMapNameMarker(mapGetSource))) {
     addMutableName(mapNames, pythonName);
     addMutableName(mapNames, tsName);
   }
@@ -5221,7 +5227,7 @@ function translateMapPopAssignment(
     addMutableName(mapNames, tsExportNameForPythonName(localAssignment[1]));
   }
   const valueExpression = expressionIsKnownMap(mapName, nameMap, mapNames)
-    ? defaultExpression === null ? `${mapName}.get(${key})!` : `${mapName}.get(${key}) ?? ${defaultExpression}`
+    ? defaultExpression === null ? `mapGetOrThrow(${mapName}, ${key})` : `${mapName}.get(${key}) ?? ${defaultExpression}`
     : defaultExpression === null ? `${mapName}[${key}]` : `${mapName}[${key}] ?? ${defaultExpression}`;
   const deleteStatement = expressionIsKnownMap(mapName, nameMap, mapNames) ? `${mapName}.delete(${key});` : `delete ${mapName}[${key}];`;
   const globalName = nameMap.get(localAssignment[1]);
@@ -5426,7 +5432,8 @@ function pythonMapTypeHasTupleKey(pythonType: string): boolean {
 }
 
 function pythonMapValueIsList(pythonType: string): boolean {
-  return pythonMapTypeArgs(pythonType)?.[1]?.trim().startsWith('list[') === true;
+  const valueType = pythonMapTypeArgs(pythonType)?.[1]?.trim();
+  return valueType?.startsWith('list[') === true || valueType?.startsWith('tuple[') === true;
 }
 
 function pythonMapValueIsMap(pythonType: string): boolean {

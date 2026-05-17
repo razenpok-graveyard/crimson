@@ -43,8 +43,11 @@ import {
 import { delimitersBalanced } from './expression/scanners.js';
 import { parseStringEnumClass } from './enums.js';
 import {
+  arrayValueMapNameMarker,
   classFieldTypeMarker,
   functionReturnTypeMarker,
+  mapValueMapNameMarker,
+  mapValueTypeMarker,
   nullableNameMarker,
   objectNameMarker,
   receiverTypeNameMarker,
@@ -52,6 +55,7 @@ import {
   staticClassMethodNameMarker,
   stringNameMarker,
   translateExpression,
+  tupleKeyMapNameMarker,
 } from './expression.js';
 import {
   functionSignatureMarker,
@@ -76,6 +80,7 @@ import {
   globPathHelperStatements,
   latin1EncodeReplaceHelperStatements,
   mapGetOrInitHelperStatements,
+  mapGetOrThrowHelperStatements,
   mapMoveToEndHelperStatements,
   msgpackCodecHelperStatements,
   openTextFileHelperStatements,
@@ -523,9 +528,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     const namedAssignment = /^([A-Za-z_][A-Za-z0-9_]*)(?:: .+?)? = /.exec(lines[index] ?? '');
     if (namedAssignment !== null) {
       moduleNameMap.set(namedAssignment[1], assignment.assignment.name);
-      if (assignment.assignment.typeExpression?.startsWith('Map<') === true || assignment.assignment.typeExpression?.startsWith('ReadonlyMap<') === true) {
-        mapNames.add(assignment.assignment.name);
-      }
+      recordTopLevelMapAssignmentMarkers(assignment.assignment, moduleNameMap, mapNames);
       if (assignment.assignment.typeExpression?.startsWith('Set<') === true || assignment.assignment.typeExpression?.startsWith('ReadonlySet<') === true) {
         setReturnFunctionNames.add(assignment.assignment.name);
       }
@@ -594,9 +597,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       const namedAssignment = /^([A-Za-z_][A-Za-z0-9_]*)(?:: .+?)? = /.exec(lines[index] ?? '');
       if (namedAssignment !== null) {
         moduleNameMap.set(namedAssignment[1], interleavedAssignment.assignment.name);
-        if (interleavedAssignment.assignment.typeExpression?.startsWith('Map<') === true) {
-          mapNames.add(interleavedAssignment.assignment.name);
-        }
+        recordTopLevelMapAssignmentMarkers(interleavedAssignment.assignment, moduleNameMap, mapNames);
         if (interleavedAssignment.assignment.typeExpression?.startsWith('Set<') === true || interleavedAssignment.assignment.typeExpression?.startsWith('ReadonlySet<') === true) {
           setReturnFunctionNames.add(interleavedAssignment.assignment.name);
         }
@@ -894,9 +895,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     attachPendingAssignmentComments(assignment.assignment, pendingAssignmentComments);
     avoidImportedPrivateNameCollision(assignment.assignment, imports);
     assignments.push(assignment.assignment);
-    if (assignment.assignment.typeExpression?.startsWith('Map<') === true || assignment.assignment.typeExpression?.startsWith('ReadonlyMap<') === true) {
-      mapNames.add(assignment.assignment.name);
-    }
+    recordTopLevelMapAssignmentMarkers(assignment.assignment, moduleNameMap, mapNames);
     index = assignment.nextIndex;
   }
 
@@ -1046,6 +1045,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   }
   if (moduleValueText.includes('mapGetOrInit(')) {
     const helperStatements = mapGetOrInitHelperStatements();
+    if (leadingStatements.length > 0) {
+      helperStatements.push('');
+    }
+    leadingStatements.unshift(...helperStatements);
+  }
+  if (moduleValueText.includes('mapGetOrThrow(')) {
+    const helperStatements = mapGetOrThrowHelperStatements();
     if (leadingStatements.length > 0) {
       helperStatements.push('');
     }
@@ -2364,6 +2370,44 @@ function ensureInferredTypeImports(
       modulePath: '@grim/geom.ts',
       names: ['Vec2'],
     });
+  }
+}
+
+function recordTopLevelMapAssignmentMarkers(
+  assignment: SimpleModuleAssignment,
+  nameMap: Map<string, string>,
+  mapNames: Set<string>,
+): void {
+  const typeExpression = assignment.typeExpression?.trim() ?? '';
+  const mapType = /^(?:Readonly)?Map<(.+)>$/.exec(typeExpression);
+  if (mapType === null) {
+    return;
+  }
+  const names = new Set([
+    assignment.name,
+    ...(assignment.pythonName === undefined ? [] : [assignment.pythonName]),
+  ]);
+  for (const name of names) {
+    mapNames.add(name);
+  }
+
+  const typeArgs = splitTopLevelComma(mapType[1]);
+  if (typeArgs.length < 2) {
+    return;
+  }
+  const keyType = typeArgs[0].trim();
+  const valueType = typeArgs.slice(1).join(', ').trim();
+  for (const name of names) {
+    nameMap.set(mapValueTypeMarker(name), valueType);
+    if (keyType.startsWith('readonly [')) {
+      mapNames.add(tupleKeyMapNameMarker(name));
+    }
+    if (valueType.endsWith('[]') || valueType.startsWith('readonly ') && valueType.endsWith('[]')) {
+      mapNames.add(arrayValueMapNameMarker(name));
+    }
+    if (valueType.startsWith('Map<') || valueType.startsWith('ReadonlyMap<')) {
+      mapNames.add(mapValueMapNameMarker(name));
+    }
   }
 }
 

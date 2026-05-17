@@ -42,6 +42,14 @@ function concatBytes(chunks: readonly Uint8Array[]): Uint8Array {
   return output;
 }
 
+function mapGetOrThrow<K, V>(map: ReadonlyMap<K, V>, key: unknown): V {
+  const typedKey = key as K;
+  if (!map.has(typedKey)) {
+    throw new Error(`missing map key: ${String(key)}`);
+  }
+  return map.get(typedKey) as V;
+}
+
 class MsgpackEncoder {
   private readonly _encoder = new TextEncoder();
   private _bytes: number[] = [];
@@ -633,7 +641,7 @@ export class RbResyncAssemblerV5 {
     if (this._chunks.size !== int(expectedChunks)) {
       throw new RollbackResyncV5Error('resync_chunks_incomplete');
     }
-    const compressed = concatBytes(Array.from({ length: Math.max(0, int(expectedChunks)) }, (_, i) => i).map((index) => this._chunks.get(index)!));
+    const compressed = concatBytes(Array.from({ length: Math.max(0, int(expectedChunks)) }, (_, i) => i).map((index) => mapGetOrThrow(this._chunks, index)));
     if (compressed.length !== int(begin.compressedSize)) {
       throw new RollbackResyncV5Error('resync_compressed_size_mismatch');
     }

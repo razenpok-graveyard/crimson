@@ -1107,7 +1107,8 @@ function pythonMapKeyHasTupleIdentity(pythonType: string, tupleTypeAliases: Read
 }
 
 function pythonMapValueIsList(pythonType: string): boolean {
-  return pythonMapTypeArgs(pythonType)?.[1]?.trim().startsWith('list[') === true;
+  const valueType = pythonMapTypeArgs(pythonType)?.[1]?.trim();
+  return valueType?.startsWith('list[') === true || valueType?.startsWith('tuple[') === true;
 }
 
 function pythonMapValueIsMap(pythonType: string): boolean {

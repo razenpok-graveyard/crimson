@@ -12,6 +12,14 @@ import { RAD_TO_DEG } from '@crimson/render/world/constants.ts';
 import { WorldRenderCtx } from '@crimson/render/world/context.ts';
 import * as wgl from '@wgl';
 
+function mapGetOrThrow<K, V>(map: ReadonlyMap<K, V>, key: unknown): V {
+  const typedKey = key as K;
+  if (!map.has(typedKey)) {
+    throw new Error(`missing map key: ${String(key)}`);
+  }
+  return map.get(typedKey) as V;
+}
+
 export function bonusIconSrc(texture: rl.Texture, iconId: number): rl.Rectangle {
   const grid = 4;
   const cellW = texture.width / grid;
@@ -87,7 +95,7 @@ export function drawBonusPickups(renderCtx: WorldRenderCtx, opts: { camera: Vec2
         continue;
       }
       const weaponId = bonus.amount;
-      const iconIndex = int(WEAPON_BY_ID.get(weaponId)!.iconIndex);
+      const iconIndex = int(mapGetOrThrow(WEAPON_BY_ID, weaponId).iconIndex);
       if (!(0 <= iconIndex && iconIndex <= 31)) {
         continue;
       }

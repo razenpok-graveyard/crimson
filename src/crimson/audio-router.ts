@@ -20,6 +20,14 @@ const _BULLET_HIT_SFX = [
   SfxId.BULLET_HIT_06,
 ];
 
+function mapGetOrThrow<K, V>(map: ReadonlyMap<K, V>, key: unknown): V {
+  const typedKey = key as K;
+  if (!map.has(typedKey)) {
+    throw new Error(`missing map key: ${String(key)}`);
+  }
+  return map.get(typedKey) as V;
+}
+
 export class AudioRouter {
   audioRng: Crand;
   audio: AudioState | null;
@@ -74,14 +82,14 @@ export class AudioRouter {
     if (this.audio === null) {
       return;
     }
-    const weapon = WEAPON_BY_ID.get(player.weapon.weaponId)!;
+    const weapon = mapGetOrThrow(WEAPON_BY_ID, player.weapon.weaponId);
 
     if (int(player.shotSeq) > int(prevShotSeq)) {
       if (player.fireBulletsTimer > 0.0) {
         // player_update (crimsonland.exe): when Fire Bullets is active, the regular per-weapon
         // shot sfx is suppressed and replaced by Fire Bullets + Plasma Minigun fire sfx.
-        const fireBullets = WEAPON_BY_ID.get(WeaponId.FIRE_BULLETS)!;
-        const plasmaMinigun = WEAPON_BY_ID.get(WeaponId.PLASMA_MINIGUN)!;
+        const fireBullets = mapGetOrThrow(WEAPON_BY_ID, WeaponId.FIRE_BULLETS);
+        const plasmaMinigun = mapGetOrThrow(WEAPON_BY_ID, WeaponId.PLASMA_MINIGUN);
         this.playSfx(fireBullets.fireSound);
         this.playSfx(plasmaMinigun.fireSound);
       } else {

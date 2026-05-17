@@ -22,6 +22,14 @@ export const LAN_PLAYER_RING_RGB: readonly [number, number, number][] = [
   [255, 120, 230],
 ];
 
+function mapGetOrThrow<K, V>(map: ReadonlyMap<K, V>, key: unknown): V {
+  const typedKey = key as K;
+  if (!map.has(typedKey)) {
+    throw new Error(`missing map key: ${String(key)}`);
+  }
+  return map.get(typedKey) as V;
+}
+
 export function lanPlayerRingRgb(playerIndex: number): [number, number, number] {
   const idx = Math.max(0, Math.min(LAN_PLAYER_RING_RGB.length - 1, int(playerIndex)));
   return LAN_PLAYER_RING_RGB[idx];
@@ -244,7 +252,7 @@ export function drawPlayerTrooperSprite(renderCtx: WorldRenderCtx, texture: rl.T
     }
 
     if (player.muzzleFlashAlpha > 1e-3 && alpha > 1e-3) {
-      const weapon = WEAPON_BY_ID.get(player.weapon.weaponId)!;
+      const weapon = mapGetOrThrow(WEAPON_BY_ID, player.weapon.weaponId);
       const flags = weapon.flags !== null ? int(weapon.flags) : 0;
       if ((flags & 0x8) === 0) {
         const flashAlpha = clamp(player.muzzleFlashAlpha * 0.8, 0.0, 1.0) * alpha;

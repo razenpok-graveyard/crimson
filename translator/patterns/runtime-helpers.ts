@@ -425,6 +425,18 @@ export function mapGetOrInitHelperStatements(): string[] {
   ];
 }
 
+export function mapGetOrThrowHelperStatements(): string[] {
+  return [
+    'function mapGetOrThrow<K, V>(map: ReadonlyMap<K, V>, key: unknown): V {',
+    '  const typedKey = key as K;',
+    '  if (!map.has(typedKey)) {',
+    "    throw new Error(`missing map key: ${String(key)}`);",
+    '  }',
+    '  return map.get(typedKey) as V;',
+    '}',
+  ];
+}
+
 export function arrayRemoveHelperStatements(): string[] {
   return [
     'function arrayRemove<T>(items: T[], value: T): void {',

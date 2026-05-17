@@ -16,7 +16,64 @@
 // - `docs/re/static/reference/weapon-id-map.md`
 
 import { SfxId } from '@grim/sfx-map.ts';
-import { ProjectileTemplateId } from './projectiles/types.ts';
+import { ProjectileTemplateId } from '@crimson/projectiles/types.ts';
+
+export class Weapon {
+  readonly weaponId: WeaponId;
+  readonly name: string;
+  readonly ammoClass: number | null;
+  readonly clipSize: number;
+  readonly shotCooldown: number;
+  readonly reloadTime: number;
+  readonly spreadHeatInc: number;
+  readonly fireSound: SfxId;
+  readonly reloadSound: SfxId;
+  readonly iconIndex: number;
+  readonly flags: number | null;
+  readonly travelBudget: number;
+  readonly damageScale: number;
+  readonly pelletCount: number;
+
+  constructor(opts: {
+    weaponId: WeaponId;
+    name: string;
+    ammoClass: number | null;
+    clipSize: number;
+    shotCooldown: number;
+    reloadTime: number;
+    spreadHeatInc: number;
+    fireSound: SfxId;
+    reloadSound: SfxId;
+    iconIndex: number;
+    flags: number | null;
+    travelBudget: number;
+    damageScale: number;
+    pelletCount: number;
+  }) {
+    this.weaponId = opts.weaponId;
+    this.name = opts.name;
+    this.ammoClass = opts.ammoClass;
+    this.clipSize = opts.clipSize;
+    this.shotCooldown = opts.shotCooldown;
+    this.reloadTime = opts.reloadTime;
+    this.spreadHeatInc = opts.spreadHeatInc;
+    this.fireSound = opts.fireSound;
+    this.reloadSound = opts.reloadSound;
+    this.iconIndex = opts.iconIndex;
+    this.flags = opts.flags;
+    this.travelBudget = opts.travelBudget;
+    this.damageScale = opts.damageScale;
+    this.pelletCount = opts.pelletCount;
+  }
+}
+
+function mapGetOrThrow<K, V>(map: ReadonlyMap<K, V>, key: unknown): V {
+  const typedKey = key as K;
+  if (!map.has(typedKey)) {
+    throw new Error(`missing map key: ${String(key)}`);
+  }
+  return map.get(typedKey) as V;
+}
 
 export enum WeaponId {
   NONE = 0,
@@ -75,56 +132,7 @@ export enum WeaponId {
   NUKE_LAUNCHER = 53,
 }
 
-export class Weapon {
-  readonly weaponId: WeaponId;
-  readonly name: string;
-  readonly ammoClass: number | null;
-  readonly clipSize: number;
-  readonly shotCooldown: number;
-  readonly reloadTime: number;
-  readonly spreadHeatInc: number;
-  readonly fireSound: SfxId;
-  readonly reloadSound: SfxId;
-  readonly iconIndex: number;
-  readonly flags: number | null;
-  readonly travelBudget: number;
-  readonly damageScale: number;
-  readonly pelletCount: number;
-
-  constructor(opts: {
-    weaponId: WeaponId;
-    name: string;
-    ammoClass: number | null;
-    clipSize: number;
-    shotCooldown: number;
-    reloadTime: number;
-    spreadHeatInc: number;
-    fireSound: SfxId;
-    reloadSound: SfxId;
-    iconIndex: number;
-    flags: number | null;
-    travelBudget: number;
-    damageScale: number;
-    pelletCount: number;
-  }) {
-    this.weaponId = opts.weaponId;
-    this.name = opts.name;
-    this.ammoClass = opts.ammoClass;
-    this.clipSize = opts.clipSize;
-    this.shotCooldown = opts.shotCooldown;
-    this.reloadTime = opts.reloadTime;
-    this.spreadHeatInc = opts.spreadHeatInc;
-    this.fireSound = opts.fireSound;
-    this.reloadSound = opts.reloadSound;
-    this.iconIndex = opts.iconIndex;
-    this.flags = opts.flags;
-    this.travelBudget = opts.travelBudget;
-    this.damageScale = opts.damageScale;
-    this.pelletCount = opts.pelletCount;
-  }
-}
-
-export const WEAPON_TABLE: readonly Weapon[] = [
+export const WEAPON_TABLE = [
   new Weapon({
     weaponId: WeaponId.PISTOL,
     name: 'Pistol',
@@ -798,12 +806,8 @@ export const WEAPON_TABLE: readonly Weapon[] = [
     pelletCount: 1,
   }),
 ];
-
-export const WEAPON_BY_ID: Map<WeaponId, Weapon> = new Map(
-  WEAPON_TABLE.map((e) => [e.weaponId, e]),
-);
-
-const _WEAPON_FIXED_NAMES: Map<WeaponId, string> = new Map([
+export const WEAPON_BY_ID: Map<WeaponId, Weapon> = new Map(Array.from(WEAPON_TABLE, (entry) => [entry.weaponId, entry] as const));
+export const WEAPON_FIXED_NAMES: Map<WeaponId, string> = new Map([
   [WeaponId.PLAGUE_SPREADER_GUN, 'Plague Spreader Gun'],
   [WeaponId.LIGHTNING_RIFLE, 'Lightning Rifle'],
   [WeaponId.FIRE_BULLETS, 'Fire Bullets'],
@@ -811,12 +815,45 @@ const _WEAPON_FIXED_NAMES: Map<WeaponId, string> = new Map([
 
 export function weaponDisplayName(weaponId: WeaponId, opts: { preserveBugs?: boolean } = {}): string {
   const preserveBugs = opts.preserveBugs ?? false;
-  const entry = WEAPON_BY_ID.get(weaponId);
-  if (!entry) return `weapon_${weaponId}`;
-  if (preserveBugs) return entry.name;
-  const fixed = _WEAPON_FIXED_NAMES.get(weaponId);
-  if (fixed !== undefined) return fixed;
-  return entry.name;
+  let entry: NonNullable<ReturnType<typeof WEAPON_BY_ID.get>>;
+  try {
+    entry = mapGetOrThrow(WEAPON_BY_ID, weaponId);
+  } catch (exc) {
+    return `weapon_${weaponId}`;
+  }
+  const name = entry.name;
+  if (preserveBugs) {
+    return String(name);
+  }
+  const fixed = WEAPON_FIXED_NAMES.get(weaponId) ?? null;
+  if (fixed !== null) {
+    return fixed;
+  }
+  return String(name);
+}
+
+export function weaponEntryForProjectileTypeId(typeId: ProjectileTemplateId): Weapon {
+  //
+  // Native `projectile_spawn` indexes weapon metadata by projectile type id.
+  // The type id is the weapon id used as the projectile stats template.
+  return mapGetOrThrow(WEAPON_BY_ID, typeId);
+}
+
+export function projectileTypeIdForWeaponId(weaponId: WeaponId): ProjectileTemplateId {
+  // Return the primary projectile type for a weapon that uses the main pool.
+
+  const typeIds = PROJECTILE_TEMPLATE_OVERRIDES.get(weaponId) ?? null;
+  if (typeIds !== null) {
+    if (typeIds === null || typeIds.length === 0) {
+      throw new Error(`weapon has no primary projectile type: ${int(weaponId)}`);
+    }
+    return typeIds[0];
+  }
+  try {
+    return weaponId as unknown as ProjectileTemplateId;
+  } catch (exc) {
+    throw new Error(`weapon has no primary projectile type: ${int(weaponId)}`);
+  }
 }
 
 export const PROJECTILE_TEMPLATE_OVERRIDES: Map<WeaponId, readonly ProjectileTemplateId[]> = new Map([
@@ -839,26 +876,3 @@ export const PROJECTILE_TEMPLATE_OVERRIDES: Map<WeaponId, readonly ProjectileTem
   [WeaponId.ION_SHOTGUN, [ProjectileTemplateId.ION_MINIGUN]],
   [WeaponId.BUBBLEGUN, []],
 ]);
-
-export function weaponEntryForProjectileTypeId(typeId: ProjectileTemplateId): Weapon {
-  // Native `projectile_spawn` indexes weapon metadata by projectile type id.
-  // The type id is the weapon id used as the projectile stats template.
-  const entry = WEAPON_BY_ID.get(typeId as number as WeaponId);
-  if (!entry) throw new Error(`No weapon entry for projectile type id: ${typeId}`);
-  return entry;
-}
-
-export function projectileTypeIdForWeaponId(weaponId: WeaponId): ProjectileTemplateId {
-  // Return the primary projectile type for a weapon that uses the main pool.
-  const typeIds = PROJECTILE_TEMPLATE_OVERRIDES.get(weaponId);
-  if (typeIds !== undefined) {
-    if (typeIds.length === 0) {
-      throw new Error(`weapon has no primary projectile type: ${weaponId}`);
-    }
-    return typeIds[0];
-  }
-  if (ProjectileTemplateId[weaponId as number] !== undefined) {
-    return weaponId as number as ProjectileTemplateId;
-  }
-  throw new Error(`weapon has no primary projectile type: ${weaponId}`);
-}

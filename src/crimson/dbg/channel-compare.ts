@@ -5,6 +5,14 @@ import { ENTITY_SAMPLE_KINDS, EntitySampleRow, entityRows } from '@crimson/dbg/c
 import { BuiltinObject, BuiltinRows, toBuiltinObject, toBuiltinValue } from '@crimson/dbg/payloads.ts';
 import { strictMismatchPayload } from '@crimson/dbg/strict-compare.ts';
 
+function mapGetOrThrow<K, V>(map: ReadonlyMap<K, V>, key: unknown): V {
+  const typedKey = key as K;
+  if (!map.has(typedKey)) {
+    throw new Error(`missing map key: ${String(key)}`);
+  }
+  return map.get(typedKey) as V;
+}
+
 function pythonEquals(left: object | string | number | boolean | null | undefined, right: object | string | number | boolean | null | undefined): boolean {
   if (left === right) {
     return true;
@@ -118,9 +126,9 @@ export function compareEntitySamples(expectedObj: EntitySamplesSnapshot, actualO
     }
 
     for (const uid of Array.from(expMap.keys()).filter((item) => actMap.has(item)).sort((left, right) => left < right ? -1 : left > right ? 1 : 0)) {
-      const expectedRow = expMap.get(uid)!;
-      const actualRow = actMap.get(uid)!;
-      if (pythonEquals(expectedRow, actualRow)) {
+      const expectedRow = mapGetOrThrow(expMap, uid);
+      const actualRow = mapGetOrThrow(actMap, uid);
+      if (expectedRow === actualRow) {
         continue;
       }
       const rowPath = `entity_samples.${kind}[uid=${uid}]`;

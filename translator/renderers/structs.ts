@@ -7,6 +7,7 @@ import type {
 import {
   arrayRemoveHelperStatements,
   mapGetOrInitHelperStatements,
+  mapGetOrThrowHelperStatements,
   pythonEqualsHelperStatements,
   pythonRoundHelperStatements,
   tupleKeyHelperStatements,
@@ -167,6 +168,9 @@ function structModuleHelperStatements(module: StructModule): string[] {
   }
   if (moduleText.includes('mapGetOrInit(')) {
     pushHelper(mapGetOrInitHelperStatements());
+  }
+  if (moduleText.includes('mapGetOrThrow(')) {
+    pushHelper(mapGetOrThrowHelperStatements());
   }
   if (moduleText.includes('arrayRemove(')) {
     pushHelper(arrayRemoveHelperStatements());

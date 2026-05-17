@@ -7,6 +7,14 @@ export const CLIENT_MAX_CAPTURE_LEAD_TICKS = 1;
 export const CLIENT_MAX_RESEND_SAMPLES = 64;
 export const CLIENT_MAX_SENT_HISTORY_TICKS = 256;
 
+function mapGetOrThrow<K, V>(map: ReadonlyMap<K, V>, key: unknown): V {
+  const typedKey = key as K;
+  if (!map.has(typedKey)) {
+    throw new Error(`missing map key: ${String(key)}`);
+  }
+  return map.get(typedKey) as V;
+}
+
 function mapGetOrInit<K, V>(map: Map<K, V>, key: K, create: () => V): V {
   const existing = map.get(key);
   if (existing !== undefined) {
@@ -112,7 +120,7 @@ export class HostLockstepState {
       const tick = int(this._nextEmitTick);
       const tickInputs = this._inputsByTick.get(tick) ?? new Map<number, PackedPlayerInput>();
       this._inputsByTick.delete(tick);
-      const orderedInputs = Array.from({ length: Math.max(0, int(this.playerCount)) }, (_, i) => i).map((slot) => Array.from(tickInputs.get(slot)!));
+      const orderedInputs = Array.from({ length: Math.max(0, int(this.playerCount)) }, (_, i) => i).map((slot) => Array.from(mapGetOrThrow(tickInputs, slot)));
       frames.push(new HostReadyTick({ tickIndex: int(tick), frameInputs: orderedInputs }));
       this._nextEmitTick += 1;
       this._lastProgressMs = int(nowMs);

@@ -5,6 +5,14 @@ import type { BuiltinObject } from '@crimson/dbg/payloads.ts';
 import { toBuiltinObject } from '@crimson/dbg/payloads.ts';
 import { strictMismatchPayload } from '@crimson/dbg/strict-compare.ts';
 
+function mapGetOrThrow<K, V>(map: ReadonlyMap<K, V>, key: unknown): V {
+  const typedKey = key as K;
+  if (!map.has(typedKey)) {
+    throw new Error(`missing map key: ${String(key)}`);
+  }
+  return map.get(typedKey) as V;
+}
+
 function pythonEquals(left: object | string | number | boolean | null | undefined, right: object | string | number | boolean | null | undefined): boolean {
   if (left === right) {
     return true;
@@ -144,7 +152,7 @@ export function compareCheckpoints(expected: readonly ReplayCheckpoint[], actual
   for (const exp of expected) {
     checkedCount += 1;
     const tick = int(exp.tickIndex);
-    const act = actualByTick.has(tick) ? actualByTick.get(tick)! : null;
+    const act = actualByTick.has(tick) ? mapGetOrThrow(actualByTick, tick) : null;
     if (act === null) {
       return new ReplayDiffResult({ ok: false, checkedCount: checkedCount, firstRngOnlyTick: firstRngOnlyTick, failure: new ReplayDiffFailure({ kind: 'missing_checkpoint', tickIndex: tick, expected: exp, actual: null }) });
     }

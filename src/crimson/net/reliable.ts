@@ -2,6 +2,14 @@
 
 import { RELIABLE_RESEND_MS, LockstepPacket, NetMessage } from '@crimson/net/lockstep-protocol.ts';
 
+function mapGetOrThrow<K, V>(map: ReadonlyMap<K, V>, key: unknown): V {
+  const typedKey = key as K;
+  if (!map.has(typedKey)) {
+    throw new Error(`missing map key: ${String(key)}`);
+  }
+  return map.get(typedKey) as V;
+}
+
 export class LockstepPendingReliable {
   packet: LockstepPacket;
   sentAtMs: number;
@@ -125,7 +133,7 @@ export class ReliableLink {
     const delivered: NetMessage[] = [];
     let nextSeq = int(this._recvHighestSeq) + 1;
     while (this._recvBuffer.has(nextSeq)) {
-      const nextPacket = this._recvBuffer.get(int(nextSeq))!;
+      const nextPacket = mapGetOrThrow(this._recvBuffer, int(nextSeq));
       this._recvBuffer.delete(int(nextSeq));
       delivered.push(nextPacket.message);
       this._recvHighestSeq = int(nextSeq);

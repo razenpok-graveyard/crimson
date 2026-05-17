@@ -6,6 +6,7 @@ import {
 import {
   classFieldTypeMarker,
   functionReturnTypeMarker,
+  mapValueTypeMarker,
   receiverTypeNameMarker,
 } from '../expression.js';
 import { tsAttributeNameForPythonName } from './names.js';
@@ -246,6 +247,14 @@ function inferPredeclaredAssignmentType(
   assignedExpression: string,
   nameMap: ReadonlyMap<string, string>,
 ): string {
+  const mapSubscript = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[.+\]$/.exec(assignedExpression.trim());
+  if (mapSubscript !== null) {
+    const mapName = nameMap.get(mapSubscript[1]) ?? tsExportNameForPythonName(mapSubscript[1]);
+    const valueType = nameMap.get(mapValueTypeMarker(mapSubscript[1])) ?? nameMap.get(mapValueTypeMarker(mapName));
+    if (valueType !== undefined) {
+      return valueType;
+    }
+  }
   const callExpression = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\(/.exec(assignedExpression.trim());
   if (callExpression !== null) {
     if (/^[A-Z][A-Za-z0-9_]*(?:Id|Type|Flags)$/.test(callExpression[1])) {
