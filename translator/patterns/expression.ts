@@ -3013,7 +3013,7 @@ function parenthesizeTranslatedMultiplicativeOperand(raw: string, translated: st
 }
 
 function multiplicativeOperandNeedsRecursiveTranslation(raw: string, translated: string): boolean {
-  return /\b(?:and|or)\b/.test(raw) || translated.includes(' && ') || translated.includes(' || ');
+  return /\b(?:and|or)\b/.test(raw) || translated.includes(' && ') || translated.includes(' || ') || translated.includes(' ?? ');
 }
 
 function tsComparisonOperator(operator: string): string {

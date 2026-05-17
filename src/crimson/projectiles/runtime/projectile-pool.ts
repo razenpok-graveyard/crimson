@@ -2,23 +2,38 @@
 
 import { Vec2 } from '@grim/geom.ts';
 import type { CrandLike } from '@grim/rand.ts';
-import type { SfxId } from '@grim/sfx-map.ts';
+import { SfxId } from '@grim/sfx-map.ts';
 import { CreatureDamageType } from '@crimson/creatures/damage-types.ts';
 import { creatureLifecycleIsAlive, creatureLifecycleIsCollidable } from '@crimson/creatures/lifecycle.ts';
-import type { EffectPool } from '@crimson/effects.ts';
-import { f32, NATIVE_HALF_PI } from '@crimson/math-parity.ts';
+import { EffectPool } from '@crimson/effects.ts';
+import { NATIVE_HALF_PI, f32 } from '@crimson/math-parity.ts';
 import { OwnerRef } from '@crimson/owner-ref.ts';
-import { PerkId } from '@crimson/perks/ids.ts';
+import { PerkId } from '@crimson/perks/index.ts';
 import { RngCallerStatic } from '@crimson/rng-caller-static.ts';
 import { weaponEntryForProjectileTypeId } from '@crimson/weapons.ts';
-import { MAIN_PROJECTILE_POOL_SIZE, type CreatureDamageApplier, Projectile, ProjectileCollisionProfile, ProjectileHit, ProjectileTemplateId } from '@crimson/projectiles/types.ts';
-import { PROJECTILE_HIT_PERK_HOOKS, ProjectileHitInfo, ProjectileUpdateCtx, ProjectileHitPerkCtx } from './behaviors.ts';
-import { applyDamageToCreature, hitRadiusFor, withinNativeFindRadius } from './collision.ts';
-import { primaryRuleForTypeId } from './primary-rules.ts';
-import { CreatureSpatialHash } from './spatial-hash.ts';
-import type { CreatureState } from '@crimson/creatures/runtime.ts';
+import type { CreatureDamageApplier } from '@crimson/projectiles/types.ts';
+import { MAIN_PROJECTILE_POOL_SIZE, Projectile, ProjectileCollisionProfile, ProjectileHit, ProjectileTemplateId } from '@crimson/projectiles/types.ts';
+import { PROJECTILE_HIT_PERK_HOOKS, ProjectileHitInfo, ProjectileHitPerkCtx, ProjectileUpdateCtx } from '@crimson/projectiles/runtime/behaviors.ts';
+import { applyDamageToCreature, hitRadiusFor, withinNativeFindRadius } from '@crimson/projectiles/runtime/collision.ts';
+import { primaryRuleForTypeId } from '@crimson/projectiles/runtime/primary-rules.ts';
+import { CreatureSpatialHash } from '@crimson/projectiles/runtime/spatial-hash.ts';
+import { CreatureState } from '@crimson/creatures/runtime.ts';
 import type { GameplayState } from '@crimson/gameplay.ts';
 import type { PlayerState } from '@crimson/sim/state-types.ts';
+
+const _DEFAULT_PROJECTILE_COLLISION_PROFILE = new ProjectileCollisionProfile({
+  hitRadius: 1.0,
+  initialDamagePool: 1.0,
+});
+export const PROJECTILE_COLLISION_PROFILE_BY_TYPE_ID: Map<ProjectileTemplateId, ProjectileCollisionProfile> = new Map([
+  [ProjectileTemplateId.ION_MINIGUN, new ProjectileCollisionProfile({ hitRadius: 3.0, initialDamagePool: 1.0 })],
+  [ProjectileTemplateId.ION_RIFLE, new ProjectileCollisionProfile({ hitRadius: 5.0, initialDamagePool: 1.0 })],
+  [ProjectileTemplateId.ION_CANNON, new ProjectileCollisionProfile({ hitRadius: 10.0, initialDamagePool: 1.0 })],
+  [ProjectileTemplateId.PLASMA_CANNON, new ProjectileCollisionProfile({ hitRadius: 10.0, initialDamagePool: 1.0 })],
+  [ProjectileTemplateId.GAUSS_GUN, new ProjectileCollisionProfile({ hitRadius: 1.0, initialDamagePool: 300.0 })],
+  [ProjectileTemplateId.FIRE_BULLETS, new ProjectileCollisionProfile({ hitRadius: 1.0, initialDamagePool: 240.0 })],
+  [ProjectileTemplateId.BLADE_GUN, new ProjectileCollisionProfile({ hitRadius: 1.0, initialDamagePool: 50.0 })],
+]);
 
 export class ProjectileUpdateOptions {
   readonly worldSize: number;
@@ -26,11 +41,11 @@ export class ProjectileUpdateOptions {
   readonly rng: CrandLike;
   readonly runtimeState: GameplayState;
   readonly players: readonly PlayerState[];
-  readonly applyPlayerDamage: (playerIndex: number, damage: number) => void;
-  readonly ionAoeScale?: number;
-  readonly detailPreset?: number;
-  readonly onHit?: ((hit: ProjectileHit) => object) | null;
-  readonly onHitPost?: ((hit: ProjectileHit, ctx: object) => void) | null;
+  readonly applyPlayerDamage: (arg0: number, arg1: number) => void;
+  readonly ionAoeScale: number;
+  readonly detailPreset: number;
+  readonly onHit: ((arg0: ProjectileHit) => unknown) | null;
+  readonly onHitPost: ((arg0: ProjectileHit, arg1: unknown) => void) | null;
 
   constructor(opts: {
     worldSize: number;
@@ -38,11 +53,11 @@ export class ProjectileUpdateOptions {
     rng: CrandLike;
     runtimeState: GameplayState;
     players: readonly PlayerState[];
-    applyPlayerDamage: (playerIndex: number, damage: number) => void;
+    applyPlayerDamage: (arg0: number, arg1: number) => void;
     ionAoeScale?: number;
     detailPreset?: number;
-    onHit?: ((hit: ProjectileHit) => object) | null;
-    onHitPost?: ((hit: ProjectileHit, ctx: object) => void) | null;
+    onHit?: ((arg0: ProjectileHit) => unknown) | null;
+    onHitPost?: ((arg0: ProjectileHit, arg1: unknown) => void) | null;
   }) {
     this.worldSize = opts.worldSize;
     this.damageScaleByType = opts.damageScaleByType;
@@ -73,32 +88,14 @@ export class PrimaryStepCtx {
   }
 }
 
-const _DEFAULT_PROJECTILE_COLLISION_PROFILE = new ProjectileCollisionProfile({
-  hitRadius: 1.0,
-  initialDamagePool: 1.0,
-});
-
-const _PROJECTILE_COLLISION_PROFILE_BY_TYPE_ID: Map<ProjectileTemplateId, ProjectileCollisionProfile> = new Map([
-  [ProjectileTemplateId.ION_MINIGUN, new ProjectileCollisionProfile({ hitRadius: 3.0, initialDamagePool: 1.0 })],
-  [ProjectileTemplateId.ION_RIFLE, new ProjectileCollisionProfile({ hitRadius: 5.0, initialDamagePool: 1.0 })],
-  [ProjectileTemplateId.ION_CANNON, new ProjectileCollisionProfile({ hitRadius: 10.0, initialDamagePool: 1.0 })],
-  [ProjectileTemplateId.PLASMA_CANNON, new ProjectileCollisionProfile({ hitRadius: 10.0, initialDamagePool: 1.0 })],
-  [ProjectileTemplateId.GAUSS_GUN, new ProjectileCollisionProfile({ hitRadius: 1.0, initialDamagePool: 300.0 })],
-  [ProjectileTemplateId.FIRE_BULLETS, new ProjectileCollisionProfile({ hitRadius: 1.0, initialDamagePool: 240.0 })],
-  [ProjectileTemplateId.BLADE_GUN, new ProjectileCollisionProfile({ hitRadius: 1.0, initialDamagePool: 50.0 })],
-]);
-
-export function projectileCollisionProfile(typeId: ProjectileTemplateId): ProjectileCollisionProfile {
-  return _PROJECTILE_COLLISION_PROFILE_BY_TYPE_ID.get(typeId) ?? _DEFAULT_PROJECTILE_COLLISION_PROFILE;
-}
-
 export class ProjectilePool {
-  private _entries: Projectile[];
-  private _creatureDamageApplier: CreatureDamageApplier | null = null;
+  protected _entries: Projectile[];
+  protected _creatureDamageApplier: CreatureDamageApplier | null;
 
   constructor(opts: { size?: number } = {}) {
     const size = opts.size ?? MAIN_PROJECTILE_POOL_SIZE;
-    this._entries = Array.from({ length: size }, () => new Projectile());
+    this._entries = Array.from({ length: Math.max(0, size) }, (_, i) => i).map((_) => new Projectile());
+    this._creatureDamageApplier = null;
   }
 
   get entries(): Projectile[] {
@@ -119,22 +116,16 @@ export class ProjectilePool {
     }
   }
 
-  spawn(
-    opts: {
-      pos: Vec2;
-      angle: number;
-      typeId: ProjectileTemplateId;
-      owner: OwnerRef;
-      travelBudget?: number;
-      hitsPlayers?: boolean;
-    },
-  ): number {
-    const { pos, angle, typeId, owner } = opts;
+  spawn(opts: { pos: Vec2; angle: number; typeId: ProjectileTemplateId; owner: OwnerRef; travelBudget?: number; hitsPlayers?: boolean }): number {
+    const pos = opts.pos;
+    const angle = opts.angle;
+    const typeId = opts.typeId;
+    const owner = opts.owner;
     const travelBudget = opts.travelBudget ?? 0.0;
     const hitsPlayers = opts.hitsPlayers ?? false;
-    let index: number | null = null;
-    for (let i = 0; i < this._entries.length; i++) {
-      if (!this._entries[i].active) {
+    let index = null;
+    for (const [i, entry] of this._entries.entries()) {
+      if (!entry.active) {
         index = i;
         break;
       }
@@ -152,10 +143,7 @@ export class ProjectilePool {
     entry.angle = angleF32;
     entry.pos = posF32;
     entry.origin = posF32;
-    entry.vel = new Vec2(
-      f32(Math.cos(angleF32) * 1.5),
-      f32(Math.sin(angleF32) * 1.5),
-    );
+    entry.vel = new Vec2(f32(Math.cos(angleF32) * 1.5), f32(Math.sin(angleF32) * 1.5));
     entry.typeId = typeId;
     entry.lifeTimer = 0.4;
     entry.reserved = 0.0;
@@ -185,15 +173,15 @@ export class ProjectilePool {
     const options = ctx.options;
     const worldSize = f32(options.worldSize);
     const damageScaleByType = options.damageScaleByType;
-    const ionAoeScale = options.ionAoeScale ?? 1.0;
-    const detailPreset = int(options.detailPreset ?? 5);
+    const ionAoeScale = options.ionAoeScale;
+    const detailPreset = int(options.detailPreset);
     const rng = options.rng;
     const runtimeState = options.runtimeState;
     const players = options.players;
     const applyPlayerDamage = options.applyPlayerDamage;
     const applyCreatureDamage = this._creatureDamageApplier;
-    const onHit = options.onHit ?? null;
-    const onHitPost = options.onHitPost ?? null;
+    const onHit = options.onHit;
+    const onHitPost = options.onHitPost;
 
     if (dt <= 0.0) {
       return [];
@@ -232,8 +220,8 @@ export class ProjectilePool {
       return perkIdx >= 0 && perkIdx < perkCounts.length && int(perkCounts[perkIdx]) > 0;
     };
 
-    const effects: EffectPool | null = runtimeState.effects ?? null;
-    const sfxQueue: SfxId[] | null = runtimeState.sfxQueue ?? null;
+    const effects: EffectPool | null = runtimeState.effects;
+    const sfxQueue: SfxId[] | null = runtimeState.sfxQueue;
 
     const hits: ProjectileHit[] = [];
     const margin = 64.0;
@@ -248,11 +236,11 @@ export class ProjectilePool {
       return true;
     };
 
-    const creatureSpatial = new CreatureSpatialHash({ creatures, isCollidable: _creatureIsCollidable });
+    const creatureSpatial = new CreatureSpatialHash({ creatures: creatures, isCollidable: _creatureIsCollidable });
 
-    const _damageScale = (typeId: ProjectileTemplateId): number => {
-      const value = damageScaleByType.get(typeId);
-      if (value !== undefined) {
+    const _damageScale = (typeId: number): number => {
+      const value = damageScaleByType.get(typeId) ?? null;
+      if (value !== null) {
         return value;
       }
       return weaponEntryForProjectileTypeId(typeId).damageScale;
@@ -277,20 +265,10 @@ export class ProjectilePool {
     };
 
     const _damageTypeFor = (): number => {
-      return CreatureDamageType.BULLET;
+      return int(CreatureDamageType.BULLET);
     };
 
-    const updateCtx = new ProjectileUpdateCtx({
-      pool: this,
-      creatures,
-      dt,
-      ionScale,
-      detailPreset,
-      rng,
-      runtimeState,
-      effects,
-      sfxQueue,
-    });
+    const updateCtx = new ProjectileUpdateCtx({ pool: this, creatures: creatures, dt: dt, ionScale: ionScale, detailPreset: int(detailPreset), rng: rng, runtimeState: runtimeState, effects: effects, sfxQueue: sfxQueue });
 
     const _resetShockChainIfOwner = (index: number): void => {
       if (runtimeState.shockChainProjectileId !== index) {
@@ -300,8 +278,7 @@ export class ProjectilePool {
       runtimeState.shockChainLinksLeft = 0;
     };
 
-    for (let projIndex = 0; projIndex < this._entries.length; projIndex++) {
-      const proj = this._entries[projIndex];
+    for (const [projIndex, proj] of this._entries.entries()) {
       if (!proj.active) {
         continue;
       }
@@ -322,12 +299,7 @@ export class ProjectilePool {
         continue;
       }
 
-      if (
-        proj.pos.x < -margin ||
-        proj.pos.y < -margin ||
-        proj.pos.x > worldSize + margin ||
-        proj.pos.y > worldSize + margin
-      ) {
+      if (proj.pos.x < -margin || proj.pos.y < -margin || proj.pos.x > worldSize + margin || proj.pos.y > worldSize + margin) {
         proj.lifeTimer = f32(proj.lifeTimer - dt);
         continue;
       }
@@ -347,45 +319,30 @@ export class ProjectilePool {
       let acc = new Vec2();
       let step = 0;
       while (step < steps) {
-        acc = new Vec2(
-          f32(
-            acc.x +
-            f32(dirX * dt * 20.0) * proj.speedScale * 3.0,
-          ),
-          f32(
-            acc.y +
-            f32(dirY * dt * 20.0) * proj.speedScale * 3.0,
-          ),
-        );
+        acc = new Vec2(f32(acc.x + f32(dirX * dt * 20.0) * proj.speedScale * 3.0), f32(acc.y + f32(dirY * dt * 20.0) * proj.speedScale * 3.0));
 
+        let hitIdx: any;
+        let creature: any;
+        let ownerPlayerIndex: any;
         if (acc.length() >= 4.0 || steps <= step + 3) {
           const move = acc;
-          proj.pos = new Vec2(
-            f32(proj.pos.x + move.x),
-            f32(proj.pos.y + move.y),
-          );
+          proj.pos = new Vec2(f32(proj.pos.x + move.x), f32(proj.pos.y + move.y));
           acc = new Vec2();
 
-          let hitIdx: number | null = null;
+          hitIdx = null;
           const ownerCreatureIdx = proj.owner.creatureIndexInBounds(creatures.length);
           for (const idx of creatureSpatial.candidateIndices({ pos: proj.pos, radius: proj.hitRadius })) {
-            const creature = creatures[idx];
+            creature = creatures[idx];
             if (!_creatureIsCollidable(creature)) {
               continue;
             }
-            if (withinNativeFindRadius({
-              origin: proj.pos,
-              target: creature.pos,
-              radius: proj.hitRadius,
-              targetSize: creature.size,
-            })) {
+            if (withinNativeFindRadius({ origin: proj.pos, target: creature.pos, radius: proj.hitRadius, targetSize: creature.size })) {
               hitIdx = idx;
               break;
             }
           }
 
-          const ownerCollision =
-            hitIdx !== null && ownerCreatureIdx !== null && hitIdx === ownerCreatureIdx;
+          const ownerCollision = (hitIdx !== null && ownerCreatureIdx !== null && int(hitIdx) === ownerCreatureIdx);
           if (ownerCollision) {
             // Native `creature_find_in_radius` does not skip owner id during
             // search; owner hits are discarded after the first match instead of
@@ -393,31 +350,27 @@ export class ProjectilePool {
             hitIdx = null;
           }
 
+          let canHitPlayers: boolean;
           if (hitIdx === null) {
-            let canHitPlayers = true;
+            canHitPlayers = true;
             if (int(projIndex) === int(runtimeState.shockChainProjectileId)) {
               // Native skips `player_find_in_radius` for the currently tracked
               // shock-chain projectile slot in this branch.
               canHitPlayers = false;
             }
 
+            let hitPlayerIdx: any;
             if (proj.hitsPlayers && canHitPlayers) {
-              let hitPlayerIdx: number | null = null;
-              const ownerPlayerIndex = proj.owner.playerIndexInBounds(players.length);
-              for (let idx = 0; idx < players.length; idx++) {
-                const player = players[idx];
+              hitPlayerIdx = null;
+              ownerPlayerIndex = proj.owner.playerIndexInBounds(players.length);
+              for (const [idx, player] of players.entries()) {
                 if (ownerPlayerIndex !== null && idx === ownerPlayerIndex) {
                   continue;
                 }
                 if (player.health <= 0.0) {
                   continue;
                 }
-                if (withinNativeFindRadius({
-                  origin: proj.pos,
-                  target: player.pos,
-                  radius: proj.hitRadius,
-                  targetSize: player.size,
-                })) {
+                if (withinNativeFindRadius({ origin: proj.pos, target: player.pos, radius: proj.hitRadius, targetSize: player.size })) {
                   hitPlayerIdx = idx;
                   break;
                 }
@@ -440,36 +393,23 @@ export class ProjectilePool {
           }
 
           const typeId = proj.typeId;
-          const creature = creatures[hitIdx];
+          creature = creatures[hitIdx];
 
-          const perkCtx = new ProjectileHitPerkCtx({
-            proj,
-            creature,
-            rng,
-            ownerPerkActive: _ownerPerkActive,
-            poisonIdx,
-          });
+          const perkCtx = new ProjectileHitPerkCtx({ proj: proj, creature: creature, rng: rng, ownerPerkActive: _ownerPerkActive, poisonIdx: poisonIdx });
           for (const hook of PROJECTILE_HIT_PERK_HOOKS) {
             hook(perkCtx);
           }
 
           rule.preHit(updateCtx, proj, int(hitIdx));
 
-          const ownerPlayerIndex = proj.owner.playerIndexInBounds(
-            runtimeState.shotsHit.length,
-          );
+          ownerPlayerIndex = proj.owner.playerIndexInBounds(runtimeState.shotsHit.length);
           if (ownerPlayerIndex !== null && creatureLifecycleIsAlive(creature.lifecycleStage)) {
-            const shotsHit: number[] = runtimeState.shotsHit;
+            const shotsHit = runtimeState.shotsHit;
             shotsHit[ownerPlayerIndex] += 1;
           }
 
           const target = creature.pos;
-          const hit = new ProjectileHit({
-            typeId,
-            origin: proj.origin,
-            hit: proj.pos,
-            target,
-          });
+          const hit = new ProjectileHit({ typeId: typeId, origin: proj.origin, hit: proj.pos, target: target });
           hits.push(hit);
           const hitCtx = onHit !== null ? onHit(hit) : null;
 
@@ -478,24 +418,12 @@ export class ProjectilePool {
             const jitter = rng.rand({ caller: RngCallerStatic.PROJECTILE_UPDATE_STOP_ON_HIT_JITTER }) & 3;
             const jitterDx = f32(dirX * jitter);
             const jitterDy = f32(dirY * jitter);
-            proj.pos = new Vec2(
-              f32(proj.pos.x + jitterDx),
-              f32(proj.pos.y + jitterDy),
-            );
+            proj.pos = new Vec2(f32(proj.pos.x + jitterDx), f32(proj.pos.y + jitterDy));
           }
 
           const dist = _damageDistanceF32(proj.origin, proj.pos);
 
-          rule.postHit(
-            updateCtx,
-            new ProjectileHitInfo({
-              projIndex: int(projIndex),
-              proj,
-              hitIdx: int(hitIdx),
-              move,
-              target,
-            }),
-          );
+          rule.postHit(updateCtx, new ProjectileHitInfo({ projIndex: int(projIndex), proj: proj, hitIdx: int(hitIdx), move: move, target: target }));
 
           const damageScale = _damageScale(typeId);
           const damageAmount = _projectileDamageAmountF32(dist, damageScale);
@@ -511,14 +439,9 @@ export class ProjectilePool {
             if (remaining <= 0.0) {
               applyDamageToCreature(
                 creatures,
-                hitIdx,
+                int(hitIdx),
                 damageAmount,
-                {
-                  damageType,
-                  impulse,
-                  owner: proj.owner,
-                  applyCreatureDamage,
-                },
+                { damageType: damageType, impulse: impulse, owner: proj.owner, applyCreatureDamage: applyCreatureDamage },
               );
               creatureSpatial.syncIndex(int(hitIdx));
               if (proj.lifeTimer !== 0.25) {
@@ -527,38 +450,28 @@ export class ProjectilePool {
             } else {
               applyDamageToCreature(
                 creatures,
-                hitIdx,
+                int(hitIdx),
                 remaining,
-                {
-                  damageType,
-                  impulse,
-                  owner: proj.owner,
-                  applyCreatureDamage,
-                },
+                { damageType: damageType, impulse: impulse, owner: proj.owner, applyCreatureDamage: applyCreatureDamage },
               );
               creatureSpatial.syncIndex(int(hitIdx));
               proj.damagePool -= creature.hp;
             }
           }
 
-          if (
-            runtimeState.bonuses.freeze > 0.0 &&
-            effects !== null &&
-            rule.emitDefaultFreezeShard
-          ) {
-            // Native `projectile_update` has separate freeze-hit ownership for
-            // primary and secondary projectiles. This branch is the default
-            // primary-projectile single-shard path (`crt_rand` @ 0x4215fa ->
-            // caller_static 0x4215ff). Secondary rocket-style `% 612` shard
-            // loops live in the secondary projectile update path instead.
-            let shardAngle = proj.angle - NATIVE_HALF_PI;
-            shardAngle +=
-              (rng.rand({ caller: RngCallerStatic.PROJECTILE_UPDATE_DEFAULT_FREEZE_SHARD_ANGLE }) % 100) * 0.01;
+          // Native `projectile_update` has separate freeze-hit ownership for
+          // primary and secondary projectiles. This branch is the default
+          // primary-projectile single-shard path (`crt_rand` @ 0x4215fa ->
+          // caller_static 0x4215ff). Secondary rocket-style `% 612` shard
+          // loops live in the secondary projectile update path instead.
+          if (runtimeState.bonuses.freeze > 0.0 && effects !== null && rule.emitDefaultFreezeShard) {
+            let shardAngle = (proj.angle - NATIVE_HALF_PI);
+            shardAngle += rng.rand({ caller: RngCallerStatic.PROJECTILE_UPDATE_DEFAULT_FREEZE_SHARD_ANGLE }) % 100 * 0.01;
             effects.spawnFreezeShard({
               pos: proj.pos,
               angle: shardAngle,
-              rng,
-              detailPreset,
+              rng: rng,
+              detailPreset: int(detailPreset),
             });
           }
 
@@ -598,14 +511,12 @@ export class ProjectilePool {
     return hits;
   }
 
-  updateDemo(
-    dt: number,
-    creatures: readonly CreatureState[],
-    opts: { worldSize: number; speedByType: Map<number, number>; damageByType: Map<number, number> },
-  ): ProjectileHit[] {
+  updateDemo(dt: number, creatures: readonly CreatureState[], opts: { worldSize: number; speedByType: Map<number, number>; damageByType: Map<number, number> }): ProjectileHit[] {
+    const worldSize = opts.worldSize;
+    const speedByType = opts.speedByType;
+    const damageByType = opts.damageByType;
     // Update a small projectile subset for the demo view.
 
-    const { worldSize, speedByType, damageByType } = opts;
     if (dt <= 0.0) {
       return [];
     }
@@ -624,28 +535,30 @@ export class ProjectilePool {
       }
 
       if (proj.lifeTimer < 0.4) {
+        let damage: number;
+        let radius: number;
         if (proj.typeId === ProjectileTemplateId.ION_RIFLE) {
-          const damage = dt * 100.0;
-          const radius = 88.0;
-          for (const creature of creatures) {
+          damage = dt * 100.0;
+          radius = 88.0;
+          for (let creature of creatures) {
             if (creature.hp <= 0.0) {
               continue;
             }
-            const creatureRadius = hitRadiusFor(creature);
-            const hitR = radius + creatureRadius;
+            let creatureRadius = hitRadiusFor(creature);
+            let hitR = radius + creatureRadius;
             if (Vec2.distanceSq(proj.pos, creature.pos) <= hitR * hitR) {
               creature.hp -= damage;
             }
           }
         } else if (proj.typeId === ProjectileTemplateId.ION_MINIGUN) {
-          const damage = dt * 40.0;
-          const radius = 60.0;
-          for (const creature of creatures) {
+          damage = dt * 40.0;
+          radius = 60.0;
+          for (let creature of creatures) {
             if (creature.hp <= 0.0) {
               continue;
             }
-            const creatureRadius = hitRadiusFor(creature);
-            const hitR = radius + creatureRadius;
+            let creatureRadius = hitRadiusFor(creature);
+            let hitR = radius + creatureRadius;
             if (Vec2.distanceSq(proj.pos, creature.pos) <= hitR * hitR) {
               creature.hp -= damage;
             }
@@ -655,12 +568,7 @@ export class ProjectilePool {
         continue;
       }
 
-      if (
-        proj.pos.x < -margin ||
-        proj.pos.y < -margin ||
-        proj.pos.x > worldSize + margin ||
-        proj.pos.y > worldSize + margin
-      ) {
+      if (proj.pos.x < -margin || proj.pos.y < -margin || proj.pos.x > worldSize + margin || proj.pos.y > worldSize + margin) {
         proj.lifeTimer = f32(proj.lifeTimer - dt);
         continue;
       }
@@ -669,14 +577,13 @@ export class ProjectilePool {
       const direction = Vec2.fromHeading(proj.angle);
       proj.pos = proj.pos.add(direction.mul(speed * dt));
 
-      let hitIdx: number | null = null;
-      for (let idx = 0; idx < creatures.length; idx++) {
-        const creature = creatures[idx];
+      let hitIdx = null;
+      for (const [idx, creature] of creatures.entries()) {
         if (creature.hp <= 0.0) {
           continue;
         }
-        const creatureRadius = hitRadiusFor(creature);
-        const hitR = proj.hitRadius + creatureRadius;
+        let creatureRadius = hitRadiusFor(creature);
+        let hitR = proj.hitRadius + creatureRadius;
         if (Vec2.distanceSq(proj.pos, creature.pos) <= hitR * hitR) {
           hitIdx = idx;
           break;
@@ -686,19 +593,19 @@ export class ProjectilePool {
         continue;
       }
 
-      const creature = creatures[hitIdx];
-      hits.push(new ProjectileHit({
-        typeId: proj.typeId,
-        origin: proj.origin,
-        hit: proj.pos,
-        target: creature.pos,
-      }));
+      let creature = creatures[hitIdx];
+      hits.push(new ProjectileHit({ typeId: proj.typeId, origin: proj.origin, hit: proj.pos, target: creature.pos }));
 
-      creatures[hitIdx].hp -= damageByType.get(proj.typeId) ?? 10.0;
+      creature = creatures[hitIdx];
+      creature.hp -= damageByType.get(proj.typeId) ?? 10.0;
 
       proj.lifeTimer = 0.25;
     }
 
     return hits;
   }
+}
+
+export function projectileCollisionProfile(typeId: ProjectileTemplateId): ProjectileCollisionProfile {
+  return PROJECTILE_COLLISION_PROFILE_BY_TYPE_ID.get(typeId) ?? _DEFAULT_PROJECTILE_COLLISION_PROFILE;
 }

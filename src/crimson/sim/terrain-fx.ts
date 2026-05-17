@@ -98,7 +98,7 @@ export class TerrainFxScratch {
   }
 
   takeBatch(): TerrainFxBatch {
-    const batch = new TerrainFxBatch({ decals: this.decals.iterActive().map((entry) => new TerrainDecalFx({ effectId: int(entry.effectId), rotation: entry.rotation, pos: entry.pos, width: entry.width, height: entry.height, color: entry.color })), corpses: this.corpses.iterActive().map((entry) => new TerrainCorpseFx({ topLeft: entry.topLeft, color: entry.color, rotation: entry.rotation, scale: entry.scale, creatureTypeId: int(entry.creatureTypeId) })) });
+    const batch = new TerrainFxBatch({ decals: Array.from(this.decals.iterActive()).map((entry) => new TerrainDecalFx({ effectId: int(entry.effectId), rotation: entry.rotation, pos: entry.pos, width: entry.width, height: entry.height, color: entry.color })), corpses: Array.from(this.corpses.iterActive()).map((entry) => new TerrainCorpseFx({ topLeft: entry.topLeft, color: entry.color, rotation: entry.rotation, scale: entry.scale, creatureTypeId: int(entry.creatureTypeId) })) });
     this.clear();
     return batch;
   }

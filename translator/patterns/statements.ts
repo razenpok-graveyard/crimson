@@ -4114,6 +4114,21 @@ function translateMultilineCallExpressionFromParts(
       return `Array.from(${translateExpression(callParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
     }
   }
+  const dictGetCallee = /^(.+)\.get$/.exec(pythonCallee);
+  if (
+    dictGetCallee !== null
+    && callParts.keywordParts.length === 0
+    && (callParts.positionalParts.length === 1 || callParts.positionalParts.length === 2)
+  ) {
+    const mapName = translateExpression(dictGetCallee[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const key = translateMapKeyExpression(mapName, translateExpression(callParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames), mapNames);
+    const value = arrayNames.has(objectNameMarker(dictGetCallee[1])) || arrayNames.has(objectNameMarker(mapName))
+      ? `${mapName}[${key}]`
+      : `${mapName}.get(${key})`;
+    return callParts.positionalParts.length === 1
+      ? `${value} ?? null`
+      : `${value} ?? ${translateMapDefaultExpression(callParts.positionalParts[1], dictGetCallee[1], mapName, nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
+  }
 
   const callee = translateExpression(pythonCallee, nameMap, arrayNames, validatedTypeAliases);
   const callPrefix = /^[A-Z][A-Za-z0-9_]*$/.test(callee) ? `new ${callee}` : callee;
@@ -5107,6 +5122,7 @@ function parseMultilineCallParts(
 function collectContinuedCallArgument(lines: string[], startIndex: number): { text: string; nextIndex: number } {
   const parts: string[] = [];
   let nextIndex = startIndex;
+  let depth = 0;
   while (nextIndex < lines.length) {
     const trimmed = splitInlineComment(lines[nextIndex].trim()).code.trim();
     if (trimmed === '') {
@@ -5115,7 +5131,14 @@ function collectContinuedCallArgument(lines: string[], startIndex: number): { te
     }
     parts.push(trimmed);
     nextIndex += 1;
-    if (trimmed === ')' || trimmed === '),' || trimmed.endsWith(',')) {
+    depth += parenthesisDelta(trimmed);
+    if (
+      parts.length === 1
+      && /^[A-Za-z_][A-Za-z0-9_]*=lambda .+: (?:\(|[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\()$/.test(trimmed)
+    ) {
+      break;
+    }
+    if (depth <= 0 && (trimmed === ')' || trimmed === '),' || trimmed.endsWith(','))) {
       break;
     }
 
@@ -5124,10 +5147,10 @@ function collectContinuedCallArgument(lines: string[], startIndex: number): { te
       lookaheadIndex += 1;
     }
     const nextTrimmed = (lines[lookaheadIndex] ?? '').trim();
-    if (nextTrimmed === '' || nextTrimmed === ')' || nextTrimmed === '),') {
+    if (depth <= 0 && (nextTrimmed === '' || nextTrimmed === ')' || nextTrimmed === '),')) {
       break;
     }
-    if (!callArgumentLineContinues(trimmed, nextTrimmed)) {
+    if (depth <= 0 && !callArgumentLineContinues(trimmed, nextTrimmed)) {
       break;
     }
     nextIndex = lookaheadIndex;

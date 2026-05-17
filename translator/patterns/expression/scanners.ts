@@ -94,6 +94,9 @@ export function parenthesizeForLogicalOr(value: string): string {
 
 export function parenthesizeForAdditive(value: string): string {
   return value.includes(' ? ')
+    || splitTopLevelSpacedOperator(value, '??') !== null
+    || splitTopLevelSpacedOperator(value, '&&') !== null
+    || splitTopLevelSpacedOperator(value, '||') !== null
     || splitTopLevelSpacedOperator(value, '&') !== null
     || splitTopLevelSpacedOperator(value, '^') !== null
     || splitTopLevelSpacedOperator(value, '|') !== null
@@ -145,6 +148,9 @@ export function splitTopLevelLogicalOperator(value: string, operator: 'and' | 'o
 
 export function parenthesizeForMultiplicative(value: string): string {
   return value.includes(' ? ')
+    || splitTopLevelSpacedOperator(value, '??') !== null
+    || splitTopLevelSpacedOperator(value, '&&') !== null
+    || splitTopLevelSpacedOperator(value, '||') !== null
     || splitTopLevelSpacedOperator(value, '&') !== null
     || splitTopLevelSpacedOperator(value, '^') !== null
     || splitTopLevelSpacedOperator(value, '|') !== null
