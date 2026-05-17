@@ -9,6 +9,29 @@ export function renderEmptyModule(relativePath: string): string {
   return `// Port of ${relativePath}\n`;
 }
 
+export function renderExcludedRuntimeModule(relativePath: string, exportNames: readonly string[]): string {
+  const lines = [`// Port of ${relativePath}`, ''];
+  const uniqueExportNames = [...new Set(exportNames)];
+  if (uniqueExportNames.length === 0) {
+    lines.push('export {};');
+    lines.push('');
+    return lines.join('\n');
+  }
+
+  lines.push('function unavailableRuntimeExport(name: string): any {');
+  lines.push('  return function unavailableRuntimeExportTarget(): never {');
+  lines.push('    throw new Error(`${name} is not available in the WebGL runtime`);');
+  lines.push('  };');
+  lines.push('}');
+  lines.push('');
+  for (const name of uniqueExportNames) {
+    lines.push(`export type ${name} = any;`);
+    lines.push(`export const ${name}: any = unavailableRuntimeExport('${name}');`);
+    lines.push('');
+  }
+  return lines.join('\n');
+}
+
 export function renderModuleDocOnly(relativePath: string, docstring: string): string {
   const lines = [`// Port of ${relativePath}`, ''];
   for (const line of docstring.split(/\r?\n/)) {

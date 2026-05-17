@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { TranslationJob } from './model.js';
+import { tsExportNameForPythonName } from './naming.js';
 import {
   parseConstantsModule,
   parseFunctionsModule,
@@ -26,6 +27,7 @@ import { parseModuleDocstring, stripFutureImports, stripIgnorablePythonLines } f
 import {
   renderConstantsModule,
   renderEmptyModule,
+  renderExcludedRuntimeModule,
   renderFunctionsModule,
   renderGuardedAttributeModule,
   renderBrowserInputModule,
@@ -116,7 +118,7 @@ export async function translateFile(job: TranslationJob): Promise<string> {
     return existingExcludedRuntimePort;
   }
   if (usesUnsupportedRuntimeIo(futureStripped) && isExcludedRuntimeModule(job.relativePath)) {
-    return renderEmptyModule(job.relativePath);
+    return renderExcludedRuntimeModule(job.relativePath, excludedRuntimeExportNames(futureStripped));
   }
 
   const simpleExportModule = parseSimpleExportModule(futureStripped, job.relativePath);
@@ -164,7 +166,11 @@ async function readExistingExcludedRuntimePort(trimmedPython: string, targetPath
     return null;
   }
   try {
-    return await readFile(targetPath, 'utf8');
+    const existing = await readFile(targetPath, 'utf8');
+    if (/^\/\/ Port of .+\.py$/.test(existing.trim())) {
+      return null;
+    }
+    return existing;
   } catch {
     return null;
   }
@@ -189,6 +195,67 @@ function usesUnsupportedRuntimeIo(trimmedPython: string): boolean {
 
 function isExcludedRuntimeModule(relativePath: string): boolean {
   return /(?:^|\/)(?:dbg|replay|net)(?:\/|$)/.test(relativePath);
+}
+
+function excludedRuntimeExportNames(trimmedPython: string): string[] {
+  const allNames = parseAllExportNames(trimmedPython);
+  const names = allNames.length > 0
+    ? allNames
+    : topLevelDefinitionNames(trimmedPython);
+  return [...new Set(names.map(tsExportNameForPythonName))];
+}
+
+function parseAllExportNames(trimmedPython: string): string[] {
+  const lines = trimmedPython.split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    const trimmed = lines[index].trim();
+    const oneLineAll = /^__all__ = \[(.*)\]$/.exec(trimmed);
+    if (oneLineAll !== null) {
+      return parseQuotedNameList(oneLineAll[1]);
+    }
+    if (trimmed !== '__all__ = [') {
+      continue;
+    }
+    const names: string[] = [];
+    index += 1;
+    while (index < lines.length && lines[index].trim() !== ']') {
+      const name = /^["']([A-Za-z_][A-Za-z0-9_]*)["'],?$/.exec(lines[index].trim());
+      if (name === null) {
+        return [];
+      }
+      names.push(name[1]);
+      index += 1;
+    }
+    return names;
+  }
+  return [];
+}
+
+function parseQuotedNameList(namesText: string): string[] {
+  const trimmed = namesText.trim();
+  if (trimmed === '') {
+    return [];
+  }
+  const names: string[] = [];
+  for (const part of trimmed.split(',').map((value) => value.trim()).filter((value) => value !== '')) {
+    const name = /^["']([A-Za-z_][A-Za-z0-9_]*)["']$/.exec(part);
+    if (name === null) {
+      return [];
+    }
+    names.push(name[1]);
+  }
+  return names;
+}
+
+function topLevelDefinitionNames(trimmedPython: string): string[] {
+  const names: string[] = [];
+  for (const line of trimmedPython.split(/\r?\n/)) {
+    const definition = /^(?:class|def) ([A-Za-z_][A-Za-z0-9_]*)\b/.exec(line);
+    if (definition !== null) {
+      names.push(definition[1]);
+    }
+  }
+  return names;
 }
 
 async function readPythonProjectVersion(packageName: string): Promise<string> {
