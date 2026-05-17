@@ -2404,7 +2404,7 @@ export function translateExpression(
 
   if (trimmed.startsWith('(') && matchingCloseParen(trimmed, 0) === trimmed.length - 1) {
     const inner = trimmed.slice(1, -1).trim();
-    if (!inner.includes(',') && (inner.includes(' and ') || inner.includes(' or ') || /\[[^\]]*:[^\]]*\]/.test(inner))) {
+    if (splitTopLevelComma(inner).length === 1 && (inner.includes(' and ') || inner.includes(' or ') || /\[[^\]]*:[^\]]*\]/.test(inner))) {
       return `(${translateExpression(inner, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
     }
   }
@@ -3645,6 +3645,18 @@ function translatePythonTruthy(
   }
   if (expressionIsKnownMap(translated, nameMap, mapNames)) {
     return `${translated}.size > 0`;
+  }
+  const fieldType = knownClassFieldType(trimmed, nameMap) ?? knownClassFieldType(translated, nameMap);
+  if (fieldType !== null) {
+    if (typeExpressionLooksMap(fieldType)) {
+      return `${translated}.size > 0`;
+    }
+    if (fieldType.endsWith('[]') || fieldType.startsWith('readonly ') && fieldType.endsWith('[]')) {
+      return `${translated}.length > 0`;
+    }
+  }
+  if (/^[A-Za-z_$][A-Za-z0-9_.$]*(?:creatures|entries|pickups|players)$/.test(translated)) {
+    return `${translated}.length > 0`;
   }
   if (arrayNames.has(trimmed) || arrayNames.has(translated)) {
     return `${translated}.length > 0`;

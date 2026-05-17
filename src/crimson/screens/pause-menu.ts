@@ -373,7 +373,7 @@ export class PauseMenuView {
       const labelDst = wgl.makeRectangle(pos.x, pos.y, MENU_LABEL_WIDTH * itemScale, MENU_LABEL_HEIGHT * itemScale);
       const labelOrigin = wgl.makeVector2(-labelOffsetX, -labelOffsetY);
       wgl.drawTexturePro(labelTex, src, labelDst, labelOrigin, rotationDeg, tint);
-      let glowAlpha: any;
+      let glowAlpha: typeof alpha;
       if (this._menuEntryEnabled(entry)) {
         glowAlpha = alpha;
         if (0 <= entry.readyTimerMs && entry.readyTimerMs < 0x100) {

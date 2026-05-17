@@ -258,7 +258,7 @@ export class LocalInputInterpreter {
     let aim = new Vec2(player.aim.x, player.aim.y);
     let computerAutoFire = false;
     let delta: Vec2;
-    let targetIndex: any;
+    let targetIndex: typeof computerTargetIndex;
     if (aimScheme === AimScheme.MOUSE) {
       aim = mouseWorld;
       delta = aim.sub(player.pos);

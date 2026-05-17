@@ -17,8 +17,10 @@ export function reassignedLocalNames(lines: string[], startIndex: number): Set<s
     if (line.trim() !== '' && !line.startsWith(baseIndent)) {
       break;
     }
-    if (line.startsWith(baseIndent) && line.slice(baseIndent.length).startsWith('def ')) {
-      const blockIndent = `${baseIndent}    `;
+    const functionDefinition = /^(\s*)def ([A-Za-z_][A-Za-z0-9_]*)\(/.exec(line);
+    if (functionDefinition !== null && line.startsWith(baseIndent)) {
+      counts.set(functionDefinition[2], (counts.get(functionDefinition[2]) ?? 0) + 1);
+      const blockIndent = `${functionDefinition[1]}    `;
       const blockEnd = skipIndentedBlock(lines, index + 1, blockIndent);
       countNonlocalAssignments(lines, index + 1, blockEnd, blockIndent, counts);
       index = blockEnd;

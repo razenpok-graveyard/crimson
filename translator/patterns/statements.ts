@@ -504,6 +504,7 @@ function parseNestedFunctionStatement(
   index: number,
   indent: string,
   outerNameMap: Map<string, string>,
+  outerDeclaredNames: Set<string>,
   outerArrayNames: ReadonlySet<string>,
   validatedTypeAliases: ReadonlySet<string>,
   relativePath: string | null,
@@ -527,6 +528,8 @@ function parseNestedFunctionStatement(
   }
 
   const functionName = tsLocalFunctionNameForPythonName(header.name);
+  const alreadyDeclared = outerDeclaredNames.has(header.name);
+  outerDeclaredNames.add(header.name);
   outerNameMap.set(header.name, functionName);
 
   const nestedNameMap = new Map(outerNameMap);
@@ -574,7 +577,7 @@ function parseNestedFunctionStatement(
   outerNameMap.set(functionReturnTypeMarker(functionName), returnType);
   return {
     statements: [
-      `const ${functionName} = ${async ? 'async ' : ''}(${parsedParams.params.join(', ')}): ${async ? `Promise<${returnType}>` : returnType} => {`,
+      `${alreadyDeclared ? functionName : `const ${functionName}`} = ${async ? 'async ' : ''}(${parsedParams.params.join(', ')}): ${async ? `Promise<${returnType}>` : returnType} => {`,
       ...[...parsedParams.prologue, ...statements].map(indentStatementLine),
       '};',
     ],
@@ -815,6 +818,7 @@ export function translateStraightLineStatement(
     index,
     indent,
     nameMap,
+    declaredNames,
     arrayNames,
     validatedTypeAliases,
     relativePath,
@@ -955,7 +959,7 @@ export function translateStraightLineStatement(
       return branchStatements.length === 0 ? null : { statements: branchStatements, nextIndex };
     };
 
-    const branchDeclarations = predeclareIfBranchAssignments(lines, index, indent, declaredNames, reassignedNames, nameMap, ifBodyStartIndex);
+    const branchDeclarations = predeclareIfBranchAssignments(lines, index, indent, declaredNames, reassignedNames, nameMap, arrayNames, ifBodyStartIndex);
     const initialBranch = translateBranch(ifBodyStartIndex);
     if (initialBranch === null) {
       return null;
@@ -1247,12 +1251,53 @@ export function translateStraightLineStatement(
     }
 
     const namedItems = withItems.filter((item): item is Extract<WithItem, { close: true }> => item.close);
+    const anonymousItems = withItems.filter((item): item is Extract<WithItem, { close: false }> => !item.close);
     if (namedItems.length === 0) {
+      const hoistedBlock = hoistTryBlockDeclarations(blockStatements);
+      let wrappedStatements = hoistedBlock.statements;
+      let wrappedAnyItem = false;
+      for (let itemIndex = anonymousItems.length - 1; itemIndex >= 0; itemIndex -= 1) {
+        const item = anonymousItems[itemIndex];
+        if (item.expression === 'maybeAlphaTest()') {
+          wrappedAnyItem = true;
+          wrappedStatements = [
+            'wgl.setAlphaTest(true);',
+            'try {',
+            ...wrappedStatements,
+            '} finally {',
+            '  wgl.setAlphaTest(false);',
+            '}',
+          ];
+          continue;
+        }
+        if (!/^[A-Za-z_$][A-Za-z0-9_.$]*\(/.test(item.expression.trim())) {
+          continue;
+        }
+        wrappedAnyItem = true;
+        const cleanupName = `_withExit${index}_${itemIndex}`;
+        wrappedStatements = [
+          `const ${cleanupName} = ${item.expression};`,
+          'try {',
+          ...wrappedStatements,
+          '} finally {',
+          `  ${cleanupName}();`,
+          '}',
+        ];
+      }
+      if (!wrappedAnyItem) {
+        return {
+          statements: [
+            '{',
+            ...blockStatements,
+            '}',
+          ],
+          nextIndex,
+        };
+      }
       return {
         statements: [
-          '{',
-          ...blockStatements,
-          '}',
+          ...hoistedBlock.declarations,
+          ...wrappedStatements,
         ],
         nextIndex,
       };
@@ -6197,6 +6242,24 @@ function recordLocalAssignmentMarkers(
   if (mapNames.has(assignedRight)) {
     addMutableName(mapNames, pythonName);
     addMutableName(mapNames, tsName);
+  }
+  const assignedFieldType = knownDottedFieldType(assignedRight, nameMap);
+  if (assignedFieldType !== null) {
+    nameMap.set(receiverTypeNameMarker(pythonName), assignedFieldType);
+    nameMap.set(receiverTypeNameMarker(tsName), assignedFieldType);
+    if (assignedFieldType === 'number') {
+      arrayNames.add(numberNameMarker(pythonName));
+      arrayNames.add(numberNameMarker(tsName));
+    } else if (assignedFieldType === 'boolean') {
+      arrayNames.add(booleanNameMarker(pythonName));
+      arrayNames.add(booleanNameMarker(tsName));
+    } else if (assignedFieldType === 'string') {
+      arrayNames.add(stringNameMarker(pythonName));
+      arrayNames.add(stringNameMarker(tsName));
+    } else if (assignedFieldType === 'Vec2') {
+      arrayNames.add(vectorNameMarker(pythonName));
+      arrayNames.add(vectorNameMarker(tsName));
+    }
   }
   if (/^[A-Za-z_$][A-Za-z0-9_.$]*(?:creatures|pickups|players)$/.test(assignedRight)) {
     arrayNames.add(pythonName);

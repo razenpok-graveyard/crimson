@@ -211,8 +211,8 @@ export function drawPlagueSpreader(ctx: ProjectileDrawCtx): boolean {
     return true;
   }
 
-  let desiredSize = (fade * 40.0 + 32.0) * ctx.scale;
-  let spriteScale = cellW > 1e-6 ? desiredSize / cellW : 0.0;
+  const desiredSize = (fade * 40.0 + 32.0) * ctx.scale;
+  const spriteScale = cellW > 1e-6 ? desiredSize / cellW : 0.0;
   if (spriteScale <= 1e-6) {
     return true;
   }

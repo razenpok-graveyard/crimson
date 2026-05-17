@@ -242,7 +242,7 @@ export const build4_8SyntaxTerror = registerQuest({ level: '4.8', title: 'Syntax
   let outerIndex = 0;
   let triggerBase = 1500;
   while (outerSeed < 0x159D) {
-    let trigger: any;
+    let trigger: number;
     let innerSeed: number;
     if (playerCount + 9 > 0) {
       trigger = triggerBase;

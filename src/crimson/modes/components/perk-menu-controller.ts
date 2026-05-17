@@ -150,7 +150,7 @@ export class PerkMenuController {
       }
 
       remaining -= measureSmallTextWidth(font, ch);
-      let j: any;
+      let j: number;
       if (remaining < 0.0) {
         j = i;
         while (j > 0 && wrapped[j] !== ' ' && wrapped[j] !== '\n') {

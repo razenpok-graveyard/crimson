@@ -5,10 +5,14 @@ import {
   splitTopLevelComma,
 } from '../common.js';
 import {
+  booleanNameMarker,
   classFieldTypeMarker,
   functionReturnTypeMarker,
   mapValueTypeMarker,
+  numberNameMarker,
   receiverTypeNameMarker,
+  stringNameMarker,
+  vectorNameMarker,
 } from '../expression.js';
 import { tsAttributeNameForPythonName } from './names.js';
 import { lineStartsAtIndent } from './utils.js';
@@ -20,6 +24,7 @@ export function predeclareIfBranchAssignments(
   declaredNames: Set<string>,
   reassignedNames: Set<string>,
   nameMap: ReadonlyMap<string, string>,
+  arrayNames: ReadonlySet<string> = new Set(),
   bodyStartIndex = index + 1,
 ): string[] {
   const innerIndent = `${indent}    `;
@@ -37,7 +42,7 @@ export function predeclareIfBranchAssignments(
       const assignment = rest.startsWith(' ') ? null : /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(rest);
       if (assignment !== null && reassignedNames.has(assignment[1]) && !declaredNames.has(assignment[1])) {
         const types = assignedTypes.get(assignment[1]) ?? new Set<string>();
-        types.add(inferPredeclaredAssignmentType(lines, nextIndex, innerIndent, assignment[2], nameMap));
+        types.add(inferPredeclaredAssignmentType(lines, nextIndex, innerIndent, assignment[2], nameMap, arrayNames, declaredNames));
         assignedTypes.set(assignment[1], types);
       }
       const tupleAssignment = rest.startsWith(' ') ? null : /^([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+) = (.+)$/.exec(rest);
@@ -47,7 +52,7 @@ export function predeclareIfBranchAssignments(
             continue;
           }
           const types = assignedTypes.get(name) ?? new Set<string>();
-          types.add(inferTupleElementAssignmentType(tupleAssignment[2], nameIndex, nameMap));
+          types.add(inferTupleElementAssignmentType(tupleAssignment[2], nameIndex, nameMap, arrayNames));
           assignedTypes.set(name, types);
         }
       }
@@ -82,12 +87,13 @@ function inferTupleElementAssignmentType(
   assignedExpression: string,
   elementIndex: number,
   nameMap: ReadonlyMap<string, string>,
+  arrayNames: ReadonlySet<string> = new Set(),
 ): string {
   const trimmed = assignedExpression.trim();
   if (/\.normalized_with_length\(\)$/.test(trimmed) || /\.normalizedWithLength\(\)$/.test(trimmed)) {
     return elementIndex === 0 ? 'Vec2' : 'number';
   }
-  const inferredType = inferPredeclaredAssignmentType([], 0, '', assignedExpression, nameMap);
+  const inferredType = inferPredeclaredAssignmentType([], 0, '', assignedExpression, nameMap, arrayNames);
   const tupleType = /^\[([\s\S]+)\]$/.exec(inferredType);
   if (tupleType !== null) {
     return splitTopLevelComma(tupleType[1])[elementIndex]?.trim() ?? 'any';
@@ -126,7 +132,7 @@ export function predeclareLoopBlockAssignments(
       continue;
     }
     const types = assignedTypes.get(assignment[1]) ?? new Set<string>();
-    types.add(inferPredeclaredAssignmentType(lines, nextIndex, /^(\s*)/.exec(line)?.[1] ?? innerIndent, assignment[2], nameMap));
+    types.add(inferPredeclaredAssignmentType(lines, nextIndex, /^(\s*)/.exec(line)?.[1] ?? innerIndent, assignment[2], nameMap, new Set(), declaredNames));
     assignedTypes.set(assignment[1], types);
   }
 
@@ -173,7 +179,7 @@ export function predeclareMatchCaseAssignments(
       const assignment = rest.startsWith(' ') ? null : /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(rest);
       if (assignment !== null && reassignedNames.has(assignment[1]) && !declaredNames.has(assignment[1])) {
         const types = assignedTypes.get(assignment[1]) ?? new Set<string>();
-        types.add(inferPredeclaredAssignmentType(lines, nextIndex, bodyIndent, assignment[2], nameMap));
+        types.add(inferPredeclaredAssignmentType(lines, nextIndex, bodyIndent, assignment[2], nameMap, new Set(), declaredNames));
         assignedTypes.set(assignment[1], types);
       }
       nextIndex += 1;
@@ -223,7 +229,7 @@ export function predeclareTryFinallyAssignments(
       continue;
     }
     const types = assignedTypes.get(assignment[1]) ?? new Set<string>();
-    types.add(inferPredeclaredAssignmentType(lines, lineIndex, innerIndent, assignment[2], nameMap));
+    types.add(inferPredeclaredAssignmentType(lines, lineIndex, innerIndent, assignment[2], nameMap, new Set(), declaredNames));
     assignedTypes.set(assignment[1], types);
   }
 
@@ -273,7 +279,28 @@ function inferPredeclaredAssignmentType(
   indent: string,
   assignedExpression: string,
   nameMap: ReadonlyMap<string, string>,
+  arrayNames: ReadonlySet<string> = new Set(),
+  declaredNames: ReadonlySet<string> = new Set(),
 ): string {
+  const localReference = /^[A-Za-z_][A-Za-z0-9_]*$/.exec(assignedExpression.trim());
+  if (localReference !== null) {
+    const name = localReference[0];
+    if (arrayNames.has(numberNameMarker(name))) {
+      return 'number';
+    }
+    if (arrayNames.has(booleanNameMarker(name))) {
+      return 'boolean';
+    }
+    if (arrayNames.has(stringNameMarker(name))) {
+      return 'string';
+    }
+    if (arrayNames.has(vectorNameMarker(name))) {
+      return 'Vec2';
+    }
+    if (declaredNames.has(name)) {
+      return `typeof ${nameMap.get(name) ?? tsExportNameForPythonName(name)}`;
+    }
+  }
   const mapSubscript = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[.+\]$/.exec(assignedExpression.trim());
   if (mapSubscript !== null) {
     const mapName = nameMap.get(mapSubscript[1]) ?? tsExportNameForPythonName(mapSubscript[1]);
@@ -317,7 +344,7 @@ function inferPredeclaredAssignmentType(
     if (lineStartsAtIndent(line, indent) && trimmed === ')') {
       return expressionLines.length === 0
         ? 'any'
-        : inferPredeclaredAssignmentType(lines, index, indent, expressionLines.join(' '), nameMap);
+        : inferPredeclaredAssignmentType(lines, index, indent, expressionLines.join(' '), nameMap, arrayNames, declaredNames);
     }
     if (trimmed !== '') {
       expressionLines.push(trimmed);
