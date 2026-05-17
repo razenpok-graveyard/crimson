@@ -4372,6 +4372,12 @@ function translateStraightLineAssignment(
     if (assignedRight === tsLeft) {
       return { statements: [], nextIndex };
     }
+    if (expressionIsKnownMap(tsLeft, nameMap, mapNames)) {
+      return {
+        statements: [`${tsLeft} = ${mapAssignmentValueExpression(assignedRight)};`],
+        nextIndex,
+      };
+    }
   }
   if (operator === '//=') {
     const tsLeft = translateExpression(pythonLeft, nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -4405,6 +4411,16 @@ function tupleAssignmentBindingName(target: string, targetIndex: number): string
     .map((word) => tsExportNameForPythonName(word))
     .map((word, wordIndex) => (wordIndex === 0 ? word : `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`))
     .join('')}`;
+}
+
+function mapAssignmentValueExpression(assignedRight: string): string {
+  const fromEntries = /^Object\.fromEntries\(([\s\S]+)\)$/.exec(assignedRight.trim());
+  if (fromEntries !== null) {
+    return `new Map(${fromEntries[1]})`;
+  }
+  return assignedRight.trim().startsWith('{') && assignedRight.trim().endsWith('}')
+    ? `new Map(Object.entries(${assignedRight}))`
+    : assignedRight;
 }
 
 function nullableLocalDeclarationType(

@@ -84,19 +84,18 @@ function bootCommandHandlers(
       con.log.log('snd_addGameTune <tuneName.ogg>');
       return;
     }
-    const relPath = `music/${args[0]}`;
     const audio = state.audio;
-    if (!audio || !audio.audioContext) {
+    if (!audio) {
       return;
     }
-    loadMusicTrack(audio.music, audio.audioContext, state.assetsDir, relPath, { console: con })
-      .then((result) => {
-        if (result) {
-          const [key, trackId] = result;
-          void trackId;
-          queueTrack(audio.music, key);
-        }
-      });
+    const relPath = `music/${args[0]}`;
+    const result = loadMusicTrack(audio.music, state.assetsDir, relPath, { console: con });
+    if (result === null) {
+      return;
+    }
+    const [trackKey, trackId] = result;
+    void trackId;
+    queueTrack(audio.music, trackKey);
   }
 
   function cmdGenerateTerrain(_args: string[]): void {

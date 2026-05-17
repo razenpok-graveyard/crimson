@@ -779,6 +779,11 @@ export function translateExpression(
     }
   }
 
+  const pathNameCallAttribute = /^Path\((.+)\)\.name$/.exec(trimmed);
+  if (pathNameCallAttribute !== null) {
+    return `_basename(String(${translateExpression(pathNameCallAttribute[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}))`;
+  }
+
   const pathNameAttribute = /^(.+)\.name$/.exec(trimmed);
   if (pathNameAttribute !== null) {
     const receiver = translateExpression(pathNameAttribute[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -1160,6 +1165,19 @@ export function translateExpression(
   const aggregateGenerator = translateAggregateGeneratorCall(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
   if (aggregateGenerator !== null) {
     return aggregateGenerator;
+  }
+
+  const enumerateCall = parseCallPrefix(trimmed, 'enumerate');
+  if (enumerateCall !== null && enumerateCall.rest === '') {
+    const args = splitTopLevelComma(enumerateCall.argsText);
+    if (args.length === 1) {
+      return `Array.from(${translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames)}).entries()`;
+    }
+    if (args.length === 2) {
+      const iterable = translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const start = translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      return `Array.from(${iterable}, (item, index) => [index + ${start}, item] as const)`;
+    }
   }
 
   for (const [pythonName, tsMethod] of [['any', 'some'], ['all', 'every']] as const) {

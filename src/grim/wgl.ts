@@ -34,6 +34,14 @@ export interface Sound {
   volume: number;
 }
 
+export interface Music {
+  fileType: string;
+  data: Uint8Array | null;
+  fileName: string | null;
+  playing: boolean;
+  volume: number;
+}
+
 let audioReady = false;
 
 export function initAudioDevice(): void {
@@ -56,6 +64,14 @@ export function unloadWave(_wave: Wave): void {}
 
 export function loadSoundFromWave(wave: Wave): Sound {
   return { wave, playing: false, pitch: 1.0, volume: 1.0 };
+}
+
+export function loadMusicStream(fileName: string): Music {
+  return { fileType: '', data: null, fileName, playing: false, volume: 1.0 };
+}
+
+export function loadMusicStreamFromMemory(fileType: string, fileData: Uint8Array, dataSize: number): Music {
+  return { fileType, data: fileData.slice(0, dataSize), fileName: null, playing: false, volume: 1.0 };
 }
 
 export function loadSoundAlias(sound: Sound): Sound {
@@ -88,6 +104,28 @@ export function setSoundPitch(sound: Sound, pitch: number): void {
 
 export function setSoundVolume(sound: Sound, volume: number): void {
   sound.volume = volume;
+}
+
+export function playMusicStream(music: Music): void {
+  music.playing = true;
+}
+
+export function stopMusicStream(music: Music): void {
+  music.playing = false;
+}
+
+export function updateMusicStream(_music: Music): void {}
+
+export function isMusicStreamPlaying(music: Music): boolean {
+  return music.playing;
+}
+
+export function unloadMusicStream(music: Music): void {
+  music.playing = false;
+}
+
+export function setMusicVolume(music: Music, volume: number): void {
+  music.volume = volume;
 }
 
 let ctx: WebGLContext;

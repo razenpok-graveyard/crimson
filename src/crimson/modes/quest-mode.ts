@@ -439,8 +439,10 @@ export class QuestMode extends BaseGameplayMode {
     const playback = this.audio.music.playbacks?.get?.('crimsonquest');
     if (playback != null) {
       playback.volume = 0.0;
-      if (playback.gainNode !== null) {
-        playback.gainNode.gain.value = 0.0;
+      try {
+        wgl.setMusicVolume(playback.music, 0.0);
+      } catch {
+        playback.volume = 0.0;
       }
     }
   }
