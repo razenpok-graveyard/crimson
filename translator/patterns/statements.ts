@@ -4365,7 +4365,7 @@ function collectContinuedCallArgument(lines: string[], startIndex: number): { te
     }
     nextIndex = lookaheadIndex;
   }
-  return { text: parts.join(' ').replace(/\s+/g, ' '), nextIndex };
+  return { text: parts.join(' '), nextIndex };
 }
 
 function callArgumentLineContinues(currentLine: string, nextLine: string): boolean {

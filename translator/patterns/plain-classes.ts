@@ -224,9 +224,11 @@ export function parsePlainClass(
   const constructorMapNames = new Set<string>(fieldMapNames);
   for (const parameter of constructorParams.parameters) {
     constructorNameMap.set(parameter.name, parameter.name);
+    constructorNameMap.set(receiverTypeNameMarker(parameter.name), parameter.typeExpression);
   }
   for (const parameter of constructorParams.optsParams) {
     constructorNameMap.set(parameter.name, parameter.name);
+    constructorNameMap.set(receiverTypeNameMarker(parameter.name), parameter.typeExpression);
   }
   for (const pythonParameterName of pythonParameterNames(constructorParametersText === 'self' ? '' : constructorParametersText.slice('self, '.length))) {
     constructorNameMap.set(pythonParameterName, tsExportNameForPythonName(pythonParameterName));
@@ -869,6 +871,23 @@ function inferPlainClassFieldType(
   if (/^(?:max|min)\(/.test(valueText.trim())) {
     return 'number';
   }
+  const dottedField = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(valueText.trim());
+  if (dottedField !== null) {
+    const receiver = translatedFunctionCallee(dottedField[1], nameMap);
+    const receiverType = nameMap.get(receiverTypeNameMarker(dottedField[1])) ?? nameMap.get(receiverTypeNameMarker(receiver));
+    const fieldType = receiverType === undefined
+      ? undefined
+      : nameMap.get(classFieldTypeMarker(receiverType, tsAttributeNameForPythonName(dottedField[2])));
+    if (fieldType !== undefined) {
+      return fieldType;
+    }
+  }
+  const listComprehension = /^\[(.+?) for ([A-Za-z_][A-Za-z0-9_]*) in .+\]$/.exec(valueText.trim());
+  if (listComprehension !== null) {
+    const itemType = inferPythonExpressionType(listComprehension[1]);
+    const itemName = tsExportNameForPythonName(listComprehension[2]);
+    return itemType.startsWith(`typeof ${itemName}.`) ? 'any[]' : `${itemType}[]`;
+  }
   const constructorCall = /^_?([A-Z][A-Za-z0-9_]*)\(.*\)$/.exec(valueText.trim());
   if (constructorCall !== null) {
     return tsExportNameForPythonName(valueText.trim().slice(0, valueText.trim().indexOf('(')));
@@ -890,6 +909,9 @@ function inferPlainClassFieldType(
     return 'number';
   }
   const literalType = inferPythonExpressionType(valueText);
+  if (/^typeof [a-z_]/.test(literalType)) {
+    return 'any';
+  }
   return literalType === 'any' ? null : literalType;
 }
 

@@ -213,6 +213,14 @@ export function tsFStringTemplateContent(
             : `String(${translatedExpression})`;
           translated += `\${${formatted}.padStart(${zeroPaddedInteger[1]}, '0')}`;
         } else {
+          const paddedInteger = /^([<>]?)(\d+)d$/.exec(format ?? '');
+          if (paddedInteger !== null) {
+            const value = `String(${translatedExpression})`;
+            const method = paddedInteger[1] === '<' ? 'padEnd' : 'padStart';
+            translated += `\${${value}.${method}(${paddedInteger[2]}, ' ')}`;
+            index = closeIndex;
+            continue;
+          }
           const fixedFloat = /^(\d+)?\.(\d+)f$/.exec(format ?? '');
           if (fixedFloat !== null) {
             const width = fixedFloat[1] ?? null;
@@ -258,6 +266,22 @@ export function translatePositionalCallExpression(
   mapNames: ReadonlySet<string> = new Set(),
   constructUppercase = false,
 ): string {
+  if (positionalParts.length === 1) {
+    const flattenedParts = splitTopLevelComma(positionalParts[0])
+      .map((part) => part.trim())
+      .filter((part) => part !== '');
+    if (flattenedParts.length > 1) {
+      return translatePositionalCallExpression(
+        pythonCallee,
+        flattenedParts,
+        nameMap,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+        constructUppercase,
+      );
+    }
+  }
   const callee = translateCallCalleeExpression(pythonCallee, nameMap, arrayNames, validatedTypeAliases);
   const args = positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
   const raylibConstructor = /^(r[dl]|wgl)\.(Color|Vector2|Rectangle)$/.exec(callee);
@@ -2111,6 +2135,26 @@ export function translateExpression(
     const right = translateExpression(parenthesizedMultiplicativeRight ?? multiplicativeWithFloorDivision.right, nameMap, arrayNames, validatedTypeAliases, mapNames);
     return `${leftWasParenthesized ? `(${left})` : parenthesizeForMultiplicative(left)} * ${rightWasParenthesized ? `(${right})` : parenthesizeForMultiplicative(right)}`;
   }
+  if (
+    multiplicativeWithFloorDivision !== null
+    && !vectorScaleContainsComparison
+    && splitTopLevelAdditive(trimmed) === null
+    && splitTopLevelComma(trimmed).length === 1
+  ) {
+    const leftRaw = multiplicativeWithFloorDivision.left;
+    const rightRaw = multiplicativeWithFloorDivision.right;
+    const left = translateExpression(leftRaw, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const right = translateExpression(rightRaw, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (
+      (left !== leftRaw || right !== rightRaw)
+      && (
+        multiplicativeOperandNeedsRecursiveTranslation(leftRaw, left)
+        || multiplicativeOperandNeedsRecursiveTranslation(rightRaw, right)
+      )
+    ) {
+      return `${parenthesizeTranslatedMultiplicativeOperand(leftRaw, left)} * ${parenthesizeTranslatedMultiplicativeOperand(rightRaw, right)}`;
+    }
+  }
   const divisionWithConditional = splitTopLevelDivision(trimmed);
   if (
     divisionWithConditional !== null
@@ -2769,6 +2813,17 @@ function parenthesizeComparisonOperand(value: string): string {
 
 function parenthesizeForModulo(value: string): string {
   return value.includes(' ? ') || value.includes(' + ') || value.includes(' - ') ? `(${value})` : value;
+}
+
+function parenthesizeTranslatedMultiplicativeOperand(raw: string, translated: string): string {
+  if (splitTopLevelAdditive(raw) === null && splitTopLevelAdditive(translated) !== null) {
+    return `(${translated})`;
+  }
+  return parenthesizeForMultiplicative(translated);
+}
+
+function multiplicativeOperandNeedsRecursiveTranslation(raw: string, translated: string): boolean {
+  return /\b(?:and|or)\b/.test(raw) || translated.includes(' && ') || translated.includes(' || ');
 }
 
 function tsComparisonOperator(operator: string): string {

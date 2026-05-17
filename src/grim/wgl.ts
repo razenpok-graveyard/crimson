@@ -133,6 +133,9 @@ export function setContext(context: WebGLContext): void { ctx = context; }
 
 export function getScreenWidth(): number { return ctx.screenWidth; }
 export function getScreenHeight(): number { return ctx.screenHeight; }
+export function getRandomValue(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
 export function clearBackground(color: Color): void {
   ctx.clearBackground(color.r, color.g, color.b, color.a);
 }
@@ -167,6 +170,26 @@ export function drawLine(x1: number, y1: number, x2: number, y2: number, color: 
     return;
   }
   drawRectangle(ix1, iy1, ix2 - ix1, iy2 - iy1, color);
+}
+
+export function drawLineEx(startPos: Vector2, endPos: Vector2, thick: number, color: Color): void {
+  const dx = endPos.x - startPos.x;
+  const dy = endPos.y - startPos.y;
+  const len = Math.hypot(dx, dy);
+  const half = Math.max(0.5, thick * 0.5);
+  if (len <= 1e-6) {
+    drawRectangle(startPos.x - half, startPos.y - half, half * 2.0, half * 2.0, color);
+    return;
+  }
+  const nx = -dy / len * half;
+  const ny = dx / len * half;
+  ctx.beginQuads(ctx.whiteTexture);
+  ctx.texCoord2f(0.5, 0.5);
+  ctx.color4f(color.r, color.g, color.b, color.a);
+  ctx.vertex2f(startPos.x + nx, startPos.y + ny);
+  ctx.vertex2f(endPos.x + nx, endPos.y + ny);
+  ctx.vertex2f(endPos.x - nx, endPos.y - ny);
+  ctx.vertex2f(startPos.x - nx, startPos.y - ny);
 }
 
 export function drawRectangleLines(x: number, y: number, w: number, h: number, color: Color): void {

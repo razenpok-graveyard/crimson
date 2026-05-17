@@ -424,7 +424,7 @@ export function inferPythonExpressionType(pythonExpression: string): string {
   if (/^(?:True|False)$/.test(trimmed)) {
     return 'boolean';
   }
-  if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) {
+  if (/^-?(?:\d+(?:\.\d+)?|0x[0-9A-Fa-f]+)$/.test(trimmed)) {
     return 'number';
   }
   if (/^(?:int|float)\(/.test(trimmed)) {
