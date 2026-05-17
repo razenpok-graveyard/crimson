@@ -79,7 +79,7 @@ export function typoMidStep(ctx: MidStepContext): void {
   typo.spawnCooldownMs = int(cooldown);
   for (const call of spawns) {
     const heading = ctx.world.state.rng.rand({ caller: RngCallerStatic.CREATURE_SPAWN_TINTED_HEADING }) % 314 * 0.01;
-    let size = ctx.world.state.rng.rand({ caller: RngCallerStatic.CREATURE_SPAWN_TINTED_SIZE }) % 20 + 47;
+    let size = (ctx.world.state.rng.rand({ caller: RngCallerStatic.CREATURE_SPAWN_TINTED_SIZE }) % 20 + 47);
     let flags = 0;
     let moveSpeed = 1.7;
     if (int(call.typeId) === int(CreatureTypeId.SPIDER_SP1) || int(call.typeId) === int(CreatureTypeId.SPIDER_SP2)) {

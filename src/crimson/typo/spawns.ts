@@ -43,7 +43,7 @@ export function tickTypoSpawns(opts: { elapsedMs: number; spawnCooldownMs: numbe
     const t = elapsedMs * 0.001;
     const y = Math.cos(t) * 256.0 + worldHeight * 0.5;
 
-    const tintT = elapsedMs + 1;
+    const tintT = (elapsedMs + 1);
     const tintR = clamp(tintT * 0.0000083333334 + 0.3, 0.0, 1.0);
     const tintG = clamp(tintT * 10000.0 + 0.3, 0.0, 1.0);
     const tintB = clamp(Math.sin(tintT * 0.0001) + 0.3, 0.0, 1.0);

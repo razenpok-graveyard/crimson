@@ -40,7 +40,7 @@ export function hsRightPanelPosX(screenWidth: number): number {
   // At 1024 this resolves to 609 (our original constant).
 
   const w = int(screenWidth);
-  let x = w - 350;
+  let x = (w - 350);
   if (w <= 800) {
     if (w <= 640) {
       x += 10.0;

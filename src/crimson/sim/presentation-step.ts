@@ -238,8 +238,8 @@ export function queueProjectileDecalsPreHit(opts: { state: GameplayState; player
         [RngCallerStatic.PROJECTILE_UPDATE_BLOODY_MESS_DECAL_DX_1, RngCallerStatic.PROJECTILE_UPDATE_BLOODY_MESS_DECAL_DY_1],
         [RngCallerStatic.PROJECTILE_UPDATE_BLOODY_MESS_DECAL_DX_2, RngCallerStatic.PROJECTILE_UPDATE_BLOODY_MESS_DECAL_DY_2],
       ]) {
-        const dx = rng.rand({ caller: dxCaller }) % span + lo;
-        const dy = rng.rand({ caller: dyCaller }) % span + lo;
+        const dx = (rng.rand({ caller: dxCaller }) % span + lo);
+        const dy = (rng.rand({ caller: dyCaller }) % span + lo);
         fxQueue.addRandom({
           pos: hit.target.add(new Vec2(dx, dy)),
           rng: rng,

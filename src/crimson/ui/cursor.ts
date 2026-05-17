@@ -36,7 +36,7 @@ export function drawCursorGlow(particles: rl.Texture | null, opts: { pos: Vec2; 
   let dst: wgl.Rectangle;
   let alpha: number;
   if (pulseTime === null) {
-    dst = wgl.makeRectangle(pos.x - 32.0, pos.y - 32.0, 64.0, 64.0);
+    dst = wgl.makeRectangle((pos.x - 32.0), (pos.y - 32.0), 64.0, 64.0);
     wgl.drawTexturePro(particles, srcRect, dst, origin, 0.0, wgl.makeColor(1, 1, 1, 1));
   } else {
     alpha = (Math.pow(2.0, Math.sin(pulseTime)) + 2.0) * 0.32;
@@ -48,7 +48,7 @@ export function drawCursorGlow(particles: rl.Texture | null, opts: { pos: Vec2; 
       [-18.0, -10.0, 64.0],
       [-48.0, -48.0, 128.0],
     ]) {
-      dst = wgl.makeRectangle(pos.x + dx, pos.y + dy, size, size);
+      dst = wgl.makeRectangle((pos.x + dx), (pos.y + dy), size, size);
       wgl.drawTexturePro(particles, srcRect, dst, origin, 0.0, tint);
     }
   }
@@ -68,7 +68,7 @@ export function drawAimCursor(particles: rl.Texture | null, aim: rl.Texture | nu
     return;
   }
   const src = wgl.makeRectangle(0.0, 0.0, aim.width, aim.height);
-  const dst = wgl.makeRectangle(pos.x - 10.0, pos.y - 10.0, 20.0, 20.0);
+  const dst = wgl.makeRectangle((pos.x - 10.0), (pos.y - 10.0), 20.0, 20.0);
   wgl.drawTexturePro(aim, src, dst, wgl.makeVector2(0.0, 0.0), 0.0, wgl.makeColor(1, 1, 1, 1));
 }
 
@@ -80,6 +80,6 @@ export function drawMenuCursor(particles: rl.Texture | null, cursor: rl.Texture 
     return;
   }
   const src = wgl.makeRectangle(0.0, 0.0, cursor.width, cursor.height);
-  const dst = wgl.makeRectangle(pos.x - 2.0, pos.y - 2.0, 32.0, 32.0);
+  const dst = wgl.makeRectangle((pos.x - 2.0), (pos.y - 2.0), 32.0, 32.0);
   wgl.drawTexturePro(cursor, src, dst, wgl.makeVector2(0.0, 0.0), 0.0, wgl.makeColor(1, 1, 1, 1));
 }

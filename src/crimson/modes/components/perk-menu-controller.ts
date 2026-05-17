@@ -116,7 +116,7 @@ export class PerkMenuController {
   protected _prewrappedPerkDesc(perkId: PerkId, font: SmallFontData, opts: { violenceDisabled: number; preserveBugs: boolean }): string {
     const violenceDisabled = opts.violenceDisabled;
     const preserveBugs = opts.preserveBugs;
-    const key = [int(perkId), int(violenceDisabled), (preserveBugs ? 1 : 0)];
+    const key: [number, number, number] = [int(perkId), int(violenceDisabled), (preserveBugs ? 1 : 0)];
     const cached = this._wrappedDescCache.get(tupleKey(key)) ?? null;
     if (cached !== null) {
       return cached;

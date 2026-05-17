@@ -127,7 +127,7 @@ function damageLethalRangedShockBurst(opts: { creature: CreatureState; rng: Cran
   }
   for (let i = 0; i < 5; i++) {
     const rotation = (rng.rand({ caller: RngCallerStatic.CREATURE_APPLY_DAMAGE_SHOCK_BURST_ROTATION }) & 0x7F) * 0.049087387;
-    const vel = new Vec2((rng.rand({ caller: RngCallerStatic.CREATURE_APPLY_DAMAGE_SHOCK_BURST_VEL_X }) & 0x7F) - 0x40, (rng.rand({ caller: RngCallerStatic.CREATURE_APPLY_DAMAGE_SHOCK_BURST_VEL_Y }) & 0x7F) - 0x40);
+    const vel = new Vec2(((rng.rand({ caller: RngCallerStatic.CREATURE_APPLY_DAMAGE_SHOCK_BURST_VEL_X }) & 0x7F) - 0x40), ((rng.rand({ caller: RngCallerStatic.CREATURE_APPLY_DAMAGE_SHOCK_BURST_VEL_Y }) & 0x7F) - 0x40));
     const scaleStep = rng.rand({ caller: RngCallerStatic.CREATURE_APPLY_DAMAGE_SHOCK_BURST_SCALE_STEP }) % 140 * 0.01 + 0.3;
     if (effects === null) {
       continue;

@@ -171,7 +171,7 @@ export const build1_9NestingGrounds = registerQuest({ level: '1.9', title: 'Nest
 export const build1_10_8LeggedTerror = registerQuest({ level: '1.10', title: '8-legged Terror', timeLimitMs: 240000, startWeaponId: WeaponId.PISTOL, unlockWeaponId: WeaponId.ROCKET_LAUNCHER })(function build1_10_8LeggedTerror(ctx: QuestContext, opts: { rng: CrandLike; fullVersion?: boolean }): SpawnEntry[] {
   const rng = opts.rng;
   const fullVersion = opts.fullVersion ?? true;
-  const entries = [spawn(new Vec2(ctx.width - 256, Math.floor(ctx.width / 2)), { heading: 0.0, spawnId: SpawnId.SPIDER_SP1_CONST_SHOCK_BOSS_3A, triggerMs: 1000, count: 1 })];
+  const entries = [spawn(new Vec2((ctx.width - 256), Math.floor(ctx.width / 2)), { heading: 0.0, spawnId: SpawnId.SPIDER_SP1_CONST_SHOCK_BOSS_3A, triggerMs: 1000, count: 1 })];
   const [topLeft, topRight, bottomLeft, bottomRight] = cornerPoints(ctx.width, ctx.height, 25.0);
   let trigger = 6000;
   while (trigger < 36800) {

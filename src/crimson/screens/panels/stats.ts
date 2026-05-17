@@ -305,7 +305,7 @@ export class StatisticsMenuView {
 
     if (isOrbesVolantesDay(new Date()) && int(this.state.statsMenuEasterEggRoll) === _STATS_EASTER_TRIGGER_ROLL) {
       this.state.statsMenuEasterEggRoll = _STATS_EASTER_ROLL_UNSET;
-      const x = this.state.rng.rand({ caller: RngCallerStatic.REWRITE_STATS_MENU_EASTER_TEXT_X }) % 64 + 16;
+      const x = (this.state.rng.rand({ caller: RngCallerStatic.REWRITE_STATS_MENU_EASTER_TEXT_X }) % 64 + 16);
       drawSmallText(font, _STATS_EASTER_TEXT, new Vec2(x, _STATS_EASTER_TEXT_Y), wgl.makeColor(51 / 255, 255 / 255, 153 / 255, 128 / 255));
     }
 

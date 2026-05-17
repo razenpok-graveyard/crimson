@@ -1764,9 +1764,10 @@ export function translateExpression(
     if (arrayNames.has(booleanNameMarker(argText)) || arrayNames.has(booleanNameMarker(translated)) || translatedExpressionLooksBooleanForInt(translated)) {
       return `(${translated} ? 1 : 0)`;
     }
-    return arrayNames.has(stringNameMarker(argText)) || arrayNames.has(stringNameMarker(translated))
+    const numericExpression = arrayNames.has(stringNameMarker(argText)) || arrayNames.has(stringNameMarker(translated))
       ? `pythonFloat(${translated})`
       : translated;
+    return splitTopLevelAdditive(numericExpression) === null ? numericExpression : `(${numericExpression})`;
   }
 
   const idCall = parseCallPrefix(trimmed, 'id');

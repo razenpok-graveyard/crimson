@@ -97,7 +97,7 @@ export function drawGrimMonoText(font: GrimMonoFont, text: string, pos: Vec2, sc
     const col = value % font.grid;
     const row = Math.floor(value / font.grid);
     const src = wgl.makeRectangle(col * font.cellWidth, row * font.cellHeight, font.cellWidth, font.cellHeight);
-    const dst = wgl.makeRectangle(xPos, yPos + 1.0, drawSize, drawSize);
+    const dst = wgl.makeRectangle(xPos, (yPos + 1.0), drawSize, drawSize);
     wgl.drawTexturePro(font.texture, src, dst, origin, 0.0, color);
   }
 }

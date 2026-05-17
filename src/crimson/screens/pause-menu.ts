@@ -260,7 +260,7 @@ export class PauseMenuView {
       offsetX = -Math.abs(width);
     } else if (t < startMs) {
       const elapsed = t - endMs;
-      const span = startMs - endMs;
+      const span = (startMs - endMs);
       const p = elapsed / span;
       angle = 1.5707964 * (1.0 - p);
       offsetX = -((1.0 - p) * Math.abs(width));

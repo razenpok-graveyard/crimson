@@ -366,6 +366,8 @@ function translateClassPatternMatchStatement(
   }
 
   const statements: string[] = [];
+  const matchEndsCurrentBlock = nextIndex >= lines.length || !isIndentedBlockLine(lines, nextIndex, indent);
+  const needsUnreachableDefault = matchEndsCurrentBlock && branches.every((branch) => branch.condition !== null && caseBodyStops(branch.statements));
   for (let branchIndex = 0; branchIndex < branches.length; branchIndex += 1) {
     const item = branches[branchIndex];
     const header = branchIndex === 0
@@ -375,6 +377,10 @@ function translateClassPatternMatchStatement(
         : `} else if (${item.condition}) {`;
     statements.push(`${header}${item.comment === null ? '' : ` // ${item.comment}`}`);
     statements.push(...item.statements.map(indentStatementLine));
+  }
+  if (needsUnreachableDefault) {
+    statements.push('} else {');
+    statements.push('  throw new Error(\'unreachable match case\');');
   }
   statements.push('}');
 
@@ -1819,6 +1825,18 @@ export function translateStraightLineStatement(
     return { statements: [`return ${callExpression.expression};`], nextIndex: callExpression.nextIndex };
   }
 
+  const multilineReturnExpression = /^return (.+)$/.exec(statement);
+  if (multilineReturnExpression !== null && parenthesisDelta(multilineReturnExpression[1]) > 0) {
+    const expression = collectMultilineParenthesizedExpression(lines, index, multilineReturnExpression[1]);
+    if (expression !== null) {
+      return {
+        statements: [`return ${translateReturnExpression(expression.expression, nameMap, arrayNames, validatedTypeAliases, mapNames)};`],
+        nextIndex: expression.nextIndex,
+      };
+    }
+    return null;
+  }
+
   const returnStatement = /^return (.+)$/.exec(statement);
   if (returnStatement !== null) {
     return { statements: [`return ${translateReturnExpression(returnStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames)};`], nextIndex: index + 1 };
@@ -1950,8 +1968,15 @@ export function translateStraightLineStatement(
   if (annotatedAssignment !== null) {
     const tsName = tsExportNameForPythonName(annotatedAssignment[1]);
     const typeExpression = tsTypeExpression(annotatedAssignment[2]);
+    const alreadyDeclared = declaredNames.has(annotatedAssignment[1]);
+    const continuedRight = parenthesisDelta(annotatedAssignment[3]) > 0
+      ? collectMultilineParenthesizedExpression(lines, index, annotatedAssignment[3])
+      : null;
+    if (parenthesisDelta(annotatedAssignment[3]) > 0 && continuedRight === null) {
+      return null;
+    }
     let assignedRight = maybeAwaitAsyncCall(
-      translateExpression(annotatedAssignment[3], nameMap, arrayNames, validatedTypeAliases, mapNames),
+      translateExpression(continuedRight?.expression ?? annotatedAssignment[3], nameMap, arrayNames, validatedTypeAliases, mapNames),
       nameMap,
     );
     declaredNames.add(annotatedAssignment[1]);
@@ -2017,9 +2042,11 @@ export function translateStraightLineStatement(
     }
     return appendTrailingCommentToResult({
       statements: [
-        `${reassignedNames.has(annotatedAssignment[1]) ? 'let' : 'const'} ${tsName}: ${typeExpression} = ${assignedRight};`,
+        alreadyDeclared
+          ? `${tsName} = ${assignedRight};`
+          : `${reassignedNames.has(annotatedAssignment[1]) ? 'let' : 'const'} ${tsName}: ${typeExpression} = ${assignedRight};`,
       ],
-      nextIndex: index + 1,
+      nextIndex: continuedRight?.nextIndex ?? index + 1,
     }, trailingComment);
   }
 
@@ -2205,6 +2232,7 @@ export function translateStraightLineStatement(
           arrayNames,
           validatedTypeAliases,
           mapNames,
+          expression.expression,
         );
       }
       return null;
@@ -2248,6 +2276,7 @@ export function translateStraightLineStatement(
           arrayNames,
           validatedTypeAliases,
           mapNames,
+          expression.expression,
         ), trailingComment);
       }
     }
@@ -3827,7 +3856,8 @@ function parseLocalFunctionCallSignature(
   pythonCallee: string,
   nameMap: Map<string, string>,
 ): FunctionCallSignature | null {
-  const signatureText = nameMap.get(functionSignatureMarker(pythonCallee));
+  const signatureText = nameMap.get(functionSignatureMarker(pythonCallee))
+    ?? nameMap.get(functionSignatureMarker(tsExportNameForPythonName(pythonCallee)));
   if (signatureText === undefined) {
     return knownExternalFunctionCallSignature(pythonCallee);
   }
@@ -4716,11 +4746,43 @@ function localTupleDeclarationType(assignedRight: string, pythonRight: string | 
   if (!pythonExpressionCouldBeTupleLiteral(pythonRight)) {
     return null;
   }
-  const length = numericTupleExpressionLength(assignedRight);
+  const length = numericTupleExpressionLength(assignedRight) ?? numericOuterPythonTupleExpressionLength(pythonRight);
   if (length === null) {
     return null;
   }
   return `[${Array.from({ length }, () => 'number').join(', ')}]`;
+}
+
+function numericOuterPythonTupleExpressionLength(pythonExpression: string | null): number | null {
+  if (pythonExpression === null) {
+    return null;
+  }
+  const trimmed = pythonExpression.trim();
+  if (!trimmed.startsWith('(') || matchingCloseParen(trimmed, 0) !== trimmed.length - 1) {
+    return null;
+  }
+  const items = splitTopLevelComma(trimmed.slice(1, -1));
+  return items.length > 1 && items.every(pythonTupleItemLooksNumeric) ? items.length : null;
+}
+
+function pythonTupleItemLooksNumeric(item: string): boolean {
+  const trimmed = item.trim();
+  if (
+    trimmed === ''
+    || trimmed === 'None'
+    || trimmed === 'True'
+    || trimmed === 'False'
+    || /^(?:[rbuRBU]*)?(["'])/.test(trimmed)
+  ) {
+    return false;
+  }
+  return /^-?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(trimmed)
+    || /^(?:int|float|f32)\(/.test(trimmed)
+    || /(?:^|\.)rand\(/.test(trimmed)
+    || (
+      /(?:[+\-*/%&|^]|<<|>>)/.test(trimmed)
+      && !/(?:["']|\b(?:None|True|False)\b)/.test(trimmed)
+    );
 }
 
 function pythonExpressionCouldBeTupleLiteral(pythonExpression: string | null): boolean {
@@ -4819,7 +4881,13 @@ function inferredReassignedLocalType(
   if (fieldType === 'number' || fieldType === 'string' || fieldType === 'boolean') {
     return fieldType;
   }
-  if (/^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*$/.test(translated)) {
+  const dottedReference = /^([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\.[A-Za-z_$][A-Za-z0-9_$]*$/.exec(translated);
+  if (dottedReference !== null) {
+    return localTypes.has(dottedReference[1]) || nameMap.has(receiverTypeNameMarker(dottedReference[1]))
+      ? `typeof ${translated}`
+      : null;
+  }
+  if (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(translated)) {
     return `typeof ${translated}`;
   }
   const call = /^([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\(/.exec(translated);

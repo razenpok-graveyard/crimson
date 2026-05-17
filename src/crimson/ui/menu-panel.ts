@@ -68,7 +68,7 @@ export function drawClassicMenuPanel(texture: rl.Texture, opts: { dst: rl.Rectan
       drawUiQuadShadow({
         texture: texture,
         src: src,
-        dst: wgl.makeRectangle(dst.x + UI_SHADOW_OFFSET, dst.y + UI_SHADOW_OFFSET, dst.w, dst.h),
+        dst: wgl.makeRectangle((dst.x + UI_SHADOW_OFFSET), (dst.y + UI_SHADOW_OFFSET), dst.w, dst.h),
         origin: origin,
         rotationDeg: 0.0,
       });
@@ -91,21 +91,21 @@ export function drawClassicMenuPanel(texture: rl.Texture, opts: { dst: rl.Rectan
     drawUiQuadShadow({
       texture: texture,
       src: srcTop,
-      dst: wgl.makeRectangle(dstTop.x + UI_SHADOW_OFFSET, dstTop.y + UI_SHADOW_OFFSET, dstTop.w, dstTop.h),
+      dst: wgl.makeRectangle((dstTop.x + UI_SHADOW_OFFSET), (dstTop.y + UI_SHADOW_OFFSET), dstTop.w, dstTop.h),
       origin: origin,
       rotationDeg: 0.0,
     });
     drawUiQuadShadow({
       texture: texture,
       src: srcMid,
-      dst: wgl.makeRectangle(dstMid.x + UI_SHADOW_OFFSET, dstMid.y + UI_SHADOW_OFFSET, dstMid.w, dstMid.h),
+      dst: wgl.makeRectangle((dstMid.x + UI_SHADOW_OFFSET), (dstMid.y + UI_SHADOW_OFFSET), dstMid.w, dstMid.h),
       origin: origin,
       rotationDeg: 0.0,
     });
     drawUiQuadShadow({
       texture: texture,
       src: srcBot,
-      dst: wgl.makeRectangle(dstBot.x + UI_SHADOW_OFFSET, dstBot.y + UI_SHADOW_OFFSET, dstBot.w, dstBot.h),
+      dst: wgl.makeRectangle((dstBot.x + UI_SHADOW_OFFSET), (dstBot.y + UI_SHADOW_OFFSET), dstBot.w, dstBot.h),
       origin: origin,
       rotationDeg: 0.0,
     });

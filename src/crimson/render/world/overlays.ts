@@ -48,7 +48,7 @@ export function drawAimCircle(renderCtx: WorldRenderCtx, opts: { center: Vec2; r
   // grim_draw_circle_outline draws a 2px-thick ring (outer radius = r + 2).
   // The exe binds bulletTrail, but that texture is white; the visual intent is
   // a subtle white outline around the filled spread circle.
-  wgl.drawRing(centerRl, radius, radius + 2.0, 0.0, 360.0, int(segCount), outline);
+  wgl.drawRing(centerRl, radius, (radius + 2.0), 0.0, 360.0, int(segCount), outline);
 
   wgl.rlSetTexture(0);
   wgl.endBlendMode();
