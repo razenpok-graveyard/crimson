@@ -58,7 +58,7 @@ export function focusTick(opts: { goldenTrace: string; candidateTrace: string; t
 
   const [rngOk, rngStreamDetail] = compareRngStream(rngStreamChannelRequired(expectedRow), rngStreamChannelRequired(candidateRow));
   const rngStream = { ...(rngStreamDetail || {}) };
-  rngStream['ok'] = rngOk;
+  rngStream['ok'] = Boolean(rngOk);
 
   const entityPresence: BuiltinObject = {};
   let entityDiverged = false;
@@ -76,7 +76,7 @@ export function focusTick(opts: { goldenTrace: string; candidateTrace: string; t
   const [entitySamplesOk, entitySamplesDetail] = compareEntitySamples(entitySamplesChannelRequired(expectedRow), entitySamplesChannelRequired(candidateRow));
   const [simStateOk, simStateDetail] = compareSimState(simStateChannelRequired(expectedRow), simStateChannelRequired(candidateRow));
 
-  let diverged = checkpointDiff !== null || !(rngStream['ok'] ?? null) || entityDiverged || !entitySamplesOk || !simStateOk;
+  let diverged = checkpointDiff !== null || !Boolean(rngStream['ok'] ?? null) || entityDiverged || !entitySamplesOk || !simStateOk;
 
-  return toBuiltinObject({ 'tick_index': int(tick), 'diverged': diverged, 'checkpoint_diff_count': checkpointDiff === null ? 0 : int(checkpointDiff.diffCount), 'checkpoint_diff': checkpointDiff === null ? null : { 'payload': checkpointDiff.payload, 'pretty': checkpointDiff.pretty }, 'rng_stream': rngStream, 'entity_presence': entityPresence, 'entity_samples': { 'ok': entitySamplesOk, 'detail': entitySamplesDetail }, 'sim_state': { 'ok': simStateOk, 'detail': simStateDetail } }, { field: 'focus_tick' });
+  return toBuiltinObject({ 'tick_index': int(tick), 'diverged': diverged, 'checkpoint_diff_count': checkpointDiff === null ? 0 : int(checkpointDiff.diffCount), 'checkpoint_diff': checkpointDiff === null ? null : { 'payload': checkpointDiff.payload, 'pretty': checkpointDiff.pretty }, 'rng_stream': rngStream, 'entity_presence': entityPresence, 'entity_samples': { 'ok': new Boolean(entitySamplesOk), 'detail': entitySamplesDetail }, 'sim_state': { 'ok': new Boolean(simStateOk), 'detail': simStateDetail } }, { field: 'focus_tick' });
 }

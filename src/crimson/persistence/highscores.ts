@@ -479,7 +479,7 @@ export function scoresPathForConfig(baseDir: string, config: CrimsonConfig, opts
           questStageMinor = int(level.minor);
         }
       }
-      path = scoresPathForModeRoot({ root: root, gameModeId: mode, hardcore: hardcore, questStageMajor: int(questStageMajor), questStageMinor: int(questStageMinor) });
+      path = scoresPathForModeRoot({ root: root, gameModeId: mode, hardcore: Boolean(hardcore), questStageMajor: int(questStageMajor), questStageMinor: int(questStageMinor) });
       break;
     default:
       path = scoresPathForModeRoot({ root: root, gameModeId: mode, hardcore: config.gameplay.hardcore, questStageMajor: int(questStageMajor), questStageMinor: int(questStageMinor) });

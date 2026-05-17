@@ -100,7 +100,7 @@ export class RelayReliableLink {
   ingestPacket(packet: RelayPacket, opts: { nowMs: number }): [NetMessage[], boolean] {
     const nowMs = opts.nowMs;
     this._applyAck(int(packet.ack), { nowMs: int(nowMs) });
-    if (!packet.reliable) {
+    if (!Boolean(packet.reliable)) {
       return [[packet.message], false];
     }
 

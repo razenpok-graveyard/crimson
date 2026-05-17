@@ -19,7 +19,7 @@ export function applyShockChain(ctx: BonusApplyCtx): void {
   // - requires `lifecycle_stage == 16.0` (alive sentinel)
   // - no HP gate
   const origin = ctx.originPos;
-  let bestIdx = ctx.state.preserveBugs ? 0 : -1;
+  let bestIdx = Boolean(ctx.state.preserveBugs) ? 0 : -1;
   let bestDistSq = 1e12;
   for (const [idx, creature] of creatures.entries()) {
     if (!creature.active) {

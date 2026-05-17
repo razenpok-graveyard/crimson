@@ -5408,11 +5408,12 @@ function translateStraightLineAssignment(
     const nullableType = nullableLocalDeclarationType(localAssignment[1], localTsName, localAssignedRight, arrayNames);
     const tupleType = localTupleDeclarationType(localAssignedRight, pythonRight, nameMap, arrayNames);
     recordLocalTupleDeclarationMarkers(localAssignment[1], localTsName, tupleType, nameMap, arrayNames);
+    const objectRecordType = objectRecordDeclarationType(localAssignedRight, nameMap, arrayNames);
     const widenedRuntimeType = reassignedNames.has(localAssignment[1]) && /^new Crand\(/.test(localAssignedRight)
       ? 'CrandLike'
       : null;
     const reassignedType = reassignedLocalTypeAnnotation(reassignedNames, localAssignment[1]);
-    const declarationType = nullableType ?? tupleType ?? widenedRuntimeType ?? reassignedType;
+    const declarationType = nullableType ?? tupleType ?? objectRecordType ?? widenedRuntimeType ?? reassignedType;
     return {
       statements: [
         `${reassignedNames.has(localAssignment[1]) ? 'let' : 'const'} ${localTsName}${declarationType === null ? '' : `: ${declarationType}`} = ${localAssignedRight};`,
@@ -5604,6 +5605,55 @@ function localTupleDeclarationType(
     return returnTupleType;
   }
   return `[${Array.from({ length }, () => 'number').join(', ')}]`;
+}
+
+function objectRecordDeclarationType(
+  assignedRight: string,
+  nameMap: ReadonlyMap<string, string>,
+  arrayNames: ReadonlySet<string>,
+): string | null {
+  const objectLiteral = /^\{ ([\s\S]*) \}$/.exec(assignedRight.trim());
+  if (objectLiteral === null) {
+    return null;
+  }
+  const items = splitTopLevelComma(objectLiteral[1]);
+  if (items.length === 0) {
+    return null;
+  }
+  const valueTypes: string[] = [];
+  for (const item of items) {
+    const separator = topLevelColonIndex(item);
+    if (separator === null) {
+      return null;
+    }
+    const keyExpression = item.slice(0, separator).trim();
+    if (!/^(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')$/.test(keyExpression)) {
+      return null;
+    }
+    const valueType = recordObjectValueType(item.slice(separator + 1).trim(), nameMap, arrayNames);
+    if (valueType === null) {
+      return null;
+    }
+    valueTypes.push(valueType);
+  }
+  const uniqueTypes = [...new Set(valueTypes)];
+  return uniqueTypes.length === 1 ? `Record<string, ${uniqueTypes[0]}>` : null;
+}
+
+function recordObjectValueType(
+  value: string,
+  nameMap: ReadonlyMap<string, string>,
+  arrayNames: ReadonlySet<string>,
+): string | null {
+  const arrayItems = parseTsArrayLiteralItems(value);
+  if (arrayItems !== null) {
+    const itemTypes = arrayItems.map((item) => inferExpressionType(item, nameMap, arrayNames));
+    if (itemTypes.some((type) => type === null)) {
+      return null;
+    }
+    return `[${itemTypes.join(', ')}]`;
+  }
+  return inferExpressionType(value, nameMap, arrayNames);
 }
 
 function homogeneousTupleArrayDeclarationType(
@@ -6291,7 +6341,7 @@ function recordLocalAssignmentMarkers(
     arrayNames.add(pathNameMarker(pythonName));
     arrayNames.add(pathNameMarker(tsName));
   }
-  if (assignedRight === '{}' || assignedRight.startsWith('{ ...')) {
+  if (assignedRight === '{}' || assignedRight.startsWith('{ ...') || assignedRight.startsWith('{ ')) {
     arrayNames.add(objectNameMarker(pythonName));
     arrayNames.add(objectNameMarker(tsName));
   }
@@ -6348,6 +6398,10 @@ function recordLocalAssignmentMarkers(
   const callAssignment = /^(?:await )?([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\(/.exec(assignedRight);
   if (callAssignment !== null) {
     const returnType = nameMap.get(functionReturnTypeMarker(callAssignment[1]));
+    if (returnType !== undefined && /^[A-Z][A-Za-z0-9_$]*$/.test(returnType)) {
+      nameMap.set(receiverTypeNameMarker(pythonName), returnType);
+      nameMap.set(receiverTypeNameMarker(tsName), returnType);
+    }
     if (returnType?.endsWith('[]') === true || returnType?.startsWith('readonly ') === true && returnType.endsWith('[]')) {
       arrayNames.add(pythonName);
       arrayNames.add(tsName);

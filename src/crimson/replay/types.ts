@@ -252,16 +252,16 @@ export function packInputFlags(opts: { fireDown: boolean; firePressed: boolean; 
   const keyFields = [moveForwardPressed, moveBackwardPressed, turnLeftPressed, turnRightPressed];
   if (keyFields.some((field) => field !== null)) {
     flags |= MOVE_KEYS_PRESENT_FLAG;
-    if (moveForwardPressed) {
+    if (Boolean(moveForwardPressed)) {
       flags |= MOVE_FORWARD_FLAG;
     }
-    if (moveBackwardPressed) {
+    if (Boolean(moveBackwardPressed)) {
       flags |= MOVE_BACKWARD_FLAG;
     }
-    if (turnLeftPressed) {
+    if (Boolean(turnLeftPressed)) {
       flags |= TURN_LEFT_FLAG;
     }
-    if (turnRightPressed) {
+    if (Boolean(turnRightPressed)) {
       flags |= TURN_RIGHT_FLAG;
     }
   }

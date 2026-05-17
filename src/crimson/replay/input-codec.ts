@@ -60,7 +60,7 @@ export function unpackPlayerInput(packed: PackedPlayerInput): PlayerInput {
   const [fireDown, firePressed, reloadPressed, reloadDown] = unpackInputFlags(int(flags));
   const [moveMode, aimScheme] = unpackInputModeFlags(int(flags));
   const [moveForwardPressed, moveBackwardPressed, turnLeftPressed, turnRightPressed] = unpackInputMoveKeyFlags(int(flags));
-  return new PlayerInput({ move: new Vec2(mx, my), aim: new Vec2(ax, ay), moveMode: moveMode, aimScheme: aimScheme, fireDown: fireDown, firePressed: firePressed, reloadPressed: reloadPressed, reloadDown: reloadDown, moveForwardPressed: moveForwardPressed, moveBackwardPressed: moveBackwardPressed, turnLeftPressed: turnLeftPressed, turnRightPressed: turnRightPressed });
+  return new PlayerInput({ move: new Vec2(mx, my), aim: new Vec2(ax, ay), moveMode: moveMode, aimScheme: aimScheme, fireDown: Boolean(fireDown), firePressed: Boolean(firePressed), reloadPressed: Boolean(reloadPressed), reloadDown: Boolean(reloadDown), moveForwardPressed: moveForwardPressed, moveBackwardPressed: moveBackwardPressed, turnLeftPressed: turnLeftPressed, turnRightPressed: turnRightPressed });
 }
 
 export function unpackTickInputs(packedTick: PackedTickInputs): PlayerInput[] {

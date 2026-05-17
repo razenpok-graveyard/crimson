@@ -362,7 +362,7 @@ export function questPostStep(ctx: PostStepContext, spawn: QuestSpawnState): voi
   spawn.noCreaturesTimerMs = noCreaturesTimerMs;
   const spawnTableEmptyNow = questSpawnTableEmpty(spawn.spawnEntries);
 
-  if (!state.demoModeActive && creaturesNoneActive && spawnTableEmptyNow) {
+  if (!Boolean(state.demoModeActive) && creaturesNoneActive && spawnTableEmptyNow) {
     state.bonuses.reflexBoost = 0.0;
     state.timeScaleActive = false;
   }
@@ -375,9 +375,9 @@ export function questPostStep(ctx: PostStepContext, spawn: QuestSpawnState): voi
   if (anyAliveAfter) {
     const [completionMs, completed, playHitSfx, playCompletionMusic] = tickQuestCompletionTransition(spawn.completionTransitionMs, dtMs, { creaturesNoneActive: creaturesNoneActive, spawnTableEmpty: spawnTableEmptyNow });
     spawn.completionTransitionMs = completionMs;
-    spawn.completed = completed;
-    spawn.playHitSfx = playHitSfx;
-    spawn.playCompletionMusic = playCompletionMusic;
+    spawn.completed = Boolean(completed);
+    spawn.playHitSfx = Boolean(playHitSfx);
+    spawn.playCompletionMusic = Boolean(playCompletionMusic);
   } else {
     spawn.completionTransitionMs = -1.0;
     spawn.completed = false;
@@ -392,5 +392,5 @@ export function rushInputTransform(inputs: PlayerInput[]): PlayerInput[] {
 
 function sessionTiming(state: any, dt: number): FrameTiming {
   // Compute frame timing from world state. Used by all session types.
-  return FrameTiming.compute(dt, { timeScaleActiveEntry: state.timeScaleActive, timeScaleFactor: timeScaleReflexBoostFactor({ reflexBoostTimer: state.bonuses.reflexBoost, timeScaleActive: state.timeScaleActive }), zeroGateActive: false });
+  return FrameTiming.compute(dt, { timeScaleActiveEntry: Boolean(state.timeScaleActive), timeScaleFactor: timeScaleReflexBoostFactor({ reflexBoostTimer: state.bonuses.reflexBoost, timeScaleActive: Boolean(state.timeScaleActive) }), zeroGateActive: false });
 }

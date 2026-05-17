@@ -261,7 +261,7 @@ export class BonusPool {
       let hasPistol: boolean;
       if (players.length > 0) {
         hasPistol = false;
-        if (state.preserveBugs) {
+        if (Boolean(state.preserveBugs)) {
           hasPistol = players[0].weapon.weaponId === WeaponId.PISTOL;
         } else {
           hasPistol = players.some((player) => player.weapon.weaponId === WeaponId.PISTOL);
@@ -275,7 +275,7 @@ export class BonusPool {
       if (!allowWithoutMagnet) {
         hasBonusMagnet = false;
         if (players.length > 0) {
-          if (state.preserveBugs) {
+          if (Boolean(state.preserveBugs)) {
             hasBonusMagnet = perkActive(players[0], PerkId.BONUS_MAGNET);
           } else {
             hasBonusMagnet = players.some((player) => perkActive(player, PerkId.BONUS_MAGNET));
@@ -297,7 +297,7 @@ export class BonusPool {
       const nearSq = BONUS_WEAPON_NEAR_RADIUS * BONUS_WEAPON_NEAR_RADIUS;
       nearPlayer = false;
       if (players.length > 0) {
-        if (state.preserveBugs) {
+        if (Boolean(state.preserveBugs)) {
           // Native checks player 1 position only.
           nearPlayer = Vec2.distanceSq(pos, players[0].pos) < nearSq;
         } else {
@@ -321,7 +321,7 @@ export class BonusPool {
 
     if (players.length > 0) {
       let weaponId: any;
-      if (state.preserveBugs) {
+      if (Boolean(state.preserveBugs)) {
         weaponId = players[0].weapon.weaponId;
         const suppressionWeaponId = weaponIdFromNativeAmount(entry.amount);
         if (suppressionWeaponId === weaponId) {

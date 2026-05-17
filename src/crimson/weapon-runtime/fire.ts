@@ -349,7 +349,7 @@ export function fireWeapon(ctx: WeaponFireCtx): WeaponFireResult {
       spawnCreatures = creatures;
     } else {
     }
-    state.secondaryProjectiles.spawnFromSpec(new SecondarySpawnSpec({ pos: muzzle, angle: shotAngle, typeId: typeId, owner: owner, targetHint: targetHint, creatures: spawnCreatures, preserveBugs: state.preserveBugs }));
+    state.secondaryProjectiles.spawnFromSpec(new SecondarySpawnSpec({ pos: muzzle, angle: shotAngle, typeId: typeId, owner: owner, targetHint: targetHint, creatures: spawnCreatures, preserveBugs: Boolean(state.preserveBugs) }));
   } else if (recipe.mode instanceof ParticleStreamMode) {
     const style = recipe.mode.style;
     const slow = recipe.mode.slow;
@@ -385,7 +385,7 @@ export function fireWeapon(ctx: WeaponFireCtx): WeaponFireResult {
     const rocketCount = Math.max(1, int(player.weapon.ammo));
     let step: number;
     let angle: number;
-    if (state.preserveBugs) {
+    if (Boolean(state.preserveBugs)) {
       // Native bug: step scales by ammo (`ammo * pi/3`), which aliases to identical headings
       // for some clip sizes (e.g. 6 rockets), causing visible clumping.
       step = rocketCount * (Math.PI / 3.0);
@@ -396,7 +396,7 @@ export function fireWeapon(ctx: WeaponFireCtx): WeaponFireResult {
       angle = shotAngle - spread * 0.5;
     }
     for (let i = 0; i < rocketCount; i++) {
-      state.secondaryProjectiles.spawnFromSpec(new SecondarySpawnSpec({ pos: muzzle, angle: angle, typeId: SecondaryProjectileTypeId.HOMING_ROCKET, owner: owner, targetHint: aim, creatures: creatures, preserveBugs: state.preserveBugs }));
+      state.secondaryProjectiles.spawnFromSpec(new SecondarySpawnSpec({ pos: muzzle, angle: angle, typeId: SecondaryProjectileTypeId.HOMING_ROCKET, owner: owner, targetHint: aim, creatures: creatures, preserveBugs: Boolean(state.preserveBugs) }));
       angle += step;
     }
     ammoCost = rocketCount;

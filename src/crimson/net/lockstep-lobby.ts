@@ -98,7 +98,7 @@ export class HostLobby {
     if (!buildsCompatible(String(hello.buildId), String(this.buildId))) {
       return new Welcome({ accepted: false, reason: 'build_mismatch' });
     }
-    if (hello.host) {
+    if (Boolean(hello.host)) {
       return new Welcome({ accepted: false, reason: 'hello_host_flag' });
     }
 
@@ -123,7 +123,7 @@ export class HostLobby {
     if (int(ready.slotIndex) !== int(peer.slotIndex)) {
       return;
     }
-    peer.ready = ready.ready;
+    peer.ready = Boolean(ready.ready);
   }
 
   allConnected(): boolean {
@@ -141,7 +141,7 @@ export class HostLobby {
       return false;
     }
     for (const peer of this.peersByAddr.values()) {
-      if (!peer.ready) {
+      if (!Boolean(peer.ready)) {
         return false;
       }
     }
@@ -168,7 +168,7 @@ export class HostLobby {
         slots.push(new LobbySlot({ slotIndex: int(slot), connected: false, ready: false, isHost: false, peerName: '' }));
         continue;
       }
-      slots.push(new LobbySlot({ slotIndex: int(slot), connected: true, ready: peer.ready, isHost: false, peerName: String(peer.peerName) }));
+      slots.push(new LobbySlot({ slotIndex: int(slot), connected: true, ready: Boolean(peer.ready), isHost: false, peerName: String(peer.peerName) }));
     }
     return new LobbyState({ sessionId: String(this.sessionId), modeId: this.modeId, playerCount: int(this.playerCount), slots: slots, allReady: this.allReady(), started: this.started, questLevel: this.questLevel });
   }
@@ -217,7 +217,7 @@ export class ClientLobby {
 
   get joined(): boolean {
     const welcome = this.welcome;
-    return welcome !== null && welcome.accepted;
+    return welcome !== null && Boolean(welcome.accepted);
   }
 
   get started(): boolean {

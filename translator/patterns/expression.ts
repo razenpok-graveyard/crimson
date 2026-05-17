@@ -3673,7 +3673,12 @@ function translateBooleanCast(
       .map((part) => translatePythonTruthy(part, nameMap, arrayNames, validatedTypeAliases, mapNames))
       .join(' && ');
   }
-  return translatePythonTruthy(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const translated = translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const truthy = translatePythonTruthy(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (truthy !== translated || expressionKnownBooleanSource(pythonExpression, translated, nameMap, arrayNames)) {
+    return truthy;
+  }
+  return `Boolean(${truthy})`;
 }
 
 function translatePythonTruthy(
@@ -3713,6 +3718,21 @@ function translatePythonTruthy(
     return translated;
   }
   return expressionLooksCallResult(translated) ? `pythonTruthy(${translated})` : translated;
+}
+
+function expressionKnownBooleanSource(
+  pythonExpression: string,
+  tsExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: ReadonlySet<string>,
+): boolean {
+  const trimmed = stripBalancedOuterParens(pythonExpression.trim());
+  const translated = stripBalancedOuterParens(tsExpression.trim());
+  const fieldType = knownClassFieldType(trimmed, nameMap) ?? knownClassFieldType(translated, nameMap);
+  return expressionLooksBoolean(translated)
+    || fieldType === 'boolean'
+    || arrayNames.has(booleanNameMarker(trimmed))
+    || arrayNames.has(booleanNameMarker(translated));
 }
 
 function expressionLooksBitwiseNumeric(tsExpression: string): boolean {

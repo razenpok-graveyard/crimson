@@ -765,7 +765,7 @@ export function buildCheckpoint(opts: { tickIndex: number; world: WorldState; el
     perkCounts.push(nonzero);
   }
 
-  const perkSnapshot = new ReplayPerkSnapshot({ pendingCount: int(state.perkSelection.pendingCount), choicesDirty: state.perkSelection.choicesDirty, choices: Array.from(state.perkSelection.choices).map((perkId) => int(perkId)), playerNonzeroCounts: perkCounts });
+  const perkSnapshot = new ReplayPerkSnapshot({ pendingCount: int(state.perkSelection.pendingCount), choicesDirty: Boolean(state.perkSelection.choicesDirty), choices: Array.from(state.perkSelection.choices).map((perkId) => int(perkId)), playerNonzeroCounts: perkCounts });
 
   const deathEntries: ReplayDeathLedgerEntry[] = [];
   for (const death of deaths || []) {
@@ -782,10 +782,10 @@ export function buildCheckpoint(opts: { tickIndex: number; world: WorldState; el
   if (state.gameMode === GameMode.TUTORIAL) {
     const tutorial = state.tutorial;
     const overlay = state.tutorialOverlay;
-    tutorialSnapshot = new ReplayTutorialSnapshot({ stageIndex: int(tutorial.stageIndex), stageTimerMs: int(tutorial.stageTimerMs), stageTransitionTimerMs: int(tutorial.stageTransitionTimerMs), hintIndex: int(tutorial.hintIndex), hintAlpha: int(tutorial.hintAlpha), hintFadeIn: tutorial.hintFadeIn, repeatSpawnCount: int(tutorial.repeatSpawnCount), hintBonusCreatureRef: tutorial.hintBonusCreatureRef === null ? null : int(tutorial.hintBonusCreatureRef), promptText: String(overlay.promptText), promptAlpha: overlay.promptAlpha, hintText: String(overlay.hintText), hintAlphaOverlay: overlay.hintAlpha });
+    tutorialSnapshot = new ReplayTutorialSnapshot({ stageIndex: int(tutorial.stageIndex), stageTimerMs: int(tutorial.stageTimerMs), stageTransitionTimerMs: int(tutorial.stageTransitionTimerMs), hintIndex: int(tutorial.hintIndex), hintAlpha: int(tutorial.hintAlpha), hintFadeIn: Boolean(tutorial.hintFadeIn), repeatSpawnCount: int(tutorial.repeatSpawnCount), hintBonusCreatureRef: tutorial.hintBonusCreatureRef === null ? null : int(tutorial.hintBonusCreatureRef), promptText: String(overlay.promptText), promptAlpha: overlay.promptAlpha, hintText: String(overlay.hintText), hintAlphaOverlay: overlay.hintAlpha });
   }
   if (state.gameMode === GameMode.TYPO) {
-    const activeMask = Array.from(world.creatures.entries).map((creature) => creature.active);
+    const activeMask = Array.from(world.creatures.entries).map((creature) => Boolean(creature.active));
     const activeNames = state.typo.names.activeEntries({ activeMask: activeMask }).map(([creatureIndex, name]) => new ReplayTypoNameEntry({ creatureIndex: int(creatureIndex), name: String(name) }));
     typoSnapshot = new ReplayTypoSnapshot({ inputText: String(state.typo.typing.text), submitCount: int(state.typo.typing.submitCount), matchCount: int(state.typo.typing.matchCount), spawnCooldownMs: int(state.typo.spawnCooldownMs), activeNames: activeNames });
   }

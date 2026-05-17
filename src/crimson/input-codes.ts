@@ -51,9 +51,9 @@ export class PressedState {
     const key: [number, number] = [int(playerIndex), int(keyCode)];
     const cached = this.pressedCache.get(tupleKey(key)) ?? null;
     if (cached !== null) {
-      return cached;
+      return Boolean(cached);
     }
-    const prev = this.prevDown.get(tupleKey(key)) ?? false;
+    const prev = Boolean(this.prevDown.get(tupleKey(key)) ?? false);
     const pressed = isDown && !prev;
     this.down.set(tupleKey(key), isDown);
     this.pressedCache.set(tupleKey(key), pressed);
@@ -357,10 +357,10 @@ export function inputCodeIsPressed(keyCode: number, opts: { playerIndex?: number
   const code = int(keyCode);
   const playerIdx = int(playerIndex);
   if (code === 0x109) {
-    return _PRESSED_STATE.wheelUp;
+    return Boolean(_PRESSED_STATE.wheelUp);
   }
   if (code === 0x10A) {
-    return _PRESSED_STATE.wheelDown;
+    return Boolean(_PRESSED_STATE.wheelDown);
   }
   const down = digitalDownForPlayer(code, { playerIndex: playerIdx });
   return _PRESSED_STATE.isPressed({ playerIndex: playerIdx, keyCode: code, isDown: down });
@@ -458,7 +458,7 @@ export function inputPrimaryIsDown(opts: { fireCodes: readonly number[]; playerC
     keyCode: _PRIMARY_EDGE_SENTINEL_KEY,
     isDown: down,
   });
-  return down;
+  return Boolean(down);
 }
 
 export function inputPrimaryJustPressed(opts: { fireCodes: readonly number[]; playerCount: number }): boolean {

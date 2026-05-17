@@ -158,7 +158,7 @@ export class WorldState {
       }
       creatureApplyDamageWithLethalFollowup(
         creature,
-        { damageAmount: damage, damageType: int(damageType), impulse: impulse, owner: owner, dt: dt, players: this.players, rng: this.state.rng, preserveBugs: this.state.preserveBugs, effects: this.state.effects, detailPreset: int(detailPreset), onLethal: (deathSfx) => this._recordCreatureDeath({ creatureIndex: idx, dt: dt, detailPreset: int(detailPreset), worldSize: worldSize, fxQueue: fxQueue, deaths: deaths, sfx: sfx, deathSfx: deathSfx }) },
+        { damageAmount: damage, damageType: int(damageType), impulse: impulse, owner: owner, dt: dt, players: this.players, rng: this.state.rng, preserveBugs: Boolean(this.state.preserveBugs), effects: this.state.effects, detailPreset: int(detailPreset), onLethal: (deathSfx) => this._recordCreatureDeath({ creatureIndex: idx, dt: dt, detailPreset: int(detailPreset), worldSize: worldSize, fxQueue: fxQueue, deaths: deaths, sfx: sfx, deathSfx: deathSfx }) },
       );
     };
 
@@ -243,7 +243,7 @@ export class WorldState {
       { creatures: this.creatures.entries, killCreature: _killCreatureNoCorpse, fxQueue: fxQueue, spriteEffects: this.state.spriteEffects },
     );
     this.state.spriteEffects.update(dt);
-    const reloadActiveAny = inputs.some((entry) => entry.reloadDown || entry.reloadPressed);
+    const reloadActiveAny = inputs.some((entry) => Boolean(entry.reloadDown) || Boolean(entry.reloadPressed));
     let playerDt = dt;
     if (dtPlayerLocal !== null) {
       playerDt = dtPlayerLocal;
@@ -255,10 +255,10 @@ export class WorldState {
         inputState,
         playerDt,
         this.state,
-        { detailPreset: int(detailPreset), worldSize: worldSize, players: this.players, creatures: this.creatures.entries, spawnSlots: this.creatures.spawnSlots, onPlayerLethal: (deadPlayer, dtValueParam = playerDt) => this._runPlayerDeathHooks({ player: deadPlayer, dt: dtValueParam, worldSize: worldSize, detailPreset: int(detailPreset), fxQueue: fxQueue, deaths: deaths }), reloadActiveAny: reloadActiveAny },
+        { detailPreset: int(detailPreset), worldSize: worldSize, players: this.players, creatures: this.creatures.entries, spawnSlots: this.creatures.spawnSlots, onPlayerLethal: (deadPlayer, dtValueParam = playerDt) => this._runPlayerDeathHooks({ player: deadPlayer, dt: dtValueParam, worldSize: worldSize, detailPreset: int(detailPreset), fxQueue: fxQueue, deaths: deaths }), reloadActiveAny: Boolean(reloadActiveAny) },
       );
       if (dtPlayerLocal === null) {
-        playerDt = playerFrameDtAfterRoundtrip({ dt: playerDt, timeScaleActive: this.state.timeScaleActive, reflexBoostTimer: this.state.bonuses.reflexBoost });
+        playerDt = playerFrameDtAfterRoundtrip({ dt: playerDt, timeScaleActive: Boolean(this.state.timeScaleActive), reflexBoostTimer: this.state.bonuses.reflexBoost });
       }
     }
     dt = playerDt;

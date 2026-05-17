@@ -124,7 +124,7 @@ export class AudioRouter {
     }
 
     const end = Math.min(hits.length, _MAX_HIT_SFX_PER_FRAME);
-    let gameTuneStarted = this.audio.music.gameTuneStarted;
+    let gameTuneStarted = Boolean(this.audio.music.gameTuneStarted);
     for (let idx = 0; idx < end; idx++) {
       if (!this.demoModeActive && gameMode !== GameMode.RUSH && !gameTuneStarted) {
         triggerGameTune(this.audio, { rng: rng });

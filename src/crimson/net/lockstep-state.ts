@@ -134,10 +134,10 @@ export class HostLockstepState {
     const tickInputs = this._inputsByTick.get(int(this._nextEmitTick)) ?? new Map<number, PackedPlayerInput>();
     const waitingFor = Math.max(0, int(this.playerCount) - tickInputs.size);
     const shouldPause = waitingFor > 0 && (int(nowMs) - int(this._lastProgressMs)) >= int(this.inputStallTimeoutMs);
-    if (shouldPause === this._paused) {
+    if (Boolean(shouldPause) === this._paused) {
       return null;
     }
-    this._paused = shouldPause;
+    this._paused = Boolean(shouldPause);
     if (shouldPause) {
       return new PauseState({ paused: true, reason: 'waiting_input' });
     }
@@ -294,10 +294,10 @@ export class ClientLockstepState {
     const nowMs = opts.nowMs;
     const frameReady = this._canonicalByTick.has(int(this._nextConsumeTick));
     const shouldPause = !frameReady && (int(nowMs) - int(this._lastProgressMs)) >= int(this.inputStallTimeoutMs);
-    if (shouldPause === this._paused) {
+    if (Boolean(shouldPause) === this._paused) {
       return null;
     }
-    this._paused = shouldPause;
+    this._paused = Boolean(shouldPause);
     if (shouldPause) {
       return new PauseState({ paused: true, reason: 'waiting_tick_frame' });
     }

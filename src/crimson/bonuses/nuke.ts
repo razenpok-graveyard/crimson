@@ -50,7 +50,7 @@ export function applyNuke(ctx: BonusApplyCtx): void {
   const creatures = ctx.creatures;
   if (creatures.length > 0) {
     const applyCreatureDamage = ctx.state.bonusPool.creatureDamageApplier;
-    const prevGuard = ctx.state.bonusSpawnGuard;
+    const prevGuard = Boolean(ctx.state.bonusSpawnGuard);
     ctx.state.bonusSpawnGuard = true;
     for (const [idx, creature] of creatures.entries()) {
       // Native applies explosion damage to any active creature, including

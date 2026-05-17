@@ -99,7 +99,7 @@ export class CreatureNameTable {
       if (!name) {
         continue;
       }
-      if (!(idx >= 0 && idx < activeMask.length && activeMask[idx])) {
+      if (!(idx >= 0 && idx < activeMask.length && Boolean(activeMask[idx]))) {
         continue;
       }
       entries.push([int(idx), String(name)]);
@@ -110,7 +110,7 @@ export class CreatureNameTable {
   findByName(name: string, opts: { activeMask: readonly boolean[] }): number | null {
     const activeMask = opts.activeMask;
     for (const [idx, existing] of this.names.entries()) {
-      if (!(idx >= 0 && idx < activeMask.length && activeMask[idx])) {
+      if (!(idx >= 0 && idx < activeMask.length && Boolean(activeMask[idx]))) {
         continue;
       }
       if (existing === name) {
@@ -128,7 +128,7 @@ export class CreatureNameTable {
       if (idx === exclude) {
         continue;
       }
-      if (!(idx >= 0 && idx < activeMask.length && activeMask[idx])) {
+      if (!(idx >= 0 && idx < activeMask.length && Boolean(activeMask[idx]))) {
         continue;
       }
       if (existing === name) {

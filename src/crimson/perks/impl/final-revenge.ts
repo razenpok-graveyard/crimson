@@ -36,7 +36,7 @@ export function applyFinalRevengeOnPlayerDeath(opts: { state: GameplayState; cre
     detailPreset: int(detailPreset),
   });
 
-  const prevGuard = state.bonusSpawnGuard;
+  const prevGuard = Boolean(state.bonusSpawnGuard);
   state.bonusSpawnGuard = true;
   for (const [creatureIdx, creature] of creatures.entries.entries()) {
     if (!creature.active) {
@@ -57,7 +57,7 @@ export function applyFinalRevengeOnPlayerDeath(opts: { state: GameplayState; cre
     const deathCreatureIdx = int(creatureIdx);
     creatureApplyDamageWithLethalFollowup(
       creature,
-      { damageAmount: damage, damageType: CreatureDamageType.EXPLOSION, impulse: new Vec2(), owner: OwnerRef.fromPlayer(int(player.index)), dt: dt, players: players, rng: state.rng, preserveBugs: state.preserveBugs, effects: state.effects, detailPreset: int(detailPreset), onLethal: (deathSfx) => { deaths.push(creatures.handleDeath(int(deathCreatureIdx), { state: state, players: players, rng: state.rng, dt: dt, detailPreset: int(detailPreset), worldWidth: worldSize, worldHeight: worldSize, fxQueue: fxQueue })); state.sfxQueue.push(...deathSfx); } },
+      { damageAmount: damage, damageType: CreatureDamageType.EXPLOSION, impulse: new Vec2(), owner: OwnerRef.fromPlayer(int(player.index)), dt: dt, players: players, rng: state.rng, preserveBugs: Boolean(state.preserveBugs), effects: state.effects, detailPreset: int(detailPreset), onLethal: (deathSfx) => { deaths.push(creatures.handleDeath(int(deathCreatureIdx), { state: state, players: players, rng: state.rng, dt: dt, detailPreset: int(detailPreset), worldWidth: worldSize, worldHeight: worldSize, fxQueue: fxQueue })); state.sfxQueue.push(...deathSfx); } },
     );
   }
 

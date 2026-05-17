@@ -271,7 +271,7 @@ export function queueProjectileDecalsPreHit(opts: { state: GameplayState; player
     }
   }
 
-  return new ProjectileDecalPostCtx({ hit: hit, baseAngle: baseAngle, typeId: int(typeId), freezeActive: freezeActive, freezeShardSpawn: freezeShardSpawn });
+  return new ProjectileDecalPostCtx({ hit: hit, baseAngle: baseAngle, typeId: int(typeId), freezeActive: Boolean(freezeActive), freezeShardSpawn: freezeShardSpawn });
 }
 
 export function queueProjectileDecalsPostHit(opts: { fxQueue: FxQueue; postCtx: ProjectileDecalPostCtx; rng: CrandLike }): void {
@@ -287,7 +287,7 @@ export function queueProjectileDecalsPostHit(opts: { fxQueue: FxQueue; postCtx: 
 
   const hookHandled = queueProjectileLargeStreakDecal({ hit: hit, baseAngle: baseAngle, fxQueue: fxQueue, rng: rng, freezeOrigin: postCtx.freezeActive ? hit.hit : null, spawnFreezeShard: postCtx.freezeShardSpawn });
 
-  if (hookHandled || postCtx.freezeActive) {
+  if (Boolean(hookHandled) || postCtx.freezeActive) {
     return;
   }
 
@@ -356,7 +356,7 @@ export function planWorldPresentationStep(opts: { state: GameplayState; players:
     }
   } else {
     if (triggerGameTune !== null) {
-      commands.triggerGameTune = triggerGameTune;
+      commands.triggerGameTune = Boolean(triggerGameTune);
     }
     if (hitSfx !== null) {
       commands.sfx.push(...hitSfx);
@@ -367,7 +367,7 @@ export function planWorldPresentationStep(opts: { state: GameplayState; players:
       continue;
     }
     const [prevShotSeq, prevReloadActive, prevReloadTimer] = prevAudio[idx];
-    commands.sfx.push(...planPlayerAudioSfx(player, { prevShotSeq: int(prevShotSeq), prevReloadActive: prevReloadActive, prevReloadTimer: prevReloadTimer }));
+    commands.sfx.push(...planPlayerAudioSfx(player, { prevShotSeq: int(prevShotSeq), prevReloadActive: Boolean(prevReloadActive), prevReloadTimer: prevReloadTimer }));
   }
   if (pickups.length > 0) {
     commands.sfx.push(...pickups.map((_) => SfxId.UI_BONUS));

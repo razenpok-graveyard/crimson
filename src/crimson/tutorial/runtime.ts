@@ -31,7 +31,7 @@ function pythonTruthy(value: unknown): boolean {
 
 export function tutorialBeforeStep(world: WorldState): void {
   const tutorial = world.state.tutorial;
-  tutorial.preserveBugs = world.state.preserveBugs;
+  tutorial.preserveBugs = Boolean(world.state.preserveBugs);
   const hintRef = tutorial.hintBonusCreatureRef;
   tutorial.hintBonusAliveBeforeTick = false;
   if (hintRef === null || !(int(hintRef) >= 0 && int(hintRef) < world.creatures.entries.length)) {
@@ -70,7 +70,7 @@ export function tutorialPostStep(ctx: any): void {
   const hintBonusDied = tutorial.hintBonusAliveBeforeTick && !hintAliveAfter;
 
   let actions: any;
-  [tutorial, actions] = tickTutorialTimeline(tutorial, { frameDtMs: ctx.dtSimMs, anyMoveActive: tutorial.moveActiveThisTick, anyFireActive: tutorial.fireActiveThisTick, creaturesNoneActive: !pythonTruthy(ctx.world.creatures.iterActive()), bonusPoolEmpty: !pythonTruthy(state.bonusPool.iterActive()), perkPendingCount: int(state.perkSelection.pendingCount), hintBonusDied: hintBonusDied });
+  [tutorial, actions] = tickTutorialTimeline(tutorial, { frameDtMs: ctx.dtSimMs, anyMoveActive: Boolean(tutorial.moveActiveThisTick), anyFireActive: Boolean(tutorial.fireActiveThisTick), creaturesNoneActive: !pythonTruthy(ctx.world.creatures.iterActive()), bonusPoolEmpty: !pythonTruthy(state.bonusPool.iterActive()), perkPendingCount: int(state.perkSelection.pendingCount), hintBonusDied: hintBonusDied });
   tutorial.moveActiveThisTick = false;
   tutorial.fireActiveThisTick = false;
   tutorial.hintBonusAliveBeforeTick = false;

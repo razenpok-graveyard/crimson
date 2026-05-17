@@ -268,7 +268,7 @@ export class NetworkSessionPanelView extends PanelMenuView {
     const click = InputState.wasMouseButtonPressed(0);
 
     this._backButton.enabled = true;
-    if (buttonUpdate(this._backButton, { pos: layout.backPos, width: layout.backW, dtMs: dtMs, mouse: mouse, click: click })) {
+    if (buttonUpdate(this._backButton, { pos: layout.backPos, width: layout.backW, dtMs: dtMs, mouse: mouse, click: Boolean(click) })) {
       this._beginCloseTransition(this._backAction);
     }
   }

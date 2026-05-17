@@ -358,6 +358,6 @@ function drawWicon(opts: { resources: RuntimeResources; iconIndex: number; pos: 
 
 function weaponLabelAndIcon(view: HighScoresView, weaponId: number): [string, number | null] {
   const weapon = mapGetOrThrow(WEAPON_BY_ID, weaponId);
-  const name = weaponDisplayName(weapon.weaponId, { preserveBugs: view.state.preserveBugs });
+  const name = weaponDisplayName(weapon.weaponId, { preserveBugs: Boolean(view.state.preserveBugs) });
   return [name, weapon.iconIndex];
 }

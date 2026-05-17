@@ -173,7 +173,7 @@ export class PlaybackDriver {
     this.world = this._prepareWorld();
 
     const applyWorldDtSteps = shouldApplyWorldDtStepsForReplay({ originalCaptureReplay: false });
-    this.session = this._buildSession({ applyWorldDtSteps: applyWorldDtSteps });
+    this.session = this._buildSession({ applyWorldDtSteps: Boolean(applyWorldDtSteps) });
     this._lastTickRngRows = [];
 
     this.tickLimit = this.maxTicks === null ? replay.ticks.length : Math.min(replay.ticks.length, Math.max(0, int(this.maxTicks)));
@@ -187,7 +187,7 @@ export class PlaybackDriver {
   }
 
   protected _prepareWorld(): WorldState {
-    const world = WorldState.build({ worldSize: this.worldSize, demoModeActive: false, hardcore: this.replay.header.hardcore, questFailRetryCount: int(this.replay.header.questFailRetryCount), preserveBugs: this.sessionSettings.preserveBugs });
+    const world = WorldState.build({ worldSize: this.worldSize, demoModeActive: false, hardcore: Boolean(this.replay.header.hardcore), questFailRetryCount: int(this.replay.header.questFailRetryCount), preserveBugs: Boolean(this.sessionSettings.preserveBugs) });
     world.state.rng.srand(int(this.replay.header.seed));
     resetWorldPlayers(
       world.players,
@@ -228,7 +228,7 @@ export class PlaybackDriver {
         // `highscore_record_random_tag` before quest terrain and spawn setup.
         world.state.rng.rand({ caller: RngCallerStatic.QUEST_START_SELECTED_HIGHSCORE_RANDOM_TAG });
         const questTerrain = advanceExplicitTerrain(world.state.rng, { terrainSlots: questDefinition.terrainSlots, width: int(this.worldSize), height: int(this.worldSize) });
-        const generatedSpawnEntries = Array.from(buildQuestSpawnTable(questDefinition, ctx, { rng: world.state.rng, hardcore: this.replay.header.hardcore, fullVersion: true }));
+        const generatedSpawnEntries = Array.from(buildQuestSpawnTable(questDefinition, ctx, { rng: world.state.rng, hardcore: Boolean(this.replay.header.hardcore), fullVersion: true }));
         const spawnEntries = this._questSpawnEntries !== null ? Array.from(this._questSpawnEntries) : generatedSpawnEntries;
         world.state.questLevel = questLevel;
         this._questDefinition = questDefinition;
@@ -461,7 +461,7 @@ function* tickRngTrace(rng: unknown, opts: { enabled: boolean; strict?: boolean 
   try {
     yield draws;
   } finally {
-    rng.setTraceSink(previousSink, { requireCaller: previousRequireCaller });
+    rng.setTraceSink(previousSink, { requireCaller: Boolean(previousRequireCaller) });
   }
 }
 

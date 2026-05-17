@@ -114,7 +114,7 @@ export class SecondaryProjectilePool {
     const timeToLive = spec.timeToLive;
     const targetHint = spec.targetHint;
     const creatures = spec.creatures;
-    const preserveBugs = spec.preserveBugs;
+    const preserveBugs = Boolean(spec.preserveBugs);
 
     let index = null;
     for (const [i, entry] of this._entries.entries()) {
@@ -316,7 +316,7 @@ export class SecondaryProjectilePool {
         // Type 2: homing projectile.
         let targetId = entry.targetId;
         if (!(targetId >= 0 && targetId < creatures.length) || !creatures[targetId].active) {
-          entry.targetId = creatureFindNearestForSecondary({ creatures: creatures, origin: entry.pos, preserveBugs: runtimeState !== null ? runtimeState.preserveBugs : false });
+          entry.targetId = creatureFindNearestForSecondary({ creatures: creatures, origin: entry.pos, preserveBugs: runtimeState !== null ? Boolean(runtimeState.preserveBugs) : false });
           targetId = entry.targetId;
         }
 
@@ -410,7 +410,7 @@ export class SecondaryProjectilePool {
           burstMinDetail = int(ruleBurstMinDetail);
           extraDecals = int(ruleExtraDecals);
           extraRadius = ruleExtraRadius;
-          freezeShardTargetPos = ruleFreezeShardTargetPos;
+          freezeShardTargetPos = Boolean(ruleFreezeShardTargetPos);
         } else if (rule instanceof HomingRocketRule) {
           const detonationScale = rule.detonationScale;
           const ruleDamageSpeedMul = rule.damageSpeedMul;
@@ -423,7 +423,7 @@ export class SecondaryProjectilePool {
           damageBase = ruleDamageBase;
           extraDecals = int(ruleExtraDecals);
           extraRadius = ruleExtraRadius;
-          freezeShardTargetPos = ruleFreezeShardTargetPos;
+          freezeShardTargetPos = Boolean(ruleFreezeShardTargetPos);
         } else if (rule instanceof RocketMinigunRule) {
           const detonationScale = rule.detonationScale;
           const ruleDamageSpeedMul = rule.damageSpeedMul;
@@ -436,7 +436,7 @@ export class SecondaryProjectilePool {
           damageBase = ruleDamageBase;
           extraDecals = int(ruleExtraDecals);
           extraRadius = ruleExtraRadius;
-          freezeShardTargetPos = ruleFreezeShardTargetPos;
+          freezeShardTargetPos = Boolean(ruleFreezeShardTargetPos);
         }
         if (freezeActive) {
           if (effects !== null) {

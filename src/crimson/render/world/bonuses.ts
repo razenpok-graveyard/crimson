@@ -165,7 +165,7 @@ export function drawBonusHoverLabels(renderCtx: WorldRenderCtx, opts: { camera: 
       continue;
     }
     const [idx, entry] = hovered;
-    const label = bonusLabelForEntry(entry, { preserveBugs: frame.state.preserveBugs });
+    const label = bonusLabelForEntry(entry, { preserveBugs: Boolean(frame.state.preserveBugs) });
     if (!label) {
       continue;
     }

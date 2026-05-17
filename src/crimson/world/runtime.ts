@@ -58,10 +58,10 @@ export class WorldRuntime {
     this.audioRng = audioRng;
     this.rtxMode = rtxMode;
 
-    this.simWorld = new SimWorldState({ worldSize: this.worldSize, demoModeActive: this.demoModeActive, hardcore: this.hardcore, questFailRetryCount: int(this.questFailRetryCount), preserveBugs: this.preserveBugs });
+    this.simWorld = new SimWorldState({ worldSize: this.worldSize, demoModeActive: Boolean(this.demoModeActive), hardcore: Boolean(this.hardcore), questFailRetryCount: int(this.questFailRetryCount), preserveBugs: Boolean(this.preserveBugs) });
     const renderResources = new RenderResources({ assetsDir: this.assetsDir, worldSize: this.worldSize, config: this.config });
     this.renderResources = renderResources;
-    this.audioBridge = new AudioBridge({ demoModeActive: this.demoModeActive, reflexBoostTimerSource: () => this.simWorld.state.bonuses.reflexBoost, audio: this.audio, audioRng: this.audioRng });
+    this.audioBridge = new AudioBridge({ demoModeActive: Boolean(this.demoModeActive), reflexBoostTimerSource: () => this.simWorld.state.bonuses.reflexBoost, audio: this.audio, audioRng: this.audioRng });
     this.terrainRuntime = new TerrainRuntime({ worldSize: this.worldSize, renderResources: renderResources });
 
     this.camera = new Vec2(-1.0, -1.0);

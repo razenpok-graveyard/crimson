@@ -75,8 +75,8 @@ export class DemoTrialOverlayUi {
     const rowW = buttonW * 2.0 + gap;
     const buttonBasePos = panelPos.add(new Vec2(256.0 - rowW * 0.5, 214.0));
 
-    const purchaseClicked = buttonUpdate(this._purchaseButton, { pos: buttonBasePos, width: buttonW, dtMs: dtMs, mouse: mouse, click: click });
-    const maybeClicked = buttonUpdate(this._maybeLaterButton, { pos: buttonBasePos.offset({ dx: buttonW + gap }), width: buttonW, dtMs: dtMs, mouse: mouse, click: click });
+    const purchaseClicked = buttonUpdate(this._purchaseButton, { pos: buttonBasePos, width: buttonW, dtMs: dtMs, mouse: mouse, click: Boolean(click) });
+    const maybeClicked = buttonUpdate(this._maybeLaterButton, { pos: buttonBasePos.offset({ dx: buttonW + gap }), width: buttonW, dtMs: dtMs, mouse: mouse, click: Boolean(click) });
 
     if (purchaseClicked) {
       return 'purchase';

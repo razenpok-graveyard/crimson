@@ -194,7 +194,7 @@ export class UnlockedWeaponsDatabaseView extends DatabaseBaseView {
       const weaponId = int(weapon.weaponId);
       let include = false;
       if (weaponId >= 0 && weaponId < available.length) {
-        include = available[weaponId];
+        include = Boolean(available[weaponId]);
       }
       if (!include) {
         if (weaponId === WeaponId.PISTOL) {

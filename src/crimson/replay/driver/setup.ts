@@ -113,7 +113,7 @@ export function player0MostUsedWeaponId(state: GameplayState, players: PlayerSta
 
 export function timeScaleReflexBoostBonus(state: GameplayState, dt: number): number {
   // Time scale (Reflex Boost bonus), mirroring deterministic world-step timing.
-  return _timeScaleReflexBoostBonus({ reflexBoostTimer: state.bonuses.reflexBoost, timeScaleActive: state.timeScaleActive, dt: dt });
+  return _timeScaleReflexBoostBonus({ reflexBoostTimer: state.bonuses.reflexBoost, timeScaleActive: Boolean(state.timeScaleActive), dt: dt });
 }
 
 export function timeScaleReflexBoostBonusF32(state: GameplayState, dt: number): number {

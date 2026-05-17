@@ -42,7 +42,7 @@ export function drawLanPlayerRing(renderCtx: WorldRenderCtx, opts: { player: Pla
   const scale = opts.scale;
   let alpha = opts.alpha;
   const frame = renderCtx.frame;
-  if (!frame.lanPlayerRingsEnabled) {
+  if (!Boolean(frame.lanPlayerRingsEnabled)) {
     return;
   }
   if (frame.players.length <= 1) {

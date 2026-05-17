@@ -112,7 +112,7 @@ export class ReliableLink {
     // sequence that has been received and delivered. Out-of-order packets are
     // buffered and only delivered once gaps are filled.
     this._applyAck(int(packet.ack), { nowMs: int(nowMs) });
-    if (!packet.reliable) {
+    if (!Boolean(packet.reliable)) {
       return [[packet.message], false];
     }
 

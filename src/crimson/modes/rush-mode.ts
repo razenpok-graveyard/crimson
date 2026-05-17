@@ -49,7 +49,7 @@ export class RushMode extends BaseGameplayMode {
   }
 
   protected _newSimSession(): DeterministicSession {
-    const [session, spawnState] = buildRushSession({ world: this.simWorld.worldState, worldSize: this.worldSize, damageScaleByType: this.simWorld.damageScaleByType, detailPreset: 5, violenceDisabled: 0, gameTuneStarted: this.simWorld.gameTuneStarted, finalizePostRenderLifecycle: true });
+    const [session, spawnState] = buildRushSession({ world: this.simWorld.worldState, worldSize: this.worldSize, damageScaleByType: this.simWorld.damageScaleByType, detailPreset: 5, violenceDisabled: 0, gameTuneStarted: Boolean(this.simWorld.gameTuneStarted), finalizePostRenderLifecycle: true });
     this._spawnState = spawnState;
     return session;
   }
@@ -69,7 +69,7 @@ export class RushMode extends BaseGameplayMode {
     const terrain = advanceUnlockTerrain(this.state.rng, { unlockIndex: int(questUnlockIndex), width: int(this.worldSize), height: int(this.worldSize) });
     lanDebugLog(
       'terrain_prelude',
-      { mode: 'RushMode', lanEnabled: this._lanEnabled, lanRole: String(this._lanRole), statusQuestUnlockIndex: int(statusUnlockIndex), statusQuestUnlockIndexFull: int(statusUnlockIndexFull), simQuestUnlockIndex: int(simUnlockIndex), simQuestUnlockIndexFull: int(simUnlockIndexFull), questUnlockIndex: int(questUnlockIndex), terrainSlots: terrain.terrainSlots, terrainSeed: terrain.terrainSeed },
+      { mode: 'RushMode', lanEnabled: Boolean(this._lanEnabled), lanRole: String(this._lanRole), statusQuestUnlockIndex: int(statusUnlockIndex), statusQuestUnlockIndexFull: int(statusUnlockIndexFull), simQuestUnlockIndex: int(simUnlockIndex), simQuestUnlockIndexFull: int(simUnlockIndexFull), questUnlockIndex: int(questUnlockIndex), terrainSlots: terrain.terrainSlots, terrainSeed: terrain.terrainSeed },
     );
     this.applyTerrainSetup({
       terrainSlots: terrain.terrainSlots,
@@ -79,9 +79,9 @@ export class RushMode extends BaseGameplayMode {
     this._simSession = this._newSimSession();
     enforceRushLoadout(this.simWorld.worldState);
     const replayStatus = status === null ? new GameStatusData() : status.asData();
-    const recordReplay = !this._lanEnabled || String(this._lanRole) === 'host';
+    const recordReplay = !Boolean(this._lanEnabled) || String(this._lanRole) === 'host';
     if (recordReplay) {
-      this._replayRecorder = new ReplayRecorder(new ReplayHeader({ gameModeId: GameMode.RUSH, seed: int(this._runResetSeed), tickRate: int(this._gameplayTickRate()), questFailRetryCount: int(this.questFailRetryCount), hardcore: this.hardcore, preserveBugs: this.state.preserveBugs, detailPreset: int(this._deterministicDetailPreset()), violenceDisabled: int(this._deterministicViolenceDisabled()), worldSize: this.worldSize, playerCount: this.simWorld.players.length, status: replayStatus }));
+      this._replayRecorder = new ReplayRecorder(new ReplayHeader({ gameModeId: GameMode.RUSH, seed: int(this._runResetSeed), tickRate: int(this._gameplayTickRate()), questFailRetryCount: int(this.questFailRetryCount), hardcore: Boolean(this.hardcore), preserveBugs: Boolean(this.state.preserveBugs), detailPreset: int(this._deterministicDetailPreset()), violenceDisabled: int(this._deterministicViolenceDisabled()), worldSize: this.worldSize, playerCount: this.simWorld.players.length, status: replayStatus }));
       this._replayCheckpointsSampleRate = int(DEFAULT_CHECKPOINT_SAMPLE_RATE);
     } else {
       this._replayRecorder = null;
@@ -110,7 +110,7 @@ export class RushMode extends BaseGameplayMode {
       return;
     }
 
-    if (!this._lanEnabled && InputState.wasKeyPressed(9)) {
+    if (!Boolean(this._lanEnabled) && InputState.wasKeyPressed(9)) {
       this._paused = !this._paused;
     }
 
@@ -139,7 +139,7 @@ export class RushMode extends BaseGameplayMode {
   }
 
   protected _replayClaimedStatsComplete(): boolean {
-    return this._gameOverActive;
+    return Boolean(this._gameOverActive);
   }
 
   protected _replayClaimedStatsElapsedMs(): number {
@@ -208,7 +208,7 @@ export class RushMode extends BaseGameplayMode {
       return;
     }
 
-    if (this._lanEnabled && this._lanRuntime !== null) {
+    if (Boolean(this._lanEnabled) && this._lanRuntime !== null) {
       this._updateLanMatch({ dt: frame.dt, dtUiMs: 0.0 });
       return;
     }

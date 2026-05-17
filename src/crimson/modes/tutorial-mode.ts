@@ -58,7 +58,7 @@ export class TutorialMode extends BaseGameplayMode {
   }
 
   protected _newSimSession(): DeterministicSession {
-    return buildTutorialSession({ world: this.simWorld.worldState, worldSize: this.worldSize, damageScaleByType: this.simWorld.damageScaleByType, detailPreset: int(this._deterministicDetailPreset()), violenceDisabled: int(this._deterministicViolenceDisabled()), gameTuneStarted: this.simWorld.gameTuneStarted, demoModeActive: this.demoModeActive });
+    return buildTutorialSession({ world: this.simWorld.worldState, worldSize: this.worldSize, damageScaleByType: this.simWorld.damageScaleByType, detailPreset: int(this._deterministicDetailPreset()), violenceDisabled: int(this._deterministicViolenceDisabled()), gameTuneStarted: Boolean(this.simWorld.gameTuneStarted), demoModeActive: Boolean(this.demoModeActive) });
   }
 
   protected _runtimePlayerCount(): number {
@@ -97,7 +97,7 @@ export class TutorialMode extends BaseGameplayMode {
     this.player.pos = new Vec2(this.worldSize * 0.5, this.worldSize * 0.5);
     weaponAssignPlayer(this.player, WeaponId.PISTOL, { state: this.state });
     this._simSession = this._newSimSession();
-    this._replayRecorder = new ReplayRecorder(new ReplayHeader({ gameModeId: GameMode.TUTORIAL, seed: int(this._runResetSeed), tickRate: int(this._gameplayTickRate()), questFailRetryCount: int(this.questFailRetryCount), hardcore: this.hardcore, preserveBugs: this.state.preserveBugs, detailPreset: int(this._deterministicDetailPreset()), violenceDisabled: int(this._deterministicViolenceDisabled()), worldSize: this.worldSize, playerCount: 1, status: status === null ? new GameStatusData() : status.asData() }));
+    this._replayRecorder = new ReplayRecorder(new ReplayHeader({ gameModeId: GameMode.TUTORIAL, seed: int(this._runResetSeed), tickRate: int(this._gameplayTickRate()), questFailRetryCount: int(this.questFailRetryCount), hardcore: Boolean(this.hardcore), preserveBugs: Boolean(this.state.preserveBugs), detailPreset: int(this._deterministicDetailPreset()), violenceDisabled: int(this._deterministicViolenceDisabled()), worldSize: this.worldSize, playerCount: 1, status: status === null ? new GameStatusData() : status.asData() }));
     this._replayCheckpointsSampleRate = int(DEFAULT_CHECKPOINT_SAMPLE_RATE);
     ((target: unknown) => {
       if (target !== null && typeof target === 'object' && typeof (target as { clear?: unknown }).clear === 'function') {
@@ -175,7 +175,7 @@ export class TutorialMode extends BaseGameplayMode {
     const reloadKey = this.config.controls.reloadCode;
     const reloadPressed = inputCodeIsPressed(reloadKey);
 
-    return new PlayerInput({ move: move, aim: aim, fireDown: fireDown, firePressed: firePressed, reloadPressed: reloadPressed });
+    return new PlayerInput({ move: move, aim: aim, fireDown: Boolean(fireDown), firePressed: Boolean(firePressed), reloadPressed: Boolean(reloadPressed) });
   }
 
   protected _buildLocalInputs(opts: { dt: number }): PlayerInput[] {

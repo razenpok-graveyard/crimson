@@ -78,7 +78,7 @@ function fireBulletsActive(players: PlayerState[] | null, opts: { state: Gamepla
 
   // Native `projectile_spawn` checks player-1/player-2 Fire Bullets timers
   // globally, regardless of projectile ownership.
-  if (state.preserveBugs) {
+  if (Boolean(state.preserveBugs)) {
     return players.slice(0, 2).some((player) => player.fireBulletsTimer > 0.0);
   }
 

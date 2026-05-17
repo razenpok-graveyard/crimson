@@ -411,7 +411,7 @@ function drawCreatures(renderCtx: WorldRenderCtx, opts: { ctx: WorldDrawContext 
     drawCreatureSprite(
       renderCtx,
       texture,
-      { typeId: typeId || CreatureTypeId.ZOMBIE, flags: creature.flags, phase: phase, mirrorLong: info.mirror && lifecycleStage >= 16.0, shadowAlpha: shadowAlpha, pos: creature.pos, screenPos: screen, rotationRad: creature.heading - Math.PI / 2.0, scale: ctx.scale, sizeScale: sizeScale, tint: tint, shadow: shadow },
+      { typeId: typeId || CreatureTypeId.ZOMBIE, flags: creature.flags, phase: phase, mirrorLong: Boolean(info.mirror) && lifecycleStage >= 16.0, shadowAlpha: shadowAlpha, pos: creature.pos, screenPos: screen, rotationRad: creature.heading - Math.PI / 2.0, scale: ctx.scale, sizeScale: sizeScale, tint: tint, shadow: shadow },
     );
   }
 }
@@ -535,7 +535,7 @@ function drawProjectilesAndEffects(renderCtx: WorldRenderCtx, opts: { ctx: World
 function iterVisibleAimPlayers(renderCtx: WorldRenderCtx): PlayerState[] {
   const frame = renderCtx.frame;
   const players = frame.players;
-  if (!frame.lanLocalAimIndicatorsOnly) {
+  if (!Boolean(frame.lanLocalAimIndicatorsOnly)) {
     return Array.from(players);
   }
   const localSlot = int(frame.lanLocalPlayerSlotIndex);

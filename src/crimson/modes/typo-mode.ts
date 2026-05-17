@@ -63,7 +63,7 @@ export class TypoShooterMode extends BaseGameplayMode {
   }
 
   protected _newSimSession(): DeterministicSession {
-    return buildTypoSession({ world: this.simWorld.worldState, worldSize: this.worldSize, damageScaleByType: this.simWorld.damageScaleByType, detailPreset: 5, violenceDisabled: 0, gameTuneStarted: this.simWorld.gameTuneStarted, dictionaryWords: this.state.typo.dictionaryWords, highscoreNames: this.state.typo.highscoreNames });
+    return buildTypoSession({ world: this.simWorld.worldState, worldSize: this.worldSize, damageScaleByType: this.simWorld.damageScaleByType, detailPreset: 5, violenceDisabled: 0, gameTuneStarted: Boolean(this.simWorld.gameTuneStarted), dictionaryWords: this.state.typo.dictionaryWords, highscoreNames: this.state.typo.highscoreNames });
   }
 
   open(): void {
@@ -86,7 +86,7 @@ export class TypoShooterMode extends BaseGameplayMode {
     this.state.typo.highscoreNames = highscoreNames;
     this._simSession = this._newSimSession();
 
-    this._replayRecorder = new ReplayRecorder(new ReplayHeader({ gameModeId: GameMode.TYPO, seed: int(this._runResetSeed), tickRate: int(this._gameplayTickRate()), questFailRetryCount: int(this.questFailRetryCount), hardcore: this.hardcore, preserveBugs: this.state.preserveBugs, detailPreset: int(this._deterministicDetailPreset()), violenceDisabled: int(this._deterministicViolenceDisabled()), worldSize: this.worldSize, playerCount: 1, status: status === null ? new GameStatusData() : status.asData(), typoDictionaryWords: Array.from(dictionaryWords), typoHighscoreNames: Array.from(highscoreNames) }));
+    this._replayRecorder = new ReplayRecorder(new ReplayHeader({ gameModeId: GameMode.TYPO, seed: int(this._runResetSeed), tickRate: int(this._gameplayTickRate()), questFailRetryCount: int(this.questFailRetryCount), hardcore: Boolean(this.hardcore), preserveBugs: Boolean(this.state.preserveBugs), detailPreset: int(this._deterministicDetailPreset()), violenceDisabled: int(this._deterministicViolenceDisabled()), worldSize: this.worldSize, playerCount: 1, status: status === null ? new GameStatusData() : status.asData(), typoDictionaryWords: Array.from(dictionaryWords), typoHighscoreNames: Array.from(highscoreNames) }));
     this._replayCheckpointsSampleRate = int(DEFAULT_CHECKPOINT_SAMPLE_RATE);
     ((target: unknown) => {
       if (target !== null && typeof target === 'object' && typeof (target as { clear?: unknown }).clear === 'function') {
@@ -178,7 +178,7 @@ export class TypoShooterMode extends BaseGameplayMode {
   }
 
   protected _replayClaimedStatsComplete(): boolean {
-    return this._gameOverActive;
+    return Boolean(this._gameOverActive);
   }
 
   protected _replayClaimedStatsElapsedMs(): number {
