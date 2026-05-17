@@ -103,6 +103,10 @@ export function tsTypeExpression(pythonType: string): string {
   if (listType !== null) {
     return `${tsArrayElementTypeExpression(listType[1])}[]`;
   }
+  const dequeType = /^deque\[(.+)\]$/.exec(trimmed);
+  if (dequeType !== null) {
+    return `${tsArrayElementTypeExpression(dequeType[1])}[]`;
+  }
   const sequenceType = /^Sequence\[(.+)\]$/.exec(trimmed);
   if (sequenceType !== null) {
     return `readonly ${tsArrayElementTypeExpression(sequenceType[1])}[]`;

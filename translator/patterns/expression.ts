@@ -1679,8 +1679,8 @@ export function translateExpression(
     }
   }
 
-  const earlyDictGet = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*|\{[\s\S]+\})\.get\((.*)\)$/.exec(trimmed);
-  if (earlyDictGet !== null) {
+  const earlyDictGet = /^(.+|\{[\s\S]+\})\.get\((.*)\)$/.exec(trimmed);
+  if (earlyDictGet !== null && delimitersBalanced(earlyDictGet[1])) {
     const parts = splitTopLevelComma(earlyDictGet[2]);
     if (parts.length === 1 || parts.length === 2) {
       const inlineMap = translateInlineDictMapExpression(earlyDictGet[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -1691,6 +1691,11 @@ export function translateExpression(
         : `${mapName}.get(${key})`;
       return parts.length === 1 ? `${value} ?? null` : `${value} ?? ${translateMapDefaultExpression(parts[1], earlyDictGet[1], mapName, nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
     }
+  }
+
+  const popLeftCall = /^(.+)\.popleft\(\)$/.exec(trimmed);
+  if (popLeftCall !== null) {
+    return `${translateExpression(popLeftCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.shift()!`;
   }
 
   const dictSetdefault = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.setdefault\((.*)\)$/.exec(trimmed);
@@ -1819,8 +1824,8 @@ export function translateExpression(
     }
   }
 
-  const dictGet = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*|\{[\s\S]+\})\.get\((.*)\)$/.exec(trimmed);
-  if (dictGet !== null) {
+  const dictGet = /^(.+|\{[\s\S]+\})\.get\((.*)\)$/.exec(trimmed);
+  if (dictGet !== null && delimitersBalanced(dictGet[1])) {
     const parts = splitTopLevelComma(dictGet[2]);
     if (parts.length === 1 || parts.length === 2) {
       const inlineMap = translateInlineDictMapExpression(dictGet[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -2641,6 +2646,8 @@ function comparisonNeedsPythonEquality(left: string, right: string, arrayNames: 
   const rightSubscript = /^([A-Za-z_$][A-Za-z0-9_.$]*)\[.+\]$/.exec(right);
   return /\bnew [A-Z][A-Za-z0-9_$]*\(/.test(left)
     || /\bnew [A-Z][A-Za-z0-9_$]*\(/.test(right)
+    || /^Array\.from\(/.test(left)
+    || /^Array\.from\(/.test(right)
     || arrayNames.has(left)
     || arrayNames.has(right)
     || (leftSubscript !== null && arrayNames.has(tupleElementArrayNameMarker(leftSubscript[1])))
@@ -2669,6 +2676,10 @@ export function expressionIsKnownMap(
   mapNames: ReadonlySet<string> = new Set(),
 ): boolean {
   if (mapNames.has(tsExpression)) {
+    return true;
+  }
+  const mapGet = /^([A-Za-z_$][A-Za-z0-9_.$]*)\.get\(.*\)!?(?: \?\? null)?$/.exec(tsExpression);
+  if (mapGet !== null && mapNames.has(mapValueMapNameMarker(mapGet[1]))) {
     return true;
   }
   const dottedField = /^(.+)\.([A-Za-z_$][A-Za-z0-9_$]*)$/.exec(tsExpression);

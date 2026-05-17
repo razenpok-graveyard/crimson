@@ -1384,6 +1384,19 @@ export function translateStraightLineStatement(
       arrayNames.add(pathNameMarker(forOfStatement[1]));
       arrayNames.add(pathNameMarker(itemName));
     }
+    const mapValuesLoop = /^(.+)\.values\(\)$/.exec(forOfStatement[2]);
+    if (mapValuesLoop !== null) {
+      const source = translateExpression(mapValuesLoop[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const itemName = tsExportNameForPythonName(forOfStatement[1]);
+      if (mapNames.has(mapValueMapNameMarker(mapValuesLoop[1])) || mapNames.has(mapValueMapNameMarker(source))) {
+        addMutableName(mapNames, forOfStatement[1]);
+        addMutableName(mapNames, itemName);
+      }
+      if (mapNames.has(arrayValueMapNameMarker(mapValuesLoop[1])) || mapNames.has(arrayValueMapNameMarker(source))) {
+        arrayNames.add(forOfStatement[1]);
+        arrayNames.add(itemName);
+      }
+    }
     let nextIndex = index + 1;
     while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, innerIndent)) {
       if (lines[nextIndex].trim() === '') {
@@ -3849,6 +3862,27 @@ function translateStraightLineAssignment(
   }
 
   const assignedRight = operator === '=' ? maybeAwaitAsyncCall(tsRight, nameMap) : tsRight;
+  const topLevelMapItemAssignment = parseTopLevelSubscriptAssignmentTarget(pythonLeft);
+  if (topLevelMapItemAssignment !== null) {
+    const mapName = translateExpression(topLevelMapItemAssignment.receiver, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (expressionIsKnownMap(mapName, nameMap, mapNames)) {
+      const key = translateMapKeyExpression(mapName, translateExpression(topLevelMapItemAssignment.key, nameMap, arrayNames, validatedTypeAliases, mapNames), mapNames);
+      if (operator === '=') {
+        const mapAssignedRight = pythonRight === null
+          ? assignedRight
+          : translateMapDefaultExpression(pythonRight, topLevelMapItemAssignment.receiver, mapName, nameMap, arrayNames, validatedTypeAliases, mapNames);
+        return {
+          statements: [`${mapName}.set(${key}, ${mapAssignedRight});`],
+          nextIndex,
+        };
+      }
+      const binaryOperator = operator.slice(0, -1);
+      return {
+        statements: [`${mapName}.set(${key}, (${mapName}.get(${key}) ?? 0) ${binaryOperator} ${assignedRight});`],
+        nextIndex,
+      };
+    }
+  }
   const mapItemAssignment = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[(.+)\]$/.exec(pythonLeft);
   if (operator === '=' && mapItemAssignment !== null) {
     const mapName = translateExpression(mapItemAssignment[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -4104,6 +4138,69 @@ function matchingCloseBracket(value: string, openIndex: number): number | null {
   return null;
 }
 
+function parseTopLevelSubscriptAssignmentTarget(value: string): { receiver: string; key: string } | null {
+  const trimmed = value.trim();
+  if (!trimmed.endsWith(']')) {
+    return null;
+  }
+  let quote: string | null = null;
+  let parenDepth = 0;
+  let braceDepth = 0;
+  let bracketDepth = 0;
+  let finalOpenIndex: number | null = null;
+  for (let index = 0; index < trimmed.length; index += 1) {
+    const char = trimmed[index];
+    if (quote !== null) {
+      if (char === quote && !charIsEscaped(trimmed, index)) {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'" || char === '`') {
+      quote = char;
+      continue;
+    }
+    if (char === '(') {
+      parenDepth += 1;
+      continue;
+    }
+    if (char === ')') {
+      parenDepth -= 1;
+      continue;
+    }
+    if (char === '{') {
+      braceDepth += 1;
+      continue;
+    }
+    if (char === '}') {
+      braceDepth -= 1;
+      continue;
+    }
+    if (char === '[') {
+      if (parenDepth === 0 && braceDepth === 0 && bracketDepth === 0) {
+        finalOpenIndex = index;
+      }
+      bracketDepth += 1;
+      continue;
+    }
+    if (char === ']') {
+      bracketDepth -= 1;
+      if (bracketDepth < 0) {
+        return null;
+      }
+    }
+  }
+  if (quote !== null || parenDepth !== 0 || braceDepth !== 0 || bracketDepth !== 0 || finalOpenIndex === null) {
+    return null;
+  }
+  if (matchingCloseBracket(trimmed, finalOpenIndex) !== trimmed.length - 1) {
+    return null;
+  }
+  const receiver = trimmed.slice(0, finalOpenIndex).trim();
+  const key = trimmed.slice(finalOpenIndex + 1, -1).trim();
+  return receiver === '' || key === '' ? null : { receiver, key };
+}
+
 function charIsEscaped(value: string, index: number): boolean {
   let slashCount = 0;
   for (let cursor = index - 1; cursor >= 0 && value[cursor] === '\\'; cursor -= 1) {
@@ -4133,7 +4230,7 @@ function recordLocalAssignmentMarkers(
   pythonName: string,
   tsName: string,
   assignedRight: string,
-  nameMap: ReadonlyMap<string, string>,
+  nameMap: Map<string, string>,
   arrayNames: Set<string>,
   mapNames: ReadonlySet<string>,
 ): void {
@@ -4205,14 +4302,14 @@ function recordLocalAssignmentMarkers(
     addMutableName(mapNames, pythonName);
     addMutableName(mapNames, tsName);
   }
-  const mapGetAssignment = /^([A-Za-z_$][A-Za-z0-9_.$]*)\.get\(.*\)(?: \?\? null)?$/.exec(assignedRight);
+  const mapGetAssignment = /^([A-Za-z_$][A-Za-z0-9_.$]*)\.get\(.*\)!?(?: \?\? null)?$/.exec(assignedRight);
   const mapDefaultAssignment = /^([A-Za-z_$][A-Za-z0-9_.$]*)\.get\(.*\) \?\? new Map(?:<[^)]*>)?\(\)$/.exec(assignedRight);
   const mapGetOrInitMapAssignment = /^mapGetOrInit\([A-Za-z_$][A-Za-z0-9_.$]*, .+, \(\) => new Map(?:<[^)]*>)?\(\)\)$/.exec(assignedRight);
   if (mapDefaultAssignment !== null || mapGetOrInitMapAssignment !== null) {
     addMutableName(mapNames, pythonName);
     addMutableName(mapNames, tsName);
   }
-  if (/^[A-Za-z_$][A-Za-z0-9_.$]*\.get\(.*\)!$/.test(assignedRight)) {
+  if (/^[A-Za-z_$][A-Za-z0-9_.$]*\.get\(.*\)!$/.test(assignedRight) && !expressionIsKnownMap(assignedRight, nameMap, mapNames)) {
     arrayNames.add(objectNameMarker(pythonName));
     arrayNames.add(objectNameMarker(tsName));
   }

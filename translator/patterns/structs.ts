@@ -1292,6 +1292,9 @@ function tsStructFieldDefaultValue(pythonValue: string): string | null {
   if (trimmed === 'msgspec.field(default_factory=list)') {
     return '[]';
   }
+  if (trimmed === 'msgspec.field(default_factory=deque)') {
+    return '[]';
+  }
   if (trimmed === 'msgspec.field(default_factory=dict)') {
     return 'new Map()';
   }

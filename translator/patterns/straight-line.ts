@@ -194,6 +194,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       || isDataclassOnlyImport(trimmed)
       || trimmed === 'from collections import OrderedDict'
       || trimmed === 'from collections import defaultdict'
+      || trimmed === 'from collections import deque'
       || trimmed === 'from functools import lru_cache'
       || trimmed === 'from pathlib import Path'
       || trimmed === 'from threading import Lock'
