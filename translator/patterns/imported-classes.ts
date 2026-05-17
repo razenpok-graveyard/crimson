@@ -79,6 +79,25 @@ export function recordImportedTupleTypeAliases(
   }
 }
 
+export function recordImportedMapNames(
+  modulePath: string,
+  names: { importedName: string; localName: string }[],
+  relativePath: string,
+  mapNames: Set<string>,
+): void {
+  const sourcePath = tsSourcePathForImportPath(modulePath, relativePath);
+  if (sourcePath === null || !fs.existsSync(sourcePath)) {
+    return;
+  }
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  for (const name of names) {
+    if (exportedConstLooksMap(source, name.importedName)) {
+      mapNames.add(name.localName);
+      mapNames.add(name.importedName);
+    }
+  }
+}
+
 export function recordImportedFunctionReturnTypes(
   modulePath: string,
   names: { importedName: string; localName: string }[],
@@ -384,6 +403,11 @@ function exportedClassSource(source: string, className: string): string | null {
 function exportedTypeAliasLooksTuple(source: string, typeName: string): boolean {
   const escapedName = typeName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`export\\s+type\\s+${escapedName}\\s*=\\s*(?:readonly\\s+)?\\[`).test(source);
+}
+
+function exportedConstLooksMap(source: string, constName: string): boolean {
+  const escapedName = constName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`export\\s+const\\s+${escapedName}(?::[^=]+)?\\s*=\\s*new\\s+Map\\b`).test(source);
 }
 
 function tsSourcePathForImportPath(modulePath: string, relativePath: string): string | null {

@@ -1,29 +1,38 @@
 // Port of crimson/sim/world_state.py
 
 import { Vec2 } from '@grim/geom.ts';
-import type { SfxId } from '@grim/sfx-map.ts';
+import { SfxId } from '@grim/sfx-map.ts';
 import { emitBonusPickupEffects } from '@crimson/bonuses/pickup-fx.ts';
 import { bonusUpdate, bonusUpdatePrePickupTimers } from '@crimson/bonuses/update.ts';
 import { cameraShakeUpdate } from '@crimson/camera.ts';
 import { creatureAnimAdvancePhase } from '@crimson/creatures/anim.ts';
 import { creatureApplyDamageWithLethalFollowup } from '@crimson/creatures/damage.ts';
-import { CreatureDeath, CreaturePool, CreatureUpdateOptions } from '@crimson/creatures/runtime.ts';
+import type { CreatureDeath } from '@crimson/creatures/runtime.ts';
+import { CreaturePool, CreatureUpdateOptions } from '@crimson/creatures/runtime.ts';
 import { CreatureAiMode, CreatureTypeId, SpawnEnv } from '@crimson/creatures/spawn.ts';
 import type { FxQueue, FxQueueRotated } from '@crimson/effects.ts';
-import { GameMode } from '@crimson/game-modes.ts';
-import { buildGameplayState, playerUpdate, playerFrameDtAfterRoundtrip, survivalProgressionUpdate, survivalEnforceRewardWeaponGuard } from '@crimson/gameplay.ts';
-import type { OwnerRef } from '@crimson/owner-ref.ts';
+import type { GameMode } from '@crimson/game-modes.ts';
+import { buildGameplayState, playerFrameDtAfterRoundtrip, playerUpdate, survivalEnforceRewardWeaponGuard, survivalProgressionUpdate } from '@crimson/gameplay.ts';
+import { OwnerRef } from '@crimson/owner-ref.ts';
 import { perksUpdateEffects } from '@crimson/perks/runtime/effects.ts';
 import { PLAYER_DEATH_HOOKS, WORLD_DT_STEPS } from '@crimson/perks/runtime/manifest.ts';
 import { playerTakeProjectileDamage } from '@crimson/player-damage.ts';
-import { PrimaryStepCtx, ProjectileUpdateOptions } from '@crimson/projectiles/runtime/projectile-pool.ts';
-import { SecondaryStepCtx } from '@crimson/projectiles/runtime/secondary-pool.ts';
-import type { ProjectileHit } from '@crimson/projectiles/types.ts';
-import { PlayerInput } from './input.ts';
-import { normalizeInputFrame } from './input-frame.ts';
-import { type ProjectileDecalPostCtx, planHitSfx, queueProjectileDecalsPostHit, queueProjectileDecalsPreHit } from './presentation-step.ts';
-import type { BonusPickupEvent, GameplayState, PlayerState } from './state-types.ts';
-import { CREATURE_ANIM } from './world-defs.ts';
+import { PrimaryStepCtx, ProjectileUpdateOptions, SecondaryStepCtx } from '@crimson/projectiles/runtime/index.ts';
+import { ProjectileHit } from '@crimson/projectiles/types.ts';
+import { PlayerInput } from '@crimson/sim/input.ts';
+import { normalizeInputFrame } from '@crimson/sim/input-frame.ts';
+import { ProjectileDecalPostCtx, planHitSfx, queueProjectileDecalsPostHit, queueProjectileDecalsPreHit } from '@crimson/sim/presentation-step.ts';
+import type { BonusPickupEvent, GameplayState } from '@crimson/sim/state-types.ts';
+import { PlayerState } from '@crimson/sim/state-types.ts';
+import { CREATURE_ANIM } from '@crimson/sim/world-defs.ts';
+
+function mapGetOrThrow<K, V>(map: ReadonlyMap<K, V>, key: unknown): V {
+  const typedKey = key as K;
+  if (!map.has(typedKey)) {
+    throw new Error(`missing map key: ${String(key)}`);
+  }
+  return map.get(typedKey) as V;
+}
 
 export class WorldEvents {
   hits: ProjectileHit[];
@@ -42,41 +51,12 @@ export class WorldEvents {
     hitSfx?: SfxId[];
   }) {
     this.hits = opts.hits;
-    this.deaths = Array.from(opts.deaths);
+    this.deaths = opts.deaths;
     this.pickups = opts.pickups;
     this.sfx = opts.sfx;
     this.triggerGameTune = opts.triggerGameTune ?? false;
     this.hitSfx = opts.hitSfx ?? [];
   }
-}
-
-const _WORLD_DT_STEPS = WORLD_DT_STEPS;
-const _PLAYER_DEATH_HOOKS = PLAYER_DEATH_HOOKS;
-
-type CreatureDamageApplier = (
-  creatureIndex: number,
-  damage: number,
-  damageType: number,
-  knockback: Vec2,
-  owner: OwnerRef,
-) => void;
-
-export interface WorldStateStepOpts {
-  readonly applyWorldDtSteps?: boolean;
-  readonly dtPlayerLocal?: number | null;
-  readonly deferCameraShakeUpdate?: boolean;
-  readonly deferFreezeCorpseFx?: boolean;
-  readonly midStepHook?: (() => void) | null;
-  readonly inputs: PlayerInput[] | null;
-  readonly worldSize: number;
-  readonly damageScaleByType: Map<number, number>;
-  readonly detailPreset: number;
-  readonly violenceDisabled?: number;
-  readonly fxQueue: FxQueue;
-  readonly fxQueueRotated: FxQueueRotated;
-  readonly gameMode: GameMode;
-  readonly perkProgressionEnabled: boolean;
-  readonly gameTuneStarted?: boolean;
 }
 
 export class WorldState {
@@ -97,153 +77,88 @@ export class WorldState {
     this.creatures = opts.creatures;
   }
 
-  static build(opts: {
-    worldSize: number;
-    demoModeActive: boolean;
-    hardcore: boolean;
-    questFailRetryCount: number;
-    preserveBugs?: boolean;
-  }): WorldState {
-    const spawnEnv = new SpawnEnv({
-      terrainWidth: Number(opts.worldSize),
-      terrainHeight: Number(opts.worldSize),
-      demoModeActive: opts.demoModeActive,
-      hardcore: opts.hardcore,
-      questFailRetryCount: int(opts.questFailRetryCount),
-    });
+  static build(opts: { worldSize: number; demoModeActive: boolean; hardcore: boolean; questFailRetryCount: number; preserveBugs?: boolean }): WorldState {
+    const worldSize = opts.worldSize;
+    const demoModeActive = opts.demoModeActive;
+    const hardcore = opts.hardcore;
+    const questFailRetryCount = opts.questFailRetryCount;
+    const preserveBugs = opts.preserveBugs ?? false;
+    const spawnEnv = new SpawnEnv({ terrainWidth: worldSize, terrainHeight: worldSize, demoModeActive: demoModeActive, hardcore: hardcore, questFailRetryCount: int(questFailRetryCount) });
     const state = buildGameplayState();
-    state.demoModeActive = opts.demoModeActive;
-    state.hardcore = opts.hardcore;
-    state.preserveBugs = opts.preserveBugs ?? false;
+    state.demoModeActive = demoModeActive;
+    state.hardcore = hardcore;
+    state.preserveBugs = preserveBugs;
     const players: PlayerState[] = [];
-    const creatures = new CreaturePool({
-      env: spawnEnv,
-      effects: state.effects,
-    });
-    return new WorldState({
-      spawnEnv,
-      state,
-      players,
-      creatures,
-    });
+    const creatures = new CreaturePool({ env: spawnEnv, effects: state.effects });
+    return new WorldState({ spawnEnv: spawnEnv, state: state, players: players, creatures: creatures });
   }
 
-  step(dt: number, opts: WorldStateStepOpts): WorldEvents {
-    const {
-      applyWorldDtSteps = true,
-      dtPlayerLocal = null,
-      deferCameraShakeUpdate: deferCameraShake = false,
-      deferFreezeCorpseFx = false,
-      midStepHook = null,
-      worldSize,
-      damageScaleByType,
-      detailPreset,
-      violenceDisabled = 0,
-      fxQueue,
-      fxQueueRotated,
-      gameMode,
-      perkProgressionEnabled,
-      gameTuneStarted = false,
-    } = opts;
-
+  step(dt: number, opts: { applyWorldDtSteps?: boolean; dtPlayerLocal?: number | null; deferCameraShakeUpdate?: boolean; deferFreezeCorpseFx?: boolean; midStepHook?: (() => void) | null; inputs: PlayerInput[] | null; worldSize: number; damageScaleByType: Map<number, number>; detailPreset: number; violenceDisabled?: number; fxQueue: FxQueue; fxQueueRotated: FxQueueRotated; gameMode: GameMode; perkProgressionEnabled: boolean; gameTuneStarted?: boolean }): WorldEvents {
+    const applyWorldDtSteps = opts.applyWorldDtSteps ?? true;
+    const dtPlayerLocal = opts.dtPlayerLocal ?? null;
+    const deferCameraShakeUpdate = opts.deferCameraShakeUpdate ?? false;
+    const deferFreezeCorpseFx = opts.deferFreezeCorpseFx ?? false;
+    const midStepHook = opts.midStepHook ?? null;
     let inputs = opts.inputs;
-
-    dt = Number(dt);
+    const worldSize = opts.worldSize;
+    const damageScaleByType = opts.damageScaleByType;
+    const detailPreset = opts.detailPreset;
+    const violenceDisabled = opts.violenceDisabled ?? 0;
+    const fxQueue = opts.fxQueue;
+    const fxQueueRotated = opts.fxQueueRotated;
+    const gameMode = opts.gameMode;
+    const perkProgressionEnabled = opts.perkProgressionEnabled;
+    const gameTuneStarted = opts.gameTuneStarted ?? false;
     fxQueue.violenceDisabled = int(violenceDisabled);
-    this.state.playerDeathHookSkipIndices.clear();
-
+    ((target: unknown) => {
+      if (target !== null && typeof target === 'object' && typeof (target as { clear?: unknown }).clear === 'function') {
+        (target as { clear: () => void }).clear();
+      } else if (target !== null && typeof target === 'object' && 'length' in target) {
+        (target as { length: number }).length = 0;
+      }
+    })(this.state.playerDeathHookSkipIndices);
     if (applyWorldDtSteps) {
-      for (const step of _WORLD_DT_STEPS) {
-        dt = Number(step({ dt, players: this.players }));
+      for (const step of WORLD_DT_STEPS) {
+        dt = step({ dt: dt, players: this.players });
       }
     }
-
-    const normalizedInputs = normalizeInputFrame(inputs, { playerCount: this.players.length }).asList();
-
-    const prevPositions: [number, number][] = this.players.map(
-      (player) => [player.pos.x, player.pos.y] as [number, number],
-    );
-    const prevHealth: number[] = this.players.map((player) => Number(player.health));
-
+    inputs = normalizeInputFrame(inputs, { playerCount: this.players.length }).asList();
+    const prevPositions = this.players.map((player) => [player.pos.x, player.pos.y] as [any, any]);
+    const prevHealth = this.players.map((player) => player.health);
     // Native Freeze pickup shatters corpses that existed at tick start;
     // same-tick kills are not included in that pass.
-    const freezeCorpseIndicesAtTickStart = new Set<number>();
-    const creatureEntries = this.creatures.entries;
-    for (let idx = 0; idx < creatureEntries.length; idx++) {
-      const creature = creatureEntries[idx];
-      if (creature.active && Number(creature.hp) <= 0.0) {
-        freezeCorpseIndicesAtTickStart.add(int(idx));
-      }
-    }
-
-    perksUpdateEffects(this.state, this.players, dt, { creatures: creatureEntries, fxQueue });
-
+    const freezeCorpseIndicesAtTickStart = new Set(Array.from(this.creatures.entries.entries()).filter(([idx, creature]) => creature.active && creature.hp <= 0.0).map(([idx, creature]) => int(idx)));
+    perksUpdateEffects(this.state, this.players, dt, { creatures: this.creatures.entries, fxQueue: fxQueue });
     // `effects_update` runs early in the native frame loop, before creature/projectile updates.
-    this.state.effects.update(dt, { fxQueue });
+    this.state.effects.update(dt, { fxQueue: fxQueue });
 
     const _applyProjectileDamageToPlayer = (playerIndex: number, damage: number): void => {
       const idx = int(playerIndex);
-      if (!(idx >= 0 && idx < this.players.length)) return;
-      playerTakeProjectileDamage(this.state, this.players[idx], Number(damage));
+      if (!(idx >= 0 && idx < this.players.length)) {
+        return;
+      }
+      playerTakeProjectileDamage(this.state, this.players[idx], damage);
     };
 
-    const creatureResult = this.creatures.update(dt, { options: new CreatureUpdateOptions({
-      state: this.state,
-      players: this.players,
-      rng: this.state.rng,
-      env: this.spawnEnv,
-      worldWidth: Number(worldSize),
-      worldHeight: Number(worldSize),
-      fxQueue,
-      fxQueueRotated,
-      detailPreset: int(detailPreset),
-      violenceDisabled: int(violenceDisabled),
-    }) });
-
-    const deaths: CreatureDeath[] = [...creatureResult.deaths];
-    const sfx: SfxId[] = [...creatureResult.sfx];
+    const creatureResult = this.creatures.update(dt, { options: new CreatureUpdateOptions({ state: this.state, players: this.players, rng: this.state.rng, env: this.spawnEnv, worldWidth: worldSize, worldHeight: worldSize, fxQueue: fxQueue, fxQueueRotated: fxQueueRotated, detailPreset: int(detailPreset), violenceDisabled: int(violenceDisabled) }) });
+    const deaths = Array.from(creatureResult.deaths);
+    const sfx = Array.from(creatureResult.sfx);
     let triggerGameTune = false;
     const hitSfx: SfxId[] = [];
     let hitAudioGameTuneStarted = gameTuneStarted;
 
-    const _applyProjectileDamageToCreature: CreatureDamageApplier = (
-      creatureIndex: number,
-      damage: number,
-      damageType: number,
-      impulse: Vec2,
-      owner: OwnerRef,
-    ): void => {
+    const _applyProjectileDamageToCreature = (creatureIndex: number, damage: number, damageType: number, impulse: Vec2, owner: OwnerRef): void => {
       const idx = int(creatureIndex);
-      if (!(idx >= 0 && idx < creatureEntries.length)) return;
-      const creature = creatureEntries[idx];
-      if (!creature.active) return;
-
+      if (!(idx >= 0 && idx < this.creatures.entries.length)) {
+        return;
+      }
+      const creature = this.creatures.entries[idx];
+      if (!creature.active) {
+        return;
+      }
       creatureApplyDamageWithLethalFollowup(
         creature,
-        {
-          damageAmount: Number(damage),
-          damageType: int(damageType),
-          impulse,
-          owner,
-          dt: Number(dt),
-          players: this.players,
-          rng: this.state.rng,
-          preserveBugs: Boolean(this.state.preserveBugs),
-          effects: this.state.effects,
-          detailPreset: int(detailPreset),
-          onLethal: (deathSfx: SfxId[]) => {
-            this._recordCreatureDeath({
-              creatureIndex: idx,
-              dt: Number(dt),
-              detailPreset: int(detailPreset),
-              worldSize: Number(worldSize),
-              fxQueue,
-              deaths,
-              sfx,
-              deathSfx,
-            });
-          },
-        },
+        { damageAmount: damage, damageType: int(damageType), impulse: impulse, owner: owner, dt: dt, players: this.players, rng: this.state.rng, preserveBugs: this.state.preserveBugs, effects: this.state.effects, detailPreset: int(detailPreset), onLethal: (deathSfx) => this._recordCreatureDeath({ creatureIndex: idx, dt: dt, detailPreset: int(detailPreset), worldSize: worldSize, fxQueue: fxQueue, deaths: deaths, sfx: sfx, deathSfx: deathSfx }) },
       );
     };
 
@@ -251,7 +166,7 @@ export class WorldState {
 
     const _onSecondaryDetonationKill = (creatureIndex: number): void => {
       const idx = int(creatureIndex);
-      if (!(idx >= 0 && idx < creatureEntries.length) || Number(creatureEntries[idx].hp) > 0.0) {
+      if (!(idx >= 0 && idx < this.creatures.entries.length) || this.creatures.entries[idx].hp > 0.0) {
         return;
       }
       // Native detonation follow-up re-enters creature death handling but does
@@ -259,424 +174,334 @@ export class WorldState {
       // does that on the original killing hit).
       this._recordCreatureDeath({
         creatureIndex: idx,
-        dt: Number(dt),
+        dt: dt,
         detailPreset: int(detailPreset),
-        worldSize: Number(worldSize),
-        fxQueue,
-        deaths,
-        sfx,
+        worldSize: worldSize,
+        fxQueue: fxQueue,
+        deaths: deaths,
+        sfx: sfx,
       });
     };
 
     const _onProjectileHitPre = (hit: ProjectileHit): ProjectileDecalPostCtx => {
-      return this._prepareProjectileHitPresentation(hit, {
-        fxQueue,
-        detailPreset: int(detailPreset),
-        violenceDisabled: int(violenceDisabled),
-      });
+      return this._prepareProjectileHitPresentation(hit, { fxQueue: fxQueue, detailPreset: int(detailPreset), violenceDisabled: int(violenceDisabled) });
     };
 
-    const _onProjectileHitPost = (_hit: ProjectileHit, postCtx: object): void => {
+    const _onProjectileHitPost = (hit: ProjectileHit, postCtx: ProjectileDecalPostCtx): void => {
       this._finalizeProjectileHitPresentation({
-        postCtx: postCtx as ProjectileDecalPostCtx,
-        fxQueue,
+        postCtx: postCtx,
+        fxQueue: fxQueue,
       });
-      const [hitTrigger, keys] = planHitSfx(
-        [_hit],
-        {
-          gameMode,
-          demoModeActive: this.state.demoModeActive,
-          gameTuneStarted: hitAudioGameTuneStarted,
-          rng: this.state.rng,
-        },
-      );
+      const [hitTrigger, keys] = planHitSfx([hit], { gameMode: gameMode, demoModeActive: this.state.demoModeActive, gameTuneStarted: hitAudioGameTuneStarted, rng: this.state.rng });
       if (hitTrigger) {
         triggerGameTune = true;
         hitAudioGameTuneStarted = true;
       }
-      if (keys.length > 0) {
+      if (keys) {
         hitSfx.push(...keys);
       }
     };
 
-    const hits: ProjectileHit[] = this.state.projectiles.step(new PrimaryStepCtx({
-      dt: Number(dt),
-      creatures: creatureEntries,
-      options: new ProjectileUpdateOptions({
-        worldSize: Number(worldSize),
-        damageScaleByType,
-        rng: this.state.rng,
-        runtimeState: this.state,
-        players: this.players,
-        applyPlayerDamage: _applyProjectileDamageToPlayer,
-        detailPreset: int(detailPreset),
-        onHit: _onProjectileHitPre,
-        onHitPost: _onProjectileHitPost,
-      }),
-    }));
-
-    this.state.secondaryProjectiles.step(new SecondaryStepCtx({
-      dt: Number(dt),
-      creatures: creatureEntries,
-      runtimeState: this.state,
-      fxQueue,
-      detailPreset: int(detailPreset),
-      onDetonationKill: _onSecondaryDetonationKill,
-    }));
-
+    const hits = this.state.projectiles.step(new PrimaryStepCtx({ dt: dt, creatures: this.creatures.entries, options: new ProjectileUpdateOptions({ worldSize: worldSize, damageScaleByType: damageScaleByType, detailPreset: int(detailPreset), rng: this.state.rng, runtimeState: this.state, players: this.players, applyPlayerDamage: _applyProjectileDamageToPlayer, onHit: _onProjectileHitPre, onHitPost: (_onProjectileHitPost as (arg0: ProjectileHit, arg1: unknown) => void) }) }));
+    this.state.secondaryProjectiles.step(new SecondaryStepCtx({ dt: dt, creatures: this.creatures.entries, runtimeState: this.state, fxQueue: fxQueue, detailPreset: int(detailPreset), onDetonationKill: _onSecondaryDetonationKill }));
     this._runPostDamagePlayerDeathHooks({
-      prevHealth,
-      dt: Number(dt),
-      worldSize: Number(worldSize),
+      prevHealth: prevHealth,
+      dt: dt,
+      worldSize: worldSize,
       detailPreset: int(detailPreset),
-      fxQueue,
-      deaths,
+      fxQueue: fxQueue,
+      deaths: deaths,
     });
 
     const _killCreatureNoCorpse = (creatureIndex: number, owner: OwnerRef): void => {
       const idx = int(creatureIndex);
-      if (!(idx >= 0 && idx < creatureEntries.length)) return;
-      const creature = creatureEntries[idx];
-      if (!creature.active) return;
-      if (Number(creature.hp) <= 0.0) return;
+      if (!(idx >= 0 && idx < this.creatures.entries.length)) {
+        return;
+      }
+      const creature = this.creatures.entries[idx];
+      if (!creature.active) {
+        return;
+      }
+      if (creature.hp <= 0.0) {
+        return;
+      }
       creature.lastHitOwner = owner;
       this._recordCreatureDeath({
         creatureIndex: idx,
-        dt: Number(dt),
+        dt: dt,
         detailPreset: int(detailPreset),
-        worldSize: Number(worldSize),
-        fxQueue,
-        deaths,
-        sfx,
+        worldSize: worldSize,
+        fxQueue: fxQueue,
+        deaths: deaths,
+        sfx: sfx,
         keepCorpse: false,
       });
     };
 
-    this.state.particles.update(dt, {
-      creatures: creatureEntries,
-      killCreature: _killCreatureNoCorpse,
-      fxQueue,
-      spriteEffects: this.state.spriteEffects,
-    });
-
-    this.state.spriteEffects.update(dt);
-
-    const reloadActiveAny = normalizedInputs.some(
-      (entry) => Boolean(entry.reloadDown) || Boolean(entry.reloadPressed),
+    this.state.particles.update(
+      dt,
+      { creatures: this.creatures.entries, killCreature: _killCreatureNoCorpse, fxQueue: fxQueue, spriteEffects: this.state.spriteEffects },
     );
-    let playerDt = Number(dt);
+    this.state.spriteEffects.update(dt);
+    const reloadActiveAny = inputs.some((entry) => entry.reloadDown || entry.reloadPressed);
+    let playerDt = dt;
     if (dtPlayerLocal !== null) {
-      playerDt = Number(dtPlayerLocal);
+      playerDt = dtPlayerLocal;
     }
-
-    for (let idx = 0; idx < this.players.length; idx++) {
-      const player = this.players[idx];
-      const inputState = idx < normalizedInputs.length ? normalizedInputs[idx] : new PlayerInput();
-
-      playerUpdate(player, inputState, playerDt, this.state, {
-        detailPreset: int(detailPreset),
-        worldSize: Number(worldSize),
-        players: this.players,
-        creatures: creatureEntries,
-        spawnSlots: this.creatures.spawnSlots,
-        onPlayerLethal: (deadPlayer: PlayerState) => {
-          this._runPlayerDeathHooks({
-            player: deadPlayer,
-            dt: Number(playerDt),
-            worldSize: Number(worldSize),
-            detailPreset: int(detailPreset),
-            fxQueue,
-            deaths,
-          });
-        },
-        reloadActiveAny: Boolean(reloadActiveAny),
-      });
-
+    for (const [idx, player] of this.players.entries()) {
+      const inputState = idx < inputs.length ? inputs[idx] : new PlayerInput();
+      playerUpdate(
+        player,
+        inputState,
+        playerDt,
+        this.state,
+        { detailPreset: int(detailPreset), worldSize: worldSize, players: this.players, creatures: this.creatures.entries, spawnSlots: this.creatures.spawnSlots, onPlayerLethal: (deadPlayer, dtValueParam = playerDt) => this._runPlayerDeathHooks({ player: deadPlayer, dt: dtValueParam, worldSize: worldSize, detailPreset: int(detailPreset), fxQueue: fxQueue, deaths: deaths }), reloadActiveAny: reloadActiveAny },
+      );
       if (dtPlayerLocal === null) {
-        playerDt = playerFrameDtAfterRoundtrip({
-          dt: playerDt,
-          timeScaleActive: Boolean(this.state.timeScaleActive),
-          reflexBoostTimer: Number(this.state.bonuses.reflexBoost),
-        });
+        playerDt = playerFrameDtAfterRoundtrip({ dt: playerDt, timeScaleActive: this.state.timeScaleActive, reflexBoostTimer: this.state.bonuses.reflexBoost });
       }
     }
-
-    dt = Number(playerDt);
-
+    dt = playerDt;
     if (dt > 0.0) {
       this._advanceCreatureAnim(dt);
       this._advancePlayerAnim(dt, prevPositions);
     }
-
     if (midStepHook !== null) {
       midStepHook();
     }
-
-    if (!deferCameraShake) {
+    if (!deferCameraShakeUpdate) {
       cameraShakeUpdate(this.state, dt);
     }
-
     // Native level-up/perk-pending check runs before `bonus_update` in
     // gameplay_update_and_render. Keep the same ordering so XP awarded from
     // bonus-side kill paths (e.g. freeze cleanup) levels on the next tick.
-
     if (perkProgressionEnabled) {
       survivalProgressionUpdate(this.state, this.players);
     }
-
     // Native latches `time_scale_active` late (post mode update, pre bonus decrement); next-frame dt uses it.
-    this.state.timeScaleActive = Number(this.state.bonuses.reflexBoost) > 0.0;
-
+    this.state.timeScaleActive = this.state.bonuses.reflexBoost > 0.0;
     bonusUpdatePrePickupTimers(this.state, dt);
-
-    const pickups = bonusUpdate(
-      this.state,
-      this.players,
-      dt,
-      {
-        creatures: creatureEntries,
-        updateHud: true,
+    const pickups = bonusUpdate(this.state, this.players, dt, { creatures: this.creatures.entries, updateHud: true, detailPreset: int(detailPreset), deferFreezeCorpseFx: deferFreezeCorpseFx, freezeCorpseIndices: freezeCorpseIndicesAtTickStart });
+    if (pickups) {
+      emitBonusPickupEffects({
+        state: this.state,
+        pickups: pickups,
         detailPreset: int(detailPreset),
-        deferFreezeCorpseFx: Boolean(deferFreezeCorpseFx),
-        freezeCorpseIndices: freezeCorpseIndicesAtTickStart,
-      },
-    );
-
-    if (pickups.length > 0) {
-      emitBonusPickupEffects({ state: this.state, pickups, detailPreset: int(detailPreset) });
+      });
     }
-
     survivalEnforceRewardWeaponGuard(this.state, this.players);
-
-    if (this.state.sfxQueue.length > 0) {
+    if (this.state.sfxQueue) {
       sfx.push(...this.state.sfxQueue);
-      this.state.sfxQueue.length = 0;
+      ((target: unknown) => {
+        if (target !== null && typeof target === 'object' && typeof (target as { clear?: unknown }).clear === 'function') {
+          (target as { clear: () => void }).clear();
+        } else if (target !== null && typeof target === 'object' && 'length' in target) {
+          (target as { length: number }).length = 0;
+        }
+      })(this.state.sfxQueue);
     }
-
     // Player-damage VO RNG work lives inside `player_take_damage` for native
     // ordering parity (VO draw before heading-jitter draw).
-
-    this.state.playerDeathHookSkipIndices.clear();
+    ((target: unknown) => {
+      if (target !== null && typeof target === 'object' && typeof (target as { clear?: unknown }).clear === 'function') {
+        (target as { clear: () => void }).clear();
+      } else if (target !== null && typeof target === 'object' && 'length' in target) {
+        (target as { length: number }).length = 0;
+      }
+    })(this.state.playerDeathHookSkipIndices);
     this._restoreCreatureDamageAppliers(prevCreatureDamageAppliers);
-
-    return new WorldEvents({
-      hits,
-      deaths,
-      pickups,
-      sfx,
-      triggerGameTune: Boolean(triggerGameTune),
-      hitSfx,
-    });
+    return new WorldEvents({ hits: hits, deaths: Array.from(deaths), pickups: pickups, sfx: sfx, triggerGameTune: triggerGameTune, hitSfx: hitSfx });
   }
 
-  private _setCreatureDamageAppliers(
-    applier: CreatureDamageApplier | null,
-  ): [
-    CreatureDamageApplier | null,
-    CreatureDamageApplier | null,
-    CreatureDamageApplier | null,
-    CreatureDamageApplier | null,
-  ] {
-    const { projectiles, secondaryProjectiles, particles, bonusPool } = this.state;
-    const prev: [
-      CreatureDamageApplier | null,
-      CreatureDamageApplier | null,
-      CreatureDamageApplier | null,
-      CreatureDamageApplier | null,
-    ] = [
-      projectiles.creatureDamageApplier,
-      secondaryProjectiles.creatureDamageApplier,
-      particles.creatureDamageApplier,
-      bonusPool.creatureDamageApplier,
-    ];
-    projectiles.creatureDamageApplier = applier;
-    secondaryProjectiles.creatureDamageApplier = applier;
-    particles.creatureDamageApplier = applier;
-    bonusPool.creatureDamageApplier = applier;
+  _setCreatureDamageAppliers(applier: ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null): [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null] {
+    const prev: [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null] = [this.state.projectiles.creatureDamageApplier, this.state.secondaryProjectiles.creatureDamageApplier, this.state.particles.creatureDamageApplier, this.state.bonusPool.creatureDamageApplier];
+    this.state.projectiles.creatureDamageApplier = applier;
+    this.state.secondaryProjectiles.creatureDamageApplier = applier;
+    this.state.particles.creatureDamageApplier = applier;
+    this.state.bonusPool.creatureDamageApplier = applier;
     return prev;
   }
 
-  private _restoreCreatureDamageAppliers(
-    previous: [
-      CreatureDamageApplier | null,
-      CreatureDamageApplier | null,
-      CreatureDamageApplier | null,
-      CreatureDamageApplier | null,
-    ],
-  ): void {
-    const { projectiles, secondaryProjectiles, particles, bonusPool } = this.state;
-    [
-      projectiles.creatureDamageApplier,
-      secondaryProjectiles.creatureDamageApplier,
-      particles.creatureDamageApplier,
-      bonusPool.creatureDamageApplier,
-    ] = previous;
+  _restoreCreatureDamageAppliers(previous: [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null]): void {
+    [this.state.projectiles.creatureDamageApplier, this.state.secondaryProjectiles.creatureDamageApplier, this.state.particles.creatureDamageApplier, this.state.bonusPool.creatureDamageApplier] = previous;
   }
 
-  private _runPlayerDeathHooks(opts: {
-    player: PlayerState;
-    dt: number;
-    worldSize: number;
-    detailPreset: number;
-    fxQueue: FxQueue;
-    deaths: CreatureDeath[];
-  }): void {
-    for (const hook of _PLAYER_DEATH_HOOKS) {
+  _runPlayerDeathHooks(opts: { player: PlayerState; dt: number; worldSize: number; detailPreset: number; fxQueue: FxQueue; deaths: CreatureDeath[] }): void {
+    const player = opts.player;
+    const dt = opts.dt;
+    const worldSize = opts.worldSize;
+    const detailPreset = opts.detailPreset;
+    const fxQueue = opts.fxQueue;
+    const deaths = opts.deaths;
+    for (const hook of PLAYER_DEATH_HOOKS) {
       hook({
         state: this.state,
         creatures: this.creatures,
         players: this.players,
-        player: opts.player,
-        dt: Number(opts.dt),
-        worldSize: Number(opts.worldSize),
-        detailPreset: int(opts.detailPreset),
-        fxQueue: opts.fxQueue,
-        deaths: opts.deaths,
+        player: player,
+        dt: dt,
+        worldSize: worldSize,
+        detailPreset: int(detailPreset),
+        fxQueue: fxQueue,
+        deaths: deaths,
       });
     }
   }
 
-  private _runPostDamagePlayerDeathHooks(opts: {
-    prevHealth: number[];
-    dt: number;
-    worldSize: number;
-    detailPreset: number;
-    fxQueue: FxQueue;
-    deaths: CreatureDeath[];
-  }): void {
-    for (let idx = 0; idx < this.players.length; idx++) {
-      const player = this.players[idx];
-      if (idx >= opts.prevHealth.length) continue;
-      if (Number(opts.prevHealth[idx]) < 0.0) continue;
-      if (Number(player.health) >= 0.0) continue;
-
+  _runPostDamagePlayerDeathHooks(opts: { prevHealth: number[]; dt: number; worldSize: number; detailPreset: number; fxQueue: FxQueue; deaths: CreatureDeath[] }): void {
+    const prevHealth = opts.prevHealth;
+    const dt = opts.dt;
+    const worldSize = opts.worldSize;
+    const detailPreset = opts.detailPreset;
+    const fxQueue = opts.fxQueue;
+    const deaths = opts.deaths;
+    for (const [idx, player] of this.players.entries()) {
+      if (idx >= prevHealth.length) {
+        continue;
+      }
+      if (prevHealth[idx] < 0.0) {
+        continue;
+      }
+      if (player.health >= 0.0) {
+        continue;
+      }
       const playerIdx = int(player.index);
-      if (this.state.playerDeathHookSkipIndices.has(playerIdx)) {
+      if (((container: unknown, value: unknown) => container instanceof Set || container instanceof Map ? container.has(value) : Array.isArray(container) ? container.includes(value) : typeof container === 'string' ? container.includes(String(value)) : container !== null && typeof container === 'object' ? Object.prototype.hasOwnProperty.call(container, String(value)) : false)(this.state.playerDeathHookSkipIndices, playerIdx)) {
         this.state.playerDeathHookSkipIndices.delete(playerIdx);
         continue;
       }
-
       this._runPlayerDeathHooks({
-        player,
-        dt: Number(opts.dt),
-        worldSize: Number(opts.worldSize),
-        detailPreset: int(opts.detailPreset),
-        fxQueue: opts.fxQueue,
-        deaths: opts.deaths,
+        player: player,
+        dt: dt,
+        worldSize: worldSize,
+        detailPreset: int(detailPreset),
+        fxQueue: fxQueue,
+        deaths: deaths,
       });
     }
   }
 
-  private _recordCreatureDeath(opts: {
-    creatureIndex: number;
-    dt: number;
-    detailPreset: number;
-    worldSize: number;
-    fxQueue: FxQueue;
-    deaths: CreatureDeath[];
-    sfx: SfxId[];
-    keepCorpse?: boolean;
-    deathSfx?: SfxId[];
-  }): void {
-    const death = this.creatures.handleDeath(int(opts.creatureIndex), {
-      state: this.state,
-      players: this.players,
-      rng: this.state.rng,
-      dt: Number(opts.dt),
-      detailPreset: int(opts.detailPreset),
-      worldWidth: Number(opts.worldSize),
-      worldHeight: Number(opts.worldSize),
-      fxQueue: opts.fxQueue,
-      keepCorpse: opts.keepCorpse ?? true,
-    });
-    opts.deaths.push(death);
-    if (opts.deathSfx !== undefined && opts.deathSfx.length > 0) {
-      opts.sfx.push(...opts.deathSfx);
-    }
+  _recordCreatureDeath(opts: { creatureIndex: number; dt: number; detailPreset: number; worldSize: number; fxQueue: FxQueue; deaths: CreatureDeath[]; keepCorpse?: boolean; sfx: SfxId[]; deathSfx?: readonly SfxId[] }): void {
+    const creatureIndex = opts.creatureIndex;
+    const dt = opts.dt;
+    const detailPreset = opts.detailPreset;
+    const worldSize = opts.worldSize;
+    const fxQueue = opts.fxQueue;
+    const deaths = opts.deaths;
+    const keepCorpse = opts.keepCorpse ?? true;
+    const sfx = opts.sfx;
+    const deathSfx = opts.deathSfx ?? [];
+    const death = this.creatures.handleDeath(int(creatureIndex), { state: this.state, players: this.players, rng: this.state.rng, dt: dt, detailPreset: int(detailPreset), worldWidth: worldSize, worldHeight: worldSize, fxQueue: fxQueue, keepCorpse: keepCorpse });
+    deaths.push(death);
+    sfx.push(...deathSfx);
   }
 
-  private _prepareProjectileHitPresentation(
-    hit: ProjectileHit,
-    opts: {
-      fxQueue: FxQueue;
-      detailPreset: number;
-      violenceDisabled: number;
-    },
-  ): ProjectileDecalPostCtx {
-    return queueProjectileDecalsPreHit({
-      state: this.state,
-      players: this.players,
-      fxQueue: opts.fxQueue,
-      hit,
-      rng: this.state.rng,
-      detailPreset: int(opts.detailPreset),
-      violenceDisabled: int(opts.violenceDisabled),
-    });
+  _prepareProjectileHitPresentation(hit: ProjectileHit, opts: { fxQueue: FxQueue; detailPreset: number; violenceDisabled: number }): ProjectileDecalPostCtx {
+    const fxQueue = opts.fxQueue;
+    const detailPreset = opts.detailPreset;
+    const violenceDisabled = opts.violenceDisabled;
+    return queueProjectileDecalsPreHit({ state: this.state, players: this.players, fxQueue: fxQueue, hit: hit, rng: this.state.rng, detailPreset: int(detailPreset), violenceDisabled: int(violenceDisabled) });
   }
 
-  private _finalizeProjectileHitPresentation(opts: {
-    postCtx: ProjectileDecalPostCtx;
-    fxQueue: FxQueue;
-  }): void {
+  _finalizeProjectileHitPresentation(opts: { postCtx: ProjectileDecalPostCtx; fxQueue: FxQueue }): void {
+    const postCtx = opts.postCtx;
+    const fxQueue = opts.fxQueue;
     queueProjectileDecalsPostHit({
-      fxQueue: opts.fxQueue,
-      postCtx: opts.postCtx,
+      fxQueue: fxQueue,
+      postCtx: postCtx,
       rng: this.state.rng,
     });
   }
 
-  private _advanceCreatureAnim(dt: number): void {
-    if (Number(this.state.bonuses.freeze) > 0.0) return;
-
-    const entries = this.creatures.entries;
-    for (let i = 0; i < entries.length; i++) {
-      const creature = entries[i];
-      if (!(creature.active && creature.hp > 0.0)) continue;
-
+  _advanceCreatureAnim(dt: number): void {
+    if (this.state.bonuses.freeze > 0.0) {
+      return;
+    }
+    for (const creature of this.creatures.entries) {
+      if (!(creature.active && creature.hp > 0.0)) {
+        continue;
+      }
       const typeId = creature.typeId;
-      const info = CREATURE_ANIM.get(typeId)!;
-
-      const [newPhase] = creatureAnimAdvancePhase(
-        creature.animPhase,
-        {
-          animRate: info.animRate,
-          moveSpeed: Number(creature.moveSpeed),
-          dt,
-          size: Number(creature.size),
-          localScale: Number(creature.moveScale),
-          flags: creature.flags,
-          aiMode: int(creature.aiMode),
-        },
-      );
-      creature.animPhase = newPhase;
+      const info = mapGetOrThrow(CREATURE_ANIM, typeId);
+      [creature.animPhase, ] = creatureAnimAdvancePhase(creature.animPhase, { animRate: info.animRate, moveSpeed: creature.moveSpeed, dt: dt, size: creature.size, localScale: creature.moveScale, flags: creature.flags, aiMode: int(creature.aiMode) });
     }
   }
 
-  private _advancePlayerAnim(dt: number, prevPositions: [number, number][]): void {
-    const info = CREATURE_ANIM.get(CreatureTypeId.TROOPER);
-    if (info === undefined) return;
-
-    for (let idx = 0; idx < this.players.length; idx++) {
-      const player = this.players[idx];
-      if (idx >= prevPositions.length) continue;
-
+  _advancePlayerAnim(dt: number, prevPositions: [number, number][]): void {
+    const info = CREATURE_ANIM.get(CreatureTypeId.TROOPER) ?? null;
+    if (info === null) {
+      return;
+    }
+    for (const [idx, player] of this.players.entries()) {
+      if (idx >= prevPositions.length) {
+        continue;
+      }
       const [prevX, prevY] = prevPositions[idx];
       const speed = new Vec2(player.pos.x - prevX, player.pos.y - prevY).length();
       const moveSpeed = dt > 0.0 ? speed / dt / 120.0 : 0.0;
-
-      const [newPhase] = creatureAnimAdvancePhase(
-        player.movePhase,
-        {
-          animRate: info.animRate,
-          moveSpeed,
-          dt,
-          size: Number(player.size),
-          localScale: 1.0,
-          flags: 0,
-          aiMode: CreatureAiMode.ORBIT_PLAYER,
-        },
-      );
-      player.movePhase = newPhase;
+      [player.movePhase, ] = creatureAnimAdvancePhase(player.movePhase, { animRate: info.animRate, moveSpeed: moveSpeed, dt: dt, size: player.size, localScale: 1.0, flags: 0, aiMode: CreatureAiMode.ORBIT_PLAYER });
     }
+  }
+
+  setCreatureDamageAppliers(applier: ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null): [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null] {
+    return this._setCreatureDamageAppliers(applier);
+  }
+
+  restoreCreatureDamageAppliers(previous: [((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null, ((arg0: number, arg1: number, arg2: number, arg3: Vec2, arg4: OwnerRef) => void) | null]): void {
+    this._restoreCreatureDamageAppliers(previous);
+  }
+
+  runPlayerDeathHooks(opts: { player: PlayerState; dt: number; worldSize: number; detailPreset: number; fxQueue: FxQueue; deaths: CreatureDeath[] }): void {
+    const player = opts.player;
+    const dt = opts.dt;
+    const worldSize = opts.worldSize;
+    const detailPreset = opts.detailPreset;
+    const fxQueue = opts.fxQueue;
+    const deaths = opts.deaths;
+    this._runPlayerDeathHooks({ player: player, dt: dt, worldSize: worldSize, detailPreset: detailPreset, fxQueue: fxQueue, deaths: deaths });
+  }
+
+  runPostDamagePlayerDeathHooks(opts: { prevHealth: number[]; dt: number; worldSize: number; detailPreset: number; fxQueue: FxQueue; deaths: CreatureDeath[] }): void {
+    const prevHealth = opts.prevHealth;
+    const dt = opts.dt;
+    const worldSize = opts.worldSize;
+    const detailPreset = opts.detailPreset;
+    const fxQueue = opts.fxQueue;
+    const deaths = opts.deaths;
+    this._runPostDamagePlayerDeathHooks({ prevHealth: prevHealth, dt: dt, worldSize: worldSize, detailPreset: detailPreset, fxQueue: fxQueue, deaths: deaths });
+  }
+
+  recordCreatureDeath(opts: { creatureIndex: number; dt: number; detailPreset: number; worldSize: number; fxQueue: FxQueue; deaths: CreatureDeath[]; keepCorpse?: boolean; sfx: SfxId[]; deathSfx?: readonly SfxId[] }): void {
+    const creatureIndex = opts.creatureIndex;
+    const dt = opts.dt;
+    const detailPreset = opts.detailPreset;
+    const worldSize = opts.worldSize;
+    const fxQueue = opts.fxQueue;
+    const deaths = opts.deaths;
+    const keepCorpse = opts.keepCorpse ?? true;
+    const sfx = opts.sfx;
+    const deathSfx = opts.deathSfx ?? [];
+    this._recordCreatureDeath({ creatureIndex: creatureIndex, dt: dt, detailPreset: detailPreset, worldSize: worldSize, fxQueue: fxQueue, deaths: deaths, keepCorpse: keepCorpse, sfx: sfx, deathSfx: deathSfx });
+  }
+
+  prepareProjectileHitPresentation(hit: ProjectileHit, opts: { fxQueue: FxQueue; detailPreset: number; violenceDisabled: number }): ProjectileDecalPostCtx {
+    const fxQueue = opts.fxQueue;
+    const detailPreset = opts.detailPreset;
+    const violenceDisabled = opts.violenceDisabled;
+    return this._prepareProjectileHitPresentation(hit, { fxQueue: fxQueue, detailPreset: detailPreset, violenceDisabled: violenceDisabled });
+  }
+
+  finalizeProjectileHitPresentation(opts: { postCtx: ProjectileDecalPostCtx; fxQueue: FxQueue }): void {
+    const postCtx = opts.postCtx;
+    const fxQueue = opts.fxQueue;
+    this._finalizeProjectileHitPresentation({ postCtx: postCtx, fxQueue: fxQueue });
+  }
+
+  advanceCreatureAnim(dt: number): void {
+    this._advanceCreatureAnim(dt);
+  }
+
+  advancePlayerAnim(dt: number, prevPositions: [number, number][]): void {
+    this._advancePlayerAnim(dt, prevPositions);
   }
 }

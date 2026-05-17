@@ -29,6 +29,7 @@ import {
   arrayValueMapNameMarker,
   classFieldTypeMarker,
   functionReturnTypeMarker,
+  instanceMethodSignatureMarker,
   mapValueMapNameMarker,
   mapValueTypeMarker,
   receiverTypeNameMarker,
@@ -40,7 +41,7 @@ import {
   functionSignatureMarker,
   parseStraightLineFunctionHeader,
 } from './function-headers.js';
-import { recordImportedInstanceMethodSignatures, recordImportedStructConstructorFields, recordImportedTupleTypeAliases } from './imported-classes.js';
+import { recordImportedInstanceMethodSignatures, recordImportedMapNames, recordImportedStructConstructorFields, recordImportedTupleTypeAliases } from './imported-classes.js';
 import { parseFunctionParameterText, parseFunctionParametersText, pythonParameterNames } from './parameters.js';
 import {
   reassignedLocalNames,
@@ -60,6 +61,7 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
   const protocols: StructModule['protocols'] = [];
   const structConstructorFields = new Map<string, string[]>();
   const tupleTypeAliases = new Set<string>();
+  const moduleMapNames = new Set<string>();
   const moduleNameMap = new Map<string, string>();
   let allNames: string[] = [];
   let sawMsgspecImport = false;
@@ -180,6 +182,12 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       relativePath,
       tupleTypeAliases,
     );
+    recordImportedMapNames(
+      modulePath,
+      names.map((name) => ({ importedName: name, localName: name })),
+      relativePath,
+      moduleMapNames,
+    );
     for (const binding of importBindings) {
       if (binding.importedName !== binding.defaultName) {
         moduleNameMap.set(binding.pythonName, binding.importedName);
@@ -243,6 +251,11 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
 
     const typeAlias = /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(trimmed);
     if (typeAlias !== null) {
+      if (typeAlias[1].startsWith('_') && /^[A-Za-z_][A-Za-z0-9_]*$/.test(typeAlias[2].trim())) {
+        moduleNameMap.set(typeAlias[1], moduleNameMap.get(typeAlias[2]) ?? tsExportNameForPythonName(typeAlias[2]));
+        index += 1;
+        continue;
+      }
       if (!isTypeAliasExpression(typeAlias[2])) {
         return null;
       }
@@ -254,7 +267,7 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       continue;
     }
 
-    const fn = parseStructModuleFunction(lines, index, structConstructorFields, moduleNameMap);
+    const fn = parseStructModuleFunction(lines, index, structConstructorFields, moduleNameMap, moduleMapNames);
     if (fn !== null) {
       functions.push(fn.fn);
       moduleNameMap.set(functionSignatureMarker(fn.pythonName), JSON.stringify({ positional: fn.signaturePositionalNames }));
@@ -272,7 +285,7 @@ export function parseMsgspecStructModule(trimmedPython: string, relativePath: st
       continue;
     }
 
-    const structClass = parseStructClass(lines, index, moduleNameMap, new Set(), tupleTypeAliases, relativePath, imports);
+    const structClass = parseStructClass(lines, index, moduleNameMap, moduleMapNames, tupleTypeAliases, relativePath, imports);
     if (structClass === null) {
       return null;
     }
@@ -333,6 +346,7 @@ function parseStructModuleFunction(
   index: number,
   structConstructorFields: ReadonlyMap<string, string[]> = new Map(),
   moduleNameMap: ReadonlyMap<string, string> = new Map(),
+  initialMapNames: ReadonlySet<string> = new Set(),
 ): { fn: SimpleModuleFunction; nextIndex: number; pythonName: string; signaturePositionalNames: string[] } | null {
   const header = parseStraightLineFunctionHeader(lines, index);
   if (header === null) {
@@ -361,7 +375,7 @@ function parseStructModuleFunction(
     return null;
   }
 
-  const mapNames = new Set<string>();
+  const mapNames = new Set<string>(initialMapNames);
   const statements: string[] = [];
   const nameMap = new Map(moduleNameMap);
   nameMap.set(functionSignatureMarker(header.name), JSON.stringify({ positional: signaturePositionalNames }));
@@ -461,6 +475,7 @@ export function parseStructClass(
   const classNameMap = new Map(moduleNameMap);
   classNameMap.set(receiverTypeNameMarker('self'), className);
   classNameMap.set(receiverTypeNameMarker('this'), className);
+  recordStructClassMethodSignatures(lines, nextIndex, className, classNameMap);
   let postInitStatements: string[] = [];
   let positionalConstructor = false;
   const pendingFieldComments: string[] = [];
@@ -1075,6 +1090,62 @@ function tsStructMethodNameForPythonName(pythonName: string): string {
     ['from_xy', 'fromXY'],
   ]).get(pythonName);
   return operatorName ?? tsAttributeNameForPythonName(pythonName);
+}
+
+function recordStructClassMethodSignatures(
+  lines: string[],
+  startIndex: number,
+  className: string,
+  nameMap: Map<string, string>,
+): void {
+  let index = startIndex;
+  while (index < lines.length) {
+    const line = lines[index] ?? '';
+    const trimmed = line.trim();
+    if (trimmed === '') {
+      index += 1;
+      continue;
+    }
+    if (!line.startsWith('    ')) {
+      break;
+    }
+    let methodIndex = index;
+    if (trimmed.startsWith('@')) {
+      methodIndex += 1;
+    }
+    const header = parseIndentedFunctionHeader(lines, methodIndex, '    ');
+    if (header === null) {
+      index += 1;
+      continue;
+    }
+    const parameterParts = header.parametersText === '' ? [] : splitTopLevelComma(header.parametersText);
+    const effectiveParameters = parameterParts[0] === 'self' || parameterParts[0]?.match(/^[A-Za-z_][A-Za-z0-9_]*(?:: .+)?$/) !== null && trimmed === '@classmethod'
+      ? parameterParts.slice(1)
+      : parameterParts;
+    const positional: string[] = [];
+    let keywordOnly = false;
+    for (const parameterText of effectiveParameters) {
+      if (parameterText === '*') {
+        keywordOnly = true;
+        continue;
+      }
+      if (keywordOnly || parameterText.startsWith('*') || parameterText === '') {
+        continue;
+      }
+      const parameterName = /^([A-Za-z_][A-Za-z0-9_]*)/.exec(parameterText)?.[1] ?? null;
+      if (parameterName !== null) {
+        positional.push(parameterName);
+      }
+    }
+    nameMap.set(
+      instanceMethodSignatureMarker(className, tsStructMethodNameForPythonName(header.name)),
+      JSON.stringify({ positional }),
+    );
+    index = header.nextIndex;
+    while (index < lines.length && isIndentedBlockLine(lines, index, '        ')) {
+      index += 1;
+    }
+  }
 }
 
 function tsAttributeNameForPythonName(pythonName: string): string {

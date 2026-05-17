@@ -6,6 +6,9 @@ import {
 
 export function translateIdentifierName(name: string, nameMap: Map<string, string>): string {
   if (!name.includes('.')) {
+    if (/^_[a-z][A-Za-z0-9]*[A-Z]/.test(name)) {
+      return nameMap.get(name) ?? name;
+    }
     return nameMap.get(name) ?? tsExportNameForPythonName(name);
   }
   const parts = name.split('.');

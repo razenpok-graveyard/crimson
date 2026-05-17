@@ -114,7 +114,11 @@ export function parseTypeAliasStatement(
   }
 
   const plainTypeAlias = /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(lines[index]?.trim() ?? '');
-  if (plainTypeAlias !== null && isBareTypeAliasExpression(plainTypeAlias[2])) {
+  if (
+    plainTypeAlias !== null
+    && !(plainTypeAlias[1].startsWith('_') && /^[A-Za-z_][A-Za-z0-9_]*$/.test(plainTypeAlias[2].trim()))
+    && isBareTypeAliasExpression(plainTypeAlias[2])
+  ) {
     return {
       alias: { name: tsExportNameForPythonName(plainTypeAlias[1]), typeExpression: tsTypeExpression(plainTypeAlias[2]) },
       nextIndex: index + 1,

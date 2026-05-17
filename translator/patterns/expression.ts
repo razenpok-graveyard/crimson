@@ -1230,12 +1230,13 @@ export function translateExpression(
       itemNameMap.set(receiverTypeNameMarker(itemName), elementType);
     }
     const translatedItem = translateExpression(listComprehension.expression, itemNameMap, arrayNames, validatedTypeAliases, mapNames);
+    const itemExpression = tupleListComprehensionItemExpression(listComprehension.expression, translatedItem);
     const filtered = listComprehension.condition === null
       ? iterable
       : `${iterable}.filter((${itemName}) => ${translateExpression(listComprehension.condition!, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
-    return listComprehension.condition !== null && translatedItem === itemName
+    return listComprehension.condition !== null && itemExpression === itemName
       ? filtered
-      : `${filtered}.map((${itemName}) => ${translatedItem})`;
+      : `${filtered}.map((${itemName}) => ${itemExpression})`;
   }
 
   const listLiteral = /^\[([\s\S]*)\]$/.exec(trimmed);
@@ -1711,7 +1712,7 @@ export function translateExpression(
       const typeText = parsePythonStringExpression(args[0])?.content ?? args[0].trim();
       const translated = translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
       const castType = tsCastTypeExpression(typeText);
-      return castType === 'PythonMapping' || castType === 'PythonSequence' ? `(${translated} as ${castType})` : translated;
+      return castType !== null && castShouldBePreserved(typeText, castType) ? `(${translated} as ${castType})` : translated;
     }
   }
 
@@ -2557,7 +2558,11 @@ export function translateExpression(
 
   const simpleSubscript = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\[(.+)\]$/.exec(trimmed);
   if (simpleSubscript !== null && !hasTopLevelColon(simpleSubscript[2])) {
-    return `${translateExpression(simpleSubscript[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}[${translateExpression(simpleSubscript[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}]`;
+    const receiver = translateExpression(simpleSubscript[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const key = translateExpression(simpleSubscript[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return expressionIsKnownMap(receiver, nameMap, mapNames)
+      ? `${receiver}.get(${translateMapKeyExpression(receiver, key, mapNames)})!`
+      : `${receiver}[${key}]`;
   }
 
   const fullSlice = /^(.+)\[(.*):(.*)\]$/.exec(trimmed);
@@ -3111,6 +3116,27 @@ function parseSimpleListComprehension(
   };
 }
 
+function tupleListComprehensionItemExpression(pythonExpression: string, itemExpression: string): string {
+  const tupleLength = pythonTupleExpressionLength(pythonExpression);
+  return tupleLength === null ? itemExpression : `${itemExpression} as [${Array.from({ length: tupleLength }, () => 'any').join(', ')}]`;
+}
+
+function pythonTupleExpressionLength(pythonExpression: string | null): number | null {
+  if (pythonExpression === null) {
+    return null;
+  }
+  const trimmed = pythonExpression.trim();
+  if (!trimmed.startsWith('(') || matchingCloseParen(trimmed, 0) !== trimmed.length - 1) {
+    return null;
+  }
+  const inner = trimmed.slice(1, -1);
+  if (!inner.includes(',')) {
+    return null;
+  }
+  const parts = splitTopLevelComma(inner).filter((part) => part.trim() !== '');
+  return parts.length === 0 ? null : parts.length;
+}
+
 function parseSimplePositionalCall(pythonExpression: string): { callee: string; args: string[] } | null {
   const callStart = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\(/.exec(pythonExpression);
   if (callStart === null) {
@@ -3419,6 +3445,10 @@ function tsCastTypeExpression(pythonTypeExpression: string): string | null {
     return 'PythonSequence';
   }
   return tsTypeExpression(trimmed);
+}
+
+function castShouldBePreserved(pythonTypeExpression: string, tsType: string): boolean {
+  return tsType === 'PythonMapping' || tsType === 'PythonSequence' || /^Callable\[/.test(pythonTypeExpression.trim());
 }
 
 function translateBooleanCast(
@@ -3775,7 +3805,7 @@ function translateCallWithInlineRecordArgs(
     const keyword = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(arg);
     if (keyword !== null) {
       sawKeyword = true;
-      keywordParts.push(`${tsExportNameForPythonName(keyword[1])}: ${translateExpression(keyword[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
+      keywordParts.push(`${tsExportNameForPythonName(keyword[1])}: ${translateKeywordArgumentExpression(keyword[1], keyword[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
       continue;
     }
     if (sawKeyword) {
@@ -3898,7 +3928,7 @@ function translateMixedKeywordCall(
     keywordParts.push({
       pythonName: keyword[1],
       tsName: tsExportNameForPythonName(keyword[1]),
-      expression: translateExpression(keyword[2], nameMap, arrayNames, validatedTypeAliases, mapNames),
+      expression: translateKeywordArgumentExpression(keyword[1], keyword[2], nameMap, arrayNames, validatedTypeAliases, mapNames),
     });
   }
   if (keywordParts.length === 0) {
@@ -3987,7 +4017,7 @@ function translateComplexKeywordMethodCall(
       continue;
     }
     sawKeyword = true;
-    keywordParts.push(`${tsExportNameForPythonName(keyword[1])}: ${translateExpression(keyword[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
+    keywordParts.push(`${tsExportNameForPythonName(keyword[1])}: ${translateKeywordArgumentExpression(keyword[1], keyword[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
   }
   if (keywordParts.length === 0) {
     return null;
@@ -4064,9 +4094,31 @@ function keywordObjectParts(
       continue;
     }
     sawKeyword = true;
-    keywordParts.push(`${tsExportNameForPythonName(keyword[1])}: ${translateExpression(keyword[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
+    keywordParts.push(`${tsExportNameForPythonName(keyword[1])}: ${translateKeywordArgumentExpression(keyword[1], keyword[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
   }
   return keywordParts.length === 0 ? null : keywordParts;
+}
+
+function translateKeywordArgumentExpression(
+  pythonKeywordName: string,
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string {
+  const localReference = /^([A-Za-z_][A-Za-z0-9_]*)$/.exec(pythonExpression.trim());
+  if (localReference !== null && nameMap.has(localReference[1])) {
+    return nameMap.get(localReference[1]) ?? tsExportNameForPythonName(localReference[1]);
+  }
+  if (localReference !== null && localReference[1].startsWith('_') && keywordNameLooksLikeCallback(pythonKeywordName)) {
+    return tsMemberNameForPythonName(localReference[1]);
+  }
+  return translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+}
+
+function keywordNameLooksLikeCallback(pythonKeywordName: string): boolean {
+  return /^(?:apply|build|consume|create|draw|handle|measure|on|play|process|registry|reset|sync|update)(?:_|$)/.test(pythonKeywordName);
 }
 
 function translateMixedKeywordCallWithKnownInstanceSignature(

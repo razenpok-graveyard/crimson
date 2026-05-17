@@ -2160,6 +2160,23 @@ export function translateStraightLineStatement(
     };
   }
 
+  if (statement === '(') {
+    const tupleAssignment = parseMultilineTupleAssignmentStatement(
+      lines,
+      index,
+      indent,
+      nameMap,
+      declaredNames,
+      reassignedNames,
+      arrayNames,
+      validatedTypeAliases,
+      mapNames,
+    );
+    if (tupleAssignment !== null) {
+      return tupleAssignment;
+    }
+  }
+
   const assignment = /^(.+?) (\/\/=|\+=|-=|\*=|\/=|\|=|&=|\^=|=) (.+)$/.exec(statement);
   if (assignment !== null) {
     const mapPopAssignment = /^(.+)\.pop\((.+)\)$/.exec(assignment[3]);
@@ -2213,6 +2230,29 @@ export function translateStraightLineStatement(
       ), trailingComment);
     }
     if (assignment[3] === '{') {
+      const setComprehension = parseMultilineSetComprehensionExpression(
+        lines,
+        index + 1,
+        indent,
+        nameMap,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+      );
+      if (setComprehension !== null) {
+        return translateStraightLineAssignment(
+          assignment[1],
+          assignment[2],
+          setComprehension.expression,
+          setComprehension.nextIndex,
+          nameMap,
+          declaredNames,
+          reassignedNames,
+          arrayNames,
+          validatedTypeAliases,
+          mapNames,
+        );
+      }
       const dictComprehension = parseMultilineDictComprehensionExpression(
         lines,
         index + 1,
@@ -2781,6 +2821,14 @@ export function translateStraightLineStatement(
           nextIndex: index + 1,
         };
       }
+    }
+    const discardCall = /^(.+)\.discard\((.+)\)$/.exec(callStatement[1]);
+    if (discardCall !== null) {
+      const target = translateExpression(discardCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      return {
+        statements: [`${target}.delete(${translateExpression(discardCall[2], nameMap, arrayNames, validatedTypeAliases, mapNames)});`],
+        nextIndex: index + 1,
+      };
     }
     const sortCall = /^(.+)\.sort\(\)$/.exec(callStatement[1]);
     if (sortCall !== null) {
@@ -3808,6 +3856,13 @@ function translateKeywordCallArgumentExpression(
   validatedTypeAliases: ReadonlySet<string>,
   mapNames: ReadonlySet<string>,
 ): string {
+  const localReference = /^([A-Za-z_][A-Za-z0-9_]*)$/.exec(pythonExpression.trim());
+  if (localReference !== null && nameMap.has(localReference[1])) {
+    return nameMap.get(localReference[1]) ?? tsExportNameForPythonName(localReference[1]);
+  }
+  if (localReference !== null && localReference[1].startsWith('_') && keywordNameLooksLikeLocalCallback(pythonKeywordName)) {
+    return tsAttributeNameForPythonName(localReference[1]);
+  }
   const callbackReference = keywordNameLooksLikeCallback(pythonKeywordName)
     ? translateDetachedMethodReference(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames)
     : null;
@@ -3816,6 +3871,10 @@ function translateKeywordCallArgumentExpression(
 
 function keywordNameLooksLikeCallback(pythonKeywordName: string): boolean {
   return /^(?:build|consume|create|draw|handle|measure|on|play|process|registry|reset|sync|update)(?:_|$)/.test(pythonKeywordName);
+}
+
+function keywordNameLooksLikeLocalCallback(pythonKeywordName: string): boolean {
+  return /^(?:apply|build|consume|create|draw|handle|measure|on|play|process|registry|reset|sync|update)(?:_|$)/.test(pythonKeywordName);
 }
 
 function translateDetachedMethodReference(
@@ -4613,6 +4672,62 @@ function collectMultilineSubscriptExpression(
   return null;
 }
 
+function parseMultilineTupleAssignmentStatement(
+  lines: string[],
+  index: number,
+  indent: string,
+  nameMap: Map<string, string>,
+  declaredNames: Set<string>,
+  reassignedNames: Set<string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): { statements: string[]; nextIndex: number } | null {
+  const innerIndent = `${indent}    `;
+  const targets: string[] = [];
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length) {
+    const line = lines[nextIndex] ?? '';
+    const trimmed = line.trim();
+    const close = /^\) (\/\/=|\+=|-=|\*=|\/=|\|=|&=|\^=|=) (.+)$/.exec(line.slice(indent.length));
+    if (lineStartsAtIndent(line, indent) && close !== null) {
+      if (targets.length === 0) {
+        return null;
+      }
+      const right = translateExpression(close[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      if (close[1] === '=' && targets.every((target) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(target))) {
+        return {
+          statements: [`[${targets.map((target) => translateExpression(target, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')}] = ${right};`],
+          nextIndex: nextIndex + 1,
+        };
+      }
+      return translateStraightLineAssignment(
+        targets.join(', '),
+        close[1],
+        right,
+        nextIndex + 1,
+        nameMap,
+        declaredNames,
+        reassignedNames,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+        close[2],
+      );
+    }
+    if (trimmed === '') {
+      nextIndex += 1;
+      continue;
+    }
+    if (!line.startsWith(innerIndent) || !trimmed.endsWith(',')) {
+      return null;
+    }
+    targets.push(trimmed.slice(0, -1));
+    nextIndex += 1;
+  }
+  return null;
+}
+
 function translateStraightLineAssignment(
   pythonLeft: string,
   operator: string,
@@ -4708,7 +4823,7 @@ function translateStraightLineAssignment(
     const localAssignedRight = assignedRightAsKnownVector(localAssignment[1], localTsName, assignedRight, arrayNames);
     recordLocalAssignmentMarkers(localAssignment[1], localTsName, localAssignedRight, nameMap, arrayNames, mapNames);
     const nullableType = nullableLocalDeclarationType(localAssignment[1], localTsName, localAssignedRight, arrayNames);
-    const tupleType = localTupleDeclarationType(localAssignedRight, pythonRight);
+    const tupleType = localTupleDeclarationType(localAssignedRight, pythonRight, nameMap);
     const widenedRuntimeType = reassignedNames.has(localAssignment[1]) && /^new Crand\(/.test(localAssignedRight)
       ? 'CrandLike'
       : null;
@@ -4767,6 +4882,17 @@ function translateStraightLineAssignment(
       statements: [
         `const [${bindings.join(', ')}] = ${assignedRight};`,
         ...postAssignments,
+      ],
+      nextIndex,
+    };
+  }
+  if (operator === '=' && tupleTargets.length > 1 && hasNonLocalTupleTarget && !hasLocalTupleTarget) {
+    return {
+      statements: [
+        `[${tupleTargets.map((target) => {
+          const trimmed = target.trim();
+          return trimmed === '_' ? '' : translateExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
+        }).join(', ')}] = ${assignedRight};`,
       ],
       nextIndex,
     };
@@ -4875,15 +5001,44 @@ function nullableLocalDeclarationType(
   return null;
 }
 
-function localTupleDeclarationType(assignedRight: string, pythonRight: string | null): string | null {
+function localTupleDeclarationType(assignedRight: string, pythonRight: string | null, nameMap: ReadonlyMap<string, string>): string | null {
   if (!pythonExpressionCouldBeTupleLiteral(pythonRight)) {
     return null;
   }
   const length = numericTupleExpressionLength(assignedRight) ?? numericOuterPythonTupleExpressionLength(pythonRight);
   if (length === null) {
-    return null;
+    const returnTupleType = tupleFunctionReturnTypeForOuterPythonTuple(pythonRight, nameMap);
+    return returnTupleType;
   }
   return `[${Array.from({ length }, () => 'number').join(', ')}]`;
+}
+
+function tupleFunctionReturnTypeForOuterPythonTuple(
+  pythonExpression: string | null,
+  nameMap: ReadonlyMap<string, string>,
+): string | null {
+  const length = outerPythonTupleExpressionLength(pythonExpression);
+  if (length === null) {
+    return null;
+  }
+  const returnType = nameMap.get(functionReturnTypeMarker('__current__')) ?? null;
+  if (returnType === null || !returnType.startsWith('[') || !returnType.endsWith(']')) {
+    return null;
+  }
+  const returnTypeLength = splitTopLevelComma(returnType.slice(1, -1)).length;
+  return returnTypeLength === length ? returnType : null;
+}
+
+function outerPythonTupleExpressionLength(pythonExpression: string | null): number | null {
+  if (pythonExpression === null) {
+    return null;
+  }
+  const trimmed = pythonExpression.trim();
+  if (!trimmed.startsWith('(') || matchingCloseParen(trimmed, 0) !== trimmed.length - 1) {
+    return null;
+  }
+  const length = splitTopLevelComma(trimmed.slice(1, -1)).length;
+  return length > 1 ? length : null;
 }
 
 function numericOuterPythonTupleExpressionLength(pythonExpression: string | null): number | null {
@@ -5758,6 +5913,116 @@ function parseMultilineDictComprehensionExpression(
     expression: `new Map(Array.from(${source}, (${itemParameter}) => [${key}, ${value}] as const))`,
     nextIndex: closeIndex + 1,
   };
+}
+
+function parseMultilineSetComprehensionExpression(
+  lines: string[],
+  startIndex: number,
+  indent: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): { expression: string; nextIndex: number } | null {
+  const innerIndent = `${indent}    `;
+  const bodyLines: string[] = [];
+  let nextIndex = startIndex;
+  while (nextIndex < lines.length) {
+    const line = lines[nextIndex] ?? '';
+    const trimmed = line.trim();
+    if (lineStartsAtIndent(line, indent) && trimmed === '}') {
+      break;
+    }
+    if (trimmed !== '') {
+      if (!line.startsWith(innerIndent)) {
+        return null;
+      }
+      bodyLines.push(trimmed.replace(/,$/, ''));
+    }
+    nextIndex += 1;
+  }
+  if ((lines[nextIndex] ?? '').trim() !== '}' || bodyLines.length < 2) {
+    return null;
+  }
+
+  const forIndex = bodyLines.findIndex((line) => line.startsWith('for '));
+  if (forIndex <= 0) {
+    return null;
+  }
+  const itemExpression = bodyLines.slice(0, forIndex).join(' ');
+  if (topLevelColonIndex(itemExpression) !== null) {
+    return null;
+  }
+
+  const forClause = /^for (.+) in (.+)$/.exec(bodyLines[forIndex]);
+  if (forClause === null) {
+    return null;
+  }
+  const targetNames = splitTopLevelComma(forClause[1])
+    .map((name) => name.trim())
+    .filter((name) => name !== '');
+  if (targetNames.length === 0 || targetNames.some((name) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name))) {
+    return null;
+  }
+  const conditions: string[] = [];
+  for (const conditionLine of bodyLines.slice(forIndex + 1)) {
+    const ifClause = /^if (.+)$/.exec(conditionLine);
+    if (ifClause === null) {
+      return null;
+    }
+    conditions.push(ifClause[1]);
+  }
+
+  const itemNameMap = new Map(nameMap);
+  for (const targetName of targetNames) {
+    itemNameMap.set(targetName, tsExportNameForPythonName(targetName));
+  }
+  const tsTargetNames = targetNames.map(tsExportNameForPythonName);
+  const enumerateIterable = /^enumerate\((.+)\)$/.exec(forClause[2]);
+  const iterable = targetNames.length === 2 && enumerateIterable !== null
+    ? `Array.from(${iterableExpressionForIteration(enumerateIterable[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.entries())`
+    : iterableExpressionForIteration(forClause[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const itemParameter = targetNames.length === 1
+    ? methodCallIterableCallbackParameter(tsTargetNames[0], iterable)
+    : `[${tsTargetNames.join(', ')}]`;
+  const translatedConditions = conditions.map((condition) => translateConditionExpression(condition, itemNameMap, arrayNames, validatedTypeAliases, mapNames));
+  const source = translatedConditions.length === 0
+    ? iterable
+    : `${iterable}.filter((${itemParameter}) => ${translatedConditions.join(' && ')})`;
+  return {
+    expression: `new Set(${source}.map((${itemParameter}) => ${translateExpression(itemExpression, itemNameMap, arrayNames, validatedTypeAliases, mapNames)}))`,
+    nextIndex: nextIndex + 1,
+  };
+}
+
+function topLevelColonIndex(value: string): number | null {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      if (char === quote && value[index - 1] !== '\\') {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char === ')' || char === ']' || char === '}') {
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
+    if (char === ':' && depth === 0) {
+      return index;
+    }
+  }
+  return null;
 }
 
 function methodCallIterableCallbackParameter(itemName: string, iterableExpression: string): string {

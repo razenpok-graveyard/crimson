@@ -333,6 +333,19 @@ export function parseIndentedFunctionHeader(
       };
     }
 
+    const multilineReturn = new RegExp(`^${indent}\\) -> (.+)$`).exec(lines[nextIndex] ?? '');
+    if (multilineReturn !== null) {
+      const returnType = collectMultilineReturnType(lines, nextIndex + 1, indent, multilineReturn[1]);
+      return returnType === null
+        ? null
+        : {
+          name: start[1],
+          parametersText: parameterLines.join(', '),
+          returnType: returnType.typeText,
+          nextIndex: returnType.nextIndex,
+        };
+    }
+
     const line = lines[nextIndex] ?? '';
     if (!line.startsWith(parameterIndent)) {
       return null;
@@ -341,6 +354,65 @@ export function parseIndentedFunctionHeader(
     nextIndex += 1;
   }
   return null;
+}
+
+function collectMultilineReturnType(
+  lines: string[],
+  startIndex: number,
+  indent: string,
+  firstPart: string,
+): { typeText: string; nextIndex: number } | null {
+  const parts = [firstPart.trim()];
+  let depth = delimiterDelta(firstPart);
+  let nextIndex = startIndex;
+  while (nextIndex < lines.length) {
+    const line = lines[nextIndex] ?? '';
+    if (!line.startsWith(indent)) {
+      return null;
+    }
+    const trimmed = line.trim();
+    if (trimmed === '') {
+      nextIndex += 1;
+      continue;
+    }
+    const closesReturn = trimmed.endsWith(':');
+    const part = closesReturn ? trimmed.slice(0, -1).trimEnd() : trimmed;
+    parts.push(part);
+    depth += delimiterDelta(part);
+    nextIndex += 1;
+    if (closesReturn) {
+      return depth === 0
+        ? { typeText: parts.join(' '), nextIndex }
+        : null;
+    }
+  }
+  return null;
+}
+
+function delimiterDelta(text: string): number {
+  let delta = 0;
+  let quote: string | null = null;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (quote !== null) {
+      if (char === quote && text[index - 1] !== '\\') {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '[' || char === '(' || char === '{') {
+      delta += 1;
+      continue;
+    }
+    if (char === ']' || char === ')' || char === '}') {
+      delta -= 1;
+    }
+  }
+  return delta;
 }
 export function parseIndentedDocstring(
   lines: string[],
