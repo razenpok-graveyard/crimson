@@ -68,7 +68,7 @@ export function parseFunctionParameterText(
 
   const typedParameter = /^([A-Za-z_][A-Za-z0-9_]*): ([^=]+?)(?: = (.+))?$/.exec(parameterText);
   if (typedParameter !== null) {
-    const typeExpression = tsTypeExpression(typedParameter[2]);
+    const typeExpression = tsParameterTypeExpression(typedParameter[2]);
     const parameterName = tsParameterNameForPythonName(typedParameter[1]);
     if (typeExpressionIncludesArray(typeExpression)) {
       arrayNames.add(typedParameter[1]);
@@ -144,6 +144,58 @@ export function recordParameterNameBindings(
       nameMap.set(pythonNames[index], parameters[index].name);
     }
   }
+}
+
+function tsParameterTypeExpression(pythonType: string): string {
+  const optionalStringDict = optionalStringKeyDictParameterType(pythonType);
+  return optionalStringDict ?? tsTypeExpression(pythonType);
+}
+
+function optionalStringKeyDictParameterType(pythonType: string): string | null {
+  const parts = splitTopLevelTypeUnion(pythonType.trim());
+  if (!parts.some((part) => part.trim() === 'None')) {
+    return null;
+  }
+  const nonNoneParts = parts.filter((part) => part.trim() !== 'None');
+  if (nonNoneParts.length !== 1) {
+    return null;
+  }
+  const dictArgs = parseGenericTypeArgs(nonNoneParts[0].trim(), 'dict');
+  if (dictArgs === null || dictArgs.length !== 2 || dictArgs[0].trim() !== 'str') {
+    return null;
+  }
+  return `Record<string, ${tsTypeExpression(dictArgs[1])}> | null`;
+}
+
+function parseGenericTypeArgs(typeText: string, typeName: string): string[] | null {
+  const prefix = `${typeName}[`;
+  if (!typeText.startsWith(prefix) || !typeText.endsWith(']')) {
+    return null;
+  }
+  return splitTopLevelComma(typeText.slice(prefix.length, -1));
+}
+
+function splitTopLevelTypeUnion(typeExpression: string): string[] {
+  const parts: string[] = [];
+  let start = 0;
+  let depth = 0;
+  for (let index = 0; index < typeExpression.length; index += 1) {
+    const char = typeExpression[index];
+    if (char === '[' || char === '(' || char === '{' || char === '<') {
+      depth += 1;
+      continue;
+    }
+    if (char === ']' || char === ')' || char === '}' || char === '>') {
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
+    if (char === '|' && depth === 0) {
+      parts.push(typeExpression.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  parts.push(typeExpression.slice(start).trim());
+  return parts;
 }
 
 function typeExpressionIncludesArray(typeExpression: string): boolean {

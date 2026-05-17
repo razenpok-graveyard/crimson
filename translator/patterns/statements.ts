@@ -207,6 +207,43 @@ export function translateStraightLineStatement(
     return { statements: [], nextIndex: index + 1 };
   }
 
+  const leadingSliceDeleteStatement = /^del (.+)\[:\s*(.+)\]$/.exec(statement);
+  if (leadingSliceDeleteStatement !== null) {
+    const target = translateExpression(leadingSliceDeleteStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const end = translateExpression(leadingSliceDeleteStatement[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return appendTrailingCommentToResult({
+      statements: [`${target}.splice(0, ${end});`],
+      nextIndex: index + 1,
+    }, trailingComment);
+  }
+
+  const rangeSliceDeleteStatement = /^del (.+)\[(.+)\s*:\s*(.*)\]$/.exec(statement);
+  if (rangeSliceDeleteStatement !== null) {
+    const target = translateExpression(rangeSliceDeleteStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const start = translateExpression(rangeSliceDeleteStatement[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const endText = rangeSliceDeleteStatement[3].trim();
+    const deleteArgs = endText === ''
+      ? start
+      : `${start}, ${translateExpression(endText, nameMap, arrayNames, validatedTypeAliases, mapNames)} - ${start}`;
+    return appendTrailingCommentToResult({
+      statements: [`${target}.splice(${deleteArgs});`],
+      nextIndex: index + 1,
+    }, trailingComment);
+  }
+
+  const subscriptDeleteStatement = /^del (.+)\[(.+)\]$/.exec(statement);
+  if (subscriptDeleteStatement !== null) {
+    const target = translateExpression(subscriptDeleteStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const key = translateExpression(subscriptDeleteStatement[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const deleteStatement = expressionIsKnownMap(target, nameMap, mapNames)
+      ? `${target}.delete(${key});`
+      : `delete ${target}[${key}];`;
+    return appendTrailingCommentToResult({
+      statements: [deleteStatement],
+      nextIndex: index + 1,
+    }, trailingComment);
+  }
+
   const assertStatement = /^assert (.+?)(?:, (.+))?$/.exec(statement);
   if (assertStatement !== null) {
     const condition = translateConditionExpression(assertStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
@@ -2744,6 +2781,12 @@ export function translateStraightLineStatement(
           nextIndex: index + 1,
         };
       }
+      if (knownDottedReceiverType(clearCall[1], target, nameMap) !== null) {
+        return {
+          statements: [`${target}.clear();`],
+          nextIndex: index + 1,
+        };
+      }
       return {
         statements: [
           '((target: unknown) => {',
@@ -4167,6 +4210,7 @@ function applyTupleAssignmentReturnMarkers(
   mapNames: ReadonlySet<string>,
 ): void {
   const trimmedRight = assignedRight.trim();
+  applyTupleAssignmentExpressionMarkers(names, trimmedRight, nameMap, arrayNames);
   const call = /^([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)?)\(/.exec(trimmedRight);
   const parenthesizedMethodCall = call === null
     ? /^\(.+\)\.([A-Za-z_$][A-Za-z0-9_$]*)\(/.exec(trimmedRight)
@@ -4210,6 +4254,79 @@ function applyTupleAssignmentReturnMarkers(
       arrayNames.add(vectorNameMarker(tsName));
     }
   }
+}
+
+function applyTupleAssignmentExpressionMarkers(
+  names: string[],
+  assignedRight: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+): void {
+  const elements = tupleArrayLiteralElements(assignedRight);
+  if (elements === null || elements.length !== names.length) {
+    return;
+  }
+  for (let index = 0; index < names.length; index += 1) {
+    const pythonName = names[index];
+    if (pythonName === '_') {
+      continue;
+    }
+    const tsName = tsExportNameForPythonName(pythonName);
+    const element = elements[index].trim();
+    const arrayElementType = arrayResultElementType(element, nameMap, arrayNames);
+    if (arrayElementType !== null) {
+      arrayNames.add(pythonName);
+      arrayNames.add(tsName);
+      nameMap.set(arrayElementTypeMarker(pythonName), arrayElementType);
+      nameMap.set(arrayElementTypeMarker(tsName), arrayElementType);
+      continue;
+    }
+    const scalarElementType = scalarElementTypeFromExpression(element, nameMap);
+    if (scalarElementType === 'string') {
+      arrayNames.add(stringNameMarker(pythonName));
+      arrayNames.add(stringNameMarker(tsName));
+    } else if (scalarElementType === 'number') {
+      arrayNames.add(numberNameMarker(pythonName));
+      arrayNames.add(numberNameMarker(tsName));
+    } else if (scalarElementType === 'boolean') {
+      arrayNames.add(booleanNameMarker(pythonName));
+      arrayNames.add(booleanNameMarker(tsName));
+    }
+  }
+}
+
+function tupleArrayLiteralElements(value: string): string[] | null {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('[') || !trimmed.endsWith(']')) {
+    return null;
+  }
+  return splitTopLevelComma(trimmed.slice(1, -1));
+}
+
+function arrayResultElementType(
+  expression: string,
+  nameMap: ReadonlyMap<string, string>,
+  arrayNames: ReadonlySet<string>,
+): string | null {
+  if (expression.startsWith('[') || expression.startsWith('Array.from(')) {
+    return 'unknown';
+  }
+  const sliceCall = /^([A-Za-z_$][A-Za-z0-9_.$]*)\.slice\(/.exec(expression);
+  if (sliceCall !== null && arrayNames.has(sliceCall[1])) {
+    return nameMap.get(arrayElementTypeMarker(sliceCall[1])) ?? 'unknown';
+  }
+  return null;
+}
+
+function scalarElementTypeFromExpression(
+  expression: string,
+  nameMap: ReadonlyMap<string, string>,
+): string | null {
+  const arraySubscript = /^([A-Za-z_$][A-Za-z0-9_.$]*)\[[^\]]+\]$/.exec(expression);
+  if (arraySubscript === null) {
+    return null;
+  }
+  return nameMap.get(arrayElementTypeMarker(arraySubscript[1])) ?? null;
 }
 
 function knownDottedMethodCallSignature(callee: string): FunctionCallSignature | null {
@@ -5284,6 +5401,31 @@ function translateMapDefaultExpression(
     return valueType?.startsWith('Map<') === true ? `new ${valueType}()` : 'new Map()';
   }
   return translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+}
+
+function knownDottedReceiverType(
+  pythonExpression: string,
+  tsExpression: string,
+  nameMap: ReadonlyMap<string, string>,
+): string | null {
+  return knownDottedFieldType(pythonExpression, nameMap)
+    ?? knownDottedFieldType(tsExpression, nameMap);
+}
+
+function knownDottedFieldType(
+  expression: string,
+  nameMap: ReadonlyMap<string, string>,
+): string | null {
+  const dotted = /^(.+)\.([A-Za-z_$][A-Za-z0-9_$]*)$/.exec(expression.trim());
+  if (dotted === null) {
+    return null;
+  }
+  const receiverType = nullableTypeExpressionBase(
+    nameMap.get(receiverTypeNameMarker(dotted[1])) ?? knownDottedFieldType(dotted[1], nameMap),
+  );
+  return receiverType === undefined
+    ? null
+    : nameMap.get(classFieldTypeMarker(receiverType, dotted[2])) ?? null;
 }
 
 function iterableIsPathArray(

@@ -31,7 +31,7 @@ export function keywordMethodOverload(
     `${firstImplName}: ${firstParam.typeExpression} | ${optsType}${firstDefault}`,
     ...method.parameters.slice(1).map((param) => `${param.name}Arg: ${param.typeExpression} | undefined = undefined`),
   ];
-  const optsCondition = `typeof ${firstImplName} === 'object' && ${firstImplName} !== null && '${methodKeywordOptionName(firstParam.name)}' in ${firstImplName}`;
+  const optsCondition = `typeof ${firstImplName} === 'object' && ${firstImplName} !== null`;
   const lines = [
     `  ${prefix}(opts: ${optsType})${returnType};`,
     `  ${prefix}(${positionalParams})${returnType};`,

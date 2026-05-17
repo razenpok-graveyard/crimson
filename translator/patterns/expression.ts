@@ -592,13 +592,24 @@ export function translateExpression(
   if (lstripCall !== null) {
     return `pythonLstrip(${translateExpression(lstripCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
+  const rstripCall = /^(.+)\.rstrip\(\)$/.exec(trimmed);
+  if (rstripCall !== null) {
+    return `${tsPropertyAccessBase(translateExpression(rstripCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames))}.trimEnd()`;
+  }
+  const stripCharsCall = /^(.+)\.strip\(([^()]+)\)$/.exec(trimmed);
+  if (stripCharsCall !== null && delimitersBalanced(stripCharsCall[1]) && splitTopLevelComma(stripCharsCall[1]).length === 1) {
+    return `pythonStripChars(${translateExpression(stripCharsCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(stripCharsCall[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
   const stripCall = /^(.+)\.strip\(\)$/.exec(trimmed);
   if (stripCall !== null && splitTopLevelComma(stripCall[1]).length === 1) {
     return `${tsPropertyAccessBase(translateExpression(stripCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames))}.trim()`;
   }
   const findCall = /^(.+)\.find\((.+)\)$/.exec(trimmed);
   if (findCall !== null) {
-    return `${translateExpression(findCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.indexOf(${translateExpression(findCall[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    const args = splitTopLevelComma(findCall[2]);
+    if (args.length === 1 || args.length === 2) {
+      return `${translateExpression(findCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.indexOf(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')})`;
+    }
   }
   const indexCall = /^(.+)\.index\((.*)\)$/.exec(trimmed);
   if (indexCall !== null) {
@@ -932,6 +943,24 @@ export function translateExpression(
     const receiver = translateExpression(pathExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (pathIsFileCall[1] !== undefined || arrayNames.has(pathNameMarker(pathExpression)) || arrayNames.has(pathNameMarker(receiver))) {
       return `(existsSync(String(${receiver})) && statSync(String(${receiver})).isFile())`;
+    }
+  }
+
+  const pathIsAbsoluteCall = /^(?:Path\((.+)\)|(.+))\.is_absolute\(\)$/.exec(trimmed);
+  if (pathIsAbsoluteCall !== null) {
+    const pathExpression = pathIsAbsoluteCall[1] ?? pathIsAbsoluteCall[2];
+    const receiver = translateExpression(pathExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (pathIsAbsoluteCall[1] !== undefined || arrayNames.has(pathNameMarker(pathExpression)) || arrayNames.has(pathNameMarker(receiver))) {
+      return `_pathIsAbsolute(String(${receiver}))`;
+    }
+  }
+
+  const pathAsPosixCall = /^(?:Path\((.+)\)|(.+))\.as_posix\(\)$/.exec(trimmed);
+  if (pathAsPosixCall !== null) {
+    const pathExpression = pathAsPosixCall[1] ?? pathAsPosixCall[2];
+    const receiver = translateExpression(pathExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (pathAsPosixCall[1] !== undefined || arrayNames.has(pathNameMarker(pathExpression)) || arrayNames.has(pathNameMarker(receiver))) {
+      return `String(${receiver}).replaceAll('\\\\', '/')`;
     }
   }
 
@@ -2458,6 +2487,13 @@ export function translateExpression(
       .map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
     if (translatedParts.length === 2 && translatedParts[0].startsWith('pythonSplitlines(')) {
       return `(() => { const value = ${translatedParts[0]}; return value.length > 0 ? value : ${translatedParts[1]}; })()`;
+    }
+    if (
+      topLevelOrParts.length === 2
+      && topLevelOrParts[1].trim() === '{}'
+      && expressionIsKnownMap(translatedParts[0], nameMap, mapNames)
+    ) {
+      return `${translatedParts[0]} ?? new Map()`;
     }
     return translatedParts.map(parenthesizeForLogicalOr).join(' || ');
   }

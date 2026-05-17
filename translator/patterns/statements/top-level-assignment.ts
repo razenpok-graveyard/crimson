@@ -383,10 +383,13 @@ export function parseTopLevelAssignment(
   const keywordCall = /^([A-Za-z_][A-Za-z0-9_]*)\($/.exec(value);
   if (keywordCall === null) {
     const translatedValue = translateExpression(value, nameMap, new Set(), new Set(), mapNames);
+    const valueExpression = topLevelTupleLiteralShouldBeReadonly(value) && !translatedValue.endsWith(' as const')
+      ? `${translatedValue} as const`
+      : translatedValue;
     return {
       assignment: {
         ...baseAssignment,
-        valueLines: [topLevelAssignmentValueExpression(translatedValue, typeExpression)],
+        valueLines: [topLevelAssignmentValueExpression(valueExpression, typeExpression)],
       },
       nextIndex: index + 1,
     };
@@ -532,6 +535,11 @@ function topLevelAssignmentValueExpression(valueExpression: string, typeExpressi
     return 'new Map()';
   }
   return valueExpression;
+}
+
+function topLevelTupleLiteralShouldBeReadonly(pythonValue: string): boolean {
+  const tupleLiteral = /^\((.*)\)$/.exec(pythonValue.trim());
+  return tupleLiteral !== null && splitTopLevelComma(tupleLiteral[1]).filter((part) => part.trim() !== '').length > 1;
 }
 
 function parseMultilineFrozenSet(

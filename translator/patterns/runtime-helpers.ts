@@ -71,6 +71,19 @@ export function bytesStripHelperStatements(): string[] {
     '  }',
     '  return value.slice(start);',
     '}',
+    '',
+    'function pythonStripChars(value: string, chars: string): string {',
+    '  const charSet = new Set(chars);',
+    '  let start = 0;',
+    '  let end = value.length;',
+    '  while (start < end && charSet.has(value[start])) {',
+    '    start += 1;',
+    '  }',
+    '  while (end > start && charSet.has(value[end - 1])) {',
+    '    end -= 1;',
+    '  }',
+    '  return value.slice(start, end);',
+    '}',
   ];
 }
 
@@ -1349,6 +1362,10 @@ export function pathStemHelperStatements(): string[] {
 
 export function pathFsHelperStatements(): string[] {
   return [
+    'function _pathIsAbsolute(path: string): boolean {',
+    "  return path.startsWith('/') || /^[A-Za-z]:[\\\\/]/.test(path);",
+    '}',
+    '',
     'function _dirname(path: string): string {',
     "  const idx = path.lastIndexOf('/');",
     '  if (idx < 0) {',

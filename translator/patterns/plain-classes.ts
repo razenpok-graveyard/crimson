@@ -912,7 +912,7 @@ function inferPlainClassFieldType(
   fieldTypes: ReadonlyMap<string, string>,
   nameMap: ReadonlyMap<string, string> = new Map(),
 ): string | null {
-  const trimmedValueText = stripOuterParenthesizedExpression(valueText.trim());
+  const trimmedValueText = stripOuterParenthesizedExpression(valueText.trim().replace(/ as const$/, ''));
   if (trimmedValueText === 'None') {
     return 'any';
   }

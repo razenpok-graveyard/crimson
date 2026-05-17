@@ -1170,6 +1170,10 @@ function recordStructClassMethodSignatures(
       instanceMethodSignatureMarker(className, tsStructMethodNameForPythonName(header.name)),
       JSON.stringify({ positional }),
     );
+    nameMap.set(
+      functionReturnTypeMarker(`${className}.${tsStructMethodNameForPythonName(header.name)}`),
+      tsTypeExpression(header.returnType),
+    );
     index = header.nextIndex;
     while (index < lines.length && isIndentedBlockLine(lines, index, '        ')) {
       index += 1;

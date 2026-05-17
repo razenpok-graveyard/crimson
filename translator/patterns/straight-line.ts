@@ -1220,7 +1220,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     pathHelperStatements.push(...pathStemHelperStatements());
   }
-  if (moduleValueText.includes('_dirname(') || moduleValueText.includes('_mkdirParents(')) {
+  if (moduleValueText.includes('_dirname(') || moduleValueText.includes('_mkdirParents(') || moduleValueText.includes('_pathIsAbsolute(')) {
     if (pathHelperStatements.length > 0) {
       pathHelperStatements.push('');
     }
@@ -1251,7 +1251,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
     }
     leadingStatements.unshift(...helperStatements);
   }
-  if (moduleValueText.includes('pythonLstrip(')) {
+  if (moduleValueText.includes('pythonLstrip(') || moduleValueText.includes('pythonStripChars(')) {
     const helperStatements = bytesStripHelperStatements();
     if (leadingStatements.length > 0) {
       helperStatements.push('');
@@ -1311,7 +1311,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   ) {
     pushUniqueImportDefinition(imports, {
       modulePath: 'node:fs',
-      names: [
+      names: [...new Set([
         ...(moduleValueText.includes('readFileSync(') ? ['readFileSync'] : []),
         ...(moduleValueText.includes('_openTextFile(') ? ['readFileSync'] : []),
         ...(moduleValueText.includes('writeFileSync(') || moduleValueText.includes('_openTextFile(') ? ['writeFileSync'] : []),
@@ -1320,7 +1320,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         ...(moduleValueText.includes('statSync(') ? ['statSync'] : []),
         ...(moduleValueText.includes('_mkdirParents(') || moduleValueText.includes('_dirname(') ? ['mkdirSync'] : []),
         ...(moduleValueText.includes('_globPath(') ? ['readdirSync'] : []),
-      ],
+      ])],
     });
   }
   if (moduleValueText.includes('deflateSync(') || moduleValueText.includes('inflateSync(')) {

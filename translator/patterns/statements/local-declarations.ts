@@ -990,6 +990,11 @@ export function recordLocalAssignmentMarkers(
     addMutableName(mapNames, pythonName);
     addMutableName(mapNames, tsName);
   }
+  const constructedClass = /^new ([A-Z][A-Za-z0-9_$]*)\(/.exec(assignedRight.trim());
+  if (constructedClass !== null) {
+    nameMap.set(receiverTypeNameMarker(pythonName), constructedClass[1]);
+    nameMap.set(receiverTypeNameMarker(tsName), constructedClass[1]);
+  }
   const assignedFieldType = knownDottedFieldType(assignedRight, nameMap);
   if (assignedFieldType !== null) {
     nameMap.set(receiverTypeNameMarker(pythonName), assignedFieldType);
@@ -1034,7 +1039,10 @@ export function recordLocalAssignmentMarkers(
     arrayNames.add(pathNameMarker(pythonName));
     arrayNames.add(pathNameMarker(tsName));
   }
-  if (assignedRight === '{}' || assignedRight.startsWith('{ ...') || assignedRight.startsWith('{ ')) {
+  if (assignedRight === '{}'
+    || assignedRight.startsWith('{ ...')
+    || assignedRight.startsWith('{ ')
+    || /(?:\|\||\?\?) \{\}$/.test(assignedRight)) {
     arrayNames.add(objectNameMarker(pythonName));
     arrayNames.add(objectNameMarker(tsName));
   }
@@ -1090,7 +1098,7 @@ export function recordLocalAssignmentMarkers(
   }
   const callAssignment = /^(?:await )?([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\(/.exec(assignedRight);
   if (callAssignment !== null) {
-    const returnType = nameMap.get(functionReturnTypeMarker(callAssignment[1]));
+    const returnType = knownCallReturnType(callAssignment[1], nameMap);
     const declaredReturnType = nameMap.get(functionDeclaredReturnTypeMarker(callAssignment[1]));
     const receiverType = nullableTypeExpressionBase(declaredReturnType ?? returnType ?? null);
     if (receiverType !== undefined && /^[A-Z][A-Za-z0-9_$]*$/.test(receiverType)) {
@@ -1131,7 +1139,7 @@ export function recordLocalAssignmentMarkers(
     arrayNames.add(vectorNameMarker(pythonName));
     arrayNames.add(vectorNameMarker(tsName));
   }
-  if (callAssignment !== null && nameMap.get(functionReturnTypeMarker(callAssignment[1])) === 'Vec2') {
+  if (callAssignment !== null && knownCallReturnType(callAssignment[1], nameMap) === 'Vec2') {
     arrayNames.add(vectorNameMarker(pythonName));
     arrayNames.add(vectorNameMarker(tsName));
   }
