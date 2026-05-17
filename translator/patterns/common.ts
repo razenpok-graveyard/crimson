@@ -7,6 +7,9 @@ export function isTypeAliasExpression(pythonExpression: string): boolean {
   if (/^(?:True|False|None|-?\d+(?:\.\d+)?|["'])/.test(trimmed)) {
     return false;
   }
+  if (isBitwiseEnumMemberValueExpression(trimmed)) {
+    return false;
+  }
   if (!hasBalancedSquareBrackets(trimmed)) {
     return false;
   }
@@ -21,6 +24,9 @@ export function isBareTypeAliasExpression(pythonExpression: string): boolean {
   if (/^(?:True|False|None|-?\d+(?:\.\d+)?|["'])/.test(trimmed)) {
     return false;
   }
+  if (isBitwiseEnumMemberValueExpression(trimmed)) {
+    return false;
+  }
   if (/^[A-Z][A-Z0-9_]*(?: \| [A-Z][A-Z0-9_]*)+$/.test(trimmed)) {
     return false;
   }
@@ -31,6 +37,51 @@ export function isBareTypeAliasExpression(pythonExpression: string): boolean {
     return false;
   }
   return /[\[\]|]/.test(trimmed) || /^(?:Callable|Literal|Sequence|dict|list|tuple)\b/.test(trimmed);
+}
+
+function isBitwiseEnumMemberValueExpression(value: string): boolean {
+  const parts = splitTopLevelPipe(value);
+  return parts.length > 1 && parts.every((part) => /^[A-Za-z_][A-Za-z0-9_]*\.[A-Z][A-Z0-9_]*$/.test(part.trim()));
+}
+
+function splitTopLevelPipe(value: string): string[] {
+  const parts: string[] = [];
+  let current = '';
+  let bracketDepth = 0;
+  let parenDepth = 0;
+  let quote: string | null = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      current += char;
+      if (char === quote && !characterIsEscaped(value, index)) {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      current += char;
+      continue;
+    }
+    if (char === '[') {
+      bracketDepth += 1;
+    } else if (char === ']') {
+      bracketDepth -= 1;
+    } else if (char === '(') {
+      parenDepth += 1;
+    } else if (char === ')') {
+      parenDepth -= 1;
+    }
+    if (char === '|' && bracketDepth === 0 && parenDepth === 0) {
+      parts.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  parts.push(current.trim());
+  return parts;
 }
 
 function hasBalancedSquareBrackets(value: string): boolean {

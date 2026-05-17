@@ -2,6 +2,31 @@
 
 // Perk ids and runtime metadata extracted from `perks_init_database` (FUN_0042fd90).
 
+export class PerkMeta {
+  readonly perkId: PerkId;
+  readonly name: string;
+  readonly description: string;
+  readonly flags: number;
+  readonly prereq: readonly PerkId[];
+
+  constructor(opts: {
+    perkId: PerkId;
+    name: string;
+    description: string;
+    flags: number;
+    prereq?: readonly PerkId[];
+  }) {
+    this.perkId = opts.perkId;
+    this.name = opts.name;
+    this.description = opts.description;
+    this.flags = opts.flags;
+    this.prereq = Array.from(opts.prereq ?? []);
+  }
+}
+
+export const QUICK_LEARNER_NAME = 'Quick Learner';
+export const QUICK_LEARNER_DESCRIPTION = 'You learn things faster than a regular Joe from now on gaining 30% more experience points from everything you do.';
+
 export enum PerkFlags {
   // `perk_can_offer` uses these bits as mode-specific allow-lists:
   // - in quest mode, only perks with QUEST_MODE_ALLOWED are eligible
@@ -10,10 +35,6 @@ export enum PerkFlags {
   MULTIPLAYER_ALLOWED = 0x2,
   STACKABLE = 0x4, // can be offered even if already owned
 }
-
-// Native perk metadata defaults to both quest and multiplayer allow bits enabled
-// (`sub_42fac0` initializes flags to 3).
-export const PERK_DEFAULT_FLAGS = PerkFlags.QUEST_MODE_ALLOWED | PerkFlags.MULTIPLAYER_ALLOWED;
 
 export enum PerkId {
   ANTIPERK = 0,
@@ -76,33 +97,14 @@ export enum PerkId {
   LIFELINE_50_50 = 57,
 }
 
-export class PerkMeta {
-  readonly perkId: PerkId;
-  readonly name: string;
-  readonly description: string;
-  readonly flags: number;
-  readonly prereq: readonly PerkId[];
-
-  constructor(opts: {
-    perkId: PerkId;
-    name: string;
-    description: string;
-    flags: number;
-    prereq?: readonly PerkId[];
-  }) {
-    this.perkId = opts.perkId;
-    this.name = opts.name;
-    this.description = opts.description;
-    this.flags = opts.flags;
-    this.prereq = opts.prereq ?? [];
-  }
-}
-
-const _PERK_TABLE: readonly PerkMeta[] = [
+// Native perk metadata defaults to both quest and multiplayer allow bits enabled
+// (`sub_42fac0` initializes flags to 3).
+export const PERK_DEFAULT_FLAGS = PerkFlags.QUEST_MODE_ALLOWED | PerkFlags.MULTIPLAYER_ALLOWED;
+const _PERK_TABLE = [
   new PerkMeta({
     perkId: PerkId.ANTIPERK,
     name: 'AntiPerk',
-    description: "You shouldn't be seeing this..",
+    description: 'You shouldn\'t be seeing this..',
     flags: PERK_DEFAULT_FLAGS,
     prereq: [],
   }),
@@ -137,7 +139,7 @@ const _PERK_TABLE: readonly PerkMeta[] = [
   new PerkMeta({
     perkId: PerkId.LONG_DISTANCE_RUNNER,
     name: 'Long Distance Runner',
-    description: "You move like a train that has feet and runs. You just need a little time to warm up. In other words you'll move faster the longer you run without stopping.",
+    description: 'You move like a train that has feet and runs. You just need a little time to warm up. In other words you\'ll move faster the longer you run without stopping.',
     flags: PERK_DEFAULT_FLAGS,
     prereq: [],
   }),
@@ -158,14 +160,14 @@ const _PERK_TABLE: readonly PerkMeta[] = [
   new PerkMeta({
     perkId: PerkId.GRIM_DEAL,
     name: 'Grim Deal',
-    description: "I'll make you a deal: I'll give you 18% more experience points, and you'll give me your life. So you'll die but score higher. Ponder that one for a sec.",
+    description: 'I\'ll make you a deal: I\'ll give you 18% more experience points, and you\'ll give me your life. So you\'ll die but score higher. Ponder that one for a sec.',
     flags: 0,
     prereq: [],
   }),
   new PerkMeta({
     perkId: PerkId.ALTERNATE_WEAPON,
     name: 'Alternate Weapon',
-    description: "Ever fancied about having two weapons available for use? This might be your lucky day; with this perk you'll get an extra weapon slot for another gun! Carrying around two guns slows you down slightly though. (You can switch the weapon slots with RELOAD key)",
+    description: 'Ever fancied about having two weapons available for use? This might be your lucky day; with this perk you\'ll get an extra weapon slot for another gun! Carrying around two guns slows you down slightly though. (You can switch the weapon slots with RELOAD key)',
     flags: PerkFlags.QUEST_MODE_ALLOWED,
     prereq: [],
   }),
@@ -193,7 +195,7 @@ const _PERK_TABLE: readonly PerkMeta[] = [
   new PerkMeta({
     perkId: PerkId.RADIOACTIVE,
     name: 'Radioactive',
-    description: "You are the Radioactive-man; you have that healthy green glow around you! Others don't like it though, it makes them sick and nauseous whenever near you. It does affect your social life a bit.",
+    description: 'You are the Radioactive-man; you have that healthy green glow around you! Others don\'t like it though, it makes them sick and nauseous whenever near you. It does affect your social life a bit.',
     flags: PERK_DEFAULT_FLAGS,
     prereq: [],
   }),
@@ -221,21 +223,21 @@ const _PERK_TABLE: readonly PerkMeta[] = [
   new PerkMeta({
     perkId: PerkId.MR_MELEE,
     name: 'Mr. Melee',
-    description: "You master the art of melee fighting. You don't just stand still when monsters come near -- you hit back. Hard.",
+    description: 'You master the art of melee fighting. You don\'t just stand still when monsters come near -- you hit back. Hard.',
     flags: PERK_DEFAULT_FLAGS,
     prereq: [],
   }),
   new PerkMeta({
     perkId: PerkId.ANXIOUS_LOADER,
     name: 'Anxious Loader',
-    description: "When you can't stand waiting your gun to be reloaded you can speed up the process by clicking your FIRE button repeatedly as fast as you can.",
+    description: 'When you can\'t stand waiting your gun to be reloaded you can speed up the process by clicking your FIRE button repeatedly as fast as you can.',
     flags: PERK_DEFAULT_FLAGS,
     prereq: [],
   }),
   new PerkMeta({
     perkId: PerkId.FINAL_REVENGE,
     name: 'Final Revenge',
-    description: "Pick this and you'll get your revenge. It's a promise.",
+    description: 'Pick this and you\'ll get your revenge. It\'s a promise.',
     flags: 0,
     prereq: [],
   }),
@@ -249,21 +251,21 @@ const _PERK_TABLE: readonly PerkMeta[] = [
   new PerkMeta({
     perkId: PerkId.PERK_EXPERT,
     name: 'Perk Expert',
-    description: "You sure know how to pick a perk -- most people just don't see that extra perk laying around. This gives you the opportunity to pick the freshest and shiniest perks from the top.",
+    description: 'You sure know how to pick a perk -- most people just don\'t see that extra perk laying around. This gives you the opportunity to pick the freshest and shiniest perks from the top.',
     flags: PERK_DEFAULT_FLAGS,
     prereq: [],
   }),
   new PerkMeta({
     perkId: PerkId.UNSTOPPABLE,
     name: 'Unstoppable',
-    description: "Monsters can't slow you down with their nasty scratches and bites. It still hurts but you simply ignore the pain.",
+    description: 'Monsters can\'t slow you down with their nasty scratches and bites. It still hurts but you simply ignore the pain.',
     flags: PERK_DEFAULT_FLAGS,
     prereq: [],
   }),
   new PerkMeta({
     perkId: PerkId.REGRESSION_BULLETS,
     name: 'Regression Bullets',
-    description: "Attempt to shoot with an empty clip leads to a severe loss of experience. But hey, whatever makes them go down, right?",
+    description: 'Attempt to shoot with an empty clip leads to a severe loss of experience. But hey, whatever makes them go down, right?',
     flags: PERK_DEFAULT_FLAGS,
     prereq: [],
   }),
@@ -298,7 +300,7 @@ const _PERK_TABLE: readonly PerkMeta[] = [
   new PerkMeta({
     perkId: PerkId.URANIUM_FILLED_BULLETS,
     name: 'Uranium Filled Bullets',
-    description: "Your bullets have a nice creamy uranium filling. Yummy. Now that's gotta hurt the monsters more, right?",
+    description: 'Your bullets have a nice creamy uranium filling. Yummy. Now that\'s gotta hurt the monsters more, right?',
     flags: PERK_DEFAULT_FLAGS,
     prereq: [],
   }),
@@ -312,14 +314,14 @@ const _PERK_TABLE: readonly PerkMeta[] = [
   new PerkMeta({
     perkId: PerkId.MONSTER_VISION,
     name: 'Monster Vision',
-    description: "With your newly enhanced senses you can see all bad energy VERY clearly. That's got to be enough.",
+    description: 'With your newly enhanced senses you can see all bad energy VERY clearly. That\'s got to be enough.',
     flags: PERK_DEFAULT_FLAGS,
     prereq: [],
   }),
   new PerkMeta({
     perkId: PerkId.HOT_TEMPERED,
     name: 'Hot Tempered',
-    description: "It literally boils inside you. That's exactly why you need to let it out once in a while, unfortunately for those near you.",
+    description: 'It literally boils inside you. That\'s exactly why you need to let it out once in a while, unfortunately for those near you.',
     flags: PERK_DEFAULT_FLAGS,
     prereq: [],
   }),
@@ -340,14 +342,14 @@ const _PERK_TABLE: readonly PerkMeta[] = [
   new PerkMeta({
     perkId: PerkId.BARREL_GREASER,
     name: 'Barrel Greaser',
-    description: "After studying a lot of physics and friction you've come up with a way to make your bullets fly faster. More speed, more damage.",
+    description: 'After studying a lot of physics and friction you\'ve come up with a way to make your bullets fly faster. More speed, more damage.',
     flags: PERK_DEFAULT_FLAGS,
     prereq: [],
   }),
   new PerkMeta({
     perkId: PerkId.AMMUNITION_WITHIN,
     name: 'Ammunition Within',
-    description: "Empty clip doesn't prevent you from shooting with a weapon; instead the ammunition is drawn from your health while you are reloading.",
+    description: 'Empty clip doesn\'t prevent you from shooting with a weapon; instead the ammunition is drawn from your health while you are reloading.',
     flags: PERK_DEFAULT_FLAGS,
     prereq: [],
   }),
@@ -361,7 +363,7 @@ const _PERK_TABLE: readonly PerkMeta[] = [
   new PerkMeta({
     perkId: PerkId.TOXIC_AVENGER,
     name: 'Toxic Avenger',
-    description: "You started out just by being poisonous. The next logical step for you is to become highly toxic -- the ULTIMATE TOXIC AVENGER. Most monsters touching you will just drop dead within seconds!",
+    description: 'You started out just by being poisonous. The next logical step for you is to become highly toxic -- the ULTIMATE TOXIC AVENGER. Most monsters touching you will just drop dead within seconds!',
     flags: PERK_DEFAULT_FLAGS,
     prereq: [PerkId.VEINS_OF_POISON],
   }),
@@ -375,21 +377,21 @@ const _PERK_TABLE: readonly PerkMeta[] = [
   new PerkMeta({
     perkId: PerkId.PYROMANIAC,
     name: 'Pyromaniac',
-    description: "You just enjoy using fire as your Tool of Destruction and you're good at it too; your fire based weapons do a lot more damage.",
+    description: 'You just enjoy using fire as your Tool of Destruction and you\'re good at it too; your fire based weapons do a lot more damage.',
     flags: PERK_DEFAULT_FLAGS,
     prereq: [],
   }),
   new PerkMeta({
     perkId: PerkId.NINJA,
     name: 'Ninja',
-    description: "You've taken your dodging abilities to the next level; monsters have really hard time hitting you.",
+    description: 'You\'ve taken your dodging abilities to the next level; monsters have really hard time hitting you.',
     flags: PERK_DEFAULT_FLAGS,
     prereq: [PerkId.DODGER],
   }),
   new PerkMeta({
     perkId: PerkId.HIGHLANDER,
     name: 'Highlander',
-    description: "You are immortal. Well, almost immortal. Instead of actually losing health on attacks you've got a 10% chance of just dropping dead whenever a monster attacks you. There really can be only one, you know.",
+    description: 'You are immortal. Well, almost immortal. Instead of actually losing health on attacks you\'ve got a 10% chance of just dropping dead whenever a monster attacks you. There really can be only one, you know.',
     flags: 0,
     prereq: [],
   }),
@@ -424,49 +426,49 @@ const _PERK_TABLE: readonly PerkMeta[] = [
   new PerkMeta({
     perkId: PerkId.BREATHING_ROOM,
     name: 'Breathing Room',
-    description: "Trade 2/3rds of your health for the killing of every single creature on the screen. No, you don't get the experience.",
+    description: 'Trade 2/3rds of your health for the killing of every single creature on the screen. No, you don\'t get the experience.',
     flags: PerkFlags.MULTIPLAYER_ALLOWED,
     prereq: [],
   }),
   new PerkMeta({
     perkId: PerkId.DEATH_CLOCK,
     name: 'Death Clock',
-    description: "You die exactly in 30 seconds. You can't escape your destiny, but feel free to go on a spree. Tick, tock.",
+    description: 'You die exactly in 30 seconds. You can\'t escape your destiny, but feel free to go on a spree. Tick, tock.',
     flags: PERK_DEFAULT_FLAGS,
     prereq: [],
   }),
   new PerkMeta({
     perkId: PerkId.MY_FAVOURITE_WEAPON,
     name: 'My Favourite Weapon',
-    description: "You've grown very fond of your piece. You polish it all the time and talk nice to it, your precious. (+2 clip size, no more random weapon bonuses)",
+    description: 'You\'ve grown very fond of your piece. You polish it all the time and talk nice to it, your precious. (+2 clip size, no more random weapon bonuses)',
     flags: PERK_DEFAULT_FLAGS,
     prereq: [],
   }),
   new PerkMeta({
     perkId: PerkId.BANDAGE,
     name: 'Bandage',
-    description: "Here, eat this bandage and you'll feel a lot better in no time. (restores up to 50% health)",
+    description: 'Here, eat this bandage and you\'ll feel a lot better in no time. (restores up to 50% health)',
     flags: PERK_DEFAULT_FLAGS,
     prereq: [],
   }),
   new PerkMeta({
     perkId: PerkId.ANGRY_RELOADER,
     name: 'Angry Reloader',
-    description: "You hate it when you run out of shots. You HATE HATE HATE reloading your gun. Lucky for you, and strangely enough, your hate materializes as Mighty Balls of Fire. Or more like Quite Decent Balls of Fire, but it's still kinda neat, huh?",
+    description: 'You hate it when you run out of shots. You HATE HATE HATE reloading your gun. Lucky for you, and strangely enough, your hate materializes as Mighty Balls of Fire. Or more like Quite Decent Balls of Fire, but it\'s still kinda neat, huh?',
     flags: PERK_DEFAULT_FLAGS,
     prereq: [],
   }),
   new PerkMeta({
     perkId: PerkId.ION_GUN_MASTER,
     name: 'Ion Gun Master',
-    description: "You're good with ion weapons. You're so good that not only your shots do slightly more damage but your ion blast radius is also increased.",
+    description: 'You\'re good with ion weapons. You\'re so good that not only your shots do slightly more damage but your ion blast radius is also increased.',
     flags: PERK_DEFAULT_FLAGS,
     prereq: [],
   }),
   new PerkMeta({
     perkId: PerkId.STATIONARY_RELOADER,
     name: 'Stationary Reloader',
-    description: "It's incredibly hard to reload your piece while moving around, you've noticed. In fact, realizing that, when you don't move a (leg) muscle you can reload the gun THREE TIMES FASTER!",
+    description: 'It\'s incredibly hard to reload your piece while moving around, you\'ve noticed. In fact, realizing that, when you don\'t move a (leg) muscle you can reload the gun THREE TIMES FASTER!',
     flags: PERK_DEFAULT_FLAGS,
     prereq: [],
   }),
@@ -487,7 +489,7 @@ const _PERK_TABLE: readonly PerkMeta[] = [
   new PerkMeta({
     perkId: PerkId.LIVING_FORTRESS,
     name: 'Living Fortress',
-    description: "It comes a time in each man's life when you'd just rather not move anymore. Being living fortress not moving comes with extra benefits as well. You do the more damage the longer you stand still.",
+    description: 'It comes a time in each man\'s life when you\'d just rather not move anymore. Being living fortress not moving comes with extra benefits as well. You do the more damage the longer you stand still.',
     flags: PERK_DEFAULT_FLAGS,
     prereq: [],
   }),
@@ -501,73 +503,57 @@ const _PERK_TABLE: readonly PerkMeta[] = [
   new PerkMeta({
     perkId: PerkId.LIFELINE_50_50,
     name: 'Lifeline 50-50',
-    description: "The computer removes half of the wrong monsters for you. You don't gain any experience.",
+    description: 'The computer removes half of the wrong monsters for you. You don\'t gain any experience.',
     flags: PERK_DEFAULT_FLAGS,
     prereq: [],
   }),
 ];
-
-export const PERK_BY_ID: Map<PerkId, PerkMeta> = new Map(
-  _PERK_TABLE.map((e) => [e.perkId, e]),
-);
-
-export const QUICK_LEARNER_NAME = 'Quick Learner';
-export const QUICK_LEARNER_DESCRIPTION =
-  'You learn things faster than a regular Joe from now on gaining 30% more experience points from everything you do.';
-
-const _PERK_FIXED_NAMES: Map<PerkId, string> = new Map([
+export const PERK_BY_ID: Map<PerkId, PerkMeta> = new Map(Array.from(_PERK_TABLE, (entry) => [entry.perkId, entry] as const));
+const _PERK_FIXED_NAMES = new Map([
   [PerkId.FIRE_CAUGH, 'Fire Cough'],
 ]);
-
-const _PERK_FIXED_DESCRIPTIONS: Map<PerkId, string> = new Map([
-  [PerkId.ANXIOUS_LOADER, "When you can't stand waiting for your gun to be reloaded you can speed up the process by clicking your FIRE button repeatedly as fast as you can."],
-  [PerkId.PERK_EXPERT, "You sure know how to pick a perk -- most people just don't see that extra perk laying around. This gives you the opportunity to pick the freshest and shiniest perks from the top."],
+const _PERK_FIXED_DESCRIPTIONS = new Map([
+  [PerkId.ANXIOUS_LOADER, 'When you can\'t stand waiting for your gun to be reloaded you can speed up the process by clicking your FIRE button repeatedly as fast as you can.'],
+  [PerkId.PERK_EXPERT, 'You sure know how to pick a perk -- most people just don\'t see that extra perk laying around. This gives you the opportunity to pick the freshest and shiniest perks from the top.'],
   [PerkId.DODGER, 'It seems so stupid just to take the hits. Each time a monster attacks you, you have a chance to dodge the attack.'],
-  [PerkId.NINJA, "You've taken your dodging abilities to the next level; monsters have a really hard time hitting you."],
-  [PerkId.LIVING_FORTRESS, "There comes a time in each man's life when you'd just rather not move anymore. Being a living fortress comes with extra benefits as well. You do more damage the longer you stand still."],
+  [PerkId.NINJA, 'You\'ve taken your dodging abilities to the next level; monsters have a really hard time hitting you.'],
+  [PerkId.LIVING_FORTRESS, 'There comes a time in each man\'s life when you\'d just rather not move anymore. Being a living fortress comes with extra benefits as well. You do more damage the longer you stand still.'],
 ]);
 
-export function perkDisplayName(
-  perkId: PerkId,
-  opts: { violenceDisabled?: number; preserveBugs?: boolean } = {},
-): string {
+export function perkDisplayName(perkId: PerkId, opts: { violenceDisabled?: number; preserveBugs?: boolean } = {}): string {
   const violenceDisabled = opts.violenceDisabled ?? 0;
   const preserveBugs = opts.preserveBugs ?? false;
   if (perkId === PerkId.BLOODY_MESS_QUICK_LEARNER && int(violenceDisabled) !== 0) {
     return QUICK_LEARNER_NAME;
   }
-  const entry = PERK_BY_ID.get(perkId);
-  if (!entry) throw new Error(`Unknown perk id: ${perkId}`);
+  const entry = PERK_BY_ID.get(perkId)!;
   if (!preserveBugs) {
-    const fixed = _PERK_FIXED_NAMES.get(perkId);
-    if (fixed !== undefined) return fixed;
+    const fixed = _PERK_FIXED_NAMES.get(perkId) ?? null;
+    if (fixed !== null) {
+      return fixed;
+    }
   }
   return entry.name;
 }
 
-export function perkDisplayDescription(
-  perkId: PerkId,
-  opts: { violenceDisabled?: number; preserveBugs?: boolean } = {},
-): string {
+export function perkDisplayDescription(perkId: PerkId, opts: { violenceDisabled?: number; preserveBugs?: boolean } = {}): string {
   const violenceDisabled = opts.violenceDisabled ?? 0;
   const preserveBugs = opts.preserveBugs ?? false;
   if (perkId === PerkId.BLOODY_MESS_QUICK_LEARNER && int(violenceDisabled) !== 0) {
     return QUICK_LEARNER_DESCRIPTION;
   }
-  const entry = PERK_BY_ID.get(perkId);
-  if (!entry) throw new Error(`Unknown perk id: ${perkId}`);
+  const entry = PERK_BY_ID.get(perkId)!;
   if (!preserveBugs) {
-    const fixed = _PERK_FIXED_DESCRIPTIONS.get(perkId);
-    if (fixed !== undefined) return fixed;
+    const fixed = _PERK_FIXED_DESCRIPTIONS.get(perkId) ?? null;
+    if (fixed !== null) {
+      return fixed;
+    }
   }
   return entry.description;
 }
 
-export function perkLabel(
-  perkId: PerkId,
-  opts: { violenceDisabled?: number; preserveBugs?: boolean } = {},
-): string {
+export function perkLabel(perkId: PerkId, opts: { violenceDisabled?: number; preserveBugs?: boolean } = {}): string {
   const violenceDisabled = opts.violenceDisabled ?? 0;
   const preserveBugs = opts.preserveBugs ?? false;
-  return perkDisplayName(perkId, { violenceDisabled, preserveBugs });
+  return perkDisplayName(perkId, { violenceDisabled: violenceDisabled, preserveBugs: preserveBugs });
 }

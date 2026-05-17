@@ -55,6 +55,14 @@ export function parseTopLevelAssignment(
     trailingComment: parsedLine.comment ?? undefined,
   };
   if (value === '(') {
+    const stringValue = parseParenthesizedStringAssignment(lines, index + 1, nameMap, mapNames);
+    if (stringValue !== null) {
+      return {
+        assignment: { ...baseAssignment, valueLines: [stringValue.expression] },
+        nextIndex: stringValue.nextIndex,
+      };
+    }
+
     const valueLines = ['['];
     let nextIndex = index + 1;
     while (nextIndex < lines.length) {
@@ -378,6 +386,42 @@ export function parseTopLevelAssignment(
   }
 
   return null;
+}
+
+function parseParenthesizedStringAssignment(
+  lines: string[],
+  startIndex: number,
+  nameMap: Map<string, string>,
+  mapNames: ReadonlySet<string>,
+): { expression: string; nextIndex: number } | null {
+  const parts: string[] = [];
+  let nextIndex = startIndex;
+  while (nextIndex < lines.length) {
+    const trimmed = lines[nextIndex].trim();
+    if (trimmed === ')') {
+      if (parts.length === 0) {
+        return null;
+      }
+      return {
+        expression: parts.length === 1 ? parts[0] : `(${parts.join(' + ')})`,
+        nextIndex: nextIndex + 1,
+      };
+    }
+    if (trimmed === '') {
+      nextIndex += 1;
+      continue;
+    }
+    if (!isStringLiteralExpression(trimmed)) {
+      return null;
+    }
+    parts.push(translateExpression(trimmed, nameMap, new Set(), new Set(), mapNames));
+    nextIndex += 1;
+  }
+  return null;
+}
+
+function isStringLiteralExpression(value: string): boolean {
+  return /^(?:[rRuUbBfF]*)?(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')$/.test(value);
 }
 
 function translateSequenceItemExpression(
