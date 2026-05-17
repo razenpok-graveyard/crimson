@@ -1189,6 +1189,28 @@ export function translateStraightLineStatement(
       if (!iterableLine.startsWith(`${indent}    `) || trimmed === '') {
         return null;
       }
+      if (trimmed === '(') {
+        const tupleParts: string[] = [];
+        iterableIndex += 1;
+        while (iterableIndex < lines.length) {
+          const tupleLine = lines[iterableIndex] ?? '';
+          const tupleTrimmed = tupleLine.trim();
+          if (tupleLine.startsWith(`${indent}    `) && tupleTrimmed === '),') {
+            break;
+          }
+          if (!tupleLine.startsWith(`${indent}        `) || tupleTrimmed === '' || !tupleTrimmed.endsWith(',')) {
+            return null;
+          }
+          tupleParts.push(translateExpression(tupleTrimmed.slice(0, -1), nameMap, arrayNames, validatedTypeAliases, mapNames));
+          iterableIndex += 1;
+        }
+        if ((lines[iterableIndex] ?? '').trim() !== '),' || tupleParts.length === 0) {
+          return null;
+        }
+        iterableItems.push(`[${tupleParts.join(', ')}]`);
+        iterableIndex += 1;
+        continue;
+      }
       const tupleItem = /^(.+),$/.exec(trimmed);
       if (tupleItem === null) {
         return null;
@@ -2086,13 +2108,14 @@ export function translateStraightLineStatement(
     let sawKeyword = false;
     let nextIndex = index + 1;
     while (nextIndex < lines.length) {
-      const trimmed = lines[nextIndex].trim();
+      const logicalArg = collectContinuedCallArgument(lines, nextIndex);
+      const trimmed = logicalArg.text;
       if (trimmed === ')') {
         const callee = translateExpression(multilineKeywordCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
         if (keywordParts.length === 0) {
           return {
             statements: [`${translatePositionalCallExpression(multilineKeywordCall[1], positionalParts, nameMap, arrayNames, validatedTypeAliases, mapNames)};`],
-            nextIndex: nextIndex + 1,
+            nextIndex: logicalArg.nextIndex,
           };
         }
         if (positionalParts.length === 0) {
@@ -2102,7 +2125,7 @@ export function translateStraightLineStatement(
               ...keywordParts.map((part) => `  ${part},`),
               '});',
             ],
-            nextIndex: nextIndex + 1,
+            nextIndex: logicalArg.nextIndex,
           };
         }
         return {
@@ -2112,7 +2135,7 @@ export function translateStraightLineStatement(
             `  { ${keywordParts.join(', ')} },`,
             ');',
           ],
-          nextIndex: nextIndex + 1,
+          nextIndex: logicalArg.nextIndex,
         };
       }
 
@@ -2259,7 +2282,7 @@ export function translateStraightLineStatement(
         }
         keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${translateCallArgumentExpression(keywordArg[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}`);
       }
-      nextIndex += 1;
+      nextIndex = logicalArg.nextIndex;
     }
     return null;
   }
@@ -3575,9 +3598,10 @@ function parseMultilineCallParts(
   let sawKeyword = false;
   let nextIndex = startIndex;
   while (nextIndex < lines.length) {
-    const trimmed = lines[nextIndex].trim();
+    const logicalArg = collectContinuedCallArgument(lines, nextIndex);
+    const trimmed = logicalArg.text;
     if (trimmed === ')' || trimmed === '),') {
-      return { positionalParts, keywordParts, keywordArgParts, nextIndex: nextIndex + 1 };
+      return { positionalParts, keywordParts, keywordArgParts, nextIndex: logicalArg.nextIndex };
     }
 
     const arg = trimmed.replace(/,$/, '');
@@ -3831,10 +3855,42 @@ function parseMultilineCallParts(
       }
     }
     if (!consumedNestedCall) {
-      nextIndex += 1;
+      nextIndex = logicalArg.nextIndex;
     }
   }
   return null;
+}
+
+function collectContinuedCallArgument(lines: string[], startIndex: number): { text: string; nextIndex: number } {
+  const parts: string[] = [];
+  let nextIndex = startIndex;
+  while (nextIndex < lines.length) {
+    const trimmed = lines[nextIndex].trim();
+    parts.push(trimmed);
+    nextIndex += 1;
+    if (trimmed === ')' || trimmed === '),' || trimmed.endsWith(',')) {
+      break;
+    }
+
+    let lookaheadIndex = nextIndex;
+    while (lookaheadIndex < lines.length && (lines[lookaheadIndex] ?? '').trim() === '') {
+      lookaheadIndex += 1;
+    }
+    const nextTrimmed = (lines[lookaheadIndex] ?? '').trim();
+    if (nextTrimmed === '' || nextTrimmed === ')' || nextTrimmed === '),') {
+      break;
+    }
+    if (!callArgumentLineContinues(trimmed, nextTrimmed)) {
+      break;
+    }
+    nextIndex = lookaheadIndex;
+  }
+  return { text: parts.join(' ').replace(/\s+/g, ' '), nextIndex };
+}
+
+function callArgumentLineContinues(currentLine: string, nextLine: string): boolean {
+  return /^[*/%&|^]|^\+(?!\+)|^-(?!-)|^(?:and|or|if|else)\b/.test(nextLine)
+    || /(?:[+\-*/%&|^]|\band|\bor)$/.test(currentLine);
 }
 
 function collectMultilineSubscriptExpression(
@@ -3987,6 +4043,43 @@ function translateStraightLineAssignment(
     };
   }
 
+  const tupleTargets = operator === '=' ? splitTopLevelComma(pythonLeft) : [];
+  const hasLocalTupleTarget = tupleTargets.some((target) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(target.trim()) && target.trim() !== '_');
+  const hasNonLocalTupleTarget = tupleTargets.some((target) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(target.trim()));
+  if (tupleTargets.length > 1 && hasLocalTupleTarget && hasNonLocalTupleTarget) {
+    const markerNames = tupleTargets.map((target) => (/^[A-Za-z_][A-Za-z0-9_]*$/.test(target.trim()) ? target.trim() : '_'));
+    const bindings: string[] = [];
+    const postAssignments: string[] = [];
+    for (const [targetIndex, rawTarget] of tupleTargets.entries()) {
+      const target = rawTarget.trim();
+      if (target === '_') {
+        bindings.push('');
+        continue;
+      }
+      const localTarget = /^([A-Za-z_][A-Za-z0-9_]*)$/.exec(target);
+      if (localTarget !== null && !declaredNames.has(localTarget[1])) {
+        const tsName = tsExportNameForPythonName(localTarget[1]);
+        bindings.push(tsName);
+        declaredNames.add(localTarget[1]);
+        continue;
+      }
+      const binding = tupleAssignmentBindingName(target, targetIndex);
+      bindings.push(binding);
+      postAssignments.push(`${translateExpression(target, nameMap, arrayNames, validatedTypeAliases, mapNames)} = ${binding};`);
+      if (localTarget !== null) {
+        declaredNames.add(localTarget[1]);
+      }
+    }
+    applyTupleAssignmentReturnMarkers(markerNames, assignedRight, nameMap, arrayNames, mapNames);
+    return {
+      statements: [
+        `const [${bindings.join(', ')}] = ${assignedRight};`,
+        ...postAssignments,
+      ],
+      nextIndex,
+    };
+  }
+
   const tupleAssignment = /^([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+)$/.exec(pythonLeft);
   if (operator === '=' && tupleAssignment !== null) {
     const names = tupleAssignment[1].split(', ');
@@ -4040,6 +4133,20 @@ function translateStraightLineAssignment(
     statements: [`${translateExpression(pythonLeft, nameMap, arrayNames, validatedTypeAliases, mapNames)} ${operator} ${assignedRight};`],
     nextIndex,
   };
+}
+
+function tupleAssignmentBindingName(target: string, targetIndex: number): string {
+  const words = target
+    .split(/[^A-Za-z0-9_]+/)
+    .map((part) => part.trim())
+    .filter((part) => part !== '');
+  if (words.length === 0) {
+    return `_tupleItem${targetIndex}`;
+  }
+  return `_${words
+    .map((word) => tsExportNameForPythonName(word))
+    .map((word, wordIndex) => (wordIndex === 0 ? word : `${word.slice(0, 1).toUpperCase()}${word.slice(1)}`))
+    .join('')}`;
 }
 
 function nullableLocalDeclarationType(

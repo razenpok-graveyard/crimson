@@ -296,6 +296,10 @@ export function translateCallArgumentExpression(
   if (trimmed.startsWith('*')) {
     return `...${translateExpression(trimmed.slice(1), nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
   }
+  const generatorArray = generatorExpressionToArray(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (generatorArray !== null) {
+    return generatorArray;
+  }
   return translateBoundMethodReference(pythonExpression, nameMap, arrayNames, validatedTypeAliases)
     ?? translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
 }
@@ -2843,15 +2847,24 @@ function findTopLevelToken(value: string, token: string, startIndex = 0): number
 
 function parseSimpleGeneratorExpression(pythonExpression: string): { expression: string; itemName: string; iterable: string; condition: string | null } | null {
   const trimmed = stripBalancedOuterParens(pythonExpression.trim());
-  const generator = /^(.+?)(?:,)? for ([A-Za-z_][A-Za-z0-9_]*) in (.+?)(?: if (.+))?$/.exec(trimmed);
-  if (generator === null) {
+  const forIndex = findTopLevelToken(trimmed, ' for ');
+  if (forIndex === null) {
+    return null;
+  }
+  const expression = trimmed.slice(0, forIndex).replace(/,$/, '').trim();
+  const rest = trimmed.slice(forIndex + ' for '.length).trim();
+  const ifIndex = findTopLevelToken(rest, ' if ');
+  const forClause = ifIndex === null ? rest : rest.slice(0, ifIndex).trim();
+  const condition = ifIndex === null ? null : rest.slice(ifIndex + ' if '.length).trim();
+  const generator = /^([A-Za-z_][A-Za-z0-9_]*) in (.+)$/.exec(forClause);
+  if (expression === '' || generator === null || condition === '') {
     return null;
   }
   return {
-    expression: generator[1],
-    itemName: generator[2],
-    iterable: generator[3],
-    condition: generator[4] ?? null,
+    expression,
+    itemName: generator[1],
+    iterable: generator[2],
+    condition,
   };
 }
 
