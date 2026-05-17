@@ -855,6 +855,14 @@ function inferPlainClassFieldType(
         .filter((part) => part !== 'null' && part !== 'undefined')
         .join(' | ');
   }
+  const trailingNoneConditional = /^(.+?) if .+ else None$/.exec(valueText.trim());
+  if (trailingNoneConditional !== null) {
+    return nullablePlainClassFieldType(trailingNoneConditional[1], fieldTypes, nameMap);
+  }
+  const leadingNoneConditional = /^None if .+ else (.+)$/.exec(valueText.trim());
+  if (leadingNoneConditional !== null) {
+    return nullablePlainClassFieldType(leadingNoneConditional[1], fieldTypes, nameMap);
+  }
   const maskedNumber = /^([A-Za-z_][A-Za-z0-9_]*) & 0x[0-9A-Fa-f]+$/.exec(valueText.trim());
   if (maskedNumber !== null) {
     const directType = fieldTypes.get(tsExportNameForPythonName(maskedNumber[1]));
@@ -870,6 +878,14 @@ function inferPlainClassFieldType(
   }
   if (/^(?:max|min)\(/.test(valueText.trim())) {
     return 'number';
+  }
+  const sortedCall = /^sorted\((.+)\)$/.exec(valueText.trim());
+  if (sortedCall !== null) {
+    return `${inferPlainIterableElementType(sortedCall[1])}[]`;
+  }
+  const listCall = /^list\((.+)\)$/.exec(valueText.trim());
+  if (listCall !== null) {
+    return `${inferPlainIterableElementType(listCall[1])}[]`;
   }
   const dottedField = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(valueText.trim());
   if (dottedField !== null) {
@@ -913,6 +929,29 @@ function inferPlainClassFieldType(
     return 'any';
   }
   return literalType === 'any' ? null : literalType;
+}
+
+function inferPlainIterableElementType(valueText: string): string {
+  const trimmed = valueText.trim();
+  const comprehension = /^[{[](.+?) for [A-Za-z_][A-Za-z0-9_]* in .+[}\]]$/.exec(trimmed);
+  if (comprehension !== null) {
+    const itemType = inferPythonExpressionType(comprehension[1]);
+    return itemType === 'any' ? 'any' : itemType;
+  }
+  const expressionType = inferPythonExpressionType(trimmed);
+  return expressionType.endsWith('[]') ? expressionType.slice(0, -2) : 'any';
+}
+
+function nullablePlainClassFieldType(
+  valueText: string,
+  fieldTypes: ReadonlyMap<string, string>,
+  nameMap: ReadonlyMap<string, string>,
+): string {
+  const branchType = inferPlainClassFieldType(valueText, fieldTypes, nameMap);
+  if (branchType === null || branchType === 'any' || branchType.includes(' | null')) {
+    return branchType ?? 'any';
+  }
+  return `${branchType} | null`;
 }
 
 function translatedFunctionCallee(functionName: string, nameMap: ReadonlyMap<string, string>): string {

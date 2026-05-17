@@ -222,14 +222,15 @@ function finalVectorMethodCall(tsExpression: string): boolean {
     'div_components',
   ]);
   const methodPattern = /\.([A-Za-z_$][A-Za-z0-9_$]*)\(/g;
-  let lastMatch: RegExpExecArray | null = null;
   let match: RegExpExecArray | null;
   while ((match = methodPattern.exec(tsExpression)) !== null) {
-    lastMatch = match;
+    if (!vectorMethods.has(match[1])) {
+      continue;
+    }
+    const openIndex = match.index + match[0].length - 1;
+    if (matchingCloseParen(tsExpression, openIndex) === tsExpression.length - 1) {
+      return true;
+    }
   }
-  if (lastMatch === null || !vectorMethods.has(lastMatch[1])) {
-    return false;
-  }
-  const openIndex = lastMatch.index + lastMatch[0].length - 1;
-  return matchingCloseParen(tsExpression, openIndex) === tsExpression.length - 1;
+  return false;
 }

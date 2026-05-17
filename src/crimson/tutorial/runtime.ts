@@ -91,7 +91,7 @@ export function tutorialPostStep(ctx: any): void {
   }
 
   for (const call of actions.spawnBonuses) {
-    const spawned = state.bonusPool.spawnAt({ pos: call.pos, bonusId: call.bonusId, durationOverride: int(call.amount), state: state, worldWidth: ctx.worldSize, worldHeight: ctx.worldSize });
+    const spawned = state.bonusPool.spawnAt(call.pos, call.bonusId, int(call.amount), { state: state, worldWidth: ctx.worldSize, worldHeight: ctx.worldSize });
     if (spawned !== null) {
       state.effects.spawnBurst({
         pos: spawned.pos,

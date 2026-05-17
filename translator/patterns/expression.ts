@@ -192,7 +192,7 @@ export function tsFStringTemplateContent(
       continue;
     }
     if (char === '{') {
-      const closeIndex = content.indexOf('}', index + 1);
+      const closeIndex = findFStringFieldClose(content, index);
       if (closeIndex !== -1) {
         const expression = content.slice(index + 1, closeIndex).trim();
         const formatSeparator = expression.indexOf(':');
@@ -228,7 +228,15 @@ export function tsFStringTemplateContent(
             const fixed = `${tsPropertyAccessBase(translatedExpression)}.toFixed(${digits})`;
             translated += width === null ? `\${${fixed}}` : `\${${fixed}.padStart(${width}, ' ')}`;
           } else {
-            translated += `\${${translatedExpression}}`;
+            const dynamicFixedFloat = /^(\d+)?\.\{(.+)\}f$/.exec(format ?? '');
+            if (dynamicFixedFloat !== null) {
+              const width = dynamicFixedFloat[1] ?? null;
+              const digits = translateExpression(dynamicFixedFloat[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+              const fixed = `${tsPropertyAccessBase(translatedExpression)}.toFixed(${digits})`;
+              translated += width === null ? `\${${fixed}}` : `\${${fixed}.padStart(${width}, ' ')}`;
+            } else {
+              translated += `\${${translatedExpression}}`;
+            }
           }
         }
         index = closeIndex;
@@ -250,6 +258,36 @@ export function tsFStringTemplateContent(
     translated += char;
   }
   return translated;
+}
+
+function findFStringFieldClose(content: string, openIndex: number): number {
+  let nestedBraceDepth = 0;
+  let quote: string | null = null;
+  for (let index = openIndex + 1; index < content.length; index += 1) {
+    const char = content[index];
+    if (quote !== null) {
+      if (char === quote && content[index - 1] !== '\\') {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '{') {
+      nestedBraceDepth += 1;
+      continue;
+    }
+    if (char !== '}') {
+      continue;
+    }
+    if (nestedBraceDepth === 0) {
+      return index;
+    }
+    nestedBraceDepth -= 1;
+  }
+  return -1;
 }
 
 function translateRaylibColorArg(pythonExpression: string, nameMap: Map<string, string>, arrayNames: Set<string>, validatedTypeAliases: ReadonlySet<string>): string {
@@ -963,6 +1001,19 @@ export function translateExpression(
       const chunks = generatorArray ?? translateExpression(bytesJoinCall[3], nameMap, arrayNames, validatedTypeAliases, mapNames);
       return `concatBytes(${chunks})`;
     }
+  }
+
+  const enumCastNameLower = /^([A-Z][A-Za-z0-9_]*(?:Id|Type|Mode|Flags))\((.+)\)\.name\.lower\(\)$/.exec(trimmed);
+  if (enumCastNameLower !== null) {
+    const enumName = tsExportNameForPythonName(enumCastNameLower[1]);
+    const value = translateExpression(enumCastNameLower[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return `String(${enumName}[${value}]).toLowerCase()`;
+  }
+  const enumCastName = /^([A-Z][A-Za-z0-9_]*(?:Id|Type|Mode|Flags))\((.+)\)\.name$/.exec(trimmed);
+  if (enumCastName !== null) {
+    const enumName = tsExportNameForPythonName(enumCastName[1]);
+    const value = translateExpression(enumCastName[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return `${enumName}[${value}]`;
   }
 
   const stringReplaceCall = /^(.+)\.replace\((.*)\)$/.exec(trimmed);
@@ -1706,6 +1757,9 @@ export function translateExpression(
   if (floatCall !== null && floatCall.rest === '') {
     const argText = singleCallArgumentText(floatCall.argsText);
     const translated = translateExpression(argText, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (arrayNames.has(booleanNameMarker(argText)) || arrayNames.has(booleanNameMarker(translated)) || translatedExpressionLooksBooleanForInt(translated)) {
+      return `(${translated} ? 1 : 0)`;
+    }
     return arrayNames.has(stringNameMarker(argText)) || arrayNames.has(stringNameMarker(translated))
       ? `pythonFloat(${translated})`
       : translated;
@@ -3429,6 +3483,7 @@ function translatedExpressionLooksBooleanForInt(tsExpression: string): boolean {
     || /(?:===|!==|<=|>=|<|>|\binstanceof\b)/.test(trimmed)
     || /^typeof\b/.test(trimmed)
     || /^(?:Array\.isArray|Number\.is(?:Finite|Integer|NaN))\(/.test(trimmed)
+    || /^InputState\.(?:is|was)[A-Za-z0-9_$]*\(/.test(trimmed)
     || /\.(?:has|includes|startsWith|endsWith)\(/.test(trimmed);
 }
 

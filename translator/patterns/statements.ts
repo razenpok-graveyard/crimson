@@ -2330,6 +2330,32 @@ export function translateStraightLineStatement(
         nextIndex: callParts.nextIndex,
       };
     }
+    const signatureCallParts = parseMultilineCallParts(
+      lines,
+      index + 1,
+      nameMap,
+      arrayNames,
+      validatedTypeAliases,
+      mapNames,
+    );
+    if (signatureCallParts !== null) {
+      const callee = translateExpression(multilineKeywordCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const signatureCall = translateMultilineCallWithLocalSignature(
+        multilineKeywordCall[1],
+        callee,
+        signatureCallParts,
+        nameMap,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+      );
+      if (signatureCall !== null) {
+        return {
+          statements: [`${signatureCall};`],
+          nextIndex: signatureCallParts.nextIndex,
+        };
+      }
+    }
 
     const positionalParts: string[] = [];
     const keywordParts: string[] = [];
@@ -2573,6 +2599,13 @@ export function translateStraightLineStatement(
     return {
       statements: [`super(${args.join(', ')});`],
       nextIndex: callParts.nextIndex,
+    };
+  }
+
+  if (/^(?:r[dl]|wgl)\.(?:hide_cursor|show_cursor|hideCursor|showCursor)\(\)$/.test(statement)) {
+    return {
+      statements: [],
+      nextIndex: index + 1,
     };
   }
 
@@ -3724,6 +3757,9 @@ function translateMultilineCallWithLocalSignature(
     args.push(keywordPart.expression);
     consumedKeywords.add(keywordPart.pythonName);
   }
+  if (consumedKeywords.size === 0) {
+    return null;
+  }
 
   const keywordParts = callParts.keywordArgParts
     .filter((part) => !consumedKeywords.has(part.pythonName))
@@ -3750,12 +3786,23 @@ function parseKnownFunctionCallSignature(
   }
   const receiver = translateExpression(dotted[1], nameMap, arrayNames, validatedTypeAliases);
   const receiverType = nameMap.get(receiverTypeNameMarker(dotted[1])) ?? nameMap.get(receiverTypeNameMarker(receiver));
-  if (receiverType === undefined) {
-    return null;
+  const methodName = tsAttributeNameForPythonName(dotted[2]);
+  if (receiverType !== undefined) {
+    const receiverSignature = parseFunctionCallSignatureText(
+      nameMap.get(instanceMethodSignatureMarker(receiverType, methodName)),
+    );
+    if (receiverSignature !== null) {
+      return receiverSignature;
+    }
   }
-  return parseFunctionCallSignatureText(
-    nameMap.get(instanceMethodSignatureMarker(receiverType, tsAttributeNameForPythonName(dotted[2]))),
-  );
+  return knownMethodCallSignature(methodName);
+}
+
+function knownMethodCallSignature(methodName: string): FunctionCallSignature | null {
+  if (methodName === 'spawnAt') {
+    return { positional: ['pos', 'bonusId', 'durationOverride'] };
+  }
+  return null;
 }
 
 function parseFunctionCallSignatureText(signatureText: string | undefined): FunctionCallSignature | null {
@@ -5466,7 +5513,7 @@ function maybeAwaitAsyncCall(tsExpression: string, nameMap: ReadonlyMap<string, 
       }
     }
   }
-  return /^(?:load[A-Z][A-Za-z0-9_]*|initAudioState)\(.*\)$/.test(tsExpression) ? `await ${tsExpression}` : tsExpression;
+  return /^(?:load[A-Z][A-Za-z0-9_]*|initAudioState|initViewAudio)\(.*\)$/.test(tsExpression) ? `await ${tsExpression}` : tsExpression;
 }
 
 function parseMultilineDictComprehensionExpression(
