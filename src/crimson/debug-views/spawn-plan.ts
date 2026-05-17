@@ -141,7 +141,7 @@ export class SpawnPlanView {
     if (this._templateIds.length === 0) {
       return;
     }
-    this._index = (this._index + delta) % this._templateIds.length;
+    this._index = ((this._index + delta) + this._templateIds.length) % this._templateIds.length;
     this._rebuildPlan();
   }
 

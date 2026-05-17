@@ -232,7 +232,7 @@ export class ArsenalDebugView {
       this._applyWeapon();
     }
     if (InputState.wasKeyPressed(221)) {
-      this._weaponIndex = (this._weaponIndex + 1) % Math.max(1, this._weaponIds.length);
+      this._weaponIndex = ((this._weaponIndex + 1) + Math.max(1, this._weaponIds.length)) % Math.max(1, this._weaponIds.length);
       this._applyWeapon();
     }
 

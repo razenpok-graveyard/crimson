@@ -718,6 +718,10 @@ export function translateExpression(
       return `Math.${method}(${splitTopLevelComma(mathCall.argsText).map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')})`;
     }
   }
+  const mathDegreesCall = parseCallPrefix(trimmed, 'math.degrees');
+  if (mathDegreesCall !== null && mathDegreesCall.rest === '') {
+    return `(${translateExpression(mathDegreesCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)}) * (180.0 / Math.PI)`;
+  }
 
   const chrCall = parseCallPrefix(trimmed, 'chr');
   if (chrCall !== null && chrCall.rest === '') {
@@ -2515,7 +2519,7 @@ export function translateExpression(
   if (modulo !== null) {
     const left = parenthesizeForModulo(translateExpression(stripBalancedOuterParens(modulo.left), nameMap, arrayNames, validatedTypeAliases, mapNames));
     const right = parenthesizeForModulo(translateExpression(stripBalancedOuterParens(modulo.right), nameMap, arrayNames, validatedTypeAliases, mapNames));
-    return modulo.left.includes(' - ') ? `(${left} + ${right}) % ${right}` : `${left} % ${right}`;
+    return modulo.left.includes(' - ') || modulo.left.includes(' + ') ? `(${left} + ${right}) % ${right}` : `${left} % ${right}`;
   }
 
   const floorDivision = splitTopLevelFloorDivision(trimmed);
@@ -2957,25 +2961,41 @@ function translateAggregateGeneratorCall(
       continue;
     }
     const args = splitTopLevelComma(call.argsText);
-    const generatorArg = args.find((arg) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(arg));
+    const generatorArg = args
+      .map((arg, index) => ({ arg, index }))
+      .find(({ arg }) => {
+        if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(arg)) {
+          return false;
+        }
+        const generatorText = stripBalancedOuterParens(arg.trim().replace(/^\*/, '').trim());
+        return parseSimpleGeneratorExpression(generatorText) !== null;
+      });
     if (generatorArg === undefined) {
       continue;
     }
-    const generator = parseSimpleGeneratorExpression(generatorArg);
+    const generatorText = stripBalancedOuterParens(generatorArg.arg.trim().replace(/^\*/, '').trim());
+    const generator = parseSimpleGeneratorExpression(generatorText);
     if (generator === null) {
       continue;
     }
+    const positionalArgs = args
+      .filter((arg, index) => index !== generatorArg.index && !/^[A-Za-z_][A-Za-z0-9_]*=/.test(arg))
+      .map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames));
     const itemName = tsExportNameForPythonName(generator.itemName);
     const itemNameMap = new Map(nameMap);
     itemNameMap.set(generator.itemName, itemName);
     const translatedIterable = translateExpression(generator.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames);
     const iterable = expressionIsKnownMap(translatedIterable, nameMap, mapNames) ? `${translatedIterable}.keys()` : translatedIterable;
-    const values = `Array.from(${iterable}, (${itemName}) => ${translateExpression(generator.expression, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    const filteredIterable = generator.condition === null
+      ? iterable
+      : `Array.from(${iterable}).filter((${itemName}) => ${translateExpression(generator.condition, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    const values = `Array.from(${filteredIterable}, (${itemName}) => ${translateExpression(generator.expression, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    const spreadArgs = [...positionalArgs, `...${values}`].join(', ');
     const defaultArg = args
       .map((arg) => /^default=(.+)$/.exec(arg))
       .find((match): match is RegExpExecArray => match !== null);
     if (defaultArg === undefined) {
-      return `${tsName}(...${values})`;
+      return `${tsName}(${spreadArgs})`;
     }
     const defaultValue = translateExpression(defaultArg[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
     return `(() => { const values = ${values}; return values.length === 0 ? ${defaultValue} : ${tsName}(...values); })()`;

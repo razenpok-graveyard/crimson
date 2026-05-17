@@ -210,7 +210,7 @@ export class PerkMenuController {
     }
 
     if (InputState.wasKeyPressed(40)) {
-      this._selectedIndex = (this._selectedIndex + 1) % choices.length;
+      this._selectedIndex = ((this._selectedIndex + 1) + choices.length) % choices.length;
     }
     if (InputState.wasKeyPressed(38)) {
       this._selectedIndex = ((this._selectedIndex - 1) + choices.length) % choices.length;
