@@ -491,6 +491,10 @@ function inferPredeclaredAssignmentType(
   }
   const dottedField = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(assignedExpression.trim());
   if (dottedField !== null) {
+    const dottedType = predeclaredDottedExpressionType(assignedExpression.trim(), nameMap, localTypes);
+    if (dottedType !== null) {
+      return dottedType;
+    }
     const receiver = nameMap.get(dottedField[1]) ?? tsExportNameForPythonName(dottedField[1]);
     const receiverType = nullableTypeExpressionBase(
       localTypes.get(dottedField[1])
@@ -606,6 +610,7 @@ function predeclaredMethodCallReturnType(
       ?? localTypes.get(receiver)
       ?? nameMap.get(receiverTypeNameMarker(dotted[1]))
       ?? nameMap.get(receiverTypeNameMarker(receiver))
+      ?? predeclaredDottedExpressionType(dotted[1], nameMap, localTypes)
       ?? null,
   );
   if (receiverType === undefined) {
@@ -623,6 +628,38 @@ function predeclaredMethodCallReturnType(
     return 'Rect';
   }
   return null;
+}
+
+function predeclaredDottedExpressionType(
+  expression: string,
+  nameMap: ReadonlyMap<string, string>,
+  localTypes: ReadonlyMap<string, string>,
+): string | null {
+  const parts = expression.split('.');
+  if (parts.length < 2 || parts.some((part) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(part))) {
+    return null;
+  }
+  const root = parts[0];
+  const rootName = nameMap.get(root) ?? tsExportNameForPythonName(root);
+  let receiverType = nullableTypeExpressionBase(
+    localTypes.get(root)
+      ?? localTypes.get(rootName)
+      ?? nameMap.get(receiverTypeNameMarker(root))
+      ?? nameMap.get(receiverTypeNameMarker(rootName))
+      ?? null,
+  );
+  if (receiverType === undefined) {
+    return null;
+  }
+  let fieldType: string | undefined;
+  for (const part of parts.slice(1)) {
+    fieldType = nameMap.get(classFieldTypeMarker(receiverType, tsAttributeNameForPythonName(part)));
+    receiverType = nullableTypeExpressionBase(fieldType ?? null);
+    if (receiverType === undefined) {
+      return fieldType ?? null;
+    }
+  }
+  return fieldType ?? null;
 }
 
 function vectorMethodReturnType(methodName: string): string | null {

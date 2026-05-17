@@ -442,6 +442,17 @@ export function translateStraightLineStatement(
       return null;
     }
     let nextIndex = initialBranch.nextIndex;
+    const nextBranchHeaderIndex = (startIndex: number): number => {
+      let candidate = startIndex;
+      while (
+        candidate < lines.length
+        && (lines[candidate] ?? '').trim() === ''
+        && (lines[candidate + 1] ?? '').startsWith(indent)
+      ) {
+        candidate += 1;
+      }
+      return candidate;
+    };
     const statements = [
       ...branchDeclarations,
       `if (${translatedIfCondition ?? translateConditionExpression(ifCondition ?? '', nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`,
@@ -449,7 +460,8 @@ export function translateStraightLineStatement(
       '}',
     ];
     while (nextIndex < lines.length) {
-      const nextLine = lines[nextIndex] ?? '';
+      const branchIndex = nextBranchHeaderIndex(nextIndex);
+      const nextLine = lines[branchIndex] ?? '';
       if (!lineStartsAtIndent(nextLine, indent)) {
         break;
       }
@@ -457,7 +469,7 @@ export function translateStraightLineStatement(
       if (elifStatement === null) {
         break;
       }
-      const elifBranch = translateBranch(nextIndex + 1);
+      const elifBranch = translateBranch(branchIndex + 1);
       if (elifBranch === null) {
         return null;
       }
@@ -465,8 +477,9 @@ export function translateStraightLineStatement(
       statements.push(...elifBranch.statements, '}');
       nextIndex = elifBranch.nextIndex;
     }
-    if (lineStartsAtIndent(lines[nextIndex] ?? '', indent) && (lines[nextIndex] ?? '').trim() === 'else:') {
-      const elseBranch = translateBranch(nextIndex + 1);
+    const elseIndex = nextBranchHeaderIndex(nextIndex);
+    if (lineStartsAtIndent(lines[elseIndex] ?? '', indent) && (lines[elseIndex] ?? '').trim() === 'else:') {
+      const elseBranch = translateBranch(elseIndex + 1);
       if (elseBranch === null) {
         return null;
       }
