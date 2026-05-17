@@ -23,6 +23,7 @@ import {
   receiverTypeNameMarker,
   translateExpression,
   tupleElementArrayNameMarker,
+  tupleKeyMapNameMarker,
 } from './expression.js';
 import { parseFunctionParametersText, pythonParameterNames } from './parameters.js';
 import {
@@ -36,7 +37,7 @@ function tsAttributeNameForPythonName(pythonName: string): string {
     return pythonName;
   }
   return pythonName.startsWith('_')
-    ? `_${tsExportNameForPythonName(pythonName)}`
+    ? `_${tsExportNameForPythonName(pythonName.replace(/^_+/, ''))}`
     : tsExportNameForPythonName(pythonName);
 }
 
@@ -104,6 +105,7 @@ function recordPlainClassFieldMarkers(
   typeExpression: string,
   arrayNames: Set<string>,
   mapNames: Set<string>,
+  pythonType: string | null = null,
 ): void {
   if (typeExpression.trim().endsWith('[]')) {
     arrayNames.add(`self.${pythonFieldName}`);
@@ -116,6 +118,10 @@ function recordPlainClassFieldMarkers(
   if (typeExpression.startsWith('Map<') || typeExpression.startsWith('ReadonlyMap<')) {
     mapNames.add(`self.${pythonFieldName}`);
     mapNames.add(`this.${fieldName}`);
+    if (pythonType !== null && pythonMapTypeHasTupleKey(pythonType)) {
+      mapNames.add(tupleKeyMapNameMarker(`self.${pythonFieldName}`));
+      mapNames.add(tupleKeyMapNameMarker(`this.${fieldName}`));
+    }
     if (/Map<[^,]+, [^>]*\[]>/.test(typeExpression) || /ReadonlyMap<[^,]+, readonly [^>]*\[]>/.test(typeExpression)) {
       mapNames.add(arrayValueMapNameMarker(`self.${pythonFieldName}`));
       mapNames.add(arrayValueMapNameMarker(`this.${fieldName}`));
@@ -247,8 +253,9 @@ export function parsePlainClass(
           return null;
         }
         if (multilineConstructorCall !== null) {
-          recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, fieldArrayNames, fieldMapNames);
-          recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, constructorArrayNames, constructorMapNames);
+          const pythonType = annotatedFieldAssignment === null ? null : assignment[2];
+          recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, fieldArrayNames, fieldMapNames, pythonType);
+          recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, constructorArrayNames, constructorMapNames, pythonType);
           if (!plainClassBaseDeclaresField(extendsName, fieldName, moduleNameMap)) {
             fieldMap.set(fieldName, {
               name: fieldName,
@@ -281,8 +288,9 @@ export function parsePlainClass(
         const value = valueText.trim() === '{}' && (typeExpression.startsWith('Map<') || typeExpression.startsWith('ReadonlyMap<'))
           ? 'new Map()'
           : translateExpression(valueText, constructorNameMap, constructorArrayNames, new Set(), constructorMapNames);
-        recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, fieldArrayNames, fieldMapNames);
-        recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, constructorArrayNames, constructorMapNames);
+        const pythonType = annotatedFieldAssignment === null ? null : assignment[2];
+        recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, fieldArrayNames, fieldMapNames, pythonType);
+        recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, constructorArrayNames, constructorMapNames, pythonType);
         if (!plainClassBaseDeclaresField(extendsName, fieldName, moduleNameMap)) {
           fieldMap.set(fieldName, {
             name: fieldName,
@@ -320,6 +328,17 @@ export function parsePlainClass(
   const methods: SimpleModuleFunction[] = [];
   const staticMethodNames = new Set<string>();
   const classNameMap = new Map(moduleNameMap);
+  collectPlainClassMethodAssignedFields(
+    lines,
+    bodyIndex,
+    fieldTypes,
+    moduleNameMap,
+    extendsName,
+    fieldMap,
+    fieldNameMap,
+    fieldArrayNames,
+    fieldMapNames,
+  );
   classNameMap.set(receiverTypeNameMarker('self'), className);
   classNameMap.set(receiverTypeNameMarker('this'), className);
   if (extendsName !== undefined) {
@@ -476,6 +495,69 @@ export function parsePlainClass(
     },
     nextIndex,
   };
+}
+
+function collectPlainClassMethodAssignedFields(
+  lines: string[],
+  startIndex: number,
+  fieldTypes: ReadonlyMap<string, string>,
+  moduleNameMap: ReadonlyMap<string, string>,
+  extendsName: string | undefined,
+  fieldMap: Map<string, PlainClassDefinition['fields'][number]>,
+  fieldNameMap: Map<string, string>,
+  fieldArrayNames: Set<string>,
+  fieldMapNames: Set<string>,
+): void {
+  let nextIndex = startIndex;
+  while (nextIndex < lines.length) {
+    const trimmed = lines[nextIndex].trim();
+    if (trimmed === '' || trimmed.startsWith('#')) {
+      nextIndex += 1;
+      continue;
+    }
+    if (!lines[nextIndex].startsWith('    ')) {
+      break;
+    }
+    const decorator = trimmed === '@property' || trimmed === '@staticmethod' || trimmed === '@classmethod'
+      ? trimmed
+      : /^@[A-Za-z_][A-Za-z0-9_]*\.setter$/.test(trimmed) ? trimmed : null;
+    const headerIndex = decorator === null ? nextIndex : nextIndex + 1;
+    const header = parseIndentedFunctionHeader(lines, headerIndex, '    ');
+    if (header === null) {
+      nextIndex += 1;
+      continue;
+    }
+    nextIndex = header.nextIndex;
+    while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, '        ')) {
+      const statement = lines[nextIndex].slice('        '.length);
+      const annotatedFieldAssignment = /^self\.([A-Za-z_][A-Za-z0-9_]*): (.+?) = (.+)$/.exec(statement);
+      const fieldAssignment = /^self\.([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(statement);
+      const assignment = annotatedFieldAssignment ?? fieldAssignment;
+      if (assignment !== null) {
+        const pythonFieldName = assignment[1];
+        const fieldName = tsAttributeNameForPythonName(pythonFieldName);
+        const valueText = annotatedFieldAssignment === null ? assignment[2] : assignment[3];
+        const pythonType = annotatedFieldAssignment === null ? null : assignment[2];
+        const typeExpression = pythonType === null
+          ? inferPlainClassFieldType(valueText, fieldTypes, moduleNameMap)
+          : tsTypeExpression(pythonType);
+        fieldNameMap.set(pythonFieldName, fieldName);
+        if (typeExpression !== null) {
+          recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, fieldArrayNames, fieldMapNames, pythonType);
+          if (!plainClassBaseDeclaresField(extendsName, fieldName, moduleNameMap) && !fieldMap.has(fieldName)) {
+            fieldMap.set(fieldName, {
+              name: fieldName,
+              typeExpression,
+              readonly: false,
+              private: plainClassFieldIsPrivate(pythonFieldName),
+              definiteAssignment: true,
+            });
+          }
+        }
+      }
+      nextIndex += 1;
+    }
+  }
 }
 
 function plainClassFieldIsPrivate(pythonName: string): boolean {
@@ -810,6 +892,14 @@ function inferConstructorCallTypeExpression(
     return 'string';
   }
   return translateExpression(pythonCallee, nameMap, arrayNames, new Set(), mapNames);
+}
+
+function pythonMapTypeHasTupleKey(pythonType: string): boolean {
+  const mapType = /^(?:dict|OrderedDict|defaultdict)\[(.+)\]$/.exec(pythonType.trim());
+  if (mapType === null) {
+    return false;
+  }
+  return splitTopLevelComma(mapType[1])[0]?.trim().startsWith('tuple[') === true;
 }
 
 function parsePlainClassMethod(

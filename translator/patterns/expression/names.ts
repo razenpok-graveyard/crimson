@@ -97,7 +97,7 @@ export function tsMemberNameForPythonName(pythonName: string): string {
     return pythonName;
   }
   return pythonName.startsWith('_')
-    ? `_${tsExportNameForPythonName(pythonName)}`
+    ? `_${tsExportNameForPythonName(pythonName.replace(/^_+/, ''))}`
     : tsExportNameForPythonName(pythonName);
 }
 

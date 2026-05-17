@@ -115,7 +115,7 @@ function importedInstanceMethodSignatures(classSource: string): { methodName: st
 }
 
 function importedClassFieldTypes(classSource: string): { name: string; typeExpression: string }[] {
-  return [
+  const fields: { name: string; typeExpression: string }[] = [
     ...[...classSource.matchAll(/^\s+(?:(?:public|private|protected)\s+)?(?:readonly\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\??:\s*([^;=\n]+)\s*(?:[;=])/gm)]
       .map((match) => ({
         name: match[1],
@@ -127,6 +127,33 @@ function importedClassFieldTypes(classSource: string): { name: string; typeExpre
         typeExpression: match[2].trim(),
       })),
   ];
+  const seen = new Set(fields.map((field) => field.name));
+  for (const match of classSource.matchAll(/^\s+(?:(?:public|private|protected)\s+)?(?:readonly\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*([^;\n]+)\s*;/gm)) {
+    const typeExpression = inferredClassFieldInitializerType(match[2]);
+    if (typeExpression === null || seen.has(match[1])) {
+      continue;
+    }
+    fields.push({
+      name: match[1],
+      typeExpression,
+    });
+    seen.add(match[1]);
+  }
+  return fields;
+}
+
+function inferredClassFieldInitializerType(value: string): string | null {
+  const trimmed = value.trim();
+  if (trimmed === 'true' || trimmed === 'false') {
+    return 'boolean';
+  }
+  if (/^-?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(trimmed)) {
+    return 'number';
+  }
+  if (/^(?:'[^']*'|"[^"]*"|`[^`]*`)$/.test(trimmed)) {
+    return 'string';
+  }
+  return null;
 }
 
 function importedStructConstructorFields(

@@ -20,7 +20,8 @@ export function renderPlainClasses(lines: string[], classes: StraightLineModule[
     const abstractPrefix = classIsAbstract ? 'abstract ' : '';
     lines.push(`export ${abstractPrefix}class ${plainClass.name}${plainClass.extendsName === undefined ? '' : ` extends ${plainClass.extendsName}`} {`);
     for (const field of plainClass.fields) {
-      const prefix = `  ${field.private ? 'private ' : ''}${field.readonly ? 'readonly ' : ''}${field.name}: ${field.typeExpression}`;
+      const assignmentAssertion = field.defaultValueLines === undefined && field.definiteAssignment === true ? '!' : '';
+      const prefix = `  ${field.private ? 'private ' : ''}${field.readonly ? 'readonly ' : ''}${field.name}${assignmentAssertion}: ${field.typeExpression}`;
       if (field.defaultValueLines === undefined) {
         lines.push(`${prefix};`);
       } else if (field.defaultValueLines.length === 1) {

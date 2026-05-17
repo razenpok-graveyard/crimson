@@ -18,6 +18,10 @@ export function colorNameMarker(name: string): string {
   return `__color__:${name}`;
 }
 
+export function booleanNameMarker(name: string): string {
+  return `__boolean__:${name}`;
+}
+
 export function rectangleNameMarker(name: string): string {
   return `__rectangle__:${name}`;
 }

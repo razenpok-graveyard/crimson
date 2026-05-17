@@ -25,6 +25,7 @@ import {
   translatePositionalCallExpression,
   arrayElementTypeMarker,
   arrayValueMapNameMarker,
+  booleanNameMarker,
   classFieldTypeMarker,
   colorNameMarker,
   dateNameMarker,
@@ -1841,6 +1842,41 @@ export function translateStraightLineStatement(
     }, trailingComment);
   }
 
+  const annotatedAttributeAssignment = /^((?:self|this)\.[A-Za-z_][A-Za-z0-9_]*): (.+?) = (.+)$/.exec(statement);
+  if (annotatedAttributeAssignment !== null) {
+    const pythonLeft = annotatedAttributeAssignment[1];
+    const annotation = annotatedAttributeAssignment[2].trim();
+    const tsLeft = translateExpression(pythonLeft, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const typeExpression = tsTypeExpression(annotation);
+    let assignedRight = maybeAwaitAsyncCall(
+      translateExpression(annotatedAttributeAssignment[3], nameMap, arrayNames, validatedTypeAliases, mapNames),
+      nameMap,
+    );
+    if (typeExpression.startsWith('Map<')) {
+      addMutableName(mapNames, pythonLeft);
+      addMutableName(mapNames, tsLeft);
+      if (pythonMapTypeHasTupleKey(annotation)) {
+        addMutableName(mapNames, tupleKeyMapNameMarker(pythonLeft));
+        addMutableName(mapNames, tupleKeyMapNameMarker(tsLeft));
+      }
+      if (pythonMapValueIsList(annotation)) {
+        addMutableName(mapNames, arrayValueMapNameMarker(pythonLeft));
+        addMutableName(mapNames, arrayValueMapNameMarker(tsLeft));
+      }
+      if (pythonMapValueIsMap(annotation)) {
+        addMutableName(mapNames, mapValueMapNameMarker(pythonLeft));
+        addMutableName(mapNames, mapValueMapNameMarker(tsLeft));
+      }
+      if (assignedRight === '{}') {
+        assignedRight = 'new Map()';
+      }
+    }
+    return appendTrailingCommentToResult({
+      statements: [`${tsLeft} = ${assignedRight};`],
+      nextIndex: index + 1,
+    }, trailingComment);
+  }
+
   const annotatedAssignment = /^([A-Za-z_][A-Za-z0-9_]*): (.+?) = (.+)$/.exec(statement);
   if (annotatedAssignment !== null) {
     const tsName = tsExportNameForPythonName(annotatedAssignment[1]);
@@ -1886,6 +1922,10 @@ export function translateStraightLineStatement(
     if (typeExpression === 'Date') {
       arrayNames.add(dateNameMarker(annotatedAssignment[1]));
       arrayNames.add(dateNameMarker(tsName));
+    }
+    if (typeExpression === 'boolean') {
+      arrayNames.add(booleanNameMarker(annotatedAssignment[1]));
+      arrayNames.add(booleanNameMarker(tsName));
     }
     if (typeExpression.startsWith('Map<')) {
       addMutableName(mapNames, annotatedAssignment[1]);
@@ -4639,6 +4679,7 @@ function recordLocalAssignmentMarkers(
   }
   for (const marker of [
     colorNameMarker,
+    booleanNameMarker,
     dateNameMarker,
     nullableNameMarker,
     numberNameMarker,
@@ -4758,6 +4799,10 @@ function recordLocalAssignmentMarkers(
     arrayNames.add(numberNameMarker(pythonName));
     arrayNames.add(numberNameMarker(tsName));
   }
+  if (translatedExpressionLooksBoolean(assignedRight)) {
+    arrayNames.add(booleanNameMarker(pythonName));
+    arrayNames.add(booleanNameMarker(tsName));
+  }
   if (translatedExpressionLooksVector(assignedRight)) {
     arrayNames.add(vectorNameMarker(pythonName));
     arrayNames.add(vectorNameMarker(tsName));
@@ -4792,6 +4837,28 @@ function translatedExpressionLooksNumber(tsExpression: string): boolean {
     return true;
   }
   return false;
+}
+
+function translatedExpressionLooksBoolean(tsExpression: string): boolean {
+  const trimmed = tsExpression.trim();
+  if (trimmed.includes(' ? ')
+    || trimmed.includes('=>')
+    || trimmed.includes(' || ')
+    || trimmed.includes(' + ')
+    || trimmed.includes(' - ')
+    || trimmed.includes(' * ')
+    || trimmed.includes(' / ')
+    || trimmed.includes(' % ')
+    || trimmed.includes(',')) {
+    return false;
+  }
+  return trimmed === 'true'
+    || trimmed === 'false'
+    || /^!/.test(trimmed)
+    || /(?:===|!==|<=|>=|<|>|&&|\|\||\binstanceof\b)/.test(trimmed)
+    || /^typeof\b/.test(trimmed)
+    || /^(?:Array\.isArray|Number\.is(?:Finite|Integer|NaN))\(/.test(trimmed)
+    || /\.(?:has|includes|startsWith|endsWith)\(/.test(trimmed);
 }
 
 function translateMapPopAssignment(

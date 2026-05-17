@@ -53,7 +53,7 @@ export class SessionSink {
 }
 
 export class RenderTelemetrySession {
-  private __INTERCEPT_APIS: readonly [string, string][] = [
+  private _INTERCEPT_APIS: readonly [string, string][] = [
     ['draw_texture_pro', 'draw_texture_pro'],
     ['draw_circle', 'draw_circle'],
     ['draw_circle_lines', 'draw_circle_lines'],
@@ -105,7 +105,7 @@ export class RenderTelemetrySession {
     this._active = true;
     profileHooks.clearPassStack();
     this._prevSink = profileHooks.setActiveSink(this._sink);
-    for (let [fnName, apiName] of this.__INTERCEPT_APIS) {
+    for (let [fnName, apiName] of this._INTERCEPT_APIS) {
       const original = Reflect.get((rl) as object, fnName) ?? null;
       if (original === null || !(typeof original === 'function')) {
         continue;

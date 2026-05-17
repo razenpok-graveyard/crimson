@@ -9,6 +9,7 @@ import {
   classBaseTypeMarker,
   classFieldTypeMarker,
   arrayElementTypeMarker,
+  booleanNameMarker,
   colorNameMarker,
   dateNameMarker,
   functionReturnTypeMarker,
@@ -74,6 +75,7 @@ import {
 export {
   arrayValueMapNameMarker,
   arrayElementTypeMarker,
+  booleanNameMarker,
   classBaseTypeMarker,
   classFieldTypeMarker,
   colorNameMarker,
@@ -1597,7 +1599,12 @@ export function translateExpression(
 
   const intCall = parseCallPrefix(trimmed, 'int');
   if (intCall !== null && intCall.rest === '') {
-    return `int(${translateExpression(intCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    const argText = intCall.argsText.trim();
+    const translated = translateExpression(argText, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (arrayNames.has(booleanNameMarker(argText)) || arrayNames.has(booleanNameMarker(translated)) || translatedExpressionLooksBooleanForInt(translated)) {
+      return `(${translated} ? 1 : 0)`;
+    }
+    return `int(${translated})`;
   }
   const floatCall = parseCallPrefix(trimmed, 'float');
   if (floatCall !== null && floatCall.rest === '') {
@@ -2313,7 +2320,9 @@ export function translateExpression(
 
   const modulo = splitTopLevelModulo(trimmed);
   if (modulo !== null) {
-    return `${translateExpression(stripBalancedOuterParens(modulo.left), nameMap, arrayNames, validatedTypeAliases, mapNames)} % ${translateExpression(stripBalancedOuterParens(modulo.right), nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
+    const left = parenthesizeForModulo(translateExpression(stripBalancedOuterParens(modulo.left), nameMap, arrayNames, validatedTypeAliases, mapNames));
+    const right = parenthesizeForModulo(translateExpression(stripBalancedOuterParens(modulo.right), nameMap, arrayNames, validatedTypeAliases, mapNames));
+    return modulo.left.includes(' - ') ? `(${left} + ${right}) % ${right}` : `${left} % ${right}`;
   }
 
   const additiveWithFloorDivision = /^(.+?) ([+-]) (.+ \/\/ .+)$/.exec(trimmed);
@@ -2666,6 +2675,10 @@ function parenthesizeComparisonOperand(value: string): string {
   return value.includes(' ?? ') || value.includes(' && ') || value.includes(' || ')
     ? `(${value})`
     : value;
+}
+
+function parenthesizeForModulo(value: string): string {
+  return value.includes(' ? ') || value.includes(' + ') || value.includes(' - ') ? `(${value})` : value;
 }
 
 function tsComparisonOperator(operator: string): string {
@@ -3343,6 +3356,28 @@ function expressionLooksBoolean(tsExpression: string): boolean {
     || /^(?:Array\.isArray|Number\.is(?:Finite|Integer|NaN))\(/.test(trimmed)
     || /\.(?:has|includes|startsWith|endsWith)\(/.test(trimmed)
     || /(?:^|\.)[A-Za-z_$][A-Za-z0-9_$]*(?:Ready|Connected|Started|Enabled|Available|Visible|Empty|Valid|Compatible|Allowed)\(\)$/.test(trimmed);
+}
+
+function translatedExpressionLooksBooleanForInt(tsExpression: string): boolean {
+  const trimmed = tsExpression.trim();
+  if (trimmed.includes(' ? ')
+    || trimmed.includes('=>')
+    || trimmed.includes(' || ')
+    || trimmed.includes(' + ')
+    || trimmed.includes(' - ')
+    || trimmed.includes(' * ')
+    || trimmed.includes(' / ')
+    || trimmed.includes(' % ')
+    || trimmed.includes(',')) {
+    return false;
+  }
+  return trimmed === 'true'
+    || trimmed === 'false'
+    || /^!/.test(trimmed)
+    || /(?:===|!==|<=|>=|<|>|\binstanceof\b)/.test(trimmed)
+    || /^typeof\b/.test(trimmed)
+    || /^(?:Array\.isArray|Number\.is(?:Finite|Integer|NaN))\(/.test(trimmed)
+    || /\.(?:has|includes|startsWith|endsWith)\(/.test(trimmed);
 }
 
 function expressionLooksSimpleValueReference(tsExpression: string): boolean {

@@ -220,6 +220,7 @@ export interface PlainClassFieldDefinition {
   typeExpression: string;
   readonly: boolean;
   private: boolean;
+  definiteAssignment?: boolean;
   defaultValueLines?: string[];
 }
 

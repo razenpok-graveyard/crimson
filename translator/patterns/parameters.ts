@@ -7,6 +7,7 @@ import { tsExportNameForPythonName, tsTypeExpression } from '../naming.js';
 import { splitTopLevelComma } from './common.js';
 import {
   colorNameMarker,
+  booleanNameMarker,
   dateNameMarker,
   numberNameMarker,
   objectNameMarker,
@@ -84,6 +85,10 @@ export function parseFunctionParameterText(
     if (typeExpression === 'number') {
       arrayNames.add(numberNameMarker(typedParameter[1]));
       arrayNames.add(numberNameMarker(parameterName));
+    }
+    if (typeExpression === 'boolean') {
+      arrayNames.add(booleanNameMarker(typedParameter[1]));
+      arrayNames.add(booleanNameMarker(parameterName));
     }
     if (typedParameter[2].trim() === 'Path') {
       arrayNames.add(pathNameMarker(typedParameter[1]));

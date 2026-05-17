@@ -1,30 +1,36 @@
 // Port of crimson/modes/components/perk_menu_controller.py
 
-import { Vec2 } from '@grim/geom.ts';
-import { type RuntimeResources, TextureId, getTexture } from '@grim/assets.ts';
-import { measureSmallTextWidth, SmallFontData } from '@grim/fonts/small.ts';
+import type { RuntimeResources } from '@grim/assets.ts';
+import { TextureId } from '@grim/assets.ts';
+import type { SmallFontData } from '@grim/fonts/small.ts';
+import { measureSmallTextWidth } from '@grim/fonts/small.ts';
 import { clamp } from '@grim/math.ts';
-import * as wgl from '@wgl';
+import type { rl } from '@grim/raylib-api.ts';
 import { InputState } from '@grim/input.ts';
 import { SfxId } from '@grim/sfx-map.ts';
-import { PerkId, perkDisplayName, perkDisplayDescription } from '@crimson/perks/ids.ts';
-import { type PlayerState } from '@crimson/sim/state-types.ts';
+import { PerkId, perkDisplayDescription, perkDisplayName } from '@crimson/perks/index.ts';
+import type { PlayerState } from '@crimson/sim/state-types.ts';
 import { uiOrigin, uiScale } from '@crimson/ui/layout.ts';
 import { drawClassicMenuPanel } from '@crimson/ui/menu-panel.ts';
 import { PERK_MENU_TRANSITION_MS, PerkMenuLayout, UiButtonState, buttonDraw, buttonUpdate, buttonWidth, drawMenuItem, drawUiText, menuItemHitRect, perkMenuComputeLayout, perkMenuPanelSlideX } from '@crimson/ui/perk-menu.ts';
+import * as wgl from '@wgl';
 
-export type PlaySfxFn = (sfxId: SfxId) => void;
+export type PlaySfxFn = (arg0: SfxId) => void;
 export type OnCloseFn = () => void;
 
-const UI_TEXT_COLOR = wgl.makeColor(220 / 255, 220 / 255, 220 / 255, 1.0);
-const UI_SPONSOR_COLOR = wgl.makeColor(1.0, 1.0, 1.0, int(255 * 0.5) / 255);
+export const UI_TEXT_COLOR = wgl.makeColor(220 / 255, 220 / 255, 220 / 255, 255 / 255);
+export const UI_SPONSOR_COLOR = wgl.makeColor(255 / 255, 255 / 255, 255 / 255, int(255 * 0.5) / 255);
+
+function tupleKey(value: readonly unknown[] | string): string {
+  return typeof value === 'string' ? value : value.join(',');
+}
 
 export class PerkMenuUiContext {
   readonly player: PlayerState;
   readonly violenceDisabled: number;
   readonly preserveBugs: boolean;
   readonly resources: RuntimeResources;
-  readonly mouse: Vec2;
+  readonly mouse: rl.Vector2;
   readonly fxDetail: boolean;
   readonly playSfx: PlaySfxFn | null;
 
@@ -33,7 +39,7 @@ export class PerkMenuUiContext {
     violenceDisabled: number;
     preserveBugs: boolean;
     resources: RuntimeResources;
-    mouse: Vec2;
+    mouse: rl.Vector2;
     fxDetail?: boolean;
     playSfx?: PlaySfxFn | null;
   }) {
@@ -48,20 +54,21 @@ export class PerkMenuUiContext {
 }
 
 export class PerkMenuController {
-  private static readonly _DESC_WRAP_WIDTH_PX = 256.0;
-
+  private _DESC_WRAP_WIDTH_PX: number = 256.0;
   private _cancelLabel: string;
   private _onClose: OnCloseFn | null;
+  private _selectedIndex!: number;
+  _timelineMs!: number;
   private _layout!: PerkMenuLayout;
   private _cancelButton!: UiButtonState;
   private _open!: boolean;
-  private _selectedIndex!: number;
-  private _timelineMs!: number;
   private _wrappedDescCache!: Map<string, string>;
 
-  constructor(opts?: { cancelLabel?: string; onClose?: OnCloseFn | null }) {
-    this._cancelLabel = opts?.cancelLabel ?? 'Cancel';
-    this._onClose = opts?.onClose ?? null;
+  constructor(opts: { cancelLabel?: string; onClose?: OnCloseFn | null } = {}) {
+    const cancelLabel = opts.cancelLabel ?? 'Cancel';
+    const onClose = opts.onClose ?? null;
+    this._cancelLabel = cancelLabel;
+    this._onClose = onClose;
     this.reset();
   }
 
@@ -78,7 +85,7 @@ export class PerkMenuController {
   }
 
   get selectedIndex(): number {
-    return this._selectedIndex;
+    return int(this._selectedIndex);
   }
 
   set selectedIndex(value: number) {
@@ -106,33 +113,22 @@ export class PerkMenuController {
     this._wrappedDescCache = new Map();
   }
 
-  private _prewrappedPerkDesc(
-    perkId: PerkId,
-    font: SmallFontData,
-    opts: { violenceDisabled: number; preserveBugs: boolean },
-  ): string {
-    const key = `${perkId}:${int(opts.violenceDisabled)}:${opts.preserveBugs ? 1 : 0}`;
-    const cached = this._wrappedDescCache.get(key);
-    if (cached !== undefined) {
+  _prewrappedPerkDesc(perkId: PerkId, font: SmallFontData, opts: { violenceDisabled: number; preserveBugs: boolean }): string {
+    const violenceDisabled = opts.violenceDisabled;
+    const preserveBugs = opts.preserveBugs;
+    const key = [int(perkId), int(violenceDisabled), (preserveBugs ? 1 : 0)];
+    const cached = this._wrappedDescCache.get(tupleKey(key)) ?? null;
+    if (cached !== null) {
       return cached;
     }
-    const desc = perkDisplayDescription(perkId, { violenceDisabled: int(opts.violenceDisabled), preserveBugs: opts.preserveBugs });
-    const wrapped = PerkMenuController._wrapSmallTextNative(
-      font,
-      desc,
-      PerkMenuController._DESC_WRAP_WIDTH_PX,
-      { scale: 1.0 },
-    );
-    this._wrappedDescCache.set(key, wrapped);
+    const desc = perkDisplayDescription(perkId, { violenceDisabled: int(violenceDisabled), preserveBugs: preserveBugs });
+    const wrapped = PerkMenuController._wrapSmallTextNative(font, desc, this._DESC_WRAP_WIDTH_PX, { scale: 1.0 });
+    this._wrappedDescCache.set(tupleKey(key), wrapped);
     return wrapped;
   }
 
-  private static _wrapSmallTextNative(
-    font: SmallFontData,
-    text: string,
-    maxWidthPx: number,
-    _opts: { scale: number },
-  ): string {
+  static _wrapSmallTextNative(font: SmallFontData, text: string, maxWidthPx: number, opts: { scale: number }): string {
+    const scale = opts.scale;
     const wrapped = Array.from(text);
     if (wrapped.length === 0) {
       return '';
@@ -154,8 +150,9 @@ export class PerkMenuController {
       }
 
       remaining -= measureSmallTextWidth(font, ch);
+      let j: any;
       if (remaining < 0.0) {
-        let j = i;
+        j = i;
         while (j > 0 && wrapped[j] !== ' ' && wrapped[j] !== '\n') {
           j -= 1;
         }
@@ -168,7 +165,7 @@ export class PerkMenuController {
       i += 1;
     }
 
-    return wrapped.join('');
+    return wrapped.join("");
   }
 
   close(): void {
@@ -181,12 +178,13 @@ export class PerkMenuController {
     }
   }
 
-  openMenu(opts?: { playSfx?: PlaySfxFn | null }): void {
+  openMenu(opts: { playSfx?: PlaySfxFn | null } = {}): void {
+    const playSfx = opts.playSfx ?? null;
     if (this._open) {
       return;
     }
-    if (opts?.playSfx) {
-      opts.playSfx(SfxId.UI_PANELCLICK);
+    if (playSfx !== null) {
+      playSfx(SfxId.UI_PANELCLICK);
     }
     this._open = true;
     this._selectedIndex = 0;
@@ -200,11 +198,8 @@ export class PerkMenuController {
     }
   }
 
-  handleInput(
-    ctx: PerkMenuUiContext,
-    choices: readonly PerkId[],
-    opts: { dtUiMs: number },
-  ): number | null {
+  handleInput(ctx: PerkMenuUiContext, choices: readonly PerkId[], opts: { dtUiMs: number }): number | null {
+    const dtUiMs = opts.dtUiMs;
     if (choices.length === 0) {
       this.close();
       return null;
@@ -218,7 +213,7 @@ export class PerkMenuController {
       this._selectedIndex = (this._selectedIndex + 1) % choices.length;
     }
     if (InputState.wasKeyPressed(38)) {
-      this._selectedIndex = (this._selectedIndex - 1 + choices.length) % choices.length;
+      this._selectedIndex = ((this._selectedIndex - 1) + choices.length) % choices.length;
     }
 
     const screenW = wgl.getScreenWidth();
@@ -229,51 +224,31 @@ export class PerkMenuController {
 
     const click = InputState.wasMouseButtonPressed(0);
 
-    const masterOwned = int(ctx.player.perkCounts[PerkId.PERK_MASTER]) > 0;
-    const expertOwned = int(ctx.player.perkCounts[PerkId.PERK_EXPERT]) > 0;
-    const computed = perkMenuComputeLayout(this._layout, {
-      screenW,
-      origin,
-      scale,
-      choiceCount: choices.length,
-      expertOwned,
-      masterOwned,
-      panelSlideX: slideX,
-    });
+    const masterOwned = int(ctx.player.perkCounts[int(PerkId.PERK_MASTER)]) > 0;
+    const expertOwned = int(ctx.player.perkCounts[int(PerkId.PERK_EXPERT)]) > 0;
+    const computed = perkMenuComputeLayout(this._layout, { screenW: screenW, origin: origin, scale: scale, choiceCount: choices.length, expertOwned: expertOwned, masterOwned: masterOwned, panelSlideX: slideX });
 
     const preserveBugs = ctx.preserveBugs;
-    for (let idx = 0; idx < choices.length; idx++) {
-      const perkId = choices[idx];
-      const label = perkDisplayName(perkId, { violenceDisabled: int(ctx.violenceDisabled), preserveBugs });
-      const itemPos = computed.listPos.offset({ dx: 0.0, dy: idx * computed.listStepY });
-      const rect = menuItemHitRect(ctx.resources, label, { pos: itemPos, scale });
+    for (const [idx, perkId] of choices.entries()) {
+      const label = perkDisplayName(perkId, { violenceDisabled: int(ctx.violenceDisabled), preserveBugs: preserveBugs });
+      const itemPos = computed.listPos.offset({ dy: idx * computed.listStepY });
+      const rect = menuItemHitRect(ctx.resources, label, { pos: itemPos, scale: scale });
       if (rect.contains(ctx.mouse)) {
         this._selectedIndex = idx;
         if (click) {
-          if (ctx.playSfx) {
+          if (ctx.playSfx !== null) {
             ctx.playSfx(SfxId.UI_BUTTONCLICK);
           }
           this.close();
-          return idx;
+          return int(idx);
         }
         break;
       }
     }
 
-    const cancelW = buttonWidth(ctx.resources, this._cancelButton.label, {
-      scale,
-      forceWide: this._cancelButton.forceWide,
-    });
-    if (
-      buttonUpdate(this._cancelButton, {
-        pos: computed.cancelPos,
-        width: cancelW,
-        dtMs: opts.dtUiMs,
-        mouse: ctx.mouse,
-        click,
-      })
-    ) {
-      if (ctx.playSfx) {
+    const cancelW = buttonWidth(ctx.resources, this._cancelButton.label, { scale: scale, forceWide: this._cancelButton.forceWide });
+    if (buttonUpdate(this._cancelButton, { pos: computed.cancelPos, width: cancelW, dtMs: dtUiMs, mouse: ctx.mouse, click: click })) {
+      if (ctx.playSfx !== null) {
         ctx.playSfx(SfxId.UI_BUTTONCLICK);
       }
       this.close();
@@ -281,13 +256,12 @@ export class PerkMenuController {
     }
 
     if (InputState.wasKeyPressed(13) || InputState.wasKeyPressed(32)) {
-      if (ctx.playSfx) {
+      if (ctx.playSfx !== null) {
         ctx.playSfx(SfxId.UI_BUTTONCLICK);
       }
       this.close();
-      return this._selectedIndex;
+      return int(this._selectedIndex);
     }
-
     return null;
   }
 
@@ -310,82 +284,51 @@ export class PerkMenuController {
     const origin = uiOrigin(screenW, screenH, scale);
     const slideX = perkMenuPanelSlideX(this._timelineMs, { width: this._layout.panelSize.x });
 
-    const masterOwned = int(ctx.player.perkCounts[PerkId.PERK_MASTER]) > 0;
-    const expertOwned = int(ctx.player.perkCounts[PerkId.PERK_EXPERT]) > 0;
-    const computed = perkMenuComputeLayout(this._layout, {
-      screenW,
-      origin,
-      scale,
-      choiceCount: choices.length,
-      expertOwned,
-      masterOwned,
-      panelSlideX: slideX,
-    });
+    const masterOwned = int(ctx.player.perkCounts[int(PerkId.PERK_MASTER)]) > 0;
+    const expertOwned = int(ctx.player.perkCounts[int(PerkId.PERK_EXPERT)]) > 0;
+    const computed = perkMenuComputeLayout(this._layout, { screenW: screenW, origin: origin, scale: scale, choiceCount: choices.length, expertOwned: expertOwned, masterOwned: masterOwned, panelSlideX: slideX });
 
-    const panelTex = getTexture(ctx.resources, TextureId.UI_MENU_PANEL);
-    const panelDst = wgl.makeRectangle(
-      computed.panel.x,
-      computed.panel.y,
-      computed.panel.w,
-      computed.panel.h,
-    );
-    drawClassicMenuPanel(panelTex, { dst: panelDst, shadow: ctx.fxDetail ?? false });
+    const panelTex = ctx.resources.texture(TextureId.UI_MENU_PANEL);
+    drawClassicMenuPanel(panelTex, { dst: computed.panel.toRl(), shadow: ctx.fxDetail });
 
-    const titleTex = getTexture(ctx.resources, TextureId.UI_TEXT_PICK_A_PERK);
-    const titleSrc = wgl.makeRectangle(0.0, 0.0, titleTex.width, titleTex.height);
-    const titleDst = wgl.makeRectangle(
-      computed.title.x,
-      computed.title.y,
-      computed.title.w,
-      computed.title.h,
-    );
-    wgl.drawTexturePro(titleTex, titleSrc, titleDst, wgl.makeVector2(0.0, 0.0), 0.0, wgl.makeColor(1, 1, 1, 1));
+    const titleTex = ctx.resources.texture(TextureId.UI_TEXT_PICK_A_PERK);
+    const src = wgl.makeRectangle(0.0, 0.0, titleTex.width, titleTex.height);
+    wgl.drawTexturePro(titleTex, src, computed.title.toRl(), wgl.makeVector2(0.0, 0.0), 0.0, wgl.makeColor(1, 1, 1, 1));
 
-    let sponsor: string | null = null;
+    let sponsor = null;
     if (masterOwned) {
       sponsor = 'extra perks sponsored by the Perk Master';
     } else if (expertOwned) {
       sponsor = 'extra perk sponsored by the Perk Expert';
     }
     if (sponsor) {
-      drawUiText(ctx.resources, sponsor, computed.sponsorPos, {
-        scale,
-        color: UI_SPONSOR_COLOR,
-      });
+      drawUiText(ctx.resources, sponsor, computed.sponsorPos, { scale: scale, color: UI_SPONSOR_COLOR });
     }
 
     const preserveBugs = ctx.preserveBugs;
-    for (let idx = 0; idx < choices.length; idx++) {
-      const perkId = choices[idx];
-      const label = perkDisplayName(perkId, { violenceDisabled: int(ctx.violenceDisabled), preserveBugs });
-      const itemPos = computed.listPos.offset({ dx: 0.0, dy: idx * computed.listStepY });
-      const rect = menuItemHitRect(ctx.resources, label, { pos: itemPos, scale });
-      const hovered = rect.contains(ctx.mouse) || idx === this._selectedIndex;
-      drawMenuItem(ctx.resources, label, { pos: itemPos, scale, hovered });
+    for (const [idx, perkId] of choices.entries()) {
+      const label = perkDisplayName(perkId, { violenceDisabled: int(ctx.violenceDisabled), preserveBugs: preserveBugs });
+      const itemPos = computed.listPos.offset({ dy: idx * computed.listStepY });
+      const rect = menuItemHitRect(ctx.resources, label, { pos: itemPos, scale: scale });
+      const hovered = rect.contains(ctx.mouse) || (idx === this._selectedIndex);
+      drawMenuItem(ctx.resources, label, { pos: itemPos, scale: scale, hovered: hovered });
     }
 
     const selected = choices[this._selectedIndex];
-    let desc = perkDisplayDescription(selected, {
-      violenceDisabled: int(ctx.violenceDisabled),
-      preserveBugs,
-    });
-    desc = this._prewrappedPerkDesc(selected, ctx.resources.smallFont, {
-      violenceDisabled: int(ctx.violenceDisabled),
-      preserveBugs,
-    });
-    drawUiText(ctx.resources, desc, computed.desc.topLeft, {
-      scale,
-      color: UI_TEXT_COLOR,
-    });
+    let desc = perkDisplayDescription(selected, { violenceDisabled: int(ctx.violenceDisabled), preserveBugs: preserveBugs });
+    desc = this._prewrappedPerkDesc(selected, ctx.resources.smallFont, { violenceDisabled: int(ctx.violenceDisabled), preserveBugs: preserveBugs });
+    drawUiText(
+      ctx.resources,
+      desc,
+      computed.desc.topLeft,
+      { scale: scale, color: UI_TEXT_COLOR },
+    );
 
-    const cancelW = buttonWidth(ctx.resources, this._cancelButton.label, {
-      scale,
-      forceWide: this._cancelButton.forceWide,
-    });
-    buttonDraw(ctx.resources, this._cancelButton, {
-      pos: computed.cancelPos,
-      width: cancelW,
-      scale,
-    });
+    const cancelW = buttonWidth(ctx.resources, this._cancelButton.label, { scale: scale, forceWide: this._cancelButton.forceWide });
+    buttonDraw(
+      ctx.resources,
+      this._cancelButton,
+      { pos: computed.cancelPos, width: cancelW, scale: scale },
+    );
   }
 }
