@@ -99,6 +99,7 @@ import {
   tupleKeyHelperStatements,
 } from './runtime-helpers.js';
 import {
+  addReassignedLocalTypeAnnotations,
   nullableLocalNames,
   reassignedLocalNames,
   rewriteStructPositionalConstructors,
@@ -719,6 +720,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       arrayNames.add(nullableNameMarker(tsExportNameForPythonName(name)));
     }
     const reassignedNames = reassignedLocalNames(lines, index);
+    addReassignedLocalTypeAnnotations(lines, index, reassignedNames, nameMap, arrayNames, validatedTypeAliases, functionMapNames);
     while (index < lines.length) {
       const line = lines[index];
       if (line.trim() === '') {

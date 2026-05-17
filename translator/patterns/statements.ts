@@ -103,6 +103,68 @@ export {
 export { nullableLocalNames, reassignedLocalNames } from './statements/reassigned-locals.js';
 export { rewriteStructPositionalConstructors } from './statements/struct-rewrites.js';
 
+const reassignedLocalTypePrefix = '\u0000reassigned-local-type:';
+
+export function addReassignedLocalTypeAnnotations(
+  lines: string[],
+  startIndex: number,
+  reassignedNames: Set<string>,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): void {
+  const typesByName = new Map<string, string[]>();
+  const localTypes = new Map<string, string>();
+  let firstStatementIndex = startIndex;
+  while (firstStatementIndex < lines.length && lines[firstStatementIndex].trim() === '') {
+    firstStatementIndex += 1;
+  }
+  const baseIndent = /^(\s+)/.exec(lines[firstStatementIndex] ?? '')?.[1] ?? null;
+  if (baseIndent === null) {
+    return;
+  }
+
+  let index = firstStatementIndex;
+  while (index < lines.length) {
+    const line = lines[index] ?? '';
+    if (line.trim() !== '' && !line.startsWith(baseIndent)) {
+      break;
+    }
+    const lineIndent = /^(\s*)/.exec(line)?.[1] ?? '';
+    if (lineIndent !== baseIndent) {
+      index += 1;
+      continue;
+    }
+    const statement = splitInlineComment(line.trim()).code;
+    const assignment = /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(statement);
+    if (assignment !== null) {
+      const type = inferredReassignedLocalType(assignment[2], nameMap, arrayNames, validatedTypeAliases, mapNames, localTypes);
+      if (type !== null) {
+        localTypes.set(assignment[1], type);
+      }
+      if (reassignedNames.has(assignment[1])) {
+        addReassignedLocalType(typesByName, assignment[1], type);
+      }
+    }
+    const annotatedAssignment = /^([A-Za-z_][A-Za-z0-9_]*): (.+?) = (.+)$/.exec(statement);
+    if (annotatedAssignment !== null) {
+      const type = tsTypeExpression(annotatedAssignment[2]);
+      localTypes.set(annotatedAssignment[1], type);
+      if (reassignedNames.has(annotatedAssignment[1])) {
+        addReassignedLocalType(typesByName, annotatedAssignment[1], type);
+      }
+    }
+    index += 1;
+  }
+
+  for (const [name, types] of typesByName) {
+    if (types.length > 1) {
+      reassignedNames.add(reassignedLocalTypeMarker(name, types.join(' | ')));
+    }
+  }
+}
+
 type WithItem = {
   pythonName: string;
   name: string;
@@ -339,6 +401,7 @@ function parseNestedFunctionStatement(
   const statements: string[] = [];
   const declaredNames = parsedParams.declaredNames;
   const reassignedNames = reassignedLocalNames(lines, header.nextIndex);
+  addReassignedLocalTypeAnnotations(lines, header.nextIndex, reassignedNames, nestedNameMap, arrayNames, validatedTypeAliases, mapNames);
   const innerIndent = `${indent}    `;
   let nextIndex = header.nextIndex;
   while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, innerIndent)) {
@@ -4021,7 +4084,8 @@ function translateStraightLineAssignment(
     recordLocalAssignmentMarkers(localAssignment[1], localTsName, localAssignedRight, nameMap, arrayNames, mapNames);
     const nullableType = nullableLocalDeclarationType(localAssignment[1], localTsName, localAssignedRight, arrayNames);
     const tupleType = localTupleDeclarationType(localAssignedRight, pythonRight);
-    const declarationType = nullableType ?? tupleType;
+    const reassignedType = reassignedLocalTypeAnnotation(reassignedNames, localAssignment[1]);
+    const declarationType = nullableType ?? tupleType ?? reassignedType;
     return {
       statements: [
         `${reassignedNames.has(localAssignment[1]) ? 'let' : 'const'} ${localTsName}${declarationType === null ? '' : `: ${declarationType}`} = ${localAssignedRight};`,
@@ -4187,6 +4251,91 @@ function pythonExpressionCouldBeTupleLiteral(pythonExpression: string | null): b
     return splitTopLevelComma(trimmed.slice(1, -1)).length > 1;
   }
   return splitTopLevelComma(trimmed).length > 1 || /\([^)]*,[^)]*\)/.test(trimmed);
+}
+
+function addReassignedLocalType(typesByName: Map<string, string[]>, name: string, type: string | null): void {
+  if (type === null) {
+    return;
+  }
+  const types = typesByName.get(name) ?? [];
+  if (!types.includes(type)) {
+    types.push(type);
+  }
+  typesByName.set(name, types);
+}
+
+function reassignedLocalTypeMarker(name: string, type: string): string {
+  return `${reassignedLocalTypePrefix}${name}:${type}`;
+}
+
+function reassignedLocalTypeAnnotation(reassignedNames: ReadonlySet<string>, name: string): string | null {
+  const prefix = `${reassignedLocalTypePrefix}${name}:`;
+  for (const marker of reassignedNames) {
+    if (marker.startsWith(prefix)) {
+      return marker.slice(prefix.length);
+    }
+  }
+  return null;
+}
+
+function inferredReassignedLocalType(
+  pythonRight: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+  localTypes: ReadonlyMap<string, string>,
+): string | null {
+  const translated = translateExpression(pythonRight, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (/^-?(?:\d+(?:\.\d*)?|\.\d+)$/.test(translated)
+    || /^int\(/.test(translated)
+    || /^Math\./.test(translated)
+    || /^clamp\(/.test(translated)) {
+    return 'number';
+  }
+  if (/^(?:true|false)$/.test(translated)) {
+    return 'boolean';
+  }
+  if (/^(?:'[^']*'|"[^"]*"|`[^`]*`)$/.test(translated) || /^String\(/.test(translated)) {
+    return 'string';
+  }
+  if (translated === 'null') {
+    return 'null';
+  }
+  if (translated.startsWith('[') || translated.startsWith('Array.from(')) {
+    return 'unknown[]';
+  }
+  if (translated.startsWith('new Map(')) {
+    return 'Map<unknown, unknown>';
+  }
+  if (/^(?:[A-Za-z_$][A-Za-z0-9_$]*\.)?makeVector2\(/.test(translated) || /^new Vec2\(/.test(translated)) {
+    return 'Vec2';
+  }
+  if (/^(?:[A-Za-z_$][A-Za-z0-9_$]*\.)?makeRectangle\(/.test(translated)) {
+    return 'rl.Rectangle';
+  }
+  if (/^(?:[A-Za-z_$][A-Za-z0-9_$]*\.)?makeColor\(/.test(translated) || /^new RGBA\(/.test(translated)) {
+    return 'rl.Color';
+  }
+  const localType = localTypes.get(translated);
+  if (localType !== undefined) {
+    return localType;
+  }
+  const fieldType = knownDottedFieldType(translated, nameMap);
+  if (fieldType === 'number' || fieldType === 'string' || fieldType === 'boolean') {
+    return fieldType;
+  }
+  if (/^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*$/.test(translated)) {
+    return `typeof ${translated}`;
+  }
+  const call = /^([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\(/.exec(translated);
+  if (call !== null) {
+    const returnType = nameMap.get(functionReturnTypeMarker(call[1]));
+    if (returnType === 'number' || returnType === 'string' || returnType === 'boolean') {
+      return returnType;
+    }
+  }
+  return null;
 }
 
 function numericTupleExpressionLength(tsExpression: string): number | null {
@@ -4366,8 +4515,8 @@ function knownDottedFieldType(expression: string, nameMap: Map<string, string>):
   if (dotted === null) {
     return null;
   }
-  const receiverType = nameMap.get(receiverTypeNameMarker(dotted[1]));
-  return receiverType === undefined ? null : nameMap.get(classFieldTypeMarker(receiverType, dotted[2])) ?? null;
+  const receiverType = nameMap.get(receiverTypeNameMarker(dotted[1])) ?? knownDottedFieldType(dotted[1], nameMap);
+  return receiverType == null ? null : nameMap.get(classFieldTypeMarker(receiverType, dotted[2])) ?? null;
 }
 
 function arrayElementTypeFromTypeExpression(typeExpression: string): string | null {
