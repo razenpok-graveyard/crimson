@@ -481,6 +481,10 @@ export function inferPythonExpressionType(pythonExpression: string): string {
   if (/\bVec2\(/.test(trimmed) && /\s(?:\+|-)\s/.test(trimmed)) {
     return 'Vec2';
   }
+  const constructorCall = /^_?([A-Z][A-Za-z0-9_]*)\((?:[^()]|\([^()]*\))*\)$/.exec(trimmed);
+  if (constructorCall !== null) {
+    return tsExportNameForPythonName(constructorCall[1]);
+  }
   if (!/["'`]/.test(trimmed) && /\s(?:%|\*|\/\/|\/|-)\s/.test(trimmed)) {
     return 'number';
   }
