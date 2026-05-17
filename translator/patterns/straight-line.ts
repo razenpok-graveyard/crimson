@@ -1854,6 +1854,15 @@ function parseTyperCliFunctionHeader(
   lines: string[],
   index: number,
 ): { name: string; parametersText: string; nextIndex: number } | null {
+  const oneLine = /^def ([A-Za-z_][A-Za-z0-9_]*)\((.*)\) -> [^:]+:$/.exec(lines[index] ?? '');
+  if (oneLine !== null) {
+    return {
+      name: oneLine[1],
+      parametersText: oneLine[2],
+      nextIndex: index + 1,
+    };
+  }
+
   const start = /^def ([A-Za-z_][A-Za-z0-9_]*)\($/.exec(lines[index] ?? '');
   if (start === null) {
     return null;
