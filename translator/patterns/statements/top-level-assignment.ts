@@ -74,6 +74,15 @@ export function parseTopLevelAssignment(
           nextIndex: nextIndex + 1,
         };
       }
+      if (trimmed === '') {
+        nextIndex += 1;
+        continue;
+      }
+      if (trimmed.startsWith('#')) {
+        valueLines.push(`  // ${trimmed.replace(/^# ?/, '')}`);
+        nextIndex += 1;
+        continue;
+      }
 
       const tupleItem = /^(.+),$/.exec(trimmed);
       if (tupleItem === null) {
