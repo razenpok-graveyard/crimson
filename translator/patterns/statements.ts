@@ -2531,6 +2531,26 @@ export function translateStraightLineStatement(
     return null;
   }
 
+  const multilineCallStatement = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\(/.exec(statement);
+  if (multilineCallStatement !== null && parenthesisDelta(statement) > 0) {
+    const expression = collectMultilineParenthesizedExpression(lines, index, statement);
+    if (expression !== null) {
+      const callExpression = translateCollectedMultilineCallExpression(
+        expression.expression,
+        nameMap,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+      );
+      if (callExpression !== null) {
+        return appendTrailingCommentToResult({
+          statements: [`${callExpression};`],
+          nextIndex: expression.nextIndex,
+        }, trailingComment);
+      }
+    }
+  }
+
   if (statement === 'super().__init__(') {
     const callParts = parseMultilineCallParts(
       lines,
@@ -3393,6 +3413,27 @@ export function parseMultilineCallExpression(
     return null;
   }
 
+  return {
+    expression: translateMultilineCallExpressionFromParts(
+      pythonCallee,
+      callParts,
+      nameMap,
+      arrayNames,
+      validatedTypeAliases,
+      mapNames,
+    ),
+    nextIndex: callParts.nextIndex,
+  };
+}
+
+function translateMultilineCallExpressionFromParts(
+  pythonCallee: string,
+  callParts: MultilineCallParts,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string {
   const msgspecStructsReplace = translateMultilineMsgspecStructsReplace(
     pythonCallee,
     callParts,
@@ -3402,56 +3443,35 @@ export function parseMultilineCallExpression(
     mapNames,
   );
   if (msgspecStructsReplace !== null) {
-    return {
-      expression: msgspecStructsReplace,
-      nextIndex: callParts.nextIndex,
-    };
+    return msgspecStructsReplace;
   }
   if (pythonCallee === 'subprocess.check_output') {
-    return {
-      expression: 'new Uint8Array()',
-      nextIndex: callParts.nextIndex,
-    };
+    return 'new Uint8Array()';
   }
   if (
     /^[A-Z][A-Za-z0-9_]*(?:Id|Type|Flags)$/.test(pythonCallee)
     && callParts.positionalParts.length === 1
     && callParts.keywordParts.length === 0
   ) {
-    return {
-      expression: translateExpression(callParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames),
-      nextIndex: callParts.nextIndex,
-    };
+    return translateExpression(callParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
   }
   if (pythonCallee === 'msgspec.msgpack.encode' && callParts.positionalParts.length === 1 && callParts.keywordParts.length === 0) {
-    return {
-      expression: `new MsgpackEncoder().encode(${translateExpression(callParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames)})`,
-      nextIndex: callParts.nextIndex,
-    };
+    return `new MsgpackEncoder().encode(${translateExpression(callParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
   if (pythonCallee === 'msgspec.msgpack.decode' && callParts.positionalParts.length >= 1) {
     const typeArg = callParts.keywordArgParts.find((part) => part.pythonName === 'type');
     const typeExpression = typeArg === undefined ? 'undefined' : typeArg.expression;
     const typeParameter = typeArg !== undefined && /^[A-Z][A-Za-z0-9_$]*$/.test(typeExpression) ? `<${typeExpression}>` : '';
-    return {
-      expression: `new MsgpackDecoder${typeParameter}({ type: ${typeExpression} }).decode(${translateExpression(callParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames)})`,
-      nextIndex: callParts.nextIndex,
-    };
+    return `new MsgpackDecoder${typeParameter}({ type: ${typeExpression} }).decode(${translateExpression(callParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
   if (pythonCallee === 'str' && callParts.positionalParts.length === 1 && callParts.keywordParts.length === 0) {
-    return {
-      expression: `String(${callParts.positionalParts[0]})`,
-      nextIndex: callParts.nextIndex,
-    };
+    return `String(${callParts.positionalParts[0]})`;
   }
   const stringJoinCallee = /^((?:[fF])?(["'])(?:\\.|(?!\2)[\s\S])*\2)\.join$/.exec(pythonCallee);
   if (stringJoinCallee !== null && callParts.positionalParts.length === 1 && callParts.keywordParts.length === 0) {
     const separator = parsePythonStringExpression(stringJoinCallee[1]);
     if (separator !== null) {
-      return {
-        expression: `${translateExpression(callParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames)}.join(${JSON.stringify(separator.content)})`,
-        nextIndex: callParts.nextIndex,
-      };
+      return `${translateExpression(callParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames)}.join(${JSON.stringify(separator.content)})`;
     }
   }
 
@@ -3466,10 +3486,7 @@ export function parseMultilineCallExpression(
     mapNames,
   );
   if (sequenceGenerator !== null && callParts.keywordParts.length === 0) {
-    return {
-      expression: sequenceGenerator,
-      nextIndex: callParts.nextIndex,
-    };
+    return sequenceGenerator;
   }
   const signatureCall = translateMultilineCallWithLocalSignature(
     pythonCallee,
@@ -3481,29 +3498,136 @@ export function parseMultilineCallExpression(
     mapNames,
   );
   if (signatureCall !== null) {
-    return {
-      expression: signatureCall,
-      nextIndex: callParts.nextIndex,
-    };
+    return signatureCall;
   }
   if (callParts.keywordParts.length === 0) {
-    return {
-      expression: translatePositionalCallExpression(pythonCallee, callParts.positionalParts, nameMap, arrayNames, validatedTypeAliases, mapNames, true),
-      nextIndex: callParts.nextIndex,
-    };
+    return translatePositionalCallExpression(pythonCallee, callParts.positionalParts, nameMap, arrayNames, validatedTypeAliases, mapNames, true);
   }
   if (callParts.positionalParts.length === 0) {
-    return {
-      expression: `${callPrefix}({ ${callParts.keywordParts.join(', ')} })`,
-      nextIndex: callParts.nextIndex,
-    };
+    return `${callPrefix}({ ${callParts.keywordParts.join(', ')} })`;
+  }
+  return `${callPrefix}(${[
+    ...callParts.positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)),
+    `{ ${callParts.keywordParts.join(', ')} }`,
+  ].join(', ')})`;
+}
+
+function translateCollectedMultilineCallExpression(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  const call = parseFullCallExpression(pythonExpression);
+  if (call === null) {
+    return null;
+  }
+  const callParts = parseInlineCallParts(
+    call.argsText,
+    nameMap,
+    arrayNames,
+    validatedTypeAliases,
+    mapNames,
+  );
+  if (callParts === null) {
+    return null;
+  }
+  return translateMultilineCallExpressionFromParts(
+    call.pythonCallee,
+    callParts,
+    nameMap,
+    arrayNames,
+    validatedTypeAliases,
+    mapNames,
+  );
+}
+
+function parseInlineCallParts(
+  argsText: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): MultilineCallParts | null {
+  const positionalParts: string[] = [];
+  const keywordParts: string[] = [];
+  const keywordArgParts: MultilineKeywordPart[] = [];
+  let sawKeyword = false;
+  for (const arg of splitTopLevelComma(argsText)) {
+    const keywordArg = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(arg);
+    if (keywordArg === null) {
+      if (sawKeyword) {
+        return null;
+      }
+      positionalParts.push(translateInlineCallArgumentIfNeeded(
+        arg,
+        nameMap,
+        arrayNames,
+        validatedTypeAliases,
+        mapNames,
+      ) ?? arg);
+      continue;
+    }
+
+    sawKeyword = true;
+    const expression = translateInlineCallArgumentIfNeeded(
+      keywordArg[2],
+      nameMap,
+      arrayNames,
+      validatedTypeAliases,
+      mapNames,
+    ) ?? translateCallArgumentExpression(keywordArg[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    keywordParts.push(`${tsExportNameForPythonName(keywordArg[1])}: ${expression}`);
+    keywordArgParts.push({ pythonName: keywordArg[1], expression });
+  }
+  return { positionalParts, keywordParts, keywordArgParts, nextIndex: 0 };
+}
+
+function translateInlineCallArgumentIfNeeded(
+  pythonExpression: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  const call = parseFullCallExpression(pythonExpression);
+  if (call === null) {
+    return null;
+  }
+  const callParts = parseInlineCallParts(
+    call.argsText,
+    nameMap,
+    arrayNames,
+    validatedTypeAliases,
+    mapNames,
+  );
+  if (callParts === null) {
+    return null;
+  }
+  return translateMultilineCallExpressionFromParts(
+    call.pythonCallee,
+    callParts,
+    nameMap,
+    arrayNames,
+    validatedTypeAliases,
+    mapNames,
+  );
+}
+
+function parseFullCallExpression(pythonExpression: string): { pythonCallee: string; argsText: string } | null {
+  const trimmed = pythonExpression.trim();
+  const callStart = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\(/.exec(trimmed);
+  if (callStart === null) {
+    return null;
+  }
+  const closeIndex = matchingCloseParen(trimmed, callStart[1].length);
+  if (closeIndex !== trimmed.length - 1) {
+    return null;
   }
   return {
-    expression: `${callPrefix}(${[
-      ...callParts.positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)),
-      `{ ${callParts.keywordParts.join(', ')} }`,
-    ].join(', ')})`,
-    nextIndex: callParts.nextIndex,
+    pythonCallee: callStart[1],
+    argsText: trimmed.slice(callStart[1].length + 1, closeIndex),
   };
 }
 
