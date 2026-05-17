@@ -71,6 +71,9 @@ export function tsTypeExpression(pythonType: string): string {
   }
   const dictType = parseGenericTypeArgs(trimmed, 'dict');
   if (dictType !== null && dictType.length === 2) {
+    if (dictType[0].trim() === 'str' && dictType[1].trim() === 'Any') {
+      return 'Record<string, any>';
+    }
     if (dictType[0].trim() === 'str' && dictType[1].trim() === 'object') {
       return 'Record<string, unknown>';
     }
@@ -141,6 +144,9 @@ export function tsTypeExpression(pythonType: string): string {
   }
   if (trimmed === 'None') {
     return 'void';
+  }
+  if (trimmed === 'dict') {
+    return 'Record<string, any>';
   }
   if (trimmed === 'bytes' || trimmed === 'bytearray') {
     return 'Uint8Array';

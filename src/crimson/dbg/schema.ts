@@ -32,24 +32,24 @@ export class TraceMeta {
   traceFormatVersion: number;
   traceSchemaVersion: number;
   createdUtc: string;
-  producer: Map<string, unknown>;
-  source: Map<string, unknown>;
+  producer: Record<string, any>;
+  source: Record<string, any>;
   channels: string[];
   channelVersions: Map<string, number>;
   tickRange: Map<string, number>;
-  config: Map<string, unknown>;
+  config: Record<string, any>;
   status: GameStatusData | null;
 
   constructor(opts: {
     traceFormatVersion: number;
     traceSchemaVersion: number;
     createdUtc: string;
-    producer: Map<string, unknown>;
-    source: Map<string, unknown>;
+    producer: Record<string, any>;
+    source: Record<string, any>;
     channels: string[];
     channelVersions: Map<string, number>;
     tickRange: Map<string, number>;
-    config: Map<string, unknown>;
+    config: Record<string, any>;
     status?: GameStatusData | null;
   }) {
     this.traceFormatVersion = opts.traceFormatVersion;

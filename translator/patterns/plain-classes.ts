@@ -26,7 +26,7 @@ import {
   tupleElementArrayNameMarker,
   tupleKeyMapNameMarker,
 } from './expression.js';
-import { parseFunctionParametersText, pythonParameterNames } from './parameters.js';
+import { parseFunctionParametersText, pythonParameterNames, recordParameterNameBindings } from './parameters.js';
 import {
   reassignedLocalNames,
   translateStraightLineStatement,
@@ -232,6 +232,8 @@ export function parsePlainClass(
   constructorNameMap.set(receiverTypeNameMarker('this'), className);
   recordPlainClassMethodHeaders(lines, nextIndex, className, constructorNameMap);
   const constructorMapNames = new Set<string>(fieldMapNames);
+  const constructorExtraParametersText = constructorParametersText === 'self' ? '' : constructorParametersText.slice('self, '.length);
+  recordParameterNameBindings(constructorNameMap, constructorExtraParametersText, [...constructorParams.parameters, ...constructorParams.optsParams]);
   for (const parameter of constructorParams.parameters) {
     constructorNameMap.set(parameter.name, parameter.name);
     constructorNameMap.set(receiverTypeNameMarker(parameter.name), parameter.typeExpression);
@@ -243,7 +245,6 @@ export function parsePlainClass(
   for (const pythonParameterName of pythonParameterNames(constructorParametersText === 'self' ? '' : constructorParametersText.slice('self, '.length))) {
     constructorNameMap.set(pythonParameterName, tsExportNameForPythonName(pythonParameterName));
   }
-  const constructorExtraParametersText = constructorParametersText === 'self' ? '' : constructorParametersText.slice('self, '.length);
   const constructorDeclaredNames = new Set<string>(pythonParameterNames(constructorExtraParametersText));
   const constructorReassignedNames = constructorHeader === null
     ? new Set<string>()
@@ -1151,6 +1152,7 @@ function parsePlainClassMethod(
     }
   }
   const nameMap = new Map<string, string>(moduleNameMap);
+  recordParameterNameBindings(nameMap, extraParameters, [...parsedParams.parameters, ...parsedParams.optsParams]);
   if (classBindingName !== null) {
     if (classReceiver === null) {
       return null;

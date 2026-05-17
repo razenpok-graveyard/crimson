@@ -63,6 +63,44 @@ function constructField<T>(name: string, construct: Construct<T>): ConstructFiel
   return { name, construct };
 }
 
+function constructByte(): Construct<number> {
+  return {
+    parse(data) {
+      return this.parseAt(new DataView(bytesFrom(data).buffer, bytesFrom(data).byteOffset, bytesFrom(data).byteLength), 0, {}).value;
+    },
+    build(value) {
+      const output = new Uint8Array(1);
+      output[0] = value & 0xff;
+      return output;
+    },
+    parseAt(view, offset) {
+      return { value: view.getUint8(offset), offset: offset + 1 };
+    },
+    buildInto(value, chunks) {
+      chunks.push(this.build(value));
+    },
+  };
+}
+
+function constructInt32sl(): Construct<number> {
+  return {
+    parse(data) {
+      return this.parseAt(new DataView(bytesFrom(data).buffer, bytesFrom(data).byteOffset, bytesFrom(data).byteLength), 0, {}).value;
+    },
+    build(value) {
+      const output = new Uint8Array(4);
+      new DataView(output.buffer).setInt32(0, value, true);
+      return output;
+    },
+    parseAt(view, offset) {
+      return { value: view.getInt32(offset, true), offset: offset + 4 };
+    },
+    buildInto(value, chunks) {
+      chunks.push(this.build(value));
+    },
+  };
+}
+
 function constructInt32ul(): Construct<number> {
   return {
     parse(data) {
@@ -75,6 +113,25 @@ function constructInt32ul(): Construct<number> {
     },
     parseAt(view, offset) {
       return { value: view.getUint32(offset, true), offset: offset + 4 };
+    },
+    buildInto(value, chunks) {
+      chunks.push(this.build(value));
+    },
+  };
+}
+
+function constructFloat32l(): Construct<number> {
+  return {
+    parse(data) {
+      return this.parseAt(new DataView(bytesFrom(data).buffer, bytesFrom(data).byteOffset, bytesFrom(data).byteLength), 0, {}).value;
+    },
+    build(value) {
+      const output = new Uint8Array(4);
+      new DataView(output.buffer).setFloat32(0, value, true);
+      return output;
+    },
+    parseAt(view, offset) {
+      return { value: view.getFloat32(offset, true), offset: offset + 4 };
     },
     buildInto(value, chunks) {
       chunks.push(this.build(value));
@@ -152,6 +209,34 @@ function constructConst(expected: Uint8Array): Construct<Uint8Array> {
   };
 }
 
+function constructArray<T>(count: number, item: Construct<T>): Construct<T[]> {
+  return {
+    parse(data) {
+      const bytes = bytesFrom(data);
+      return this.parseAt(new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), 0, {}).value;
+    },
+    build(values) {
+      const chunks: Uint8Array[] = [];
+      this.buildInto(values, chunks, {});
+      return concatBytes(chunks);
+    },
+    parseAt(view, offset, ctx) {
+      const values: T[] = [];
+      for (let index = 0; index < count; index += 1) {
+        const parsed = item.parseAt(view, offset, ctx);
+        values.push(parsed.value);
+        offset = parsed.offset;
+      }
+      return { value: values, offset };
+    },
+    buildInto(values, chunks, ctx) {
+      for (let index = 0; index < count; index += 1) {
+        item.buildInto(values[index], chunks, ctx);
+      }
+    },
+  };
+}
+
 function constructGreedyRange<T>(item: Construct<T>): Construct<T[]> {
   return {
     parse(data) {
@@ -221,11 +306,11 @@ export function* iterEntries(source: string): IterableIterator<[string, Uint8Arr
 }
 
 export function readPaq(source: string): [string, Uint8Array][] {
-  return Array.from(iterEntries(source));
+  return Array.from(iterEntries(source)) as [string, Uint8Array][];
 }
 
 export function decodeBytes(data: Uint8Array): [string, Uint8Array][] {
-  return Array.from(iterEntriesBytes(data));
+  return Array.from(iterEntriesBytes(data)) as [string, Uint8Array][];
 }
 
 export function buildEntries(entries: Iterable<[string, Uint8Array]>): Uint8Array {

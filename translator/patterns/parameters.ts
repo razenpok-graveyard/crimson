@@ -56,7 +56,7 @@ export function parseFunctionParameterText(
 ): FunctionParameter | null {
   const kwargsParameter = /^\*\*([A-Za-z_][A-Za-z0-9_]*): (.+)$/.exec(parameterText);
   if (kwargsParameter !== null) {
-    const parameterName = tsExportNameForPythonName(kwargsParameter[1]);
+    const parameterName = tsParameterNameForPythonName(kwargsParameter[1]);
     arrayNames.add(objectNameMarker(kwargsParameter[1]));
     arrayNames.add(objectNameMarker(parameterName));
     return {
@@ -69,7 +69,7 @@ export function parseFunctionParameterText(
   const typedParameter = /^([A-Za-z_][A-Za-z0-9_]*): ([^=]+?)(?: = (.+))?$/.exec(parameterText);
   if (typedParameter !== null) {
     const typeExpression = tsTypeExpression(typedParameter[2]);
-    const parameterName = tsExportNameForPythonName(typedParameter[1]);
+    const parameterName = tsParameterNameForPythonName(typedParameter[1]);
     if (typeExpressionIncludesArray(typeExpression)) {
       arrayNames.add(typedParameter[1]);
       arrayNames.add(parameterName);
@@ -124,13 +124,26 @@ export function parseFunctionParameterText(
   const untypedParameter = /^([A-Za-z_][A-Za-z0-9_]*)(?: = (.+))?$/.exec(parameterText);
   if (untypedParameter !== null) {
     return {
-      name: tsExportNameForPythonName(untypedParameter[1]),
+      name: tsParameterNameForPythonName(untypedParameter[1]),
       typeExpression: 'any',
       ...(untypedParameter[2] === undefined ? {} : { defaultValue: translateExpression(untypedParameter[2], undefined, arrayNames) }),
     };
   }
 
   return null;
+}
+
+export function recordParameterNameBindings(
+  nameMap: Map<string, string>,
+  parametersText: string,
+  parameters: readonly FunctionParameter[],
+): void {
+  const pythonNames = pythonParameterNames(parametersText);
+  for (let index = 0; index < Math.min(pythonNames.length, parameters.length); index += 1) {
+    if (parameters[index].name !== tsExportNameForPythonName(pythonNames[index])) {
+      nameMap.set(pythonNames[index], parameters[index].name);
+    }
+  }
 }
 
 function typeExpressionIncludesArray(typeExpression: string): boolean {
@@ -160,6 +173,61 @@ export function pythonParameterNames(parametersText: string): string[] {
     }
   }
   return names;
+}
+
+function tsParameterNameForPythonName(pythonName: string): string {
+  const name = tsExportNameForPythonName(pythonName);
+  return isReservedTsBindingName(name) ? `_${name}` : name;
+}
+
+function isReservedTsBindingName(name: string): boolean {
+  return new Set([
+    'break',
+    'case',
+    'catch',
+    'class',
+    'const',
+    'continue',
+    'debugger',
+    'default',
+    'delete',
+    'do',
+    'else',
+    'enum',
+    'export',
+    'extends',
+    'false',
+    'finally',
+    'for',
+    'function',
+    'if',
+    'import',
+    'in',
+    'instanceof',
+    'new',
+    'null',
+    'return',
+    'super',
+    'switch',
+    'this',
+    'throw',
+    'true',
+    'try',
+    'typeof',
+    'var',
+    'void',
+    'while',
+    'with',
+    'yield',
+    'let',
+    'static',
+    'implements',
+    'interface',
+    'package',
+    'private',
+    'protected',
+    'public',
+  ]).has(name);
 }
 export function tsSimpleExpression(pythonExpression: string, parameters: SimpleFunctionParameter[]): string | null {
   const stringParameterNames = new Set(

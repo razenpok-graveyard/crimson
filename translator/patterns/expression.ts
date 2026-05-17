@@ -1595,6 +1595,17 @@ export function translateExpression(
   if (listRepeat !== null) {
     return `Array.from({ length: ${translateExpression(listRepeat[2], nameMap, arrayNames, validatedTypeAliases, mapNames)} }, () => ${translateExpression(listRepeat[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
+  const bytesRepeat = splitTopLevelMultiplicative(trimmed);
+  if (bytesRepeat !== null) {
+    const leftBytes = parseBytesLiteral(stripBalancedOuterParens(bytesRepeat.left));
+    const rightBytes = parseBytesLiteral(stripBalancedOuterParens(bytesRepeat.right));
+    if (leftBytes !== null && leftBytes.every((byte) => byte === 0)) {
+      return `new Uint8Array(${translateExpression(bytesRepeat.right, nameMap, arrayNames, validatedTypeAliases, mapNames)} * ${leftBytes.length})`;
+    }
+    if (rightBytes !== null && rightBytes.every((byte) => byte === 0)) {
+      return `new Uint8Array(${translateExpression(bytesRepeat.left, nameMap, arrayNames, validatedTypeAliases, mapNames)} * ${rightBytes.length})`;
+    }
+  }
   const stringRepeat = splitTopLevelMultiplicative(trimmed);
   if (stringRepeat !== null) {
     const left = stripBalancedOuterParens(stringRepeat.left);
@@ -1642,6 +1653,9 @@ export function translateExpression(
 
   const bytesCall = parseCallPrefix(trimmed, 'bytes');
   if (bytesCall !== null && bytesCall.rest === '') {
+    if (looksLikeNumericByteLengthExpression(bytesCall.argsText.trim())) {
+      return `new Uint8Array(${translateExpression(bytesCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
     return `bytesFrom(${translateExpression(bytesCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
@@ -2473,13 +2487,20 @@ export function translateExpression(
     const values = tupleParts
       .map((part) => part.trim())
       .filter((part) => part !== '')
-      .map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
+      .map((part) => (part.startsWith('*')
+        ? `...${translateExpression(part.slice(1), nameMap, arrayNames, validatedTypeAliases, mapNames)}`
+        : translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)));
     return `[${values.join(', ')}]`;
   }
 
   const topLevelTupleParts = splitTopLevelComma(trimmed);
   if (topLevelTupleParts.length > 1) {
-    return `[${topLevelTupleParts.map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')}]`;
+    return `[${topLevelTupleParts.map((part) => {
+      const stripped = part.trim();
+      return stripped.startsWith('*')
+        ? `...${translateExpression(stripped.slice(1), nameMap, arrayNames, validatedTypeAliases, mapNames)}`
+        : translateExpression(stripped, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    }).join(', ')}]`;
   }
 
   const parenthesizedLeftFloorDivision = splitTopLevelFloorDivision(trimmed);
@@ -3104,6 +3125,25 @@ function translateAggregateGeneratorCall(
           : `(${translateExpression(generator.condition, itemNameMap, arrayNames, validatedTypeAliases, mapNames)}) && (${expression})`;
         return `${iterable}.every((${itemName}) => ${condition})`;
       }
+    }
+  }
+  const anyCall = parseCallPrefix(pythonExpression, 'any');
+  if (anyCall !== null && anyCall.rest === '') {
+    const args = splitTopLevelComma(anyCall.argsText);
+    if (args.length === 1) {
+      const generator = parseSimpleGeneratorExpression(args[0]);
+      if (generator !== null) {
+        const itemName = tsExportNameForPythonName(generator.itemName);
+        const itemNameMap = new Map(nameMap);
+        itemNameMap.set(generator.itemName, itemName);
+        const iterable = arrayMethodIterableExpression(generator.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames);
+        const expression = translateExpression(generator.expression, itemNameMap, arrayNames, validatedTypeAliases, mapNames);
+        const condition = generator.condition === null
+          ? expression
+          : `(${translateExpression(generator.condition, itemNameMap, arrayNames, validatedTypeAliases, mapNames)}) && (${expression})`;
+        return `${iterable}.some((${itemName}) => ${condition})`;
+      }
+      return `Array.from(${translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames)}).some(pythonTruthy)`;
     }
   }
   return null;
@@ -3871,8 +3911,24 @@ function translateConstructExpression(
   validatedTypeAliases: ReadonlySet<string>,
   mapNames: ReadonlySet<string>,
 ): string | null {
+  if (pythonExpression === 'Byte') {
+    return 'constructByte()';
+  }
+  if (pythonExpression === 'Int32sl') {
+    return 'constructInt32sl()';
+  }
   if (pythonExpression === 'Int32ul') {
     return 'constructInt32ul()';
+  }
+  if (pythonExpression === 'Float32l') {
+    return 'constructFloat32l()';
+  }
+  const arrayCall = parseCallPrefix(pythonExpression, 'Array');
+  if (arrayCall !== null && arrayCall.rest === '') {
+    const args = splitTopLevelComma(arrayCall.argsText);
+    if (args.length === 2) {
+      return `constructArray(${translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames)}, ${translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
   }
   const cStringCall = parseCallPrefix(pythonExpression, 'CString');
   if (cStringCall !== null && cStringCall.rest === '') {
@@ -3904,6 +3960,11 @@ function translateConstructExpression(
     return `constructStruct([${fields.join(', ')}])`;
   }
   return null;
+}
+
+function looksLikeNumericByteLengthExpression(value: string): boolean {
+  const atom = String.raw`(?:0x[0-9a-fA-F]+|\d+(?:\.\d+)?|[A-Z][A-Z0-9_]*)`;
+  return new RegExp(String.raw`^${atom}(?:\s*(?:[+\-*]|//|>>|<<)\s*${atom})*$`).test(value);
 }
 
 function translateInlineRecordLiteral(

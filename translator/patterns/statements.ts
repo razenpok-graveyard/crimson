@@ -66,6 +66,7 @@ import {
   parseFunctionParameterText,
   parseFunctionParametersText,
   pythonParameterNames,
+  recordParameterNameBindings,
 } from './parameters.js';
 import {
   isSimpleReferenceExpression,
@@ -589,11 +590,13 @@ function parseNestedFunctionParameters(
           : `const ${param.name} = opts.${param.name} ?? ${param.defaultValue};`);
       }
     }
+    const nameBindings = new Map<string, string>();
+    recordParameterNameBindings(nameBindings, parametersText, [...parsedParams.parameters, ...parsedParams.optsParams]);
     return {
       params,
       prologue,
       declaredNames: new Set<string>(pythonParameterNames(parametersText)),
-      nameBindings: new Map(),
+      nameBindings,
     };
   }
 
@@ -2373,6 +2376,24 @@ export function translateStraightLineStatement(
     }, trailingComment);
   }
 
+  const rangeSliceAssignment = /^(.+)\[(.+)\s*:\s*(.+)\] = (.+)$/.exec(statement);
+  if (rangeSliceAssignment !== null) {
+    const target = translateExpression(rangeSliceAssignment[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const start = translateExpression(rangeSliceAssignment[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const end = translateExpression(rangeSliceAssignment[3], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const zeroRepeat = /^b(["'])\\x00\1 \* (.+)$/.exec(rangeSliceAssignment[4]);
+    if (zeroRepeat !== null) {
+      return appendTrailingCommentToResult({
+        statements: [`${target}.fill(0, ${start}, ${end});`],
+        nextIndex: index + 1,
+      }, trailingComment);
+    }
+    return appendTrailingCommentToResult({
+      statements: [`${target}.set(${translateExpression(rangeSliceAssignment[4], nameMap, arrayNames, validatedTypeAliases, mapNames)}, ${start});`],
+      nextIndex: index + 1,
+    }, trailingComment);
+  }
+
   const assignment = /^(.+?) (\/\/=|\+=|-=|\*=|\/=|\|=|&=|\^=|=) (.+)$/.exec(statement);
   if (assignment !== null) {
     const mapPopAssignment = /^(.+)\.pop\((.+)\)$/.exec(assignment[3]);
@@ -3234,9 +3255,12 @@ function translateReturnExpression(
   const translated = translateExpression(pythonExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
   const returnType = nameMap.get(functionReturnTypeMarker('__current__'));
   const trimmed = translated.trim();
-  const enumReturnCast = /^([A-Z][A-Za-z0-9_]*(?:Id|Mode|Type|Flags))\((.+)\)$/.exec(pythonExpression.trim());
+  const enumReturnCast = /^([A-Z][A-Za-z0-9_]*(?:Id|Mode|Type|Flags|Scheme))\((.+)\)$/.exec(pythonExpression.trim());
   if (enumReturnCast !== null && returnType === tsExportNameForPythonName(enumReturnCast[1])) {
     return `${translateExpression(enumReturnCast[2], nameMap, arrayNames, validatedTypeAliases, mapNames)} as unknown as ${returnType}`;
+  }
+  if (returnType?.startsWith('[') === true && trimmed.startsWith('Array.from(')) {
+    return `${translated} as ${returnType}`;
   }
   if (returnType?.startsWith('Map<') === true && trimmed.startsWith('{') && trimmed.endsWith('}')) {
     return `new Map(Object.entries(${translated}))`;

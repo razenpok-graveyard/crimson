@@ -354,6 +354,11 @@ export function parseTopLevelAssignment(
         nextIndex += 1;
         continue;
       }
+      if (trimmed.startsWith('#')) {
+        valueLines.push(`  // ${trimmed.replace(/^# ?/, '')}`);
+        nextIndex += 1;
+        continue;
+      }
       const arg = /^(.+),$/.exec(trimmed);
       if (arg === null) {
         return null;

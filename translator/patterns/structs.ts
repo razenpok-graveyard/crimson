@@ -42,7 +42,7 @@ import {
   parseStraightLineFunctionHeader,
 } from './function-headers.js';
 import { recordImportedInstanceMethodSignatures, recordImportedMapNames, recordImportedStructConstructorFields, recordImportedTupleTypeAliases } from './imported-classes.js';
-import { parseFunctionParameterText, parseFunctionParametersText, pythonParameterNames } from './parameters.js';
+import { parseFunctionParameterText, parseFunctionParametersText, pythonParameterNames, recordParameterNameBindings } from './parameters.js';
 import {
   reassignedLocalNames,
   rewriteStructPositionalConstructors,
@@ -378,6 +378,7 @@ function parseStructModuleFunction(
   const mapNames = new Set<string>(initialMapNames);
   const statements: string[] = [];
   const nameMap = new Map(moduleNameMap);
+  recordParameterNameBindings(nameMap, header.parametersText, [...parsedParams.parameters, ...parsedParams.optsParams]);
   nameMap.set(functionSignatureMarker(header.name), JSON.stringify({ positional: signaturePositionalNames }));
   const declaredNames = new Set<string>(pythonParameterNames(header.parametersText));
   let nextIndex = header.nextIndex;
@@ -1011,6 +1012,7 @@ function parseStructMethod(
 
   const statements: string[] = [];
   const nameMap = new Map<string, string>(moduleNameMap);
+  recordParameterNameBindings(nameMap, extraParameters, [...parameters, ...optsParams]);
   nameMap.set(functionReturnTypeMarker('__current__'), tsTypeExpression(header.returnType));
   for (const [mapName, valueType] of mapValueTypes) {
     nameMap.set(mapValueTypeMarker(mapName), valueType);

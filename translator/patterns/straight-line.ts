@@ -68,7 +68,7 @@ import {
   recordImportedInstanceMethodSignatures,
   recordImportedStructConstructorFields,
 } from './imported-classes.js';
-import { parseFunctionParameterText, pythonParameterNames } from './parameters.js';
+import { parseFunctionParameterText, pythonParameterNames, recordParameterNameBindings } from './parameters.js';
 import { parseTypeAliasStatement } from './straight-line/type-aliases.js';
 import {
   bytesFromHelperStatements,
@@ -121,6 +121,7 @@ import { parsePlainClass, parseStructClass } from './structs.js';
 export function parseStraightLineModule(trimmedPython: string, relativePath: string): StraightLineModule | null {
   const moduleDocstring = splitLeadingModuleDocstring(trimmedPython);
   const lines = flattenFromImportBlocks((moduleDocstring?.remainder.trim() ?? trimmedPython).split(/\r?\n/));
+  const privateFunctionNameCollisions = privateFunctionNamesCollidingWithParameters(lines);
   const imports: ImportDefinition[] = [];
   const namespaceImports: NamespaceImportDefinition[] = [];
   const leadingAssignments: SimpleModuleAssignment[] = [];
@@ -146,6 +147,8 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
   const stringReturnFunctionNames = new Set<string>();
   const pendingAssignmentComments: string[] = [];
   let index = 0;
+
+  prerecordTopLevelFunctionNames(moduleNameMap, lines, privateFunctionNameCollisions);
 
   while (index < lines.length) {
     const trimmed = lines[index].trim();
@@ -733,11 +736,13 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       positional: signaturePositionalNames,
       returnTupleMarkers: returnTupleMarkersForType(header.returnType),
     };
+    const functionName = tsFunctionNameForPythonName(header.name, privateFunctionNameCollisions);
     moduleNameMap.set(functionSignatureMarker(header.name), JSON.stringify(signature));
-    moduleNameMap.set(functionSignatureMarker(tsExportNameForPythonName(header.name)), JSON.stringify(signature));
+    moduleNameMap.set(functionSignatureMarker(functionName), JSON.stringify(signature));
 
     const statements: string[] = [];
     const nameMap = new Map(moduleNameMap);
+    recordParameterNameBindings(nameMap, header.parametersText, [...parameters, ...optsParams]);
     nameMap.set(functionReturnTypeMarker('__current__'), tsFunctionReturnTypeExpression(header.returnType));
     recordParameterReceiverTypes(nameMap, arrayNames, [...parameters, ...optsParams]);
     const declaredNames = new Set<string>(pythonParameterNames(header.parametersText));
@@ -793,7 +798,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
 
     const returnType = tsFunctionReturnTypeExpression(header.returnType);
     functions.push({
-      name: tsExportNameForPythonName(header.name),
+      name: functionName,
       exported: !header.name.startsWith('_'),
       async: statements.some((statement) => statement.includes('await ')),
       typeParams: simpleFunctionTypeParams(typeVarNames, parameters, optsParams, returnType),
@@ -803,18 +808,18 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       decorators,
       statements,
     });
-    moduleNameMap.set(header.name, tsExportNameForPythonName(header.name));
+    moduleNameMap.set(header.name, functionName);
     if (returnType.startsWith('Set<') || returnType.startsWith('ReadonlySet<')) {
-      setReturnFunctionNames.add(tsExportNameForPythonName(header.name));
+      setReturnFunctionNames.add(functionName);
     }
     if (returnType === 'BuiltinObject' || returnType.startsWith('Record<')) {
-      objectReturnFunctionNames.add(tsExportNameForPythonName(header.name));
+      objectReturnFunctionNames.add(functionName);
     }
     if (returnType === 'string') {
-      stringReturnFunctionNames.add(tsExportNameForPythonName(header.name));
+      stringReturnFunctionNames.add(functionName);
     }
     moduleNameMap.set(functionReturnTypeMarker(header.name), returnType);
-    moduleNameMap.set(functionReturnTypeMarker(tsExportNameForPythonName(header.name)), returnType);
+    moduleNameMap.set(functionReturnTypeMarker(functionName), returnType);
   }
 
   while (index < lines.length) {
@@ -1670,6 +1675,50 @@ function functionBodyHasDottedAccess(
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function prerecordTopLevelFunctionNames(
+  moduleNameMap: Map<string, string>,
+  lines: readonly string[],
+  privateFunctionNameCollisions: ReadonlySet<string>,
+): void {
+  for (const name of topLevelFunctionNames(lines)) {
+    moduleNameMap.set(name, tsFunctionNameForPythonName(name, privateFunctionNameCollisions));
+  }
+}
+
+function privateFunctionNamesCollidingWithParameters(lines: readonly string[]): Set<string> {
+  const parameterNames = new Set<string>();
+  const functionNames = topLevelFunctionNames(lines);
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!lines[index]?.startsWith('def ')) {
+      continue;
+    }
+    const header = parseStraightLineFunctionHeader(lines as string[], index);
+    if (header === null) {
+      continue;
+    }
+    for (const parameterName of pythonParameterNames(header.parametersText)) {
+      parameterNames.add(tsExportNameForPythonName(parameterName));
+    }
+  }
+  return new Set(functionNames.filter((name) => name.startsWith('_') && parameterNames.has(tsExportNameForPythonName(name))));
+}
+
+function topLevelFunctionNames(lines: readonly string[]): string[] {
+  const names: string[] = [];
+  for (const line of lines) {
+    const match = /^def ([A-Za-z_][A-Za-z0-9_]*)\(/.exec(line);
+    if (match !== null) {
+      names.push(match[1]);
+    }
+  }
+  return names;
+}
+
+function tsFunctionNameForPythonName(pythonName: string, privateFunctionNameCollisions: ReadonlySet<string>): string {
+  const publicName = tsExportNameForPythonName(pythonName);
+  return privateFunctionNameCollisions.has(pythonName) ? `_${publicName}` : publicName;
 }
 
 function recordParameterReceiverTypes(
