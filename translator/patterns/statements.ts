@@ -747,9 +747,20 @@ export function translateStraightLineStatement(
 
   const sideEffectImport = /^from (\.+) import ([A-Za-z_][A-Za-z0-9_]*) as (_[A-Za-z_][A-Za-z0-9_]*)(?:\s+#.*)?$/.exec(statement);
   if (sideEffectImport !== null && relativePath !== null) {
+    const modulePath = tsImportPathForPythonImport(`${sideEffectImport[1]}${sideEffectImport[2]}`, relativePath);
+    let nextIndex = index + 1;
+    while (
+      nextIndex < lines.length
+      && (lines[nextIndex] ?? '').trim() === ''
+      && ((lines[nextIndex] ?? '') === '' || (lines[nextIndex] ?? '').startsWith(indent))
+    ) {
+      nextIndex += 1;
+    }
+    const nextLine = lines[nextIndex] ?? '';
+    const skipAliasKeepalive = lineStartsAtIndent(nextLine, indent) && nextLine.trim() === `_ = ${sideEffectImport[3]}`;
     return {
-      statements: [`void import('${tsImportPathForPythonImport(`${sideEffectImport[1]}${sideEffectImport[2]}`, relativePath)}');`],
-      nextIndex: index + 1,
+      statements: [`void import('${modulePath}');`],
+      nextIndex: skipAliasKeepalive ? nextIndex + 1 : index + 1,
     };
   }
 

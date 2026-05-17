@@ -596,6 +596,18 @@ export function translateExpression(
   if (trimmed === 'int.from_bytes(os.urandom(4), "little")' || trimmed === "int.from_bytes(os.urandom(4), 'little')") {
     return 'globalThis.crypto.getRandomValues(new Uint32Array(1))[0]';
   }
+  const intFromBytesCall = parseCallPrefix(trimmed, 'int.from_bytes');
+  if (intFromBytesCall !== null && intFromBytesCall.rest === '') {
+    const args = splitTopLevelComma(intFromBytesCall.argsText);
+    if (args.length >= 1 && args.length <= 2) {
+      const bytes = translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const endian = args[1]?.trim() ?? "'big'";
+      const readExpression = endian === '"little"' || endian === "'little'"
+        ? 'Array.from(bytes).reduce((value, byte, index) => value + byte * (256 ** index), 0)'
+        : 'Array.from(bytes).reduce((value, byte) => value * 256 + byte, 0)';
+      return `((bytes: ArrayLike<number>) => ${readExpression})(${bytes})`;
+    }
+  }
 
   const secretsTokenHexCall = parseCallPrefix(trimmed, 'secrets.token_hex');
   if (secretsTokenHexCall !== null && secretsTokenHexCall.rest === '') {

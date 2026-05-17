@@ -25,13 +25,20 @@ export function tsExceptGuardExpression(
 ): string | null {
   const guards: string[] = [];
   for (const pythonType of pythonTypes) {
-    const translatedType = translateExpression(pythonType, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const translatedType = tsExceptionGuardType(translateExpression(pythonType, nameMap, arrayNames, validatedTypeAliases, mapNames));
     if (!tsExceptionTypeIsGuardable(translatedType)) {
       return null;
     }
     guards.push(`${catchName} instanceof ${translatedType}`);
   }
   return guards.length === 0 ? null : guards.join(' || ');
+}
+
+function tsExceptionGuardType(tsType: string): string {
+  if (tsType === 'IndexError') {
+    return 'RangeError';
+  }
+  return tsType;
 }
 
 function tsExceptionTypeIsGuardable(tsType: string): boolean {
