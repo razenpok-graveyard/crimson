@@ -204,6 +204,7 @@ export interface InitReexports {
 export interface SimpleModuleFunction {
   name: string;
   exported: boolean;
+  decorators?: string[];
   leadingComments?: string[];
   abstract?: boolean;
   async?: boolean;

@@ -40,6 +40,7 @@ import {
   splitTopLevelComma,
   stripTypeOnlyStatementSyntax,
 } from './common.js';
+import { delimitersBalanced } from './expression/scanners.js';
 import { parseStringEnumClass } from './enums.js';
 import {
   classFieldTypeMarker,
@@ -147,7 +148,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       index += 1;
       continue;
     }
-    if (trimmed.startsWith('def ')) {
+    if (trimmed.startsWith('def ') || decoratorBlockIsFollowedByFunction(lines, index)) {
       break;
     }
     if (trimmed.startsWith('__all__ = ')) {
@@ -604,9 +605,19 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       continue;
     }
 
-    const functionIndex = skipIgnorableFunctionDecorators(lines, index);
-    if (functionIndex !== index) {
-      index = functionIndex;
+    let decorators: string[] = [];
+    if ((lines[index] ?? '').trim().startsWith('@')) {
+      const decoratorParse = parseFunctionDecorators(
+        lines,
+        index,
+        moduleNameMap,
+        validatedTypeAliases,
+        mapNames,
+      );
+      if (decoratorParse !== null && (lines[decoratorParse.headerIndex] ?? '').startsWith('def ')) {
+        decorators = decoratorParse.decorators;
+        index = decoratorParse.headerIndex;
+      }
     }
 
     if (!(lines[index] ?? '').startsWith('def ')) {
@@ -780,6 +791,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       parameters,
       optsParams,
       returnType,
+      decorators,
       statements,
     });
     moduleNameMap.set(header.name, tsExportNameForPythonName(header.name));
@@ -1353,7 +1365,7 @@ function straightLineModuleUsesPythonRepr(
       ...plainClass.constructorDefinition.statements,
       ...plainClass.methods.flatMap((method) => method.statements),
     ]),
-    ...functions.flatMap((fn) => fn.statements),
+    ...functions.flatMap((fn) => [...(fn.decorators ?? []), ...fn.statements]),
     ...assignments.flatMap((assignment) => assignment.valueLines),
   ].some((line) => line.includes('pythonRepr('));
 }
@@ -1376,7 +1388,7 @@ function straightLineModuleUsesStructFloatBuffers(
       ...plainClass.constructorDefinition.statements,
       ...plainClass.methods.flatMap((method) => method.statements),
     ]),
-    ...functions.flatMap((fn) => fn.statements),
+    ...functions.flatMap((fn) => [...(fn.decorators ?? []), ...fn.statements]),
     ...assignments.flatMap((assignment) => assignment.valueLines),
   ].some((line) => line.includes('_f32buf') || line.includes('_u32buf'));
 }
@@ -1418,7 +1430,7 @@ function moduleValueUsageText(
     ...plainClasses.flatMap((plainClass) => plainClass.constructorDefinition.statements),
     ...plainClasses.flatMap((plainClass) => plainClass.methods.flatMap((method) => method.statements)),
     ...statements,
-    ...functions.flatMap((fn) => fn.statements),
+    ...functions.flatMap((fn) => [...(fn.decorators ?? []), ...fn.statements]),
     ...functions.flatMap((fn) => [
       ...fn.parameters.map((parameter) => parameter.defaultValue ?? ''),
       ...fn.optsParams.map((parameter) => parameter.defaultValue ?? ''),
@@ -2070,12 +2082,74 @@ function tsImportPathForSourcePath(sourcePath: string): string | null {
   return null;
 }
 
-function skipIgnorableFunctionDecorators(lines: string[], index: number): number {
+function parseFunctionDecorators(
+  lines: string[],
+  index: number,
+  nameMap: Map<string, string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): { decorators: string[]; headerIndex: number } | null {
+  const decorators: string[] = [];
   let nextIndex = index;
-  while (/^@(?:functools\.)?lru_cache\([^)]*\)$/.test(lines[nextIndex]?.trim() ?? '')) {
+  while ((lines[nextIndex] ?? '').trim().startsWith('@')) {
+    const decorator = parseFunctionDecorator(lines, nextIndex);
+    if (decorator === null) {
+      return null;
+    }
+    nextIndex = decorator.nextIndex;
+    if (isIgnorableFunctionDecorator(decorator.expression)) {
+      continue;
+    }
+    decorators.push(translateExpression(
+      decorator.expression,
+      nameMap,
+      new Set(),
+      validatedTypeAliases,
+      mapNames,
+    ));
+  }
+  return { decorators, headerIndex: nextIndex };
+}
+
+function parseFunctionDecorator(lines: string[], index: number): { expression: string; nextIndex: number } | null {
+  const firstLine = (lines[index] ?? '').trim();
+  if (!firstLine.startsWith('@')) {
+    return null;
+  }
+  const parts = [firstLine.slice(1).trim()];
+  let nextIndex = index + 1;
+  while (!delimitersBalanced(parts.join(' '))) {
+    if (nextIndex >= lines.length) {
+      return null;
+    }
+    const line = lines[nextIndex];
+    const trimmed = line.trim();
+    if (trimmed === '' || (!line.startsWith(' ') && !line.startsWith('\t') && !/^[)\]}]+,?$/.test(trimmed))) {
+      return null;
+    }
+    parts.push(trimmed);
     nextIndex += 1;
   }
-  return (nextIndex !== index && (lines[nextIndex] ?? '').startsWith('def ')) ? nextIndex : index;
+  return { expression: parts.join(' '), nextIndex };
+}
+
+function decoratorBlockIsFollowedByFunction(lines: string[], index: number): boolean {
+  if (!(lines[index] ?? '').trim().startsWith('@')) {
+    return false;
+  }
+  let nextIndex = index;
+  while ((lines[nextIndex] ?? '').trim().startsWith('@')) {
+    const decorator = parseFunctionDecorator(lines, nextIndex);
+    if (decorator === null) {
+      return false;
+    }
+    nextIndex = decorator.nextIndex;
+  }
+  return (lines[nextIndex] ?? '').startsWith('def ');
+}
+
+function isIgnorableFunctionDecorator(expression: string): boolean {
+  return /^(?:functools\.)?lru_cache\([^)]*\)$/.test(expression);
 }
 
 function menuViewHelperImportNames(): string[] {
@@ -2224,7 +2298,7 @@ function markTypeOnlyImports(
     ...plainClasses.flatMap((plainClass) => plainClass.constructorDefinition.statements),
     ...plainClasses.flatMap((plainClass) => plainClass.methods.flatMap((method) => method.statements)),
     ...leadingStatements,
-    ...functions.flatMap((fn) => fn.statements),
+    ...functions.flatMap((fn) => [...(fn.decorators ?? []), ...fn.statements]),
     ...functions.flatMap((fn) => [
       ...fn.parameters.map((parameter) => parameter.defaultValue ?? ''),
       ...fn.optsParams.map((parameter) => parameter.defaultValue ?? ''),

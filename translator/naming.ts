@@ -6,7 +6,11 @@ export function tsExportNameForPythonName(pythonName: string): string {
   const withoutLeadingPrivateMarker = pythonName.replace(/^_+/, '');
   return withoutLeadingPrivateMarker.replaceAll(
     /_([a-zA-Z0-9])/g,
-    (_match, letter: string) => letter.toUpperCase(),
+    (match: string, letter: string, offset: number, text: string) => (
+      /\d/.test(text[offset - 1] ?? '') && /\d/.test(letter)
+        ? match
+        : letter.toUpperCase()
+    ),
   );
 }
 

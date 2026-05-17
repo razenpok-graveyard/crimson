@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { tsTargetRoot } from '../paths.js';
 import { splitTopLevelComma } from './common.js';
+import { functionSignatureMarker } from './function-headers.js';
 import { classFieldTypeMarker, functionReturnTypeMarker, instanceMethodSignatureMarker } from './expression.js';
 
 export function recordImportedInstanceMethodSignatures(
@@ -85,12 +86,17 @@ export function recordImportedFunctionReturnTypes(
   moduleNameMap: Map<string, string>,
 ): void {
   for (const name of names) {
-    const returnType = importedFunctionReturnType(modulePath, name.importedName, relativePath);
-    if (returnType === null) {
+    const signature = importedFunctionSignature(modulePath, name.importedName, relativePath);
+    if (signature === null) {
       continue;
     }
-    moduleNameMap.set(functionReturnTypeMarker(name.localName), `ReturnType<typeof ${name.localName}>`);
-    moduleNameMap.set(functionReturnTypeMarker(name.importedName), `ReturnType<typeof ${name.importedName}>`);
+    if (signature.returnType !== null) {
+      moduleNameMap.set(functionReturnTypeMarker(name.localName), `ReturnType<typeof ${name.localName}>`);
+      moduleNameMap.set(functionReturnTypeMarker(name.importedName), `ReturnType<typeof ${name.importedName}>`);
+    }
+    const signatureJson = JSON.stringify({ positional: signature.positional });
+    moduleNameMap.set(functionSignatureMarker(name.localName), signatureJson);
+    moduleNameMap.set(functionSignatureMarker(name.importedName), signatureJson);
   }
 }
 
@@ -249,7 +255,11 @@ function uniqueFieldNames(fields: string[]): string[] {
   return unique;
 }
 
-function importedFunctionReturnType(modulePath: string, functionName: string, relativePath: string): string | null {
+function importedFunctionSignature(
+  modulePath: string,
+  functionName: string,
+  relativePath: string,
+): { returnType: string | null; positional: string[] } | null {
   const sourcePath = tsSourcePathForImportPath(modulePath, relativePath);
   if (sourcePath === null || !fs.existsSync(sourcePath)) {
     return null;
@@ -265,8 +275,14 @@ function importedFunctionReturnType(modulePath: string, functionName: string, re
   if (closeIndex === null) {
     return null;
   }
+  const positional = splitTopLevelComma(source.slice(openIndex + 1, closeIndex))
+    .map((parameter) => /^(?:readonly\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\??(?:\s*:|\s*=)/.exec(parameter.trim())?.[1] ?? null)
+    .filter((name): name is string => name !== null && name !== 'opts');
   const returnType = /^\s*:\s*([^{};=\n]+)\s*\{/.exec(source.slice(closeIndex + 1))?.[1]?.trim();
-  return returnType === undefined || returnType === '' ? null : returnType;
+  return {
+    returnType: returnType === undefined || returnType === '' ? null : returnType,
+    positional,
+  };
 }
 
 function matchingCloseParen(source: string, openIndex: number): number | null {

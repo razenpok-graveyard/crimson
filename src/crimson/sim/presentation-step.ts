@@ -203,7 +203,7 @@ export function queueProjectileDecalsPreHit(opts: { state: GameplayState; player
   let hi: number;
   if (bloody) {
     for (let i = 0; i < 8; i++) {
-      const spread = ( (rng.rand({ caller: RngCallerStatic.PROJECTILE_UPDATE_BLOODY_MESS_SPREAD }) & 0x1F) - 16.0 ) * 0.0625;
+      const spread = ((rng.rand({ caller: RngCallerStatic.PROJECTILE_UPDATE_BLOODY_MESS_SPREAD }) & 0x1F) - 16.0) * 0.0625;
       state.effects.spawnBloodSplatter({
         pos: hit.hit,
         angle: baseAngle + spread,

@@ -34,6 +34,7 @@ import {
 import { parseBytesLiteral } from './expression/literals.js';
 import type { FunctionCallSignature } from './expression/function-signatures.js';
 import { parseFunctionCallSignature } from './expression/function-signatures.js';
+import { functionSignatureMarker } from './function-headers.js';
 import {
   parseSimpleGeneratorExpression,
   parseTopLevelConditionalExpression,
@@ -1667,7 +1668,7 @@ export function translateExpression(
 
   const intCall = parseCallPrefix(trimmed, 'int');
   if (intCall !== null && intCall.rest === '') {
-    const argText = intCall.argsText.trim();
+    const argText = singleCallArgumentText(intCall.argsText);
     const translated = translateExpression(argText, nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (arrayNames.has(booleanNameMarker(argText)) || arrayNames.has(booleanNameMarker(translated)) || translatedExpressionLooksBooleanForInt(translated)) {
       return `(${translated} ? 1 : 0)`;
@@ -1676,7 +1677,7 @@ export function translateExpression(
   }
   const floatCall = parseCallPrefix(trimmed, 'float');
   if (floatCall !== null && floatCall.rest === '') {
-    const argText = floatCall.argsText.trim();
+    const argText = singleCallArgumentText(floatCall.argsText);
     const translated = translateExpression(argText, nameMap, arrayNames, validatedTypeAliases, mapNames);
     return arrayNames.has(stringNameMarker(argText)) || arrayNames.has(stringNameMarker(translated))
       ? `pythonFloat(${translated})`
@@ -2091,6 +2092,22 @@ export function translateExpression(
     const right = translateExpression(stripBalancedOuterParens(multiplicativeWithFloorDivision.right), nameMap, arrayNames, validatedTypeAliases, mapNames);
     return `${parenthesizeForMultiplicative(left)} * ${parenthesizeForMultiplicative(right)}`;
   }
+  const parenthesizedMultiplicativeLeft = multiplicativeWithFloorDivision === null ? null : stripBalancedOuterParens(multiplicativeWithFloorDivision.left);
+  const parenthesizedMultiplicativeRight = multiplicativeWithFloorDivision === null ? null : stripBalancedOuterParens(multiplicativeWithFloorDivision.right);
+  if (
+    multiplicativeWithFloorDivision !== null
+    && !vectorScaleContainsComparison
+    && (
+      parenthesizedMultiplicativeLeft !== multiplicativeWithFloorDivision.left
+      || parenthesizedMultiplicativeRight !== multiplicativeWithFloorDivision.right
+    )
+  ) {
+    const leftWasParenthesized = parenthesizedMultiplicativeLeft !== multiplicativeWithFloorDivision.left;
+    const rightWasParenthesized = parenthesizedMultiplicativeRight !== multiplicativeWithFloorDivision.right;
+    const left = translateExpression(parenthesizedMultiplicativeLeft ?? multiplicativeWithFloorDivision.left, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const right = translateExpression(parenthesizedMultiplicativeRight ?? multiplicativeWithFloorDivision.right, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    return `${leftWasParenthesized ? `(${left})` : parenthesizeForMultiplicative(left)} * ${rightWasParenthesized ? `(${right})` : parenthesizeForMultiplicative(right)}`;
+  }
   const divisionWithConditional = splitTopLevelDivision(trimmed);
   if (
     divisionWithConditional !== null
@@ -2398,11 +2415,6 @@ export function translateExpression(
     const left = parenthesizeForModulo(translateExpression(stripBalancedOuterParens(modulo.left), nameMap, arrayNames, validatedTypeAliases, mapNames));
     const right = parenthesizeForModulo(translateExpression(stripBalancedOuterParens(modulo.right), nameMap, arrayNames, validatedTypeAliases, mapNames));
     return modulo.left.includes(' - ') ? `(${left} + ${right}) % ${right}` : `${left} % ${right}`;
-  }
-
-  const additiveWithFloorDivision = /^(.+?) ([+-]) (.+ \/\/ .+)$/.exec(trimmed);
-  if (additiveWithFloorDivision !== null) {
-    return `${translateExpression(additiveWithFloorDivision[1], nameMap, arrayNames, validatedTypeAliases, mapNames)} ${additiveWithFloorDivision[2]} ${translateExpression(additiveWithFloorDivision[3], nameMap, arrayNames, validatedTypeAliases, mapNames)}`;
   }
 
   const floorDivision = splitTopLevelFloorDivision(trimmed);
@@ -3739,6 +3751,18 @@ function translateMixedKeywordCall(
   if (knownSignatureCall !== null) {
     return knownSignatureCall;
   }
+  const knownFunctionSignatureCall = translateMixedKeywordCallWithKnownFunctionSignature(
+    call[1],
+    positionalParts,
+    keywordParts,
+    nameMap,
+    arrayNames,
+    validatedTypeAliases,
+    mapNames,
+  );
+  if (knownFunctionSignatureCall !== null) {
+    return knownFunctionSignatureCall;
+  }
   const callee = translateStaticMethodCalleeIfKnown(call[1], nameMap)
     ?? translateExpression(call[1], nameMap, arrayNames, validatedTypeAliases);
   const callPrefix = /^[A-Z][A-Za-z0-9_]*$/.test(callee) ? `new ${callee}` : callee;
@@ -3751,6 +3775,11 @@ function translateMixedKeywordCall(
     ...positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)),
     optsExpression,
   ].join(', ')})`;
+}
+
+function singleCallArgumentText(argsText: string): string {
+  const parts = splitTopLevelComma(argsText).filter((part) => part !== '');
+  return parts.length === 1 ? parts[0] : argsText.trim();
 }
 
 function translateComplexKeywordMethodCall(
@@ -3916,6 +3945,74 @@ function translateMixedKeywordCallWithKnownInstanceSignature(
     args.push(`{ ${remainingKeywordParts.join(', ')} }`);
   }
   return `${knownMethod.callee}(${args.join(', ')})`;
+}
+
+function translateMixedKeywordCallWithKnownFunctionSignature(
+  pythonCallee: string,
+  positionalParts: string[],
+  keywordParts: { pythonName: string; tsName: string; expression: string }[],
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  const knownFunction = knownFunctionCall(pythonCallee, nameMap, arrayNames, validatedTypeAliases);
+  if (knownFunction === null) {
+    return null;
+  }
+  const consumedKeywords = new Set<string>();
+  const args = positionalParts.map((part) => translateCallArgumentExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
+  for (const positionalName of knownFunction.signature.positional.slice(args.length)) {
+    const keywordPart = keywordParts.find((part) => (
+      !consumedKeywords.has(part.pythonName)
+      && (
+        part.pythonName === positionalName
+        || part.tsName === positionalName
+        || `_${part.pythonName}` === positionalName
+        || `_${part.tsName}` === positionalName
+      )
+    ));
+    if (keywordPart === undefined) {
+      break;
+    }
+    args.push(keywordPart.expression);
+    consumedKeywords.add(keywordPart.pythonName);
+  }
+  if (consumedKeywords.size === 0) {
+    return null;
+  }
+  const remainingKeywordParts = keywordParts
+    .filter((part) => !consumedKeywords.has(part.pythonName))
+    .map((part) => `${part.tsName}: ${part.expression}`);
+  if (remainingKeywordParts.length > 0) {
+    args.push(`{ ${remainingKeywordParts.join(', ')} }`);
+  }
+  return `${knownFunction.callee}(${args.join(', ')})`;
+}
+
+function knownFunctionCall(
+  pythonCallee: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+): { callee: string; signature: { positional: string[] } } | null {
+  const callee = translateStaticMethodCalleeIfKnown(pythonCallee, nameMap)
+    ?? translateExpression(pythonCallee, nameMap, arrayNames, validatedTypeAliases);
+  const signatureText = nameMap.get(functionSignatureMarker(pythonCallee))
+    ?? nameMap.get(functionSignatureMarker(callee))
+    ?? nameMap.get(functionSignatureMarker(tsExportNameForPythonName(pythonCallee)));
+  if (signatureText === undefined) {
+    return null;
+  }
+  try {
+    const signature = JSON.parse(signatureText) as { positional?: unknown };
+    if (!Array.isArray(signature.positional) || !signature.positional.every((part) => typeof part === 'string')) {
+      return null;
+    }
+    return { callee, signature: { positional: signature.positional } };
+  } catch {
+    return null;
+  }
 }
 
 function knownInstanceMethodCall(

@@ -379,7 +379,11 @@ export function renderSimpleModuleFunctions(
       const allOptsHaveDefaults = fn.optsParams.every((param) => param.defaultValue !== null);
       params.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
     }
-    lines.push(`${fn.exported ? 'export ' : ''}${fn.async === true ? 'async ' : ''}function${generator ? '*' : ''} ${fn.name}${renderTypeParameters(fn)}(${params.join(', ')}): ${renderFunctionReturnType(fn)} {`);
+    const decorators = fn.decorators ?? [];
+    const decoratorPrefix = decorators.length === 0
+      ? ''
+      : `const ${fn.name} = ${decorators.map((decorator) => `${decorator}(`).join('')}`;
+    lines.push(`${fn.exported ? 'export ' : ''}${decoratorPrefix}${fn.async === true ? 'async ' : ''}function${generator ? '*' : ''} ${fn.name}${renderTypeParameters(fn)}(${params.join(', ')}): ${renderFunctionReturnType(fn)} {`);
     let statementIndex = 0;
     while (
       statementIndex < fn.statements.length
@@ -400,7 +404,7 @@ export function renderSimpleModuleFunctions(
     for (const statement of fn.statements.slice(statementIndex)) {
       lines.push(statement === '' ? '' : `  ${statement}`);
     }
-    lines.push('}');
+    lines.push(`}${decorators.length === 0 ? '' : `${')'.repeat(decorators.length)};`}`);
     if (index < functions.length - 1 || hasFollowingContent) {
       lines.push('');
     }
