@@ -211,6 +211,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       || trimmed === 'from collections import OrderedDict'
       || trimmed === 'from collections import defaultdict'
       || trimmed === 'from collections import deque'
+      || trimmed === 'from contextlib import contextmanager'
       || trimmed === 'from functools import lru_cache'
       || trimmed === 'from pathlib import Path'
       || trimmed === 'from threading import Lock'
@@ -2207,7 +2208,7 @@ function decoratorBlockIsFollowedByFunction(lines: string[], index: number): boo
 }
 
 function isIgnorableFunctionDecorator(expression: string): boolean {
-  return /^(?:functools\.)?lru_cache\([^)]*\)$/.test(expression);
+  return expression === 'contextmanager' || /^(?:functools\.)?lru_cache\([^)]*\)$/.test(expression);
 }
 
 function menuViewHelperImportNames(): string[] {

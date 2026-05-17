@@ -5,6 +5,7 @@ import {
 } from '../../naming.js';
 import { parseTypeAliasValidation } from '../basic.js';
 import { isBareTypeAliasExpression } from '../common.js';
+import { delimitersBalanced } from '../expression/scanners.js';
 
 export function parseTypeAliasStatement(
   lines: string[],
@@ -99,6 +100,13 @@ export function parseTypeAliasStatement(
 
   const plainAlias = /^([A-Za-z_][A-Za-z0-9_]*): TypeAlias = (.+)$/.exec(lines[index]?.trim() ?? '');
   if (plainAlias !== null) {
+    const multilineExpression = collectMultilineAliasExpression(lines, index, plainAlias[2]);
+    if (multilineExpression !== null) {
+      return {
+        alias: { name: tsExportNameForPythonName(plainAlias[1]), typeExpression: tsTypeExpression(multilineExpression.expression) },
+        nextIndex: multilineExpression.nextIndex,
+      };
+    }
     return {
       alias: { name: tsExportNameForPythonName(plainAlias[1]), typeExpression: tsTypeExpression(plainAlias[2]) },
       nextIndex: index + 1,
@@ -125,4 +133,42 @@ export function parseTypeAliasStatement(
     };
   }
   return null;
+}
+
+function collectMultilineAliasExpression(
+  lines: string[],
+  index: number,
+  firstExpressionPart: string,
+): { expression: string; nextIndex: number } | null {
+  if (delimitersBalanced(firstExpressionPart)) {
+    return null;
+  }
+
+  const parts = [firstExpressionPart.trim()];
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length) {
+    const line = lines[nextIndex] ?? '';
+    const trimmed = line.trim();
+    if (trimmed === '') {
+      return null;
+    }
+    parts.push(trimmed);
+    const expression = normalizeMultilineAliasExpression(parts);
+    if (delimitersBalanced(expression)) {
+      return { expression, nextIndex: nextIndex + 1 };
+    }
+    if (!line.startsWith('    ')) {
+      return null;
+    }
+    nextIndex += 1;
+  }
+  return null;
+}
+
+function normalizeMultilineAliasExpression(parts: string[]): string {
+  return parts
+    .join(' ')
+    .replace(/\[\s+/g, '[')
+    .replace(/\s+\]/g, ']')
+    .replace(/,\s*\]/g, ']');
 }

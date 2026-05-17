@@ -175,6 +175,7 @@ type WithItem = {
   name: string;
   expression: string;
   close: true;
+  iterator?: boolean;
 } | {
   expression: string;
   close: false;
@@ -1160,9 +1161,29 @@ export function translateStraightLineStatement(
     };
   }
 
-  const withStatement = /^with (.+):$/.exec(statement);
-  if (withStatement !== null) {
-    const withItems = parseWithItems(withStatement[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const multilineWithCallStatement = /^with ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(statement);
+  const multilineWithCall = multilineWithCallStatement === null
+    ? null
+    : parseMultilineCallExpressionWithAsClose(
+      lines,
+      index + 1,
+      multilineWithCallStatement[1],
+      nameMap,
+      arrayNames,
+      validatedTypeAliases,
+      mapNames,
+    );
+  const withStatement = multilineWithCall === null ? /^with (.+):$/.exec(statement) : null;
+  if (withStatement !== null || multilineWithCall !== null) {
+    const withItems = multilineWithCall !== null
+      ? [{
+        pythonName: multilineWithCall.pythonName,
+        name: multilineWithCall.name,
+        expression: multilineWithCall.expression,
+        close: true as const,
+        iterator: withItemExpressionIsIterator(multilineWithCall.expression, nameMap),
+      }]
+      : parseWithItems(withStatement![1], nameMap, arrayNames, validatedTypeAliases, mapNames);
     if (withItems === null) {
       return null;
     }
@@ -1175,7 +1196,7 @@ export function translateStraightLineStatement(
 
     const innerIndent = `${indent}    `;
     const blockStatements: string[] = [];
-    let nextIndex = index + 1;
+    let nextIndex = multilineWithCall?.nextIndex ?? index + 1;
     while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, innerIndent)) {
       if (lines[nextIndex].trim() === '') {
         blockStatements.push('');
@@ -1211,6 +1232,28 @@ export function translateStraightLineStatement(
         statements: [
           '{',
           ...blockStatements,
+          '}',
+        ],
+        nextIndex,
+      };
+    }
+    const iteratorItems = namedItems.filter((item) => item.iterator === true);
+    if (iteratorItems.length > 0) {
+      if (namedItems.length !== 1) {
+        return null;
+      }
+      const item = iteratorItems[0];
+      const iterName = `_${item.name}Value`;
+      const hoistedBlock = hoistTryBlockDeclarations(blockStatements);
+      return {
+        statements: [
+          `let ${item.name}: any;`,
+          ...hoistedBlock.declarations.map((declaration) => (
+            declaration.replace(/^let ([A-Za-z_$][A-Za-z0-9_$]*): (.+);$/, 'let $1 = undefined as unknown as $2;')
+          )),
+          `for (const ${iterName} of ${item.expression}) {`,
+          `  ${item.name} = ${iterName};`,
+          ...hoistedBlock.statements,
           '}',
         ],
         nextIndex,
@@ -3944,6 +3987,14 @@ function translateMultilineCallExpressionFromParts(
       return `${translateExpression(callParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames)}.join(${JSON.stringify(separator.content)})`;
     }
   }
+  if ((pythonCallee === 'list' || pythonCallee === 'tuple') && callParts.keywordParts.length === 0) {
+    if (callParts.positionalParts.length === 0) {
+      return '[]';
+    }
+    if (callParts.positionalParts.length === 1) {
+      return `Array.from(${translateExpression(callParts.positionalParts[0], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
+  }
 
   const callee = translateExpression(pythonCallee, nameMap, arrayNames, validatedTypeAliases);
   const callPrefix = /^[A-Z][A-Za-z0-9_]*$/.test(callee) ? `new ${callee}` : callee;
@@ -4465,6 +4516,42 @@ function parseMultilineCallExpressionWithColonClose(
   return expression;
 }
 
+function parseMultilineCallExpressionWithAsClose(
+  lines: string[],
+  startIndex: number,
+  pythonCallee: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string> = new Set(),
+  mapNames: ReadonlySet<string> = new Set(),
+): { expression: string; nextIndex: number; pythonName: string; name: string } | null {
+  const close = findMultilineCallAsClose(lines, startIndex);
+  if (close === null) {
+    return null;
+  }
+
+  const patchedLines = [...lines];
+  patchedLines[close.index] = (patchedLines[close.index] ?? '').replace(/\)\s+as\s+[A-Za-z_][A-Za-z0-9_]*:\s*$/, ')');
+  const expression = parseMultilineCallExpression(
+    patchedLines,
+    startIndex,
+    pythonCallee,
+    nameMap,
+    arrayNames,
+    validatedTypeAliases,
+    mapNames,
+  );
+  if (expression === null || expression.nextIndex !== close.index + 1) {
+    return null;
+  }
+  return {
+    expression: expression.expression,
+    nextIndex: expression.nextIndex,
+    pythonName: close.pythonName,
+    name: tsExportNameForPythonName(close.pythonName),
+  };
+}
+
 function findNestedCallOuterClose(lines: string[], startIndex: number): number | null {
   let depth = 1;
   for (let nextIndex = startIndex; nextIndex < lines.length; nextIndex += 1) {
@@ -4514,6 +4601,42 @@ function findMultilineCallColonClose(lines: string[], startIndex: number): numbe
         depth -= 1;
         if (depth === 0) {
           return trimmed.slice(charIndex + 1).trim() === ':' ? nextIndex : null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function findMultilineCallAsClose(lines: string[], startIndex: number): { index: number; pythonName: string } | null {
+  let depth = 1;
+  for (let nextIndex = startIndex; nextIndex < lines.length; nextIndex += 1) {
+    const trimmed = lines[nextIndex].trim();
+    if (trimmed === '') {
+      continue;
+    }
+    let quote: string | null = null;
+    for (let charIndex = 0; charIndex < trimmed.length; charIndex += 1) {
+      const char = trimmed[charIndex];
+      if (quote !== null) {
+        if (char === quote && trimmed[charIndex - 1] !== '\\') {
+          quote = null;
+        }
+        continue;
+      }
+      if (char === '"' || char === "'") {
+        quote = char;
+        continue;
+      }
+      if (char === '(') {
+        depth += 1;
+        continue;
+      }
+      if (char === ')') {
+        depth -= 1;
+        if (depth === 0) {
+          const suffix = /^as ([A-Za-z_][A-Za-z0-9_]*):$/.exec(trimmed.slice(charIndex + 1).trim());
+          return suffix === null ? null : { index: nextIndex, pythonName: suffix[1] };
         }
       }
     }
@@ -6047,11 +6170,13 @@ function parseWithItems(
   for (const itemText of splitTopLevelComma(itemsText)) {
     const item = /^(.+) as ([A-Za-z_][A-Za-z0-9_]*)$/.exec(itemText);
     if (item !== null) {
+      const expression = translateExpression(item[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
       items.push({
         pythonName: item[2],
         name: tsExportNameForPythonName(item[2]),
-        expression: translateExpression(item[1], nameMap, arrayNames, validatedTypeAliases, mapNames),
+        expression,
         close: true,
+        iterator: withItemExpressionIsIterator(expression, nameMap),
       });
       continue;
     }
@@ -6061,6 +6186,15 @@ function parseWithItems(
     });
   }
   return items.length === 0 ? null : items;
+}
+
+function withItemExpressionIsIterator(expression: string, nameMap: ReadonlyMap<string, string>): boolean {
+  const call = /^([A-Za-z_$][A-Za-z0-9_.$]*)\(/.exec(expression.trim());
+  if (call === null) {
+    return false;
+  }
+  const returnType = nameMap.get(functionReturnTypeMarker(call[1]));
+  return returnType?.startsWith('IterableIterator<') === true || returnType?.startsWith('Generator<') === true;
 }
 
 function parseZipLoopSources(iterableText: string): string[] | null {

@@ -9,6 +9,7 @@ import { tsExportNameForPythonName, tsTypeExpression } from '../naming.js';
 import {
   inferPythonExpressionType,
   isIndentedBlockLine,
+  matchingCloseParen,
   parseIndentedDocstring,
   parseIndentedFunctionHeader,
   splitTopLevelComma,
@@ -31,6 +32,7 @@ import {
   translateStraightLineStatement,
 } from './statements.js';
 import { parseTopLevelAssignment } from './statements/top-level-assignment.js';
+import { collectMultilineParenthesizedExpression } from './statements/utils.js';
 
 function tsAttributeNameForPythonName(pythonName: string): string {
   if (/^__[^_].*__$/.test(pythonName)) {
@@ -133,6 +135,10 @@ function recordPlainClassFieldMarkers(
   }
 }
 
+function mutablePlainClassFieldTypeExpression(typeExpression: string): string {
+  return typeExpression.replace(/^readonly (.+\[])$/, '$1');
+}
+
 export function parsePlainClass(
   lines: string[],
   index: number,
@@ -221,6 +227,9 @@ export function parsePlainClass(
   }
   const constructorStatements: string[] = [];
   const constructorNameMap = new Map<string, string>([...moduleNameMap, ['self', 'this']]);
+  constructorNameMap.set(receiverTypeNameMarker('self'), className);
+  constructorNameMap.set(receiverTypeNameMarker('this'), className);
+  recordPlainClassMethodHeaders(lines, nextIndex, className, constructorNameMap);
   const constructorMapNames = new Set<string>(fieldMapNames);
   for (const parameter of constructorParams.parameters) {
     constructorNameMap.set(parameter.name, parameter.name);
@@ -262,16 +271,20 @@ export function parsePlainClass(
         const fieldName = tsAttributeNameForPythonName(pythonFieldName);
         fieldNameMap.set(pythonFieldName, fieldName);
         const valueText = annotatedFieldAssignment === null ? assignment[2] : assignment[3];
+        const parenthesizedFieldExpression = valueText.trim() === '('
+          ? collectMultilineParenthesizedExpression(lines, bodyIndex, valueText.trim())
+          : null;
+        const inferredValueText = parenthesizedFieldExpression?.expression ?? valueText;
         const multilineConstructorCall = /^(_?[A-Z][A-Za-z0-9_]*(?:\.[A-Z][A-Za-z0-9_]*)?)\($/.exec(valueText.trim());
         const typeExpression = annotatedFieldAssignment === null
           ? multilineConstructorCall === null
-            ? inferPlainClassFieldType(valueText, fieldTypes, constructorNameMap)
+            ? inferPlainClassFieldType(inferredValueText, fieldTypes, constructorNameMap)
             : inferConstructorCallTypeExpression(multilineConstructorCall[1], constructorNameMap, constructorArrayNames, constructorMapNames)
           : tsTypeExpression(assignment[2]);
         if (typeExpression === null) {
           return null;
         }
-        if (multilineConstructorCall !== null) {
+        if (multilineConstructorCall !== null || parenthesizedFieldExpression !== null) {
           const pythonType = annotatedFieldAssignment === null ? null : assignment[2];
           recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, fieldArrayNames, fieldMapNames, pythonType);
           recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, constructorArrayNames, constructorMapNames, pythonType);
@@ -342,6 +355,21 @@ export function parsePlainClass(
       constructorStatements.push(...translated.statements);
       bodyIndex = translated.nextIndex;
     }
+  }
+  if (constructorHeader !== null) {
+    collectPlainClassConstructorAssignedFields(
+      lines,
+      constructorHeader.nextIndex,
+      fieldTypes,
+      constructorNameMap,
+      extendsName,
+      fieldMap,
+      fieldNameMap,
+      fieldArrayNames,
+      fieldMapNames,
+      constructorArrayNames,
+      constructorMapNames,
+    );
   }
 
   const methods: SimpleModuleFunction[] = [];
@@ -480,6 +508,9 @@ export function parsePlainClass(
   }
   const fields = [...fieldMap.values()].map((field) => ({
     ...field,
+    typeExpression: mutableFields.has(field.name)
+      ? mutablePlainClassFieldTypeExpression(field.typeExpression)
+      : field.typeExpression,
     readonly: field.readonly && !mutableFields.has(field.name),
   }));
   const methodsWithBaseSignatures = adaptPlainClassMethodsToBaseSignatures(methods, extendsName, classNameMap);
@@ -514,6 +545,58 @@ export function parsePlainClass(
     },
     nextIndex,
   };
+}
+
+function collectPlainClassConstructorAssignedFields(
+  lines: string[],
+  startIndex: number,
+  fieldTypes: ReadonlyMap<string, string>,
+  nameMap: ReadonlyMap<string, string>,
+  extendsName: string | undefined,
+  fieldMap: Map<string, PlainClassDefinition['fields'][number]>,
+  fieldNameMap: Map<string, string>,
+  fieldArrayNames: Set<string>,
+  fieldMapNames: Set<string>,
+  constructorArrayNames: Set<string>,
+  constructorMapNames: Set<string>,
+): void {
+  let nextIndex = startIndex;
+  while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, '        ')) {
+    const statement = lines[nextIndex].trim();
+    const annotatedFieldAssignment = /^self\.([A-Za-z_][A-Za-z0-9_]*): (.+?) = (.+)$/.exec(statement);
+    const fieldAssignment = /^self\.([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(statement);
+    const assignment = annotatedFieldAssignment ?? fieldAssignment;
+    if (assignment === null) {
+      nextIndex += 1;
+      continue;
+    }
+    const pythonFieldName = assignment[1];
+    const fieldName = tsAttributeNameForPythonName(pythonFieldName);
+    const valueText = annotatedFieldAssignment === null ? assignment[2] : assignment[3];
+    const parenthesizedFieldExpression = valueText.trim() === '('
+      ? collectMultilineParenthesizedExpression(lines, nextIndex, valueText.trim())
+      : null;
+    const inferredValueText = parenthesizedFieldExpression?.expression ?? valueText;
+    const typeExpression = annotatedFieldAssignment === null
+      ? inferPlainClassFieldType(inferredValueText, fieldTypes, nameMap)
+      : tsTypeExpression(assignment[2]);
+    if (typeExpression !== null) {
+      const pythonType = annotatedFieldAssignment === null ? null : assignment[2];
+      fieldNameMap.set(pythonFieldName, fieldName);
+      recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, fieldArrayNames, fieldMapNames, pythonType);
+      recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, constructorArrayNames, constructorMapNames, pythonType);
+      if (!plainClassBaseDeclaresField(extendsName, fieldName, nameMap) && !fieldMap.has(fieldName)) {
+        fieldMap.set(fieldName, {
+          name: fieldName,
+          typeExpression,
+          readonly: false,
+          private: plainClassFieldIsPrivate(pythonFieldName),
+          definiteAssignment: true,
+        });
+      }
+    }
+    nextIndex += 1;
+  }
 }
 
 function collectPlainClassMethodAssignedFields(
@@ -826,16 +909,25 @@ function inferPlainClassFieldType(
   fieldTypes: ReadonlyMap<string, string>,
   nameMap: ReadonlyMap<string, string> = new Map(),
 ): string | null {
-  if (valueText.trim() === 'None') {
+  const trimmedValueText = stripOuterParenthesizedExpression(valueText.trim());
+  if (trimmedValueText === 'None') {
     return 'any';
   }
-  if (/^Path\([A-Za-z_][A-Za-z0-9_]*\)$/.test(valueText)) {
+  if (/^Path\([A-Za-z_][A-Za-z0-9_]*\)$/.test(trimmedValueText)) {
     return 'string';
   }
-  if (/\.splitlines\(\)$/.test(valueText.trim())) {
+  if (/\.splitlines\(\)$/.test(trimmedValueText)) {
     return 'string[]';
   }
-  const nonNoneDefault = /^([A-Za-z_][A-Za-z0-9_]*) if \1 is not None else ([A-Z][A-Za-z0-9_]*)\(\)$/.exec(valueText.trim());
+  const conditional = /^(.+) if .+ else (.+)$/.exec(trimmedValueText);
+  if (conditional !== null) {
+    const trueType = inferPlainClassFieldType(conditional[1], fieldTypes, nameMap);
+    const falseType = inferPlainClassFieldType(conditional[2], fieldTypes, nameMap);
+    if (trueType !== null && trueType === falseType) {
+      return trueType;
+    }
+  }
+  const nonNoneDefault = /^([A-Za-z_][A-Za-z0-9_]*) if \1 is not None else ([A-Z][A-Za-z0-9_]*)\(\)$/.exec(trimmedValueText);
   if (nonNoneDefault !== null) {
     const directType = fieldTypes.get(tsExportNameForPythonName(nonNoneDefault[1]));
     return directType === undefined
@@ -845,7 +937,7 @@ function inferPlainClassFieldType(
         .filter((part) => part !== 'null' && part !== 'undefined')
         .join(' | ');
   }
-  const noneGuardedConstructor = /^([A-Z_][A-Za-z0-9_]*)\(.+\) if ([A-Za-z_][A-Za-z0-9_]*) is None else \2$/.exec(valueText.trim());
+  const noneGuardedConstructor = /^([A-Z_][A-Za-z0-9_]*)\(.+\) if ([A-Za-z_][A-Za-z0-9_]*) is None else \2$/.exec(trimmedValueText);
   if (noneGuardedConstructor !== null) {
     const directType = fieldTypes.get(tsExportNameForPythonName(noneGuardedConstructor[2]));
     return directType === undefined
@@ -855,39 +947,44 @@ function inferPlainClassFieldType(
         .filter((part) => part !== 'null' && part !== 'undefined')
         .join(' | ');
   }
-  const trailingNoneConditional = /^(.+?) if .+ else None$/.exec(valueText.trim());
+  const trailingNoneConditional = /^(.+?) if .+ else None$/.exec(trimmedValueText);
   if (trailingNoneConditional !== null) {
     return nullablePlainClassFieldType(trailingNoneConditional[1], fieldTypes, nameMap);
   }
-  const leadingNoneConditional = /^None if .+ else (.+)$/.exec(valueText.trim());
+  const leadingNoneConditional = /^None if .+ else (.+)$/.exec(trimmedValueText);
   if (leadingNoneConditional !== null) {
     return nullablePlainClassFieldType(leadingNoneConditional[1], fieldTypes, nameMap);
   }
-  const maskedNumber = /^([A-Za-z_][A-Za-z0-9_]*) & 0x[0-9A-Fa-f]+$/.exec(valueText.trim());
+  const maskedNumber = /^([A-Za-z_][A-Za-z0-9_]*) & 0x[0-9A-Fa-f]+$/.exec(trimmedValueText);
   if (maskedNumber !== null) {
     const directType = fieldTypes.get(tsExportNameForPythonName(maskedNumber[1]));
     if (directType?.split(' | ').some((part) => part === 'number') === true) {
       return 'number';
     }
   }
-  if (/^int\.from_bytes\(.+\)$/.test(valueText.trim())) {
+  if (/^int\.from_bytes\(.+\)$/.test(trimmedValueText)) {
     return 'number';
   }
-  if (/^-?\d+(?:\.\d+)?(?:\s*[+\-*/]\s*(?:-?\d+(?:\.\d+)?|(?:int|float)\(.+\)|[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?))*$/.test(valueText.trim())) {
+  if (/^(?:len|int|float)\(.+\)$/.test(trimmedValueText)) {
     return 'number';
   }
-  if (/^(?:max|min)\(/.test(valueText.trim())) {
+  if (/^-?\d+(?:\.\d+)?(?:\s*[+\-*/]\s*(?:-?\d+(?:\.\d+)?|(?:int|float)\(.+\)|[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?))*$/.test(trimmedValueText)) {
     return 'number';
   }
-  const sortedCall = /^sorted\((.+)\)$/.exec(valueText.trim());
+  if (/^(?:max|min)\(/.test(trimmedValueText)) {
+    return 'number';
+  }
+  const sortedCall = /^sorted\((.+)\)$/.exec(trimmedValueText);
   if (sortedCall !== null) {
     return `${inferPlainIterableElementType(sortedCall[1])}[]`;
   }
-  const listCall = /^list\((.+)\)$/.exec(valueText.trim());
-  if (listCall !== null) {
-    return `${inferPlainIterableElementType(listCall[1])}[]`;
+  const sequenceCall = /^(?:list|tuple)\((.+)\)$/.exec(trimmedValueText);
+  if (sequenceCall !== null) {
+    const directType = fieldTypes.get(tsExportNameForPythonName(sequenceCall[1].trim()));
+    const arrayType = directType === undefined ? null : mutableArrayTypeFromKnownIterableType(directType);
+    return arrayType ?? `${inferPlainIterableElementType(sequenceCall[1])}[]`;
   }
-  const dottedField = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(valueText.trim());
+  const dottedField = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(trimmedValueText);
   if (dottedField !== null) {
     const receiver = translatedFunctionCallee(dottedField[1], nameMap);
     const receiverType = nameMap.get(receiverTypeNameMarker(dottedField[1])) ?? nameMap.get(receiverTypeNameMarker(receiver));
@@ -898,17 +995,17 @@ function inferPlainClassFieldType(
       return fieldType;
     }
   }
-  const listComprehension = /^\[(.+?) for ([A-Za-z_][A-Za-z0-9_]*) in .+\]$/.exec(valueText.trim());
+  const listComprehension = /^\[(.+?) for ([A-Za-z_][A-Za-z0-9_]*) in .+\]$/.exec(trimmedValueText);
   if (listComprehension !== null) {
     const itemType = inferPythonExpressionType(listComprehension[1]);
     const itemName = tsExportNameForPythonName(listComprehension[2]);
     return itemType.startsWith(`typeof ${itemName}.`) ? 'any[]' : `${itemType}[]`;
   }
-  const constructorCall = /^_?([A-Z][A-Za-z0-9_]*)\(.*\)$/.exec(valueText.trim());
+  const constructorCall = /^_?([A-Z][A-Za-z0-9_]*)\(.*\)$/.exec(trimmedValueText);
   if (constructorCall !== null) {
-    return tsExportNameForPythonName(valueText.trim().slice(0, valueText.trim().indexOf('(')));
+    return tsExportNameForPythonName(trimmedValueText.slice(0, trimmedValueText.indexOf('(')));
   }
-  const functionCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\(.*\)$/.exec(valueText.trim());
+  const functionCall = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\(.*\)$/.exec(trimmedValueText);
   if (functionCall !== null) {
     const callee = translatedFunctionCallee(functionCall[1], nameMap);
     const returnType = nameMap.get(functionReturnTypeMarker(callee))
@@ -917,18 +1014,43 @@ function inferPlainClassFieldType(
       return returnType;
     }
   }
-  const directParameterType = fieldTypes.get(tsExportNameForPythonName(valueText));
+  const directParameterType = fieldTypes.get(tsExportNameForPythonName(trimmedValueText));
   if (directParameterType !== undefined) {
     return directParameterType;
   }
-  if (/^[A-Z][A-Z0-9_]*$/.test(valueText.trim())) {
+  if (/^[A-Z][A-Z0-9_]*$/.test(trimmedValueText)) {
     return 'number';
   }
-  const literalType = inferPythonExpressionType(valueText);
+  const literalType = inferPythonExpressionType(trimmedValueText);
   if (/^typeof [a-z_]/.test(literalType)) {
     return 'any';
   }
   return literalType === 'any' ? null : literalType;
+}
+
+function stripOuterParenthesizedExpression(valueText: string): string {
+  let trimmed = valueText.trim();
+  while (trimmed.startsWith('(') && matchingCloseParen(trimmed, 0) === trimmed.length - 1) {
+    trimmed = trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
+function mutableArrayTypeFromKnownIterableType(typeExpression: string): string | null {
+  const concreteTypes = typeExpression
+    .split(' | ')
+    .map((part) => part.trim())
+    .filter((part) => part !== 'null' && part !== 'undefined');
+  if (concreteTypes.length !== 1) {
+    return null;
+  }
+  const type = concreteTypes[0];
+  const readonlyArray = /^readonly (.+)\[]$/.exec(type);
+  if (readonlyArray !== null) {
+    return `${readonlyArray[1]}[]`;
+  }
+  const mutableArray = /^(.+)\[]$/.exec(type);
+  return mutableArray === null ? null : `${mutableArray[1]}[]`;
 }
 
 function inferPlainIterableElementType(valueText: string): string {
@@ -959,7 +1081,7 @@ function translatedFunctionCallee(functionName: string, nameMap: ReadonlyMap<str
     .split('.')
     .map((part, index) => index === 0
       ? nameMap.get(part) ?? tsExportNameForPythonName(part)
-      : tsExportNameForPythonName(part))
+      : tsAttributeNameForPythonName(part))
     .join('.');
 }
 

@@ -92,6 +92,9 @@ function inferTupleElementAssignmentType(
   if (tupleType !== null) {
     return splitTopLevelComma(tupleType[1])[elementIndex]?.trim() ?? 'any';
   }
+  if (inferredType.startsWith('ReturnType<typeof ')) {
+    return `${inferredType}[${elementIndex}]`;
+  }
   return inferredType;
 }
 
