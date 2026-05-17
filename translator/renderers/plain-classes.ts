@@ -75,8 +75,7 @@ export function renderPlainClasses(lines: string[], classes: StraightLineModule[
       constructorParams.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
     }
     if (shouldRenderConstructor) {
-      const gameplayContextParam = plainClass.extendsName === 'BaseGameplayMode'
-        && plainClass.constructorDefinition.parameters.length === 1
+      const gameplayContextParam = plainClass.constructorDefinition.parameters.length === 1
         && plainClass.constructorDefinition.parameters[0].typeExpression === 'ViewContext'
         && optsType !== null
         ? plainClass.constructorDefinition.parameters[0]

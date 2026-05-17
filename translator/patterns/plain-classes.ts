@@ -66,6 +66,52 @@ function skipSlotsAssignment(lines: string[], index: number): number {
   return index + 1;
 }
 
+function collectPlainClassPropertyFieldNames(lines: string[], startIndex: number): Set<string> {
+  const propertyNames = new Set<string>();
+  let nextIndex = startIndex;
+  while (nextIndex < lines.length) {
+    const trimmed = lines[nextIndex].trim();
+    if (trimmed === '' || trimmed.startsWith('#')) {
+      nextIndex += 1;
+      continue;
+    }
+    if (!lines[nextIndex].startsWith('    ')) {
+      break;
+    }
+    if (trimmed === '@property') {
+      const header = parseIndentedFunctionHeader(lines, nextIndex + 1, '    ');
+      if (header === null) {
+        nextIndex += 1;
+        continue;
+      }
+      propertyNames.add(tsAttributeNameForPythonName(header.name));
+      nextIndex = skipIndentedMethodBody(lines, header.nextIndex);
+      continue;
+    }
+    const setter = /^@([A-Za-z_][A-Za-z0-9_]*)\.setter$/.exec(trimmed);
+    if (setter !== null) {
+      propertyNames.add(tsAttributeNameForPythonName(setter[1]));
+      const header = parseIndentedFunctionHeader(lines, nextIndex + 1, '    ');
+      nextIndex = header === null ? nextIndex + 1 : skipIndentedMethodBody(lines, header.nextIndex);
+      continue;
+    }
+    const decorator = trimmed === '@staticmethod' || trimmed === '@classmethod'
+      ? trimmed
+      : null;
+    const header = parseIndentedFunctionHeader(lines, decorator === null ? nextIndex : nextIndex + 1, '    ');
+    nextIndex = header === null ? nextIndex + 1 : skipIndentedMethodBody(lines, header.nextIndex);
+  }
+  return propertyNames;
+}
+
+function skipIndentedMethodBody(lines: string[], startIndex: number): number {
+  let nextIndex = startIndex;
+  while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, '        ')) {
+    nextIndex += 1;
+  }
+  return nextIndex;
+}
+
 function parsePlainClassFieldAssignment(
   lines: string[],
   index: number,
@@ -191,6 +237,7 @@ export function parsePlainClass(
   const fieldNameMap = new Map<string, string>();
   const fieldArrayNames = new Set<string>(initialArrayNames);
   const fieldMapNames = new Set<string>();
+  const propertyFieldNames = collectPlainClassPropertyFieldNames(lines, nextIndex);
   while (nextIndex < lines.length) {
     const classField = parsePlainClassFieldAssignment(lines, nextIndex, moduleNameMap);
     if (classField === null) {
@@ -198,7 +245,7 @@ export function parsePlainClass(
     }
     fieldNameMap.set(classField.pythonName, classField.field.name);
     recordPlainClassFieldMarkers(classField.pythonName, classField.field.name, classField.field.typeExpression, fieldArrayNames, fieldMapNames);
-    if (!plainClassBaseDeclaresField(extendsName, classField.field.name, moduleNameMap)) {
+    if (!propertyFieldNames.has(classField.field.name) && !plainClassBaseDeclaresField(extendsName, classField.field.name, moduleNameMap)) {
       fieldMap.set(classField.field.name, classField.field);
     }
     nextIndex = classField.nextIndex;
@@ -291,7 +338,7 @@ export function parsePlainClass(
           const pythonType = annotatedFieldAssignment === null ? null : assignment[2];
           recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, fieldArrayNames, fieldMapNames, pythonType);
           recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, constructorArrayNames, constructorMapNames, pythonType);
-          if (!plainClassBaseDeclaresField(extendsName, fieldName, moduleNameMap)) {
+          if (!propertyFieldNames.has(fieldName) && !plainClassBaseDeclaresField(extendsName, fieldName, moduleNameMap)) {
             fieldMap.set(fieldName, {
               name: fieldName,
               typeExpression,
@@ -326,7 +373,7 @@ export function parsePlainClass(
         const pythonType = annotatedFieldAssignment === null ? null : assignment[2];
         recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, fieldArrayNames, fieldMapNames, pythonType);
         recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, constructorArrayNames, constructorMapNames, pythonType);
-        if (!plainClassBaseDeclaresField(extendsName, fieldName, moduleNameMap)) {
+        if (!propertyFieldNames.has(fieldName) && !plainClassBaseDeclaresField(extendsName, fieldName, moduleNameMap)) {
           fieldMap.set(fieldName, {
             name: fieldName,
             typeExpression,
@@ -372,6 +419,7 @@ export function parsePlainClass(
       fieldMapNames,
       constructorArrayNames,
       constructorMapNames,
+      propertyFieldNames,
     );
   }
 
@@ -388,6 +436,7 @@ export function parsePlainClass(
     fieldNameMap,
     fieldArrayNames,
     fieldMapNames,
+    propertyFieldNames,
   );
   classNameMap.set(receiverTypeNameMarker('self'), className);
   classNameMap.set(receiverTypeNameMarker('this'), className);
@@ -517,9 +566,7 @@ export function parsePlainClass(
     readonly: field.readonly && !mutableFields.has(field.name),
   }));
   const methodsWithBaseSignatures = adaptPlainClassMethodsToBaseSignatures(methods, extendsName, classNameMap);
-  const abstractHookMethods = methodsWithBaseSignatures
-    .filter(isNotImplementedHookMethod)
-    .map(abstractHookMethodDefinition);
+  const abstractHookMethods: SimpleModuleFunction[] = [];
   const abstractHookMethodByName = new Map(abstractHookMethods.map((method) => [method.name, method]));
   const rewrittenMethods = methodsWithBaseSignatures.map((method) => (
     method.static === true
@@ -542,7 +589,7 @@ export function parsePlainClass(
       constructorDefinition: {
         parameters: constructorParams.parameters,
         optsParams: constructorParams.optsParams,
-        statements: constructorStatements,
+        statements: rewritePlainClassStaticMethodCalls(constructorStatements, className, staticMethodNames),
       },
       methods: rewrittenMethods,
     },
@@ -562,6 +609,7 @@ function collectPlainClassConstructorAssignedFields(
   fieldMapNames: Set<string>,
   constructorArrayNames: Set<string>,
   constructorMapNames: Set<string>,
+  propertyFieldNames: ReadonlySet<string>,
 ): void {
   let nextIndex = startIndex;
   while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, '        ')) {
@@ -588,7 +636,7 @@ function collectPlainClassConstructorAssignedFields(
       fieldNameMap.set(pythonFieldName, fieldName);
       recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, fieldArrayNames, fieldMapNames, pythonType);
       recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, constructorArrayNames, constructorMapNames, pythonType);
-      if (!plainClassBaseDeclaresField(extendsName, fieldName, nameMap) && !fieldMap.has(fieldName)) {
+      if (!propertyFieldNames.has(fieldName) && !plainClassBaseDeclaresField(extendsName, fieldName, nameMap) && !fieldMap.has(fieldName)) {
         fieldMap.set(fieldName, {
           name: fieldName,
           typeExpression,
@@ -612,6 +660,7 @@ function collectPlainClassMethodAssignedFields(
   fieldNameMap: Map<string, string>,
   fieldArrayNames: Set<string>,
   fieldMapNames: Set<string>,
+  propertyFieldNames: ReadonlySet<string>,
 ): void {
   let nextIndex = startIndex;
   while (nextIndex < lines.length) {
@@ -649,7 +698,7 @@ function collectPlainClassMethodAssignedFields(
         fieldNameMap.set(pythonFieldName, fieldName);
         if (typeExpression !== null) {
           recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, fieldArrayNames, fieldMapNames, pythonType);
-          if (!plainClassBaseDeclaresField(extendsName, fieldName, moduleNameMap) && !fieldMap.has(fieldName)) {
+          if (!propertyFieldNames.has(fieldName) && !plainClassBaseDeclaresField(extendsName, fieldName, moduleNameMap) && !fieldMap.has(fieldName)) {
             fieldMap.set(fieldName, {
               name: fieldName,
               typeExpression,

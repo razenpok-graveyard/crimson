@@ -366,6 +366,15 @@ export function parseIndentedFunctionHeader(
       nextIndex: index + 1,
     };
   }
+  const oneLineUnannotated = new RegExp(`^${indent}def ([A-Za-z_][A-Za-z0-9_]*)\\((.*)\\):$`).exec(lines[index] ?? '');
+  if (oneLineUnannotated !== null) {
+    return {
+      name: oneLineUnannotated[1],
+      parametersText: oneLineUnannotated[2],
+      returnType: 'any',
+      nextIndex: index + 1,
+    };
+  }
 
   const start = new RegExp(`^${indent}def ([A-Za-z_][A-Za-z0-9_]*)\\($`).exec(lines[index] ?? '');
   if (start === null) {
@@ -382,6 +391,14 @@ export function parseIndentedFunctionHeader(
         name: start[1],
         parametersText: parameterLines.join(', '),
         returnType: close[1],
+        nextIndex: nextIndex + 1,
+      };
+    }
+    if ((lines[nextIndex] ?? '') === `${indent}):`) {
+      return {
+        name: start[1],
+        parametersText: parameterLines.join(', '),
+        returnType: 'any',
         nextIndex: nextIndex + 1,
       };
     }

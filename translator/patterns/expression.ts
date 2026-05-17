@@ -245,6 +245,14 @@ export function translatePositionalCallExpression(
   if (raylibTimeCall !== null && args.length === 0) {
     return '(performance.now() / 1000.0)';
   }
+  const raylibWidthCall = /^(?:r[dl]|wgl)\.(?:get_screen_width|getScreenWidth|get_render_width|getRenderWidth)$/.exec(callee);
+  if (raylibWidthCall !== null && args.length === 0) {
+    return 'wgl.getScreenWidth()';
+  }
+  const raylibHeightCall = /^(?:r[dl]|wgl)\.(?:get_screen_height|getScreenHeight|get_render_height|getRenderHeight)$/.exec(callee);
+  if (raylibHeightCall !== null && args.length === 0) {
+    return 'wgl.getScreenHeight()';
+  }
   const raylibInputNoArgCall = /^(?:r[dl]|wgl)\.(get_char_pressed|getCharPressed|get_key_pressed|getKeyPressed)$/.exec(callee);
   if (raylibInputNoArgCall !== null && args.length === 0) {
     return raylibInputNoArgCall[1].includes('char') || raylibInputNoArgCall[1].includes('Char')
@@ -398,7 +406,12 @@ function translateBoundMethodReference(
   }
   const receiver = translateExpression(parts.slice(0, -1).join('.'), nameMap, arrayNames, validatedTypeAliases);
   const tsMethod = tsMemberNameForPythonName(method);
-  return `${receiver}.${tsMethod}.bind(${receiver})`;
+  const referenceExpression = `${receiver}.${tsMethod}`;
+  const fieldType = knownClassFieldType(referenceExpression, nameMap);
+  if (fieldType !== null && typeExpressionLooksCallable(fieldType)) {
+    return referenceExpression;
+  }
+  return `${referenceExpression}.bind(${receiver})`;
 }
 
 function attributeNameLooksLikeCallbackMethod(pythonName: string): boolean {
@@ -407,6 +420,10 @@ function attributeNameLooksLikeCallbackMethod(pythonName: string): boolean {
     return false;
   }
   return /^(?:apply|build|consume|create|draw|handle|on|play|process|registry|reset|sync|update)(?:_|$)/.test(normalized);
+}
+
+function typeExpressionLooksCallable(typeExpression: string): boolean {
+  return /=>|\bFunction\b|\b[A-Za-z_$][A-Za-z0-9_$]*Fn\b/.test(typeExpression);
 }
 
 function translateInlineLambdaExpression(
@@ -634,6 +651,24 @@ export function translateExpression(
     }
   }
 
+  const mapPopCall = /^(.+)\.pop\((.*)\)$/.exec(trimmed);
+  if (mapPopCall !== null) {
+    const mapName = translateExpression(mapPopCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const args = splitTopLevelComma(mapPopCall[2]);
+    if (args.length >= 1 && args.length <= 2 && expressionIsKnownMap(mapName, nameMap, mapNames)) {
+      const key = translateMapKeyExpression(
+        mapName,
+        translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames),
+        mapNames,
+      );
+      const defaultExpression = args[1] === undefined
+        ? null
+        : translateMapDefaultExpression(args[1], mapPopCall[1], mapName, nameMap, arrayNames, validatedTypeAliases, mapNames);
+      const value = defaultExpression === null ? 'mapGetOrThrow(map, key)' : `map.has(key) ? map.get(key)! : ${defaultExpression}`;
+      return `(() => { const map = ${mapName}; const key = ${key}; const value = ${value}; map.delete(key); return value; })()`;
+    }
+  }
+
   const toBytesCall = /^(.+)\.tobytes\(\)$/.exec(trimmed);
   if (toBytesCall !== null) {
     return `bytesFrom(${translateExpression(toBytesCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
@@ -647,6 +682,15 @@ export function translateExpression(
     || trimmed === 'datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")'
   ) {
     return '_strftimeUtcNow()';
+  }
+  const datetimeNowStrftime = /^(?:dt|datetime)\.datetime\.now\((.*)\)\.strftime\((.+)\)$/.exec(trimmed);
+  if (datetimeNowStrftime !== null) {
+    const nowArgs = datetimeNowStrftime[1].trim();
+    const useUtc = nowArgs === 'dt.timezone.utc' || nowArgs === 'datetime.timezone.utc';
+    if (nowArgs === '' || useUtc) {
+      const format = translateExpression(datetimeNowStrftime[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
+      return `_strftimeUtcNow(${format}, ${useUtc ? 'true' : 'false'})`;
+    }
   }
   if (
     trimmed === 'dt.datetime.now(dt.timezone.utc).isoformat(timespec="milliseconds")'
@@ -776,6 +820,14 @@ export function translateExpression(
   const raylibTimeCall = /^(?:r[dl]|wgl)\.(?:get_time|getTime)\(\)$/.exec(trimmed);
   if (raylibTimeCall !== null) {
     return '(performance.now() / 1000.0)';
+  }
+  const raylibWidthCall = /^(?:r[dl]|wgl)\.(?:get_screen_width|getScreenWidth|get_render_width|getRenderWidth)\(\)$/.exec(trimmed);
+  if (raylibWidthCall !== null) {
+    return 'wgl.getScreenWidth()';
+  }
+  const raylibHeightCall = /^(?:r[dl]|wgl)\.(?:get_screen_height|getScreenHeight|get_render_height|getRenderHeight)\(\)$/.exec(trimmed);
+  if (raylibHeightCall !== null) {
+    return 'wgl.getScreenHeight()';
   }
 
   const raylibKeyInputCall = parseRaylibMethodCall(trimmed, ['is_key_pressed', 'isKeyPressed', 'is_key_pressed_repeat', 'isKeyPressedRepeat', 'is_key_down', 'isKeyDown']);
@@ -1110,9 +1162,19 @@ export function translateExpression(
     return `pythonStdev(${translateExpression(statisticsStdevCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
-  const vec2FromXyCall = /^Vec2\.from_xy\((.*)\)$/.exec(trimmed);
-  if (vec2FromXyCall !== null) {
-    return `Vec2.fromXY(${translateExpression(vec2FromXyCall[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  const vec2FromXyCall = parseCallPrefix(trimmed, 'Vec2.from_xy');
+  if (vec2FromXyCall !== null && vec2FromXyCall.rest === '') {
+    return `Vec2.fromXY(${translateExpression(vec2FromXyCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+  }
+  const vectorMethodCall = finalMethodCall(trimmed);
+  if (vectorMethodCall !== null) {
+    const receiver = translateExpression(vectorMethodCall.receiver, nameMap, arrayNames, validatedTypeAliases, mapNames);
+    if (expressionIsKnownVector(vectorMethodCall.receiver, nameMap, arrayNames) || translatedExpressionLooksVector(receiver)) {
+      const args = splitTopLevelComma(vectorMethodCall.argsText)
+        .filter((arg) => arg.trim() !== '')
+        .map((arg) => translateCallArgumentExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames));
+      return `${tsPropertyAccessBase(receiver)}.${tsMemberNameForPythonName(vectorMethodCall.method)}(${args.join(', ')})`;
+    }
   }
 
   const stringJoinCall = /^((?:[fF])?(["'])(?:\\.|(?!\2)[\s\S])*\2)\.join\((.+)\)$/.exec(trimmed);
@@ -1223,6 +1285,13 @@ export function translateExpression(
     return callWithInlineRecord;
   }
 
+  if (trimmed.startsWith('(') && matchingCloseParen(trimmed, 0) === trimmed.length - 1) {
+    const inner = trimmed.slice(1, -1).trim();
+    if (/^(?:\(?\s*)*lambda\b/.test(inner)) {
+      return `(${translateExpression(inner, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
+  }
+
   const oneItemTuple = /^\((.+),\)$/.exec(trimmed);
   if (oneItemTuple !== null && splitTopLevelComma(oneItemTuple[1]).length === 1) {
     return `[${translateExpression(oneItemTuple[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}]`;
@@ -1231,6 +1300,12 @@ export function translateExpression(
   const parenthesizedConditional = /^\((.+ if .+ else .+)\)$/.exec(trimmed);
   if (parenthesizedConditional !== null && matchingCloseParen(trimmed, 0) === trimmed.length - 1) {
     return translateExpression(parenthesizedConditional[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+  }
+  if (trimmed.startsWith('(') && matchingCloseParen(trimmed, 0) === trimmed.length - 1) {
+    const inner = trimmed.slice(1, -1).trim();
+    if (splitTopLevelComma(inner).length === 1 && /^(?:\(?\s*)*lambda\b/.test(inner)) {
+      return `(${translateExpression(inner, nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+    }
   }
 
   const earlyConditionalExpression = parseTopLevelConditionalExpression(trimmed);
@@ -3364,7 +3439,7 @@ function translateAggregateGeneratorCall(
         const condition = generator.condition === null
           ? expression
           : `(${translateExpression(generator.condition, itemNameMap, arrayNames, validatedTypeAliases, mapNames)}) && (${expression})`;
-        return `${iterable}.every((${itemName}) => ${condition})`;
+        return `${iterable}.every((${itemName}: any) => ${condition})`;
       }
     }
   }
@@ -3382,7 +3457,7 @@ function translateAggregateGeneratorCall(
         const condition = generator.condition === null
           ? expression
           : `(${translateExpression(generator.condition, itemNameMap, arrayNames, validatedTypeAliases, mapNames)}) && (${expression})`;
-        return `${iterable}.some((${itemName}) => ${condition})`;
+        return `${iterable}.some((${itemName}: any) => ${condition})`;
       }
       return `Array.from(${translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames)}).some(pythonTruthy)`;
     }
@@ -4532,6 +4607,20 @@ function finalKeywordMethodCall(pythonExpression: string): { receiver: string; m
     : null;
 }
 
+function finalMethodCall(pythonExpression: string): { receiver: string; method: string; argsText: string } | null {
+  if (splitTopLevelComma(pythonExpression).length > 1) {
+    return null;
+  }
+  const callOpenIndex = finalCallOpenIndex(pythonExpression);
+  if (callOpenIndex === null) {
+    return null;
+  }
+  const member = /^(.*)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(pythonExpression.slice(0, callOpenIndex));
+  return member !== null && delimitersBalanced(member[1])
+    ? { receiver: member[1], method: member[2], argsText: pythonExpression.slice(callOpenIndex + 1, -1) }
+    : null;
+}
+
 function keywordObjectParts(
   argsText: string,
   nameMap: Map<string, string>,
@@ -4593,7 +4682,8 @@ function translateKeywordDetachedMethodReference(
   }
   const parts = reference[1].split('.');
   const receiver = translateExpression(parts.slice(0, -1).join('.'), nameMap, arrayNames, validatedTypeAliases, mapNames);
-  return `${receiver}.${tsMemberNameForPythonName(parts[parts.length - 1])}.bind(${receiver})`;
+  const member = tsMemberNameForPythonName(parts[parts.length - 1]);
+  return `${receiver}.${member}?.bind(${receiver}) ?? null`;
 }
 
 function translateMixedKeywordCallWithKnownInstanceSignature(

@@ -1775,8 +1775,14 @@ export function translateStraightLineStatement(
     const annotation = annotatedAttributeAssignment[2].trim();
     const tsLeft = translateExpression(pythonLeft, nameMap, arrayNames, validatedTypeAliases, mapNames);
     const typeExpression = tsTypeExpression(annotation);
+    const continuedRight = parenthesisDelta(annotatedAttributeAssignment[3]) > 0
+      ? collectMultilineParenthesizedExpression(lines, index, annotatedAttributeAssignment[3])
+      : null;
+    if (parenthesisDelta(annotatedAttributeAssignment[3]) > 0 && continuedRight === null) {
+      return null;
+    }
     let assignedRight = maybeAwaitAsyncCall(
-      translateExpression(annotatedAttributeAssignment[3], nameMap, arrayNames, validatedTypeAliases, mapNames),
+      translateExpression(continuedRight?.expression ?? annotatedAttributeAssignment[3], nameMap, arrayNames, validatedTypeAliases, mapNames),
       nameMap,
     );
     if (typeExpression.startsWith('Map<')) {
@@ -1800,7 +1806,7 @@ export function translateStraightLineStatement(
     }
     return appendTrailingCommentToResult({
       statements: [`${tsLeft} = ${assignedRight};`],
-      nextIndex: index + 1,
+      nextIndex: continuedRight?.nextIndex ?? index + 1,
     }, trailingComment);
   }
 
@@ -4030,7 +4036,8 @@ function translateDetachedMethodReference(
   }
   const parts = reference[1].split('.');
   const receiver = translateExpression(parts.slice(0, -1).join('.'), nameMap, arrayNames, validatedTypeAliases, mapNames);
-  return `${receiver}.${tsAttributeNameForPythonName(parts[parts.length - 1])}.bind(${receiver})`;
+  const member = tsAttributeNameForPythonName(parts[parts.length - 1]);
+  return `${receiver}.${member}?.bind(${receiver}) ?? null`;
 }
 
 function parseFullCallExpression(pythonExpression: string): { pythonCallee: string; argsText: string } | null {
@@ -5629,8 +5636,35 @@ function parseMultilineDictComprehensionExpression(
   validatedTypeAliases: ReadonlySet<string>,
   mapNames: ReadonlySet<string>,
 ): { expression: string; nextIndex: number } | null {
-  const keyValue = /^(.+): (.+)$/.exec((lines[startIndex] ?? '').trim());
-  const forClause = /^for ([A-Za-z_][A-Za-z0-9_]*) in (.+)$/.exec((lines[startIndex + 1] ?? '').trim());
+  const firstLine = (lines[startIndex] ?? '').trim().replace(/,$/, '');
+  const inlineComprehension = /^(.+): (.+) for (.+) in (.+)$/.exec(firstLine);
+  if (inlineComprehension !== null) {
+    let closeIndex = startIndex + 1;
+    let filterExpression: string | null = null;
+    const ifClause = /^if (.+)$/.exec((lines[closeIndex] ?? '').trim());
+    if (ifClause !== null) {
+      filterExpression = ifClause[1];
+      closeIndex += 1;
+    }
+    if ((lines[closeIndex] ?? '').trim() !== '}') {
+      return null;
+    }
+    const expression = translateDictComprehensionExpression(
+      inlineComprehension[1],
+      inlineComprehension[2],
+      inlineComprehension[3],
+      inlineComprehension[4],
+      filterExpression,
+      nameMap,
+      arrayNames,
+      validatedTypeAliases,
+      mapNames,
+    );
+    return expression === null ? null : { expression, nextIndex: closeIndex + 1 };
+  }
+
+  const keyValue = /^(.+): (.+)$/.exec(firstLine);
+  const forClause = /^for (.+) in (.+)$/.exec((lines[startIndex + 1] ?? '').trim());
   if (keyValue === null || forClause === null) {
     return null;
   }
@@ -5645,20 +5679,55 @@ function parseMultilineDictComprehensionExpression(
     return null;
   }
 
-  const itemName = tsExportNameForPythonName(forClause[1]);
+  const expression = translateDictComprehensionExpression(
+    keyValue[1],
+    keyValue[2],
+    forClause[1],
+    forClause[2],
+    filterExpression,
+    nameMap,
+    arrayNames,
+    validatedTypeAliases,
+    mapNames,
+  );
+  return expression === null ? null : {
+    expression,
+    nextIndex: closeIndex + 1,
+  };
+}
+
+function translateDictComprehensionExpression(
+  keyExpression: string,
+  valueExpression: string,
+  targetExpression: string,
+  iterableExpression: string,
+  filterExpression: string | null,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  const targetNames = splitTopLevelComma(stripBalancedOuterParens(targetExpression))
+    .map((name) => name.trim())
+    .filter((name) => name !== '');
+  if (targetNames.length === 0 || targetNames.some((name) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name))) {
+    return null;
+  }
   const itemNameMap = new Map(nameMap);
-  itemNameMap.set(forClause[1], itemName);
-  const iterable = translateExpression(forClause[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
-  const key = translateExpression(keyValue[1], itemNameMap, arrayNames, validatedTypeAliases, mapNames);
-  const value = translateExpression(keyValue[2], itemNameMap, arrayNames, validatedTypeAliases, mapNames);
-  const itemParameter = methodCallIterableCallbackParameter(itemName, iterable);
+  const tsTargetNames = targetNames.map(tsExportNameForPythonName);
+  for (let index = 0; index < targetNames.length; index += 1) {
+    itemNameMap.set(targetNames[index], tsTargetNames[index]);
+  }
+  const iterable = translateExpression(iterableExpression, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const key = translateExpression(keyExpression, itemNameMap, arrayNames, validatedTypeAliases, mapNames);
+  const value = translateExpression(valueExpression, itemNameMap, arrayNames, validatedTypeAliases, mapNames);
+  const itemParameter = tsTargetNames.length === 1
+    ? methodCallIterableCallbackParameter(tsTargetNames[0], iterable)
+    : `[${tsTargetNames.join(', ')}]: any`;
   const source = filterExpression === null
     ? iterable
     : `${iterable}.filter((${itemParameter}) => ${translateExpression(filterExpression, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
-  return {
-    expression: `new Map(Array.from(${source}, (${itemParameter}) => [${key}, ${value}] as const))`,
-    nextIndex: closeIndex + 1,
-  };
+  return `new Map(Array.from(${source}, (${itemParameter}) => [${key}, ${value}] as const))`;
 }
 
 function parseMultilineSetComprehensionExpression(
