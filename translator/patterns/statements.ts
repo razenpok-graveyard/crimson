@@ -973,6 +973,12 @@ export function translateStraightLineStatement(
       if (exceptBlocks.length === 0 || !exceptBlocksHaveSameBody(exceptBlocks)) {
         return null;
       }
+      const elseBlock = lineStartsAtIndent(lines[exceptIndex] ?? '', indent) && (lines[exceptIndex] ?? '').trim() === 'else:'
+        ? translateBlock(exceptIndex + 1)
+        : null;
+      if (elseBlock === null && lineStartsAtIndent(lines[exceptIndex] ?? '', indent) && (lines[exceptIndex] ?? '').trim() === 'else:') {
+        return null;
+      }
       const hoistedTry = hoistTryBlockDeclarations(tryBlock.statements);
       const catchName = exceptBlocks[0].catchName;
       const exceptGuard = tsExceptGuardExpression(
@@ -989,6 +995,25 @@ export function translateStraightLineStatement(
         '  }',
         ...exceptBlocks[0].statements,
       ];
+      if (elseBlock !== null) {
+        const trySucceededName = `_trySucceeded${index}`;
+        return {
+          statements: [
+            ...hoistedTry.declarations,
+            `let ${trySucceededName} = false;`,
+            'try {',
+            ...hoistedTry.statements,
+            `  ${trySucceededName} = true;`,
+            `} catch (${catchName}) {`,
+            ...catchStatements,
+            '}',
+            `if (${trySucceededName}) {`,
+            ...elseBlock.statements,
+            '}',
+          ],
+          nextIndex: elseBlock.nextIndex,
+        };
+      }
       return {
         statements: [
           ...hoistedTry.declarations,
@@ -1495,6 +1520,28 @@ export function translateStraightLineStatement(
     }
     if (innerStatements.length === 0) {
       return null;
+    }
+    const zipLoopSources = parseZipLoopSources(tupleForOfStatement[2]);
+    if (zipLoopSources !== null) {
+      if (zipLoopSources.length !== targets.length) {
+        return null;
+      }
+      const zipIndexName = `_zipIndex${index}`;
+      const zipSourceNames = zipLoopSources.map((_source, sourceIndex) => `_zip${index}_${sourceIndex}`);
+      return {
+        statements: [
+          ...zipLoopSources.map((source, sourceIndex) => (
+            `const ${zipSourceNames[sourceIndex]} = Array.from(${translateExpression(source, nameMap, arrayNames, validatedTypeAliases, mapNames)});`
+          )),
+          `for (let ${zipIndexName} = 0; ${zipIndexName} < Math.min(${zipSourceNames.map((sourceName) => `${sourceName}.length`).join(', ')}); ${zipIndexName}++) {`,
+          ...targets.map((target, targetIndex) => (
+            `  let ${tsExportNameForPythonName(target)} = ${zipSourceNames[targetIndex]}[${zipIndexName}];`
+          )),
+          ...innerStatements,
+          '}',
+        ],
+        nextIndex,
+      };
     }
     return {
       statements: [
@@ -5158,6 +5205,22 @@ function parseWithItems(
     });
   }
   return items.length === 0 ? null : items;
+}
+
+function parseZipLoopSources(iterableText: string): string[] | null {
+  const zipCall = /^zip\((.+)\)$/.exec(iterableText.trim());
+  if (zipCall === null) {
+    return null;
+  }
+  const parts = splitTopLevelComma(zipCall[1]);
+  const strictArgument = /^strict\s*=\s*(True|False)$/.exec(parts.at(-1)?.trim() ?? '');
+  if (strictArgument !== null) {
+    if (strictArgument[1] !== 'False') {
+      return null;
+    }
+    parts.pop();
+  }
+  return parts.length === 0 ? null : parts;
 }
 
 function exceptBlocksHaveSameBody(blocks: Array<{ statements: string[] }>): boolean {
