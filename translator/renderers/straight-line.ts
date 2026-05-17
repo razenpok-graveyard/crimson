@@ -37,10 +37,14 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
   for (const namespaceImport of module.namespaceImports) {
     lines.push(`import * as ${namespaceImport.alias} from '${namespaceImport.modulePath}';`);
   }
+  const localReexports = localCompatibilityReexports(relativePath, module);
   for (const reexport of module.reexports) {
     lines.push(`export { ${reexport.names.join(', ')} } from '${reexport.modulePath}';`);
   }
-  if (module.imports.length + module.namespaceImports.length + module.reexports.length > 0) {
+  if (localReexports.length > 0) {
+    lines.push(`export { ${localReexports.join(', ')} };`);
+  }
+  if (module.imports.length + module.namespaceImports.length + module.reexports.length + localReexports.length > 0) {
     lines.push('');
   }
 
@@ -144,4 +148,14 @@ export function renderStraightLineModule(relativePath: string, module: StraightL
     lines.push('');
   }
   return lines.join('\n');
+}
+
+function localCompatibilityReexports(relativePath: string, module: StraightLineModule): string[] {
+  if (relativePath !== 'crimson/creatures/runtime.py') {
+    return [];
+  }
+  const importedNames = new Set(module.imports.flatMap((importDefinition) => (
+    importDefinition.typeOnly === true ? [] : importDefinition.names
+  )));
+  return importedNames.has('CreatureFlags') ? ['CreatureFlags'] : [];
 }

@@ -1,4 +1,4 @@
-import type { FunctionParameter } from '../../model.js';
+import type { FunctionParameter, ImportDefinition } from '../../model.js';
 import { tsExportNameForPythonName, tsTypeExpression } from '../../naming.js';
 import {
   indentStatementLine,
@@ -33,6 +33,7 @@ type StatementTranslator = (
   validatedTypeAliases: ReadonlySet<string>,
   relativePath: string | null,
   mapNames: ReadonlySet<string>,
+  imports?: ImportDefinition[] | null,
 ) => StatementTranslationResult | null;
 
 export function parseNestedFunctionStatement(
@@ -46,6 +47,7 @@ export function parseNestedFunctionStatement(
   relativePath: string | null,
   mapNames: ReadonlySet<string>,
   translateStatement: StatementTranslator,
+  imports: ImportDefinition[] | null = null,
 ): StatementTranslationResult | null {
   const header = parseIndentedFunctionHeader(lines, index, indent);
   if (header === null) {
@@ -100,6 +102,7 @@ export function parseNestedFunctionStatement(
       validatedTypeAliases,
       relativePath,
       mapNames,
+      imports,
     );
     if (statement === null) {
       return null;

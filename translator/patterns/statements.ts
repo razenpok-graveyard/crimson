@@ -300,6 +300,7 @@ export function translateStraightLineStatement(
     relativePath,
     mapNames,
     translateStraightLineStatement,
+    imports,
   );
   if (nestedFunction !== null) {
     return nestedFunction;
@@ -4135,6 +4136,9 @@ function knownMethodCallSignature(methodName: string): FunctionCallSignature | n
   if (methodName === 'spawnAt') {
     return { positional: ['pos', 'bonusId', 'durationOverride'] };
   }
+  if (methodName === 'trySpawnOnKill') {
+    return { positional: ['pos'] };
+  }
   if (methodName === 'normalizedWithLength') {
     return { positional: [], returnTupleMarkers: ['vector', null] };
   }
@@ -4357,6 +4361,9 @@ function parseMultilineConditionalArgument(
 ): { expression: string; nextIndex: number } | null {
   const trueExpression = (lines[startIndex] ?? '').trim();
   if (trueExpression === '' || trueExpression.endsWith(',')) {
+    return null;
+  }
+  if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(trueExpression)) {
     return null;
   }
   const condition = /^if (.+)$/.exec((lines[startIndex + 1] ?? '').trim());

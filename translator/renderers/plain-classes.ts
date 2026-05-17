@@ -139,6 +139,36 @@ export function renderPlainClasses(lines: string[], classes: StraightLineModule[
       }
       lines.push('  }');
     }
+    if (plainClass.name === 'CreaturePool') {
+      const publicWrapperMethods = new Set(['_plaguebearerSpreadInfection', '_tickDead']);
+      const fieldNames = new Set(plainClass.fields.map((field) => field.name));
+      for (const method of plainClass.methods) {
+        const wrapperName = publicAccessorNameForPrivateField(method.name);
+        if (
+          wrapperName === null
+          || !publicWrapperMethods.has(method.name)
+          || method.abstract === true
+          || methodNames.has(wrapperName)
+          || fieldNames.has(wrapperName)
+        ) {
+          continue;
+        }
+        const params = method.parameters.map(renderParameter);
+        const callArgs = method.parameters.map((param) => param.name);
+        if (method.optsParams.length > 0) {
+          const optsType = method.optsParams
+            .map((param) => `${param.name}${param.defaultValue === null ? '' : '?'}: ${param.typeExpression}`)
+            .join('; ');
+          const allOptsHaveDefaults = method.optsParams.every((param) => param.defaultValue !== null);
+          params.push(`opts: { ${optsType} }${allOptsHaveDefaults ? ' = {}' : ''}`);
+          callArgs.push('opts');
+        }
+        lines.push('');
+        lines.push(`  ${method.static === true ? 'static ' : ''}${wrapperName}(${params.join(', ')}): ${renderFunctionReturnType(method)} {`);
+        lines.push(`    return this.${method.name}(${callArgs.join(', ')});`);
+        lines.push('  }');
+      }
+    }
     lines.push('}');
     if (index < classes.length - 1) {
       lines.push('');
