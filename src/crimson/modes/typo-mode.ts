@@ -150,7 +150,7 @@ export class TypoShooterMode extends BaseGameplayMode {
     } else {
       const codepoint = int(InputState.getCharPressed());
       if (codepoint !== 13 && codepoint !== 8 && 0x20 <= codepoint && codepoint <= 0xFF) {
-        let ch: ReturnType<typeof String.fromCodePoint>;
+        let ch: string;
         try {
           ch = String.fromCodePoint(codepoint);
         } catch (exc) {

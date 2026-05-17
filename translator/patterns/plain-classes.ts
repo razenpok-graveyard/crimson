@@ -28,6 +28,7 @@ import {
 } from './expression.js';
 import { parseFunctionParametersText, pythonParameterNames, recordParameterNameBindings } from './parameters.js';
 import {
+  markAssignedLocalCollectionNames,
   reassignedLocalNames,
   translateStraightLineStatement,
 } from './statements.js';
@@ -1166,6 +1167,7 @@ function parsePlainClassMethod(
     extraParameters,
   ));
   const reassignedNames = reassignedLocalNames(lines, header.nextIndex);
+  markAssignedLocalCollectionNames(lines, header.nextIndex, '        ', arrayNames, mapNames);
   let nextIndex = header.nextIndex;
   const docstring = parseIndentedDocstring(lines, nextIndex, '        ');
   if (docstring !== null) {

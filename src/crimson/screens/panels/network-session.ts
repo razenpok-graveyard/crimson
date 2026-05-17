@@ -319,7 +319,7 @@ export class NetworkSessionPanelView extends PanelMenuView {
   }
 
   protected _parsePort(): number {
-    let port: ReturnType<typeof int>;
+    let port: number;
     try {
       port = int(Number(this._portText));
     } catch (exc) {

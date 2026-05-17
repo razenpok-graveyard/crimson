@@ -33,10 +33,52 @@ export function isBareTypeAliasExpression(pythonExpression: string): boolean {
   if (!hasBalancedSquareBrackets(trimmed)) {
     return false;
   }
+  if (hasTopLevelArithmeticOperator(trimmed)) {
+    return false;
+  }
   if (trimmed.includes('(') || trimmed.includes('{')) {
     return false;
   }
   return /[\[\]|]/.test(trimmed) || /^(?:Callable|Literal|Sequence|dict|list|tuple)\b/.test(trimmed);
+}
+
+function hasTopLevelArithmeticOperator(value: string): boolean {
+  let bracketDepth = 0;
+  let parenDepth = 0;
+  let quote: string | null = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      if (char === quote && !characterIsEscaped(value, index)) {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '[') {
+      bracketDepth += 1;
+      continue;
+    }
+    if (char === ']') {
+      bracketDepth -= 1;
+      continue;
+    }
+    if (char === '(') {
+      parenDepth += 1;
+      continue;
+    }
+    if (char === ')') {
+      parenDepth -= 1;
+      continue;
+    }
+    if (bracketDepth === 0 && parenDepth === 0 && /[+\-*/%&^]/.test(char)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function isBitwiseEnumMemberValueExpression(value: string): boolean {
@@ -499,10 +541,10 @@ export function inferPythonExpressionType(pythonExpression: string): string {
   if (/^-?(?:\d+(?:\.\d+)?|0x[0-9A-Fa-f]+)$/.test(trimmed)) {
     return 'number';
   }
-  if (/^(?:int|float)\(/.test(trimmed)) {
+  if (/^(?:int|float|len|f32|_f32)\(/.test(trimmed)) {
     return 'number';
   }
-  if (/^str\(/.test(trimmed) || /\.(?:strip|lower|upper)\(\)/.test(trimmed)) {
+  if (/^(?:str|chr)\(/.test(trimmed) || /\.(?:strip|lower|upper)\(\)/.test(trimmed)) {
     return 'string';
   }
   if (/\.read_text\(/.test(trimmed)) {
@@ -510,6 +552,14 @@ export function inferPythonExpressionType(pythonExpression: string): string {
   }
   if (/^bool\(/.test(trimmed)) {
     return 'boolean';
+  }
+  const conditional = splitTopLevelConditionalExpression(trimmed);
+  if (conditional !== null) {
+    const trueType = inferPythonExpressionType(conditional.trueExpression);
+    const falseType = inferPythonExpressionType(conditional.falseExpression);
+    if (trueType === falseType) {
+      return trueType;
+    }
   }
   const listComprehension = /^\[(.+?) for [A-Za-z_][A-Za-z0-9_]* in .+\]$/.exec(trimmed);
   if (listComprehension !== null) {
@@ -574,6 +624,45 @@ export function inferPythonExpressionType(pythonExpression: string): string {
     return `typeof ${trimmed.split('.').map(tsExportNameForPythonName).join('.')}`;
   }
   return 'any';
+}
+
+function splitTopLevelConditionalExpression(value: string): { trueExpression: string; falseExpression: string } | null {
+  let depth = 0;
+  let quote: string | null = null;
+  let ifIndex: number | null = null;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (quote !== null) {
+      if (char === quote && !characterIsEscaped(value, index)) {
+        quote = null;
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') {
+      depth += 1;
+      continue;
+    }
+    if (char === ')' || char === ']' || char === '}') {
+      depth -= 1;
+      continue;
+    }
+    if (depth === 0 && value.startsWith(' if ', index)) {
+      ifIndex = index;
+      index += 3;
+      continue;
+    }
+    if (depth === 0 && ifIndex !== null && value.startsWith(' else ', index)) {
+      return {
+        trueExpression: value.slice(0, ifIndex).trim(),
+        falseExpression: value.slice(index + 6).trim(),
+      };
+    }
+  }
+  return null;
 }
 export function stripTypeOnlyStatementSyntax(text: string): string {
   return text

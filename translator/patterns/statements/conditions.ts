@@ -1,6 +1,8 @@
 import { matchingCloseParen, splitTopLevelComma } from '../common.js';
 import {
+  classFieldTypeMarker,
   nullableNameMarker,
+  receiverTypeNameMarker,
   setNameMarker,
   splitTopLevelLogicalOperator,
   translateExpression,
@@ -49,8 +51,38 @@ export function translateConditionExpression(
         ? `${translated} !== null && ${translated}.length > 0`
         : `${translated}.length > 0`;
     }
+    const fieldType = simpleReferenceFieldType(trimmed, translated, nameMap);
+    if (fieldType !== null && (fieldType.endsWith('[]') || /^readonly .+\[]$/.test(fieldType))) {
+      return fieldType.includes('null') || fieldType.includes('undefined')
+        ? `${translated} !== null && ${translated} !== undefined && ${translated}.length > 0`
+        : `${translated}.length > 0`;
+    }
   }
   return translateExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
+}
+
+function simpleReferenceFieldType(
+  pythonExpression: string,
+  tsExpression: string,
+  nameMap: ReadonlyMap<string, string>,
+): string | null {
+  const pythonFieldType = dottedFieldType(pythonExpression, nameMap);
+  if (pythonFieldType !== null) {
+    return pythonFieldType;
+  }
+  return dottedFieldType(tsExpression, nameMap);
+}
+
+function dottedFieldType(
+  expression: string,
+  nameMap: ReadonlyMap<string, string>,
+): string | null {
+  const dotted = /^(.+)\.([A-Za-z_$][A-Za-z0-9_$]*)$/.exec(expression);
+  if (dotted === null) {
+    return null;
+  }
+  const receiverType = nameMap.get(receiverTypeNameMarker(dotted[1]));
+  return receiverType === undefined ? null : nameMap.get(classFieldTypeMarker(receiverType, dotted[2])) ?? null;
 }
 
 function parenthesizeAndConditionOperand(value: string): string {

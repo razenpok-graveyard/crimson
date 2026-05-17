@@ -475,7 +475,7 @@ export class QuestsMenuView {
       return null;
     }
 
-    let completed: ReturnType<typeof int>;
+    let completed: number;
     try {
       completed = int(status.questPlayCount(completedIdx));
     } catch (exc) {

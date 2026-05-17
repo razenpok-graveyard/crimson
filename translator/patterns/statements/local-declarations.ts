@@ -857,6 +857,98 @@ export function assignedRightAsKnownVector(
   return args.length === 2 ? `new Vec2(${args.join(', ')})` : assignedRight;
 }
 
+export function markAssignedLocalCollectionNames(
+  lines: string[],
+  startIndex: number,
+  indent: string,
+  arrayNames: Set<string>,
+  mapNames: Set<string>,
+): void {
+  let index = startIndex;
+  while (index < lines.length) {
+    const line = lines[index] ?? '';
+    if (line.trim() !== '' && !line.startsWith(indent)) {
+      break;
+    }
+    if (line.trim() === '') {
+      index += 1;
+      continue;
+    }
+    const lineIndent = /^(\s*)/.exec(line)?.[1] ?? '';
+    const rest = line.slice(lineIndent.length);
+    if (/^(?:class|def) [A-Za-z_][A-Za-z0-9_]*/.test(rest)) {
+      index = localIndentedBlockEndIndex(lines, index + 1, `${lineIndent}    `);
+      continue;
+    }
+    if (rest.startsWith(' ')) {
+      index += 1;
+      continue;
+    }
+
+    const annotated = /^([A-Za-z_][A-Za-z0-9_]*): (.+?) = (.+)$/.exec(rest);
+    const plain = /^([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(rest);
+    const name = annotated?.[1] ?? plain?.[1] ?? null;
+    const annotation = annotated?.[2] ?? null;
+    const value = annotated?.[3] ?? plain?.[2] ?? null;
+    if (name !== null && value !== null) {
+      if (assignmentCreatesMap(lines, index, lineIndent, value)) {
+        addMutableName(mapNames, name);
+        addMutableName(mapNames, tsExportNameForPythonName(name));
+      }
+      if (annotation?.trim().startsWith('list[') === true || value.trim() === '[') {
+        arrayNames.add(name);
+        arrayNames.add(tsExportNameForPythonName(name));
+      }
+    }
+    index += 1;
+  }
+}
+
+function assignmentCreatesMap(
+  lines: string[],
+  index: number,
+  lineIndent: string,
+  value: string,
+): boolean {
+  const trimmed = value.trim();
+  if (/^(?:OrderedDict|defaultdict)\(/.test(trimmed)) {
+    return true;
+  }
+  if (trimmed !== '{') {
+    return false;
+  }
+  const firstItemIndex = firstNonBlankLocalLineIndex(lines, index + 1);
+  const secondItemIndex = firstNonBlankLocalLineIndex(lines, firstItemIndex + 1);
+  const firstItem = lines[firstItemIndex] ?? '';
+  const secondItem = lines[secondItemIndex] ?? '';
+  return (
+    firstItem.startsWith(`${lineIndent}    `)
+    && /^.+: .+/.test(firstItem.trim())
+    && secondItem.startsWith(`${lineIndent}    `)
+    && /^for [A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)* in .+/.test(secondItem.trim())
+  );
+}
+
+function firstNonBlankLocalLineIndex(lines: string[], startIndex: number): number {
+  let index = startIndex;
+  while (index < lines.length && (lines[index] ?? '').trim() === '') {
+    index += 1;
+  }
+  return index;
+}
+
+function localIndentedBlockEndIndex(lines: string[], startIndex: number, indent: string): number {
+  let index = startIndex;
+  while (index < lines.length) {
+    const line = lines[index] ?? '';
+    if (line.trim() !== '' && !line.startsWith(indent)) {
+      break;
+    }
+    index += 1;
+  }
+  return index;
+}
+
 export function recordLocalAssignmentMarkers(
   pythonName: string,
   tsName: string,

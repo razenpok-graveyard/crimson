@@ -111,6 +111,7 @@ import {
 } from './runtime-helpers.js';
 import {
   addReassignedLocalTypeAnnotations,
+  markAssignedLocalCollectionNames,
   nullableLocalNames,
   reassignedLocalNames,
   rewriteStructPositionalConstructors,
@@ -324,6 +325,16 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
         namespaceImports.push({
           alias: aliasName,
           modulePath: tsImportPathForPythonImport(`${aliasedFromImport[1]}${aliasedFromImport[2]}`, relativePath),
+        });
+        moduleNameMap.set(aliasedFromImport[3], aliasName);
+        index += 1;
+        continue;
+      }
+      const submodulePath = tsImportPathForPythonImport(`${aliasedFromImport[1]}.${aliasedFromImport[2]}`, relativePath);
+      if (tsImportPathExists(submodulePath, relativePath)) {
+        namespaceImports.push({
+          alias: aliasName,
+          modulePath: submodulePath,
         });
         moduleNameMap.set(aliasedFromImport[3], aliasName);
         index += 1;
@@ -755,6 +766,7 @@ export function parseStraightLineModule(trimmedPython: string, relativePath: str
       index = docstring.nextIndex;
     }
     markIteratedLocalNames(lines, index, '    ', arrayNames);
+    markAssignedLocalCollectionNames(lines, index, '    ', arrayNames, functionMapNames);
     for (const name of nullableLocalNames(lines, index)) {
       arrayNames.add(nullableNameMarker(name));
       arrayNames.add(nullableNameMarker(tsExportNameForPythonName(name)));

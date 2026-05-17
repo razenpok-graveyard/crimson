@@ -132,7 +132,7 @@ export {
   parseStraightLineFunctionHeader,
 } from './function-headers.js';
 
-export { addReassignedLocalTypeAnnotations } from './statements/local-declarations.js';
+export { addReassignedLocalTypeAnnotations, markAssignedLocalCollectionNames } from './statements/local-declarations.js';
 export { nullableLocalNames, reassignedLocalNames } from './statements/reassigned-locals.js';
 export { rewriteStructPositionalConstructors } from './statements/struct-rewrites.js';
 
@@ -764,7 +764,7 @@ export function translateStraightLineStatement(
     }
 
     const innerIndent = `${indent}    `;
-    const tryFinallyPredeclarations = predeclareTryFinallyAssignments(lines, index, indent, declaredNames, nameMap);
+    const tryFinallyPredeclarations = predeclareTryFinallyAssignments(lines, index, indent, declaredNames, reassignedNames, nameMap);
     const translateBlock = (startIndex: number): { statements: string[]; nextIndex: number } | null => {
       const blockStatements: string[] = [];
       let nextIndex = startIndex;
@@ -867,6 +867,7 @@ export function translateStraightLineStatement(
         const trySucceededName = `_trySucceeded${index}`;
         return {
           statements: [
+            ...tryFinallyPredeclarations,
             ...hoistedTry.declarations,
             `let ${trySucceededName} = false;`,
             'try {',
@@ -884,6 +885,7 @@ export function translateStraightLineStatement(
       }
       return {
         statements: [
+          ...tryFinallyPredeclarations,
           ...hoistedTry.declarations,
           'try {',
           ...hoistedTry.statements,

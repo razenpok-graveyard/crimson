@@ -114,6 +114,7 @@ export function recordImportedFunctionReturnTypes(
       moduleNameMap.set(functionReturnTypeMarker(name.importedName), `ReturnType<typeof ${name.importedName}>`);
       moduleNameMap.set(functionDeclaredReturnTypeMarker(name.localName), signature.returnType);
       moduleNameMap.set(functionDeclaredReturnTypeMarker(name.importedName), signature.returnType);
+      recordSameModuleReturnClassFieldTypes(modulePath, signature.returnType, relativePath, moduleNameMap);
     }
     const signatureJson = JSON.stringify({
       positional: signature.positional,
@@ -121,6 +122,25 @@ export function recordImportedFunctionReturnTypes(
     });
     moduleNameMap.set(functionSignatureMarker(name.localName), signatureJson);
     moduleNameMap.set(functionSignatureMarker(name.importedName), signatureJson);
+  }
+}
+
+function recordSameModuleReturnClassFieldTypes(
+  modulePath: string,
+  returnType: string,
+  relativePath: string,
+  moduleNameMap: Map<string, string>,
+): void {
+  const className = /^([A-Z][A-Za-z0-9_$]*)$/.exec(returnType.trim())?.[1] ?? null;
+  if (className === null) {
+    return;
+  }
+  const classSource = importedClassSource(modulePath, className, relativePath);
+  if (classSource === null) {
+    return;
+  }
+  for (const field of importedClassFieldTypes(classSource)) {
+    moduleNameMap.set(classFieldTypeMarker(className, field.name), field.typeExpression);
   }
 }
 

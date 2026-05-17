@@ -530,7 +530,7 @@ function fmtHex(value: number | null): string {
 }
 
 function projectileTypeLabel(typeId: number): string {
-  let name: ReturnType<typeof String>;
+  let name: string;
   try {
     name = String(ProjectileTemplateId[typeId]).toLowerCase().replaceAll('_', ' ');
   } catch (exc) {

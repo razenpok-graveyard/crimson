@@ -208,7 +208,7 @@ export function postHitIonRifle(ctx: ProjectileUpdateCtx, hit: ProjectileHitInfo
   const hitCreature = int(hit.hitIdx);
   if (runtimeState !== null && runtimeState.shockChainProjectileId === hit.projIndex && hitCreature >= 0 && hitCreature < creatures.length) {
     const linksLeft = int(runtimeState.shockChainLinksLeft);
-    let bestIdx: any;
+    let bestIdx: number;
     let bestDistSq: any;
     if (linksLeft > 0 && creatures.length > 0) {
       runtimeState.shockChainLinksLeft = linksLeft - 1;

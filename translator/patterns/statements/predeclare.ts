@@ -2,6 +2,7 @@ import { tsExportNameForPythonName } from '../../naming.js';
 import {
   inferPythonExpressionType,
   isIndentedBlockLine,
+  matchingCloseParen,
   splitTopLevelComma,
 } from '../common.js';
 import {
@@ -239,15 +240,18 @@ export function predeclareTryFinallyAssignments(
   index: number,
   indent: string,
   declaredNames: Set<string>,
+  reassignedNames: ReadonlySet<string>,
   nameMap: ReadonlyMap<string, string>,
 ): string[] {
   const innerIndent = `${indent}    `;
   const tryEndIndex = indentedBlockEndIndex(lines, index + 1, innerIndent);
-  const finallyLine = lines[tryEndIndex] ?? '';
-  if (!lineStartsAtIndent(finallyLine, indent) || finallyLine.trim() !== 'finally:') {
+  const firstClauseIndex = firstNonBlankIndex(lines, tryEndIndex);
+  const firstClause = (lines[firstClauseIndex] ?? '').trim();
+  const predeclareAllReferencedTryAssignments = firstClause === 'finally:';
+  const afterTryIndex = tryStatementEndIndex(lines, firstClauseIndex, indent, innerIndent);
+  if (afterTryIndex === null) {
     return [];
   }
-  const afterFinallyIndex = indentedBlockEndIndex(lines, tryEndIndex + 1, innerIndent);
   const assignedTypes = new Map<string, Set<string>>();
   for (let lineIndex = index + 1; lineIndex < tryEndIndex; lineIndex += 1) {
     const line = lines[lineIndex] ?? '';
@@ -259,7 +263,10 @@ export function predeclareTryFinallyAssignments(
     if (assignment === null || declaredNames.has(assignment[1])) {
       continue;
     }
-    if (!nameReferencedAfterBlock(lines, afterFinallyIndex, indent, assignment[1])) {
+    if (!predeclareAllReferencedTryAssignments && !reassignedNames.has(assignment[1])) {
+      continue;
+    }
+    if (!nameReferencedAfterBlock(lines, afterTryIndex, indent, assignment[1])) {
       continue;
     }
     const types = assignedTypes.get(assignment[1]) ?? new Set<string>();
@@ -273,6 +280,47 @@ export function predeclareTryFinallyAssignments(
     declaredNames.add(name);
   }
   return declarations;
+}
+
+function tryStatementEndIndex(
+  lines: string[],
+  firstClauseIndex: number,
+  indent: string,
+  innerIndent: string,
+): number | null {
+  let index = firstNonBlankIndex(lines, firstClauseIndex);
+  const firstLine = lines[index] ?? '';
+  if (!lineStartsAtIndent(firstLine, indent)) {
+    return null;
+  }
+  if (firstLine.trim() === 'finally:') {
+    return indentedBlockEndIndex(lines, index + 1, innerIndent);
+  }
+  if (!/^except\b.*:/.test(firstLine.trim())) {
+    return null;
+  }
+  while (index < lines.length) {
+    index = firstNonBlankIndex(lines, index);
+    const line = lines[index] ?? '';
+    if (!lineStartsAtIndent(line, indent)) {
+      break;
+    }
+    const trimmed = line.trim();
+    if (/^except\b.*:/.test(trimmed) || trimmed === 'else:' || trimmed === 'finally:') {
+      index = indentedBlockEndIndex(lines, index + 1, innerIndent);
+      continue;
+    }
+    break;
+  }
+  return index;
+}
+
+function firstNonBlankIndex(lines: string[], startIndex: number): number {
+  let index = startIndex;
+  while (index < lines.length && (lines[index] ?? '').trim() === '') {
+    index += 1;
+  }
+  return index;
 }
 
 function predeclaredTypeExpression(types: Iterable<string>): string {
@@ -387,7 +435,10 @@ function inferPredeclaredAssignmentType(
     }
   }
   const callExpression = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\(/.exec(assignedExpression.trim());
-  if (callExpression !== null) {
+  const trimmedAssignedExpression = assignedExpression.trim();
+  const callCloseParen = callExpression === null ? null : matchingCloseParen(trimmedAssignedExpression, callExpression[0].length - 1);
+  const callIsWholeAssignment = callCloseParen === trimmedAssignedExpression.length - 1 || trimmedAssignedExpression.endsWith('(');
+  if (callExpression !== null && callIsWholeAssignment) {
     if (/^[A-Z][A-Za-z0-9_]*(?:Id|Type|Flags)$/.test(callExpression[1])) {
       return tsExportNameForPythonName(callExpression[1]);
     }
@@ -396,6 +447,14 @@ function inferPredeclaredAssignmentType(
       ?? nameMap.get(functionReturnTypeMarker(callExpression[1]));
     if (returnType !== undefined) {
       return returnType;
+    }
+    const inferredType = inferPythonExpressionType(assignedExpression);
+    if (inferredType !== 'any') {
+      return inferredType;
+    }
+    const fallbackReturnType = fallbackCallReturnType(callExpression[1], translatedCallee);
+    if (fallbackReturnType !== null) {
+      return fallbackReturnType;
     }
   }
   const dottedField = /^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(assignedExpression.trim());
@@ -432,6 +491,53 @@ function inferPredeclaredAssignmentType(
   }
   return 'any';
 }
+
+function fallbackCallReturnType(pythonCallee: string, translatedCallee: string): string | null {
+  if (pythonCallee.includes('.')) {
+    return null;
+  }
+  const pythonRoot = pythonCallee.split('.')[0] ?? pythonCallee;
+  if (pythonBuiltinCallableNames.has(pythonRoot)) {
+    return null;
+  }
+  const lastPart = translatedCallee.split('.').at(-1) ?? translatedCallee;
+  if (/^[A-Z]/.test(lastPart)) {
+    return null;
+  }
+  return `ReturnType<typeof ${translatedCallee}>`;
+}
+
+const pythonBuiltinCallableNames = new Set([
+  'abs',
+  'all',
+  'any',
+  'bool',
+  'bytes',
+  'bytearray',
+  'cast',
+  'chr',
+  'dict',
+  'enumerate',
+  'filter',
+  'float',
+  'int',
+  'isinstance',
+  'len',
+  'list',
+  'map',
+  'max',
+  'min',
+  'range',
+  'repr',
+  'reversed',
+  'round',
+  'set',
+  'sorted',
+  'str',
+  'sum',
+  'tuple',
+  'zip',
+]);
 
 function translateDottedTypeQueryExpression(
   pythonExpression: string,

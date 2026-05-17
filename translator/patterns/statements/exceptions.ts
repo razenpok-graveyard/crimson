@@ -1,11 +1,13 @@
 import { splitTopLevelComma } from '../common.js';
 import { translateExpression } from '../expression.js';
+import { splitInlineComment } from './inline-comments.js';
 import { lineStartsAtIndent } from './utils.js';
 
 export function parseExceptClause(statement: string): { name: string | null; types: string[] } | null {
+  const code = splitInlineComment(statement).code;
   const typeNamePattern = '[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*';
   const identifierNamePattern = '[A-Za-z_][A-Za-z0-9_]*';
-  const clause = new RegExp(`^except (?:(` + typeNamePattern + `)|\\((${typeNamePattern}(?:, ${typeNamePattern})+),?\\))(?: as (${identifierNamePattern}))?:$`).exec(statement);
+  const clause = new RegExp(`^except (?:(` + typeNamePattern + `)|\\((${typeNamePattern}(?:, ${typeNamePattern})+),?\\))(?: as (${identifierNamePattern}))?:$`).exec(code);
   if (clause === null) {
     return null;
   }
