@@ -2827,7 +2827,7 @@ export function translateExpression(
   if (privatePositionalConstructor !== null) {
     const args = splitTopLevelComma(privatePositionalConstructor[2]);
     if (args.every((arg) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(arg))) {
-      return `new ${tsExportNameForPythonName(`_${privatePositionalConstructor[1]}`)}(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')})`;
+      return `new ${tsExportNameForPythonName(`_${privatePositionalConstructor[1]}`)}(${args.map((arg) => translateCallArgumentExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')})`;
     }
   }
 
@@ -2836,9 +2836,9 @@ export function translateExpression(
     const args = splitTopLevelComma(positionalConstructor[2]);
     if (args.every((arg) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(arg))) {
       if (positionalConstructor[1] === 'String') {
-        return `String(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')})`;
+        return `String(${args.map((arg) => translateCallArgumentExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')})`;
       }
-      return `new ${tsExportNameForPythonName(positionalConstructor[1])}(${args.map((arg) => translateExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')})`;
+      return `new ${tsExportNameForPythonName(positionalConstructor[1])}(${args.map((arg) => translateCallArgumentExpression(arg, nameMap, arrayNames, validatedTypeAliases, mapNames)).join(', ')})`;
     }
   }
 

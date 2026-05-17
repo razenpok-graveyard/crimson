@@ -581,6 +581,9 @@ function predeclaredExpressionLooksVector(
     return true;
   }
   const localReference = /^[A-Za-z_][A-Za-z0-9_]*$/.exec(trimmed);
+  if (localReference !== null && localNameLooksVector(localReference[0])) {
+    return true;
+  }
   if (localReference !== null && arrayNames.has(vectorNameMarker(localReference[0]))) {
     return true;
   }
@@ -605,6 +608,7 @@ function predeclaredMethodCallReturnType(
     return null;
   }
   const receiver = nameMap.get(dotted[1]) ?? tsExportNameForPythonName(dotted[1]);
+  const methodName = tsAttributeNameForPythonName(dotted[2]);
   const receiverType = nullableTypeExpressionBase(
     localTypes.get(dotted[1])
       ?? localTypes.get(receiver)
@@ -616,7 +620,6 @@ function predeclaredMethodCallReturnType(
   if (receiverType === undefined) {
     return null;
   }
-  const methodName = tsAttributeNameForPythonName(dotted[2]);
   const declaredReturnType = nameMap.get(functionReturnTypeMarker(`${receiverType}.${methodName}`));
   if (declaredReturnType !== undefined) {
     return declaredReturnType;
@@ -660,6 +663,10 @@ function predeclaredDottedExpressionType(
     }
   }
   return fieldType ?? null;
+}
+
+function localNameLooksVector(name: string): boolean {
+  return name.includes('_') && /(?:^|_)(?:pos|size|step|center|offset)(?:_|$)/.test(name);
 }
 
 function vectorMethodReturnType(methodName: string): string | null {

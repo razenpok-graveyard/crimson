@@ -160,7 +160,7 @@ export function tsTypeExpression(pythonType: string): string {
   if (trimmed === 'float' || trimmed === 'int') {
     return 'number';
   }
-  if (/^[A-Z][A-Za-z0-9_]*Flags$/.test(trimmed)) {
+  if (/^[A-Z][A-Za-z0-9_]*Flags$/.test(trimmed) && !/[A-Za-z0-9_]RenderFlags$/.test(trimmed)) {
     return 'number';
   }
   if (trimmed === 'str') {
