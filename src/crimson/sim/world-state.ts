@@ -127,7 +127,7 @@ export class WorldState {
     const prevHealth = this.players.map((player) => player.health);
     // Native Freeze pickup shatters corpses that existed at tick start;
     // same-tick kills are not included in that pass.
-    const freezeCorpseIndicesAtTickStart = new Set(Array.from(this.creatures.entries.entries()).filter(([idx, creature]) => creature.active && creature.hp <= 0.0).map(([idx, creature]) => int(idx)));
+    const freezeCorpseIndicesAtTickStart = new Set(Array.from(this.creatures.entries, (item, index) => [index, item] as const).filter(([idx, creature]) => creature.active && creature.hp <= 0.0).map(([idx, creature]) => int(idx)));
     perksUpdateEffects(this.state, this.players, dt, { creatures: this.creatures.entries, fxQueue: fxQueue });
     // `effects_update` runs early in the native frame loop, before creature/projectile updates.
     this.state.effects.update(dt, { fxQueue: fxQueue });

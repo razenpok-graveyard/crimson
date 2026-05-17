@@ -36,6 +36,7 @@ import type { FunctionCallSignature } from './expression/function-signatures.js'
 import { parseFunctionCallSignature } from './expression/function-signatures.js';
 import { functionSignatureMarker } from './function-headers.js';
 import {
+  parseEnumerateCallArgs,
   parseSimpleGeneratorExpression,
   parseTopLevelConditionalExpression,
   parseTupleTargetGeneratorExpression,
@@ -1295,6 +1296,11 @@ export function translateExpression(
     }
   }
 
+  const tupleTargetListComprehension = parseTupleTargetListComprehension(trimmed);
+  if (tupleTargetListComprehension !== null) {
+    return tupleTargetGeneratorExpressionToArray(tupleTargetListComprehension, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  }
+
   const listComprehension = parseSimpleListComprehension(trimmed);
   if (listComprehension !== null) {
     const itemName = tsExportNameForPythonName(listComprehension.itemName);
@@ -1334,14 +1340,16 @@ export function translateExpression(
 
   const enumerateCall = parseCallPrefix(trimmed, 'enumerate');
   if (enumerateCall !== null && enumerateCall.rest === '') {
-    const args = splitTopLevelComma(enumerateCall.argsText);
-    if (args.length === 1) {
-      return `Array.from(${translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames)}).entries()`;
-    }
-    if (args.length === 2) {
-      const iterable = translateExpression(args[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
-      const start = translateExpression(args[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
-      return `Array.from(${iterable}, (item, index) => [index + ${start}, item] as const)`;
+    const enumerateArgs = parseEnumerateCallArgs(enumerateCall.argsText);
+    if (enumerateArgs !== null) {
+      const iterable = translateExpression(enumerateArgs.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames);
+      if (enumerateArgs.start === null) {
+        return `Array.from(${iterable}).entries()`;
+      }
+      const start = translateExpression(enumerateArgs.start, nameMap, arrayNames, validatedTypeAliases, mapNames);
+      return start === '0'
+        ? `Array.from(${iterable}).entries()`
+        : `Array.from(${iterable}, (item, index) => [index + ${start}, item] as const)`;
     }
   }
 
@@ -3178,11 +3186,32 @@ function tupleTargetGeneratorExpressionToArray(
     itemNameMap.set(targetName, targetNames[targetIndex]);
   });
   const mapParameter = `[${targetNames.join(', ')}]`;
-  const iterable = arrayMethodIterableExpression(generator.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const enumerateCall = parseCallPrefix(generator.iterable, 'enumerate');
+  const enumerateArgs = targetNames.length === 2 && enumerateCall !== null && enumerateCall.rest === ''
+    ? parseEnumerateCallArgs(enumerateCall.argsText)
+    : null;
+  const iterable = enumerateArgs === null
+    ? arrayMethodIterableExpression(generator.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames)
+    : enumerateArrayExpression(enumerateArgs, nameMap, arrayNames, validatedTypeAliases, mapNames);
   const filtered = generator.condition === null
     ? iterable
     : `${iterable}.filter((${mapParameter}) => ${translateExpression(generator.condition, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   return `${filtered}.map((${mapParameter}) => ${translateExpression(generator.expression, itemNameMap, arrayNames, validatedTypeAliases, mapNames)})`;
+}
+
+function enumerateArrayExpression(
+  enumerateArgs: { iterable: string; start: string | null },
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string {
+  const iterable = arrayMethodIterableExpression(enumerateArgs.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const start = enumerateArgs.start === null
+    ? '0'
+    : translateExpression(enumerateArgs.start, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const indexExpression = start === '0' ? 'index' : `index + ${start}`;
+  return `Array.from(${iterable}, (item, index) => [${indexExpression}, item] as const)`;
 }
 
 function tsGeneratorTargetName(pythonName: string): string {
@@ -3229,6 +3258,14 @@ function parseSimpleListComprehension(
     iterable: listComprehension[3],
     condition: listComprehension[4] ?? null,
   };
+}
+
+function parseTupleTargetListComprehension(pythonExpression: string): TupleTargetGeneratorExpression | null {
+  const trimmed = pythonExpression.trim();
+  if (!trimmed.startsWith('[') || !trimmed.endsWith(']') || !delimitersBalanced(trimmed)) {
+    return null;
+  }
+  return parseTupleTargetGeneratorExpression(trimmed.slice(1, -1));
 }
 
 function tupleListComprehensionItemExpression(pythonExpression: string, itemExpression: string): string {
@@ -3658,6 +3695,7 @@ function translatedExpressionLooksBooleanForInt(tsExpression: string): boolean {
     || /^!/.test(trimmed)
     || /(?:===|!==|<=|>=|<|>|\binstanceof\b)/.test(trimmed)
     || /^typeof\b/.test(trimmed)
+    || /^pythonTruthy\(/.test(trimmed)
     || /^(?:Array\.isArray|Number\.is(?:Finite|Integer|NaN))\(/.test(trimmed)
     || /^InputState\.(?:is|was)[A-Za-z0-9_$]*\(/.test(trimmed)
     || /\.(?:has|includes|startsWith|endsWith)\(/.test(trimmed);

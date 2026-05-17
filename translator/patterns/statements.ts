@@ -57,6 +57,10 @@ import {
   tsFunctionReturnTypeExpression,
 } from './function-headers.js';
 import {
+  parseEnumerateCallArgs,
+  type EnumerateCallArgs,
+} from './expression/generators.js';
+import {
   parseFunctionParameterText,
   parseFunctionParametersText,
   pythonParameterNames,
@@ -1377,6 +1381,10 @@ export function translateStraightLineStatement(
 
   const enumerateStatement = /^for ([A-Za-z_][A-Za-z0-9_]*), ([A-Za-z_][A-Za-z0-9_]*) in enumerate\((.+)\):$/.exec(statement);
   if (enumerateStatement !== null) {
+    const enumerateArgs = parseEnumerateCallArgs(enumerateStatement[3]);
+    if (enumerateArgs === null) {
+      return null;
+    }
     const innerIndent = `${indent}    `;
     const innerStatements: string[] = [];
     const branchDeclaredNames = new Set(declaredNames);
@@ -1413,7 +1421,7 @@ export function translateStraightLineStatement(
     }
     return {
       statements: [
-        `for (const [${tsExportNameForPythonName(enumerateStatement[1])}, ${tsExportNameForPythonName(enumerateStatement[2])}] of ${translateExpression(enumerateStatement[3], nameMap, arrayNames, validatedTypeAliases, mapNames)}.entries()) {`,
+        `for (const [${tsExportNameForPythonName(enumerateStatement[1])}, ${tsExportNameForPythonName(enumerateStatement[2])}] of ${enumerateForOfExpression(enumerateArgs, nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`,
         ...innerStatements,
         '}',
       ],
@@ -3313,11 +3321,11 @@ function parseMultilineListComprehension(
   const mapParameter = targetNames.length === 1
     ? tsExportNameForPythonName(targetNames[0])
     : `[${targetNames.map(tsExportNameForPythonName).join(', ')}]`;
-  const enumerateIterable = /^enumerate\((.+)\)$/.exec(forClause[2]);
-  if (targetNames.length === 2 && enumerateIterable !== null && filterExpression === null) {
+  const enumerateIterable = parseEnumerateIterableExpression(forClause[2]);
+  if (targetNames.length === 2 && enumerateIterable !== null && enumerateIterable.start === null && filterExpression === null) {
     const indexName = tsExportNameForPythonName(targetNames[0]);
     const itemName = tsExportNameForPythonName(targetNames[1]);
-    const iterable = iterableExpressionForIteration(enumerateIterable[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
+    const iterable = iterableExpressionForIteration(enumerateIterable.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames);
     return {
       expression: `${iterable}.map((${itemName}, ${indexName}) => ${itemExpression})`,
       nextIndex: closeIndex + 1,
@@ -3325,7 +3333,7 @@ function parseMultilineListComprehension(
     };
   }
   const iterable = targetNames.length > 1 && enumerateIterable !== null
-    ? `Array.from(${iterableExpressionForIteration(enumerateIterable[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.entries())`
+    ? enumerateArrayExpression(enumerateIterable, nameMap, arrayNames, validatedTypeAliases, mapNames)
     : iterableExpressionForIteration(forClause[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
   const filtered = filterExpression === null
     ? iterable
@@ -3364,6 +3372,43 @@ function iterableExpressionForIteration(
     return `Array.from(${iterable})`;
   }
   return iterable;
+}
+
+function parseEnumerateIterableExpression(pythonExpression: string): EnumerateCallArgs | null {
+  const enumerateCall = /^enumerate\((.+)\)$/.exec(pythonExpression.trim());
+  return enumerateCall === null ? null : parseEnumerateCallArgs(enumerateCall[1]);
+}
+
+function enumerateForOfExpression(
+  enumerateArgs: EnumerateCallArgs,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string {
+  const iterable = iterableExpressionForIteration(enumerateArgs.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (enumerateArgs.start === null) {
+    return `${iterable}.entries()`;
+  }
+  const start = translateExpression(enumerateArgs.start, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  return start === '0'
+    ? `${iterable}.entries()`
+    : `Array.from(${iterable}, (item, index) => [index + ${start}, item] as const)`;
+}
+
+function enumerateArrayExpression(
+  enumerateArgs: EnumerateCallArgs,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string {
+  const iterable = iterableExpressionForIteration(enumerateArgs.iterable, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const start = enumerateArgs.start === null
+    ? '0'
+    : translateExpression(enumerateArgs.start, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  const indexExpression = start === '0' ? 'index' : `index + ${start}`;
+  return `Array.from(${iterable}, (item, index) => [${indexExpression}, item] as const)`;
 }
 
 function translateSetUpdateStatements(
@@ -5627,6 +5672,7 @@ function recordLocalAssignmentMarkers(
     booleanNameMarker,
     dateNameMarker,
     nullableNameMarker,
+    numberArrayNameMarker,
     numberNameMarker,
     objectNameMarker,
     pathNameMarker,
@@ -5655,6 +5701,10 @@ function recordLocalAssignmentMarkers(
   if (/^Array\.from\(/.test(assignedRight) && !isArrayFromBooleanChain) {
     arrayNames.add(pythonName);
     arrayNames.add(tsName);
+  }
+  if (assignedRightLooksNumericArray(assignedRight)) {
+    arrayNames.add(numberArrayNameMarker(pythonName));
+    arrayNames.add(numberArrayNameMarker(tsName));
   }
   const arrayElementType = assignedArrayElementType(assignedRight, nameMap);
   if (arrayElementType !== null) {
@@ -5767,6 +5817,17 @@ function recordLocalAssignmentMarkers(
     arrayNames.add(dateNameMarker(pythonName));
     arrayNames.add(dateNameMarker(tsName));
   }
+}
+
+function assignedRightLooksNumericArray(assignedRight: string): boolean {
+  const trimmed = assignedRight.trim();
+  if (/^\[[\d\s.,+\-*/%()]+\]$/.test(trimmed) && /\d/.test(trimmed)) {
+    return true;
+  }
+  if (/\.map\(\(\[([A-Za-z_$][A-Za-z0-9_$]*),\s*[A-Za-z_$][A-Za-z0-9_$]*\]\) => \1\)$/.test(trimmed)) {
+    return true;
+  }
+  return /\.map\(\([^)]*\) => (?:int|Number|Math\.[A-Za-z_$][A-Za-z0-9_$]*)\(/.test(trimmed);
 }
 
 function translatedExpressionLooksNumber(tsExpression: string): boolean {
@@ -6185,9 +6246,9 @@ function parseMultilineSetComprehensionExpression(
     itemNameMap.set(targetName, tsExportNameForPythonName(targetName));
   }
   const tsTargetNames = targetNames.map(tsExportNameForPythonName);
-  const enumerateIterable = /^enumerate\((.+)\)$/.exec(forClause[2]);
+  const enumerateIterable = parseEnumerateIterableExpression(forClause[2]);
   const iterable = targetNames.length === 2 && enumerateIterable !== null
-    ? `Array.from(${iterableExpressionForIteration(enumerateIterable[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}.entries())`
+    ? enumerateArrayExpression(enumerateIterable, nameMap, arrayNames, validatedTypeAliases, mapNames)
     : iterableExpressionForIteration(forClause[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
   const itemParameter = targetNames.length === 1
     ? methodCallIterableCallbackParameter(tsTargetNames[0], iterable)

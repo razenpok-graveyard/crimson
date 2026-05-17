@@ -1,3 +1,4 @@
+import { splitTopLevelComma } from '../common.js';
 import { stripBalancedOuterParens } from './scanners.js';
 
 export type SimpleGeneratorExpression = {
@@ -12,6 +13,11 @@ export type TupleTargetGeneratorExpression = {
   targetNames: string[];
   iterable: string;
   condition: string | null;
+};
+
+export type EnumerateCallArgs = {
+  iterable: string;
+  start: string | null;
 };
 
 export function parseTopLevelConditionalExpression(
@@ -109,4 +115,17 @@ export function parseTupleTargetGeneratorExpression(
     iterable: generator[2],
     condition,
   };
+}
+
+export function parseEnumerateCallArgs(argsText: string): EnumerateCallArgs | null {
+  const args = splitTopLevelComma(argsText).map((arg) => arg.trim()).filter((arg) => arg !== '');
+  if (args.length === 1) {
+    return { iterable: args[0], start: null };
+  }
+  if (args.length !== 2) {
+    return null;
+  }
+  const startKeyword = /^start\s*=\s*(.+)$/.exec(args[1]);
+  const start = startKeyword?.[1]?.trim() ?? args[1];
+  return start === '' ? null : { iterable: args[0], start };
 }
