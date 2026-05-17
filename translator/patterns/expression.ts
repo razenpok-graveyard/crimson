@@ -190,11 +190,16 @@ export function tsFStringTemplateContent(
             ? `Math.trunc(${translatedExpression}).toString(16)`
             : `String(${translatedExpression})`;
           translated += `\${${formatted}.padStart(${zeroPaddedInteger[1]}, '0')}`;
-        } else if (/^(?:\d+)?\.(\d+)f$/.test(format ?? '')) {
-          const digits = /^(?:\d+)?\.(\d+)f$/.exec(format ?? '')?.[1] ?? '0';
-          translated += `\${${tsPropertyAccessBase(translatedExpression)}.toFixed(${digits})}`;
         } else {
-          translated += `\${${translatedExpression}}`;
+          const fixedFloat = /^(\d+)?\.(\d+)f$/.exec(format ?? '');
+          if (fixedFloat !== null) {
+            const width = fixedFloat[1] ?? null;
+            const digits = fixedFloat[2];
+            const fixed = `${tsPropertyAccessBase(translatedExpression)}.toFixed(${digits})`;
+            translated += width === null ? `\${${fixed}}` : `\${${fixed}.padStart(${width}, ' ')}`;
+          } else {
+            translated += `\${${translatedExpression}}`;
+          }
         }
         index = closeIndex;
         continue;
