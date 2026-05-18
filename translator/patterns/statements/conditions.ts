@@ -1,4 +1,5 @@
 import { matchingCloseParen, splitTopLevelComma } from '../common.js';
+import { tsExportNameForPythonName } from '../../naming.js';
 import {
   classFieldTypeMarker,
   nullableNameMarker,
@@ -35,6 +36,11 @@ export function translateConditionExpression(
         return parenthesizeAndConditionOperand(guardedTruthiness ?? translateConditionExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
       })
       .join(' && ');
+  }
+  const walrusAssignment = /^([A-Za-z_][A-Za-z0-9_]*) := (.+)$/.exec(trimmed);
+  if (walrusAssignment !== null) {
+    const tsName = tsExportNameForPythonName(walrusAssignment[1]);
+    return `(${tsName} = ${translateExpression(walrusAssignment[2], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
   if (isSimpleReferenceExpression(trimmed)) {
     const translated = translateExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);

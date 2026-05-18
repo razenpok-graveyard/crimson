@@ -119,11 +119,19 @@ export function addReassignedLocalTypeAnnotations(
         addReassignedLocalType(typesByName, annotatedAssignment[1], type);
       }
     }
+    const tupleAssignment = /^([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+) = (.+)$/.exec(statement);
+    if (tupleAssignment !== null) {
+      for (const name of splitTopLevelComma(tupleAssignment[1]).map((part) => part.trim())) {
+        if (reassignedNames.has(name)) {
+          addReassignedLocalType(typesByName, name, 'any');
+        }
+      }
+    }
     index += 1;
   }
 
   for (const [name, types] of typesByName) {
-    if (types.length > 1 || types[0] === 'CrandLike') {
+    if (types.length > 1 || types[0] === 'CrandLike' || types[0] === 'any') {
       reassignedNames.add(reassignedLocalTypeMarker(name, types.join(' | ')));
     }
   }

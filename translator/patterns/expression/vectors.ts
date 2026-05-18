@@ -27,7 +27,7 @@ export function translatedExpressionLooksVector(tsExpression: string): boolean {
   if (/^(?:Vec2\.|new Vec2\b|projOrigin\()/.test(trimmed) && !/\.(?:length|toHeading)\(\)$/.test(trimmed)) {
     return true;
   }
-  if (/\bnew Vec2\b/.test(trimmed) && trimmed.includes('?')) {
+  if (/\bnew Vec2\b/.test(trimmed) && (trimmed.includes('?') || trimmed.includes('||'))) {
     return true;
   }
   if (/\.(?:aim|pos|vel)$/.test(trimmed)) {

@@ -1773,11 +1773,34 @@ function escapeRegExp(value: string): string {
 
 function prerecordTopLevelFunctionNames(
   moduleNameMap: Map<string, string>,
-  lines: readonly string[],
+  lines: string[],
   privateFunctionNameCollisions: ReadonlySet<string>,
 ): void {
-  for (const name of topLevelFunctionNames(lines)) {
-    moduleNameMap.set(name, tsFunctionNameForPythonName(name, privateFunctionNameCollisions));
+  for (let index = 0; index < lines.length; index += 1) {
+    const header = parseStraightLineFunctionHeader(lines, index);
+    if (header === null) {
+      continue;
+    }
+    const functionName = tsFunctionNameForPythonName(header.name, privateFunctionNameCollisions);
+    moduleNameMap.set(header.name, functionName);
+    const positional: string[] = [];
+    let keywordOnly = false;
+    for (const parameterText of splitTopLevelComma(header.parametersText)) {
+      if (parameterText === '*') {
+        keywordOnly = true;
+        continue;
+      }
+      if (keywordOnly || parameterText.startsWith('*') || parameterText === '') {
+        continue;
+      }
+      positional.push(...pythonParameterNames(parameterText));
+    }
+    const signature = {
+      positional,
+      returnTupleMarkers: returnTupleMarkersForType(header.returnType),
+    };
+    moduleNameMap.set(functionSignatureMarker(header.name), JSON.stringify(signature));
+    moduleNameMap.set(functionSignatureMarker(functionName), JSON.stringify(signature));
   }
 }
 

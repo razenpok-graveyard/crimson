@@ -56,6 +56,18 @@ export function parseFunctionParameterText(
   parameterText: string,
   arrayNames: Set<string>,
 ): FunctionParameter | null {
+  const untypedKwargsParameter = /^\*\*([A-Za-z_][A-Za-z0-9_]*)$/.exec(parameterText);
+  if (untypedKwargsParameter !== null) {
+    const parameterName = tsParameterNameForPythonName(untypedKwargsParameter[1]);
+    arrayNames.add(objectNameMarker(untypedKwargsParameter[1]));
+    arrayNames.add(objectNameMarker(parameterName));
+    return {
+      name: parameterName,
+      typeExpression: 'any',
+      defaultValue: '{}',
+    };
+  }
+
   const kwargsParameter = /^\*\*([A-Za-z_][A-Za-z0-9_]*): (.+)$/.exec(parameterText);
   if (kwargsParameter !== null) {
     const parameterName = tsParameterNameForPythonName(kwargsParameter[1]);
@@ -65,6 +77,17 @@ export function parseFunctionParameterText(
       name: parameterName,
       typeExpression: `Record<string, ${tsTypeExpression(kwargsParameter[2])}>`,
       defaultValue: '{}',
+    };
+  }
+
+  const varArgsParameter = /^\*([A-Za-z_][A-Za-z0-9_]*)(?:: (.+))?$/.exec(parameterText);
+  if (varArgsParameter !== null) {
+    const parameterName = tsParameterNameForPythonName(varArgsParameter[1]);
+    arrayNames.add(varArgsParameter[1]);
+    arrayNames.add(parameterName);
+    return {
+      name: `...${parameterName}`,
+      typeExpression: `${varArgsParameter[2] === undefined ? 'any' : tsTypeExpression(varArgsParameter[2])}[]`,
     };
   }
 
@@ -142,13 +165,14 @@ export function recordParameterNameBindings(
 ): void {
   const pythonNames = pythonParameterNames(parametersText);
   for (let index = 0; index < Math.min(pythonNames.length, parameters.length); index += 1) {
-    if (parameters[index].name !== tsExportNameForPythonName(pythonNames[index])) {
-      nameMap.set(pythonNames[index], parameters[index].name);
+    const emittedName = parameters[index].name.replace(/^\.\.\./, '');
+    if (emittedName !== tsExportNameForPythonName(pythonNames[index])) {
+      nameMap.set(pythonNames[index], emittedName);
     }
     const receiverType = nullableTypeExpressionBase(parameters[index].typeExpression) ?? parameters[index].typeExpression;
     if (/^[A-Z][A-Za-z0-9_$]*$/.test(receiverType)) {
       nameMap.set(receiverTypeNameMarker(pythonNames[index]), receiverType);
-      nameMap.set(receiverTypeNameMarker(parameters[index].name), receiverType);
+      nameMap.set(receiverTypeNameMarker(emittedName), receiverType);
     }
   }
 }
@@ -226,7 +250,8 @@ export function pythonParameterNames(parametersText: string): string[] {
     if (parameterText === '*') {
       continue;
     }
-    const parameter = /^([A-Za-z_][A-Za-z0-9_]*)(?:: |(?: = .+)?$)/.exec(parameterText);
+    const parameter = /^\*\*?([A-Za-z_][A-Za-z0-9_]*)(?:: |(?: = .+)?$)/.exec(parameterText)
+      ?? /^([A-Za-z_][A-Za-z0-9_]*)(?:: |(?: = .+)?$)/.exec(parameterText);
     if (parameter !== null) {
       names.push(parameter[1]);
     }

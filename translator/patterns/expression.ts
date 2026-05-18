@@ -788,6 +788,10 @@ export function translateExpression(
   if (mathDegreesCall !== null && mathDegreesCall.rest === '') {
     return `(${translateExpression(mathDegreesCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)}) * (180.0 / Math.PI)`;
   }
+  const mathRadiansCall = parseCallPrefix(trimmed, 'math.radians');
+  if (mathRadiansCall !== null && mathRadiansCall.rest === '') {
+    return `(${translateExpression(mathRadiansCall.argsText, nameMap, arrayNames, validatedTypeAliases, mapNames)}) * (Math.PI / 180.0)`;
+  }
 
   const chrCall = parseCallPrefix(trimmed, 'chr');
   if (chrCall !== null && chrCall.rest === '') {
@@ -1295,6 +1299,11 @@ export function translateExpression(
   const oneItemTuple = /^\((.+),\)$/.exec(trimmed);
   if (oneItemTuple !== null && splitTopLevelComma(oneItemTuple[1]).length === 1) {
     return `[${translateExpression(oneItemTuple[1], nameMap, arrayNames, validatedTypeAliases, mapNames)}]`;
+  }
+
+  const earlyTupleExpression = translateTupleExpression(trimmed, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  if (earlyTupleExpression !== null) {
+    return earlyTupleExpression;
   }
 
   const parenthesizedConditional = /^\((.+ if .+ else .+)\)$/.exec(trimmed);
@@ -2383,8 +2392,14 @@ export function translateExpression(
     vectorAdditive !== null
     && vectorAdditive.parts.length === 2
     && vectorAdditive.operators[0] === '+'
-    && expressionIsKnownVector(vectorAdditive.parts[0], nameMap, arrayNames)
-    && expressionIsKnownVector(vectorAdditive.parts[1], nameMap, arrayNames)
+    && (
+      expressionIsKnownVector(vectorAdditive.parts[0], nameMap, arrayNames)
+      || translatedExpressionLooksVector(translateExpression(vectorAdditive.parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames))
+    )
+    && (
+      expressionIsKnownVector(vectorAdditive.parts[1], nameMap, arrayNames)
+      || translatedExpressionLooksVector(translateExpression(vectorAdditive.parts[1], nameMap, arrayNames, validatedTypeAliases, mapNames))
+    )
   ) {
     return `${translateExpression(vectorAdditive.parts[0], nameMap, arrayNames, validatedTypeAliases, mapNames)}.add(${translateExpression(vectorAdditive.parts[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
@@ -2736,30 +2751,7 @@ export function translateExpression(
 
   const tupleLiteral = /^\((.*)\)$/.exec(trimmed);
   if (tupleLiteral !== null && matchingCloseParen(trimmed, 0) === trimmed.length - 1) {
-    const tupleParts = splitTopLevelComma(tupleLiteral[1]);
-    if (tupleParts.length === 1) {
-      return `(${translateExpression(tupleLiteral[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
-    }
-    const values = tupleParts
-      .map((part) => part.trim())
-      .filter((part) => part !== '')
-      .map((part) => (part.startsWith('*')
-        ? `...${translateExpression(part.slice(1), nameMap, arrayNames, validatedTypeAliases, mapNames)}`
-        : translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)));
-    const expression = `[${values.join(', ')}]`;
-    return translatedItemsLookLikeLabelTupleArray(values) ? `${expression} as const` : expression;
-  }
-
-  const topLevelTupleParts = splitTopLevelComma(trimmed);
-  if (topLevelTupleParts.length > 1) {
-    const values = topLevelTupleParts.map((part) => {
-      const stripped = part.trim();
-      return stripped.startsWith('*')
-        ? `...${translateExpression(stripped.slice(1), nameMap, arrayNames, validatedTypeAliases, mapNames)}`
-        : translateExpression(stripped, nameMap, arrayNames, validatedTypeAliases, mapNames);
-    });
-    const expression = `[${values.join(', ')}]`;
-    return translatedItemsLookLikeLabelTupleArray(values) ? `${expression} as const` : expression;
+    return `(${translateExpression(tupleLiteral[1], nameMap, arrayNames, validatedTypeAliases, mapNames)})`;
   }
 
   const earlyFullSlice = /^(.+)\[(.*):(.*)\]$/.exec(trimmed);
@@ -3588,6 +3580,44 @@ function parseTupleTargetListComprehension(pythonExpression: string): TupleTarge
 function tupleListComprehensionItemExpression(pythonExpression: string, itemExpression: string): string {
   const tupleLength = pythonTupleExpressionLength(pythonExpression);
   return tupleLength === null ? itemExpression : `${itemExpression} as [${Array.from({ length: tupleLength }, () => 'any').join(', ')}]`;
+}
+
+function translateTupleExpression(
+  trimmed: string,
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string | null {
+  const tupleLiteral = /^\((.*)\)$/.exec(trimmed);
+  if (tupleLiteral !== null && matchingCloseParen(trimmed, 0) === trimmed.length - 1) {
+    const tupleParts = splitTopLevelComma(tupleLiteral[1]);
+    return tupleParts.length <= 1
+      ? null
+      : renderTupleExpressionValues(tupleParts, nameMap, arrayNames, validatedTypeAliases, mapNames);
+  }
+
+  const topLevelTupleParts = splitTopLevelComma(trimmed);
+  return topLevelTupleParts.length <= 1
+    ? null
+    : renderTupleExpressionValues(topLevelTupleParts, nameMap, arrayNames, validatedTypeAliases, mapNames);
+}
+
+function renderTupleExpressionValues(
+  tupleParts: readonly string[],
+  nameMap: Map<string, string>,
+  arrayNames: Set<string>,
+  validatedTypeAliases: ReadonlySet<string>,
+  mapNames: ReadonlySet<string>,
+): string {
+  const values = tupleParts
+    .map((part) => part.trim())
+    .filter((part) => part !== '')
+    .map((part) => (part.startsWith('*')
+      ? `...${translateExpression(part.slice(1), nameMap, arrayNames, validatedTypeAliases, mapNames)}`
+      : translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames)));
+  const expression = `[${values.join(', ')}]`;
+  return translatedItemsLookLikeLabelTupleArray(values) ? `${expression} as const` : expression;
 }
 
 function translatedItemsLookLikeLabelTupleArray(items: readonly string[]): boolean {

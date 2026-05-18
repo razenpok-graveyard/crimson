@@ -156,6 +156,7 @@ type MultilineCallParts = {
   keywordParts: string[];
   keywordArgParts: MultilineKeywordPart[];
   nextIndex: number;
+  closeSuffix?: string;
 };
 
 export function translateStraightLineStatement(
@@ -451,6 +452,22 @@ export function translateStraightLineStatement(
       return null;
     }
     let nextIndex = initialBranch.nextIndex;
+    const walrusDeclarations: string[] = [];
+    const walrusDeclarationNames = new Set<string>();
+    const recordWalrusDeclarations = (condition: string | null): string[] => {
+      const declarations: string[] = [];
+      for (const pythonName of walrusAssignmentNames(condition ?? '')) {
+        const tsName = tsExportNameForPythonName(pythonName);
+        if (walrusDeclarationNames.has(tsName) || declaredNames.has(pythonName)) {
+          continue;
+        }
+        walrusDeclarationNames.add(tsName);
+        nameMap.set(pythonName, tsName);
+        declarations.push(`let ${tsName}: any = null;`);
+      }
+      return declarations;
+    };
+    walrusDeclarations.push(...recordWalrusDeclarations(ifCondition));
     const nextBranchHeaderIndex = (startIndex: number): number => {
       let candidate = startIndex;
       while (
@@ -464,6 +481,7 @@ export function translateStraightLineStatement(
     };
     const statements = [
       ...branchDeclarations,
+      ...walrusDeclarations,
       `if (${translatedIfCondition ?? translateConditionExpression(ifCondition ?? '', nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`,
       ...initialBranch.statements,
       '}',
@@ -477,6 +495,11 @@ export function translateStraightLineStatement(
       const elifStatement = /^elif (.+):$/.exec(nextLine.trim());
       if (elifStatement === null) {
         break;
+      }
+      const newWalrusDeclarations = recordWalrusDeclarations(elifStatement[1]);
+      if (newWalrusDeclarations.length > 0) {
+        statements.splice(branchDeclarations.length + walrusDeclarations.length, 0, ...newWalrusDeclarations);
+        walrusDeclarations.push(...newWalrusDeclarations);
       }
       const elifBranch = translateBranch(branchIndex + 1);
       if (elifBranch === null) {
@@ -1559,19 +1582,32 @@ export function translateStraightLineStatement(
 
   const multilineReturnCall = /^return ([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\($/.exec(statement);
   if (multilineReturnCall !== null) {
-    const callExpression = parseMultilineCallExpression(
+    const callParts = parseMultilineCallParts(
       lines,
       index + 1,
+      nameMap,
+      arrayNames,
+      validatedTypeAliases,
+      mapNames,
+      /^\), (.+)$/,
+    );
+    if (callParts === null) {
+      return null;
+    }
+    const callExpression = translateMultilineCallExpressionFromParts(
       multilineReturnCall[1],
+      callParts,
       nameMap,
       arrayNames,
       validatedTypeAliases,
       mapNames,
     );
-    if (callExpression === null) {
-      return null;
+    if (callParts.closeSuffix !== undefined) {
+      const trailingParts = splitTopLevelComma(callParts.closeSuffix)
+        .map((part) => translateExpression(part, nameMap, arrayNames, validatedTypeAliases, mapNames));
+      return { statements: [`return [${[callExpression, ...trailingParts].join(', ')}];`], nextIndex: callParts.nextIndex };
     }
-    return { statements: [`return ${callExpression.expression};`], nextIndex: callExpression.nextIndex };
+    return { statements: [`return ${callExpression};`], nextIndex: callParts.nextIndex };
   }
 
   const multilineReturnStringJoinCall = /^return (((?:[fF])?(["'])(?:\\.|(?!\3)[\s\S])*\3)\.join)\($/.exec(statement);
@@ -2893,6 +2929,16 @@ export function translateStraightLineStatement(
   }
 
   return null;
+}
+
+function walrusAssignmentNames(condition: string): string[] {
+  const names: string[] = [];
+  const pattern = /(?:^|[(\s])([A-Za-z_][A-Za-z0-9_]*) := /g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(condition)) !== null) {
+    names.push(match[1]);
+  }
+  return names;
 }
 
 function translateReturnExpression(
@@ -4648,6 +4694,7 @@ function parseMultilineCallParts(
   arrayNames: Set<string>,
   validatedTypeAliases: ReadonlySet<string> = new Set(),
   mapNames: ReadonlySet<string> = new Set(),
+  closeSuffixPattern: RegExp | null = null,
 ): MultilineCallParts | null {
   const positionalParts: string[] = [];
   const keywordParts: string[] = [];
@@ -4659,6 +4706,10 @@ function parseMultilineCallParts(
     const trimmed = logicalArg.text;
     if (trimmed === ')' || trimmed === '),') {
       return { positionalParts, keywordParts, keywordArgParts, nextIndex: logicalArg.nextIndex };
+    }
+    const closeSuffix = closeSuffixPattern?.exec(trimmed);
+    if (closeSuffix !== undefined && closeSuffix !== null) {
+      return { positionalParts, keywordParts, keywordArgParts, nextIndex: logicalArg.nextIndex, closeSuffix: closeSuffix[1] };
     }
 
     const arg = trimmed.replace(/,$/, '');

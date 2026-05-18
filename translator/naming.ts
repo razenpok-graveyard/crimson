@@ -148,6 +148,9 @@ export function tsTypeExpression(pythonType: string): string {
   if (trimmed === 'list') {
     return 'any[]';
   }
+  if (trimmed === 'range') {
+    return 'Iterable<number>';
+  }
   if (trimmed === 'bytes' || trimmed === 'bytearray') {
     return 'Uint8Array';
   }
