@@ -248,8 +248,8 @@ export const build4_8SyntaxTerror = registerQuest({ level: '4.8', title: 'Syntax
       trigger = triggerBase;
       innerSeed = 0x4C5;
       for (let i = 0; i < playerCount + 9; i++) {
-        const x = ((((i * i * 0x4C + 0xEC) * i + outerSeed * outerIndex) + 0x380) % 0x380) + 0x40;
-        const y = (((innerSeed * i + (outerIndex * outerIndex * 0x4C + 0x1B) * outerIndex) + 0x380) % 0x380) + 0x40;
+        const x = (((((i * i * 0x4C + 0xEC) * i + outerSeed * outerIndex) % 0x380) + 0x380) % 0x380) + 0x40;
+        const y = ((((innerSeed * i + (outerIndex * outerIndex * 0x4C + 0x1B) * outerIndex) % 0x380) + 0x380) % 0x380) + 0x40;
         entries.push(spawn(new Vec2(x, y), { heading: 0.0, spawnId: SpawnId.ALIEN_SPAWNER_CHILD_1D_FAST_07, triggerMs: trigger, count: 1 }));
         trigger += 300;
         innerSeed += 0x15;
@@ -317,7 +317,7 @@ export const build4_10TheEndOfAll = registerQuest({ level: '4.10', title: 'The E
   trigger = 18000;
   let y = 0x100;
   let toggle = false;
-  let x: any;
+  let x: typeof edgesWide.right.x | typeof edgesWide.left.x;
   while (y < 0x300) {
     x = toggle ? edgesWide.right.x : edgesWide.left.x;
     entries.push(spawn(new Vec2(x, y), { heading: 0.0, spawnId: SpawnId.SPIDER_SP1_CONST_RANGED_VARIANT_3C, triggerMs: trigger, count: 2 }));

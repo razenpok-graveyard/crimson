@@ -36,7 +36,7 @@ export function creatureFindInRadius(creatures: readonly CreatureState[], opts: 
       continue;
     }
 
-    const dist = creature.pos.sub(pos).length() - radius;
+    const dist = (creature.pos.sub(pos)).length() - radius;
     const threshold = nativeFindSizeMargin(creature.size);
     if (threshold < dist) {
       continue;
@@ -76,7 +76,7 @@ export class PerksUpdateEffectsCtx {
   aimTargetForPlayer(opts: { playerIndex: number }): number;
   aimTargetForPlayer(playerIndex: number): number;
   aimTargetForPlayer(playerIndexOrOpts: number | { playerIndex: number }): number {
-    let playerIndex: number = typeof playerIndexOrOpts === 'object' && playerIndexOrOpts !== null && 'playerIndex' in playerIndexOrOpts ? playerIndexOrOpts.playerIndex : playerIndexOrOpts as number;
+    let playerIndex: number = typeof playerIndexOrOpts === 'object' && playerIndexOrOpts !== null ? playerIndexOrOpts.playerIndex : playerIndexOrOpts as number;
     playerIndex = int(playerIndex);
     if (this._aimTargetByPlayerIndex.has(playerIndex)) {
       return int(mapGetOrThrow(this._aimTargetByPlayerIndex, playerIndex));

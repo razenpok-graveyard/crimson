@@ -40,8 +40,8 @@ export function buildHighscoreRecordForGameOver(opts: { state: GameplayState; pl
   const weaponId = mostUsedWeaponIdForPlayer(state, { playerIndex: int(player.index), fallbackWeaponId: player.weapon.weaponId });
   record.mostUsedWeaponId = weaponId;
 
-  let fired: number;
-  let hit: number;
+  let fired: any | number;
+  let hit: any | number;
   if (shotsFired === null || shotsHit === null) {
     [fired, hit] = shotsFromState(state, { playerIndex: int(player.index) });
   } else {

@@ -10,6 +10,7 @@ import { loadGrimMonoFont } from '@grim/fonts/grim-mono.ts';
 import type { SmallFontData } from '@grim/fonts/small.ts';
 import { drawSmallText, loadSmallFont, measureSmallTextWidth } from '@grim/fonts/small.ts';
 import { Vec2 } from '@grim/geom.ts';
+import type { CrandLike } from '@grim/rand.ts';
 import { Crand } from '@grim/rand.ts';
 import { InputState } from '@grim/input.ts';
 import type { ViewContext } from '@grim/view.ts';
@@ -33,7 +34,7 @@ import { WorldRuntime } from '@crimson/world/runtime.ts';
 import * as grimMusic from '@grim/music.ts';
 import * as wgl from '@wgl';
 
-export const PLAYBACK_SPEED_STEPS: readonly number[] = [0.25, 0.5, 1.0, 2.0, 4.0, 8.0];
+export const PLAYBACK_SPEED_STEPS: readonly number[] = [0.25, 0.5, 1.0, 2.0, 4.0, 8.0] as const;
 const _DEFAULT_SPEED_INDEX = 2;
 const _SKIP_SHORT_SECONDS = 5.0;
 const _SKIP_LONG_SECONDS = 30.0;
@@ -104,7 +105,7 @@ export class ReplayPlaybackMode {
   protected _driver: PlaybackDriver | null;
   protected _questTotalSpawnCount: number;
   protected _audio: AudioState | null;
-  protected _audioRng: Crand | null;
+  protected _audioRng: CrandLike | null;
 
   get ctx(): ViewContext {
     return this._ctx;
@@ -184,11 +185,15 @@ export class ReplayPlaybackMode {
   get audio(): AudioState | null {
     return this._audio;
   }
-  get audioRng(): Crand | null {
+  get audioRng(): CrandLike | null {
     return this._audioRng;
   }
 
-  constructor(ctx: ViewContext, opts: { replayPath: string; config: CrimsonConfig; console: ConsoleState; maxTicks?: number | null; traceRng?: boolean; rtx?: boolean; showReplayWidget?: boolean }) {
+  constructor(ctx: ViewContext, opts: { replayPath: string; config: CrimsonConfig; console: ConsoleState; maxTicks?: number | null; traceRng?: boolean; rtx?: boolean; showReplayWidget?: boolean });
+  constructor(opts: { replayPath: string; config: CrimsonConfig; console: ConsoleState; maxTicks?: number | null; traceRng?: boolean; rtx?: boolean; showReplayWidget?: boolean } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean });
+  constructor(ctxOrOpts: ViewContext | { replayPath: string; config: CrimsonConfig; console: ConsoleState; maxTicks?: number | null; traceRng?: boolean; rtx?: boolean; showReplayWidget?: boolean } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean }, maybeOpts?: { replayPath: string; config: CrimsonConfig; console: ConsoleState; maxTicks?: number | null; traceRng?: boolean; rtx?: boolean; showReplayWidget?: boolean }) {
+    const ctx = maybeOpts === undefined ? { assetsDir: (ctxOrOpts as { assetsUrl?: string }).assetsUrl ?? '', preserveBugs: (ctxOrOpts as { preserveBugs?: boolean }).preserveBugs ?? false } as ViewContext : ctxOrOpts as ViewContext;
+    const opts = maybeOpts ?? (ctxOrOpts as { replayPath: string; config: CrimsonConfig; console: ConsoleState; maxTicks?: number | null; traceRng?: boolean; rtx?: boolean; showReplayWidget?: boolean } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean });
     const replayPath = opts.replayPath;
     const config = opts.config;
     const console = opts.console;
@@ -543,8 +548,8 @@ export class ReplayPlaybackMode {
     }
     applyPostApplyReaction({
       reaction: reaction,
-      playSfx: runtime.audioBridge.router.playSfx.bind(runtime.audioBridge.router),
-      playCompletionMusic: this._playQuestCompletionMusic.bind(this),
+      playSfx: runtime.audioBridge.router.playSfx?.bind(runtime.audioBridge.router) ?? null,
+      playCompletionMusic: this._playQuestCompletionMusic?.bind(this) ?? null,
     });
   }
 
@@ -614,10 +619,10 @@ export class ReplayPlaybackMode {
     if (advance.outputs.length > 0) {
       applyPresentationOutputs({
         outputs: advance.outputs,
-        syncAudioBridgeState: runtime.syncAudioBridgeState.bind(runtime),
+        syncAudioBridgeState: runtime.syncAudioBridgeState?.bind(runtime) ?? null,
         applyAudioPlan: (plan, shouldApplyAudio) => runtime.audioBridge.applyPlan({ plan: plan, applyAudio: Boolean(shouldApplyAudio) }),
         applyTerrainFx: runtime.renderResources.consumeTerrainFxBatch,
-        updateCamera: runtime.updateCamera.bind(runtime),
+        updateCamera: runtime.updateCamera?.bind(runtime) ?? null,
         onOutputApplied: _onOutputApplied,
         applyAudio: true,
       });
@@ -657,8 +662,9 @@ export class ReplayPlaybackMode {
       prevSfxEnabled = Boolean(audioBridge.router.sfxEnabled);
       audioBridge.router.sfxEnabled = false;
     }
+    let ticksToAdvance: ReturnType<typeof Math.max>;
     try {
-      const ticksToAdvance = Math.max(0, int(target) - int(this._tickIndex));
+      ticksToAdvance = Math.max(0, int(target) - int(this._tickIndex));
       if (ticksToAdvance > 0) {
         this._advanceRunner({
           dtSeconds: ticksToAdvance * this._dt,

@@ -6,7 +6,7 @@ import type { CrimsonConfig } from '@grim/config.ts';
 import type { ConsoleState } from '@grim/console.ts';
 import { Vec2 } from '@grim/geom.ts';
 import { clamp } from '@grim/math.ts';
-import type { Crand } from '@grim/rand.ts';
+import type { CrandLike } from '@grim/rand.ts';
 import { InputState } from '@grim/input.ts';
 import { SfxId } from '@grim/sfx-map.ts';
 import type { ViewContext } from '@grim/view.ts';
@@ -97,18 +97,18 @@ export class SurvivalMode extends BaseGameplayMode {
     return this._lanLastTickIndex;
   }
 
-  constructor(ctx: ViewContext, opts: { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand });
-  constructor(opts: { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean });
-  constructor(ctxOrOpts: ViewContext | { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean }, maybeOpts?: { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand }) {
+  constructor(ctx: ViewContext, opts: { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: CrandLike });
+  constructor(opts: { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: CrandLike } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean });
+  constructor(ctxOrOpts: ViewContext | { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: CrandLike } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean }, maybeOpts?: { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: CrandLike }) {
     const ctx = maybeOpts === undefined ? { assetsDir: (ctxOrOpts as { assetsUrl?: string }).assetsUrl ?? '', preserveBugs: (ctxOrOpts as { preserveBugs?: boolean }).preserveBugs ?? false } as ViewContext : ctxOrOpts as ViewContext;
-    const opts = maybeOpts ?? (ctxOrOpts as { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean });
+    const opts = maybeOpts ?? (ctxOrOpts as { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: CrandLike } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean });
     const config = opts.config;
     const console = opts.console ?? null;
     const audio = opts.audio ?? null;
     const audioRng = opts.audioRng;
     super({ assetsUrl: ctx.assetsDir, preserveBugs: ctx.preserveBugs, worldSize: WORLD_SIZE, defaultGameModeId: GameMode.SURVIVAL, demoModeActive: false, questFailRetryCount: 0, hardcore: false, config: config, console: console, audio: audio, audioRng: audioRng });
     this._perkPrompt = new PerkPromptState();
-    this._perkMenu = new PerkMenuController({ onClose: this._resetPerkPrompt.bind(this) });
+    this._perkMenu = new PerkMenuController({ onClose: this._resetPerkPrompt?.bind(this) ?? null });
     this._hudFadeMs = PERK_MENU_TRANSITION_MS;
     this._cursorTime = 0.0;
     this._replayRecorder = null;
@@ -326,7 +326,7 @@ export class SurvivalMode extends BaseGameplayMode {
     if (idx < 0) {
       idx = 0;
     }
-    const weaponId = weaponIds[((idx + int(delta)) + weaponIds.length) % weaponIds.length];
+    const weaponId = weaponIds[(((idx + int(delta)) % weaponIds.length) + weaponIds.length) % weaponIds.length];
     weaponAssignPlayer(this.player, weaponId, { state: this.state });
   }
 
@@ -560,7 +560,7 @@ export class SurvivalMode extends BaseGameplayMode {
         anyAlive: this._anyPlayerAlive(),
         menuActive: this._perkMenu.active,
         config: this.config,
-        uiTextWidth: this._uiTextWidth.bind(this),
+        uiTextWidth: this._uiTextWidth?.bind(this) ?? null,
         textColor: UI_TEXT_COLOR,
         promptScale: UI_TEXT_SCALE,
       });

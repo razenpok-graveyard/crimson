@@ -5,6 +5,7 @@ import { initAudioState } from '@grim/audio.ts';
 import type { CrimsonConfig } from '@grim/config.ts';
 import { ensureCrimsonCfg } from '@grim/config.ts';
 import { ConsoleLog, ConsoleState } from '@grim/console.ts';
+import type { CrandLike } from '@grim/rand.ts';
 import { Crand } from '@grim/rand.ts';
 import { downloadMissingPaqs } from '@crimson/assets-fetch.ts';
 import { defaultRuntimeDir } from '@crimson/paths.ts';
@@ -42,13 +43,13 @@ export class ViewAudioBootstrap {
   config: CrimsonConfig | null;
   console: ConsoleState | null;
   audio: AudioState | null;
-  audioRng: Crand;
+  audioRng: CrandLike;
 
   constructor(opts: {
     config: CrimsonConfig | null;
     console: ConsoleState | null;
     audio: AudioState | null;
-    audioRng: Crand;
+    audioRng: CrandLike;
   }) {
     this.config = opts.config;
     this.console = opts.console;

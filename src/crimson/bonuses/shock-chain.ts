@@ -40,7 +40,7 @@ export function applyShockChain(ctx: BonusApplyCtx): void {
   }
 
   const target = creatures[bestIdx];
-  const angle = target.pos.sub(origin).toHeading();
+  const angle = (target.pos.sub(origin)).toHeading();
   const owner = ctx.state.friendlyFireEnabled ? ownerRefForPlayer(ctx.player.index) : OwnerRef.fromLocalPlayer(0);
 
   ctx.state.bonusSpawnGuard = true;

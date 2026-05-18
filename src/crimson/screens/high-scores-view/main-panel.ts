@@ -120,8 +120,8 @@ export function drawMainPanel(view: HighScoresView, opts: { resources: RuntimeRe
 
   const rowStep = 16.0 * scale;
   const rows = 10;
-  const start = Math.max(0, int(view.scrollIndex));
-  const end = Math.min(view.records.length, start + rows);
+  const start = Math.max(0, int(view._scrollIndex));
+  const end = Math.min(view._records.length, start + rows);
   let y = leftPanelTopLeft.y + 103.0 * scale;
   let selectedRank = (request !== null && request.highlightRank !== null) ? int(request.highlightRank) : null;
   const mouse = Vec2.fromXY((() => { const [x, y] = InputState.mousePosition(); return { x, y }; })());
@@ -141,7 +141,7 @@ export function drawMainPanel(view: HighScoresView, opts: { resources: RuntimeRe
     drawSmallText(font, 'No scores yet.', new Vec2(leftPanelTopLeft.x + 211.0 * scale, y + 8.0 * scale), wgl.makeColor(190 / 255, 190 / 255, 200 / 255, 255 / 255));
   } else {
     for (let idx = start; idx < end; idx++) {
-      const entry = view.records[idx];
+      const entry = view._records[idx];
       let name = String(entry.name());
       if (name.length === 0) {
         name = '???';
@@ -174,18 +174,18 @@ export function drawMainPanel(view: HighScoresView, opts: { resources: RuntimeRe
   }
 
   const buttonBasePos = leftPanelTopLeft.add(new Vec2(HS_BUTTON_X * scale, HS_BUTTON_Y0 * scale));
-  let w = buttonWidth(resources, view.updateButton.label, { scale: scale, forceWide: view.updateButton.forceWide });
-  buttonDraw(resources, view.updateButton, { pos: buttonBasePos, width: w, scale: scale });
-  w = buttonWidth(resources, view.playButton.label, { scale: scale, forceWide: view.playButton.forceWide });
+  let w = buttonWidth(resources, view._updateButton.label, { scale: scale, forceWide: view._updateButton.forceWide });
+  buttonDraw(resources, view._updateButton, { pos: buttonBasePos, width: w, scale: scale });
+  w = buttonWidth(resources, view._playButton.label, { scale: scale, forceWide: view._playButton.forceWide });
   buttonDraw(
     resources,
-    view.playButton,
+    view._playButton,
     { pos: buttonBasePos.offset({ dy: HS_BUTTON_STEP_Y * scale }), width: w, scale: scale },
   );
-  w = buttonWidth(resources, view.backButton.label, { scale: scale, forceWide: view.backButton.forceWide });
+  w = buttonWidth(resources, view._backButton.label, { scale: scale, forceWide: view._backButton.forceWide });
   buttonDraw(
     resources,
-    view.backButton,
+    view._backButton,
     { pos: leftPanelTopLeft.add(new Vec2(HS_BACK_BUTTON_X * scale, HS_BACK_BUTTON_Y * scale)), width: w, scale: scale },
   );
 

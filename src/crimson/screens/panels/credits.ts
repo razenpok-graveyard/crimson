@@ -13,7 +13,7 @@ import type { GameState } from '@crimson/game/types.ts';
 import { drawClassicMenuPanel } from '@crimson/ui/menu-panel.ts';
 import { UiButtonState, buttonDraw, buttonUpdate, buttonWidth } from '@crimson/ui/perk-menu.ts';
 import { requireRuntimeResources } from '@crimson/screens/assets.ts';
-import { MENU_PANEL_OFFSET_X, MENU_PANEL_OFFSET_Y, MENU_PANEL_WIDTH, MENU_SCALE_SMALL_THRESHOLD, MENU_SIGN_HEIGHT, MENU_SIGN_OFFSET_X, MENU_SIGN_OFFSET_Y, MENU_SIGN_POS_X_PAD, MENU_SIGN_POS_Y, MENU_SIGN_POS_Y_SMALL, MENU_SIGN_WIDTH, MenuView, drawMenuCursorHelper, ensureMenuGround, menuGroundCamera, uiElementAnim } from '@crimson/screens/menu.ts';
+import { MENU_PANEL_OFFSET_X, MENU_PANEL_OFFSET_Y, MENU_PANEL_WIDTH, MENU_SCALE_SMALL_THRESHOLD, MENU_SIGN_HEIGHT, MENU_SIGN_OFFSET_X, MENU_SIGN_OFFSET_Y, MENU_SIGN_POS_X_PAD, MENU_SIGN_POS_Y, MENU_SIGN_POS_Y_SMALL, MENU_SIGN_WIDTH, MenuView, drawMenuCursorHelper, ensureMenuGround, menuGroundCamera, uiElementAnim, signLayoutScale } from '@crimson/screens/menu.ts';
 import { UI_SHADOW_OFFSET, drawUiQuadShadow } from '@crimson/ui/shadow.ts';
 import { drawScreenFade } from '@crimson/screens/transitions.ts';
 import { PANEL_TIMELINE_END_MS, PANEL_TIMELINE_START_MS } from '@crimson/screens/panels/base.ts';
@@ -173,7 +173,7 @@ export class CreditsView {
 
   open(): void {
     const layoutW = this.state.config.display.width;
-    this._widescreenYShift = MenuView._menuWidescreenYShift(layoutW);
+    this._widescreenYShift = MenuView.menuWidescreenYShift(layoutW);
     this._ground = this.state.pauseBackground !== null ? null : ensureMenuGround(this.state);
     this._cursorPulseTime = 0.0;
     this._timelineMs = 0;
@@ -530,7 +530,7 @@ export class CreditsView {
   protected _drawSign(): void {
     const sign = requireRuntimeResources(this.state).texture(TextureId.UI_SIGN_CRIMSON);
     const screenW = this.state.config.display.width;
-    const [signScale, shiftX] = MenuView._signLayoutScale(int(screenW));
+    const [signScale, shiftX] = MenuView.signLayoutScale(int(screenW));
     const signPos = new Vec2(screenW + MENU_SIGN_POS_X_PAD, screenW > MENU_SCALE_SMALL_THRESHOLD ? MENU_SIGN_POS_Y : MENU_SIGN_POS_Y_SMALL);
     const signW = MENU_SIGN_WIDTH * signScale;
     const signH = MENU_SIGN_HEIGHT * signScale;

@@ -223,7 +223,7 @@ export class RollbackController {
   rebuildEmittedFrom(opts: { fromTick: number }): RollbackFrame[];
   rebuildEmittedFrom(fromTick: number): RollbackFrame[];
   rebuildEmittedFrom(fromTickOrOpts: number | { fromTick: number }): RollbackFrame[] {
-    const fromTick: number = typeof fromTickOrOpts === 'object' && fromTickOrOpts !== null && 'fromTick' in fromTickOrOpts ? fromTickOrOpts.fromTick : fromTickOrOpts as number;
+    const fromTick: number = typeof fromTickOrOpts === 'object' && fromTickOrOpts !== null ? fromTickOrOpts.fromTick : fromTickOrOpts as number;
     const start = Math.max(0, int(fromTick));
     const head = int(this._nextEmitTick);
     if (start >= int(head)) {
@@ -251,7 +251,7 @@ export class RollbackController {
   resetToTick(opts: { tickIndex: number }): void;
   resetToTick(tickIndex: number): void;
   resetToTick(tickIndexOrOpts: number | { tickIndex: number }): void {
-    const tickIndex: number = typeof tickIndexOrOpts === 'object' && tickIndexOrOpts !== null && 'tickIndex' in tickIndexOrOpts ? tickIndexOrOpts.tickIndex : tickIndexOrOpts as number;
+    const tickIndex: number = typeof tickIndexOrOpts === 'object' && tickIndexOrOpts !== null ? tickIndexOrOpts.tickIndex : tickIndexOrOpts as number;
     const target = Math.max(0, int(tickIndex));
     this._captureTick = Math.max(int(this._captureTick), int(target));
     this._nextEmitTick = Math.max(int(this._nextEmitTick), int(target));
@@ -298,16 +298,16 @@ export class RollbackController {
   _knownForTick(opts: { slot: number; tick: number }): PackedPlayerInput | null;
   _knownForTick(slot: number, tick: number): PackedPlayerInput | null;
   _knownForTick(slotOrOpts: number | { slot: number; tick: number }, tickArg: number | undefined = undefined): PackedPlayerInput | null {
-    const slot: number = typeof slotOrOpts === 'object' && slotOrOpts !== null && 'slot' in slotOrOpts ? slotOrOpts.slot : slotOrOpts as number;
-    const tick: number = typeof slotOrOpts === 'object' && slotOrOpts !== null && 'slot' in slotOrOpts ? slotOrOpts.tick : tickArg as number;
+    const slot: number = typeof slotOrOpts === 'object' && slotOrOpts !== null ? slotOrOpts.slot : slotOrOpts as number;
+    const tick: number = typeof slotOrOpts === 'object' && slotOrOpts !== null ? slotOrOpts.tick : tickArg as number;
     return mapGetOrThrow(this._knownBySlot, int(slot)).get(int(tick)) ?? null;
   }
 
   _predictForTick(opts: { slot: number; tick: number }): PackedPlayerInput;
   _predictForTick(slot: number, tick: number): PackedPlayerInput;
   _predictForTick(slotOrOpts: number | { slot: number; tick: number }, tickArg: number | undefined = undefined): PackedPlayerInput {
-    const slot: number = typeof slotOrOpts === 'object' && slotOrOpts !== null && 'slot' in slotOrOpts ? slotOrOpts.slot : slotOrOpts as number;
-    const tick: number = typeof slotOrOpts === 'object' && slotOrOpts !== null && 'slot' in slotOrOpts ? slotOrOpts.tick : tickArg as number;
+    const slot: number = typeof slotOrOpts === 'object' && slotOrOpts !== null ? slotOrOpts.slot : slotOrOpts as number;
+    const tick: number = typeof slotOrOpts === 'object' && slotOrOpts !== null ? slotOrOpts.tick : tickArg as number;
     const known = mapGetOrThrow(this._knownBySlot, int(slot));
     for (let back = int(tick) - 1; -1 >= 0 ? back < -1 : back > -1; back += -1) {
       const value = known.get(int(back)) ?? null;
@@ -375,16 +375,16 @@ export class RollbackController {
   knownForTick(opts: { slot: number; tick: number }): PackedPlayerInput | null;
   knownForTick(slot: number, tick: number): PackedPlayerInput | null;
   knownForTick(slotOrOpts: number | { slot: number; tick: number }, tickArg: number | undefined = undefined): PackedPlayerInput | null {
-    const slot: number = typeof slotOrOpts === 'object' && slotOrOpts !== null && 'slot' in slotOrOpts ? slotOrOpts.slot : slotOrOpts as number;
-    const tick: number = typeof slotOrOpts === 'object' && slotOrOpts !== null && 'slot' in slotOrOpts ? slotOrOpts.tick : tickArg as number;
+    const slot: number = typeof slotOrOpts === 'object' && slotOrOpts !== null ? slotOrOpts.slot : slotOrOpts as number;
+    const tick: number = typeof slotOrOpts === 'object' && slotOrOpts !== null ? slotOrOpts.tick : tickArg as number;
     return this._knownForTick(slot, tick);
   }
 
   predictForTick(opts: { slot: number; tick: number }): PackedPlayerInput;
   predictForTick(slot: number, tick: number): PackedPlayerInput;
   predictForTick(slotOrOpts: number | { slot: number; tick: number }, tickArg: number | undefined = undefined): PackedPlayerInput {
-    const slot: number = typeof slotOrOpts === 'object' && slotOrOpts !== null && 'slot' in slotOrOpts ? slotOrOpts.slot : slotOrOpts as number;
-    const tick: number = typeof slotOrOpts === 'object' && slotOrOpts !== null && 'slot' in slotOrOpts ? slotOrOpts.tick : tickArg as number;
+    const slot: number = typeof slotOrOpts === 'object' && slotOrOpts !== null ? slotOrOpts.slot : slotOrOpts as number;
+    const tick: number = typeof slotOrOpts === 'object' && slotOrOpts !== null ? slotOrOpts.tick : tickArg as number;
     return this._predictForTick(slot, tick);
   }
 

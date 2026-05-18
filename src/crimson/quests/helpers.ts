@@ -77,7 +77,7 @@ export function* radialPoints(center: Vec2, angle: number, radiusStart: number, 
 }
 
 export function headingFromCenter(point: Vec2, center: Vec2): number {
-  return point.sub(center).toAngle() - (Math.PI / 2.0);
+  return (point.sub(center)).toAngle() - (Math.PI / 2.0);
 }
 
 export function* linePoints(start: Vec2, step: Vec2, count: number): IterableIterator<Vec2> {

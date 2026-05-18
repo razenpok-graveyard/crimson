@@ -153,7 +153,7 @@ export function resetWorldPlayers(players: PlayerState[], opts: { state: Gamepla
   }
 
   for (let idx = 0; idx < count; idx++) {
-    const pos = base.add(offsets[idx]).clampRect(0.0, 0.0, worldSize, worldSize);
+    const pos = (base.add(offsets[idx])).clampRect(0.0, 0.0, worldSize, worldSize);
     const player = new PlayerState({ index: idx, pos: pos });
     weaponAssignPlayer(player, WeaponId.PISTOL, { state: state });
     initDefaultAltWeapon(player);
@@ -161,11 +161,5 @@ export function resetWorldPlayers(players: PlayerState[], opts: { state: Gamepla
   }
 
   // Reset-time loadout bootstrap should not leak queued reload SFX.
-  ((target: unknown) => {
-    if (target !== null && typeof target === 'object' && typeof (target as { clear?: unknown }).clear === 'function') {
-      (target as { clear: () => void }).clear();
-    } else if (target !== null && typeof target === 'object' && 'length' in target) {
-      (target as { length: number }).length = 0;
-    }
-  })(state.sfxQueue);
+  state.sfxQueue.clear();
 }

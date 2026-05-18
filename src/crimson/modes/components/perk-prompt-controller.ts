@@ -78,7 +78,7 @@ export class PerkPromptState {
   tickPulse(opts: { dtUiMs: number }): void;
   tickPulse(dtUiMs: number): void;
   tickPulse(dtUiMsOrOpts: number | { dtUiMs: number }): void {
-    const dtUiMs: number = typeof dtUiMsOrOpts === 'object' && dtUiMsOrOpts !== null && 'dtUiMs' in dtUiMsOrOpts ? dtUiMsOrOpts.dtUiMs : dtUiMsOrOpts as number;
+    const dtUiMs: number = typeof dtUiMsOrOpts === 'object' && dtUiMsOrOpts !== null ? dtUiMsOrOpts.dtUiMs : dtUiMsOrOpts as number;
     const pulseDelta = dtUiMs * (this.hover ? 6.0 : -2.0);
     this.pulse = clamp(this.pulse + pulseDelta, 0.0, 1000.0);
   }

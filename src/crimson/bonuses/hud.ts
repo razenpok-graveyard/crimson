@@ -111,7 +111,7 @@ export function bonusHudUpdate(state: GameplayState, players: PlayerState[], opt
   };
 
   const _playerTimerValue = (player: PlayerState, key: string): number => {
-    const playerTimers = { "fire_bullets_timer": player.fireBulletsTimer, "shield_timer": player.shieldTimer, "speed_bonus_timer": player.speedBonusTimer };
+    const playerTimers: Record<string, number> = { "fire_bullets_timer": player.fireBulletsTimer, "shield_timer": player.shieldTimer, "speed_bonus_timer": player.speedBonusTimer };
     if (!Object.prototype.hasOwnProperty.call(playerTimers, key)) {
       throw new Error(`Unexpected bonus HUD player timer key: ${key}`);
     }
@@ -157,7 +157,7 @@ export function bonusHudUpdate(state: GameplayState, players: PlayerState[], opt
       slot.slideX = -2.0;
     }
 
-    if (slot.slideX < -184.0 && !state.bonusHud.slots.slice(slotIndex + 1).some((other) => other.active)) {
+    if (slot.slideX < -184.0 && !state.bonusHud.slots.slice(slotIndex + 1).some((other: any) => other.active)) {
       slot.active = false;
       slot.bonusId = BonusId.UNUSED;
       slot.label = '';

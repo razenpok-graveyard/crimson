@@ -17,7 +17,7 @@ const PLAYER_PAIN_SFX: readonly SfxId[] = [
   SfxId.TROOPER_INPAIN_02,
   SfxId.TROOPER_INPAIN_03,
 ];
-const PLAYER_DEATH_SFX: readonly SfxId[] = [SfxId.TROOPER_DIE_01, SfxId.TROOPER_DIE_02];
+const PLAYER_DEATH_SFX: readonly SfxId[] = [SfxId.TROOPER_DIE_01, SfxId.TROOPER_DIE_02] as const;
 const _THICK_SKINNED_DAMAGE_SCALE_F32 = 0.6660000085830688;
 
 export function playerTakeDamage(state: GameplayState, player: PlayerState, damage: number, opts: { dt?: number | null; players?: readonly PlayerState[] | null; onLethal?: (() => void) | null } = {}): number {

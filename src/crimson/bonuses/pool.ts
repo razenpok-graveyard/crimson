@@ -224,10 +224,10 @@ export class BonusPool {
 
     const rng = state.rng;
     // Native special-case: while any player has Pistol, 3/4 chance to force a Weapon drop.
-    let entry: any;
+    let entry: BonusEntry;
     let weaponId: ReturnType<typeof weaponPickRandomAvailable>;
     let matches: any;
-    if (players.length > 0 && players.some((player) => player.weapon.weaponId === WeaponId.PISTOL)) {
+    if (players.length > 0 && players.some((player: any) => player.weapon.weaponId === WeaponId.PISTOL)) {
       if ((rng.rand({ caller: RngCallerStatic.BONUS_TRY_SPAWN_ON_KILL_PISTOL_FORCE_WEAPON }) & 3) < 3) {
         entry = this.spawnAtPos(pos, { state: state, players: players, worldWidth: worldWidth, worldHeight: worldHeight });
 
@@ -268,7 +268,7 @@ export class BonusPool {
         if (Boolean(state.preserveBugs)) {
           hasPistol = players[0].weapon.weaponId === WeaponId.PISTOL;
         } else {
-          hasPistol = players.some((player) => player.weapon.weaponId === WeaponId.PISTOL);
+          hasPistol = players.some((player: any) => player.weapon.weaponId === WeaponId.PISTOL);
         }
         if (hasPistol) {
           allowWithoutMagnet = (rng.rand({ caller: RngCallerStatic.BONUS_TRY_SPAWN_ON_KILL_PISTOL_ALLOW_WITHOUT_MAGNET }) % 5 === 1);
@@ -282,7 +282,7 @@ export class BonusPool {
           if (Boolean(state.preserveBugs)) {
             hasBonusMagnet = perkActive(players[0], PerkId.BONUS_MAGNET);
           } else {
-            hasBonusMagnet = players.some((player) => perkActive(player, PerkId.BONUS_MAGNET));
+            hasBonusMagnet = players.some((player: any) => perkActive(player, PerkId.BONUS_MAGNET));
           }
         }
         if (!hasBonusMagnet) {
@@ -305,7 +305,7 @@ export class BonusPool {
           // Native checks player 1 position only.
           nearPlayer = Vec2.distanceSq(pos, players[0].pos) < nearSq;
         } else {
-          nearPlayer = players.some((player) => Vec2.distanceSq(pos, player.pos) < nearSq);
+          nearPlayer = players.some((player: any) => Vec2.distanceSq(pos, player.pos) < nearSq);
         }
       }
       if (nearPlayer) {

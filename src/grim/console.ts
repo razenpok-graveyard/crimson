@@ -1230,7 +1230,7 @@ export function registerCoreCommands(console: ConsoleState): void {
     const target = normalizeScriptPath(args[0]);
     let scriptText: string | null;
     let primaryDirs: ReturnType<typeof primaryScriptDirs>;
-    let path: ReturnType<typeof resolveScriptPathIn>;
+    let path: string | null;
     try {
       scriptText = null;
       primaryDirs = primaryScriptDirs(console);

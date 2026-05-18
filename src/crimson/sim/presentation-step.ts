@@ -191,7 +191,7 @@ export function queueProjectileDecalsPreHit(opts: { state: GameplayState; player
 
   const typeId = hit.typeId;
 
-  const baseAngle = hit.hit.sub(hit.origin).toAngle();
+  const baseAngle = (hit.hit.sub(hit.origin)).toAngle();
 
   if (typeId === ProjectileTemplateId.BLADE_GUN) {
     for (let i = 0; i < 8; i++) {

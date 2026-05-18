@@ -27,10 +27,10 @@ export function tickFireCough(ctx: PlayerPerkTickCtx): void {
 
   const aimHeading = ctx.player.aimHeading;
   const originPos = ctx.playerPosBeforeMove;
-  const muzzle = originPos.add(Vec2.fromHeading(aimHeading).rotated(-0.150915).mul(16.0));
+  const muzzle = originPos.add((Vec2.fromHeading(aimHeading)).rotated(-0.150915).mul(16.0));
 
   const aim = ctx.player.aim;
-  const dist = aim.sub(originPos).length();
+  const dist = (aim.sub(originPos)).length();
   const maxOffset = dist * ctx.player.spreadHeat * 0.5;
   const dirRoll = ctx.state.rng.rand({ caller: RngCallerStatic.PLAYER_UPDATE_FIRE_COUGH_SPREAD_DIR });
   const dirAngle = (dirRoll & 0x1FF) * ((Math.PI * 2.0) / 512.0);
@@ -38,7 +38,7 @@ export function tickFireCough(ctx: PlayerPerkTickCtx): void {
   const mag = (magRoll & 0x1FF) * (1.0 / 512.0);
   const offset = maxOffset * mag;
   const jitter = aim.add(Vec2.fromAngle(dirAngle).mul(offset));
-  const angle = jitter.sub(originPos).toHeading();
+  const angle = (jitter.sub(originPos)).toHeading();
   ctx.projectileSpawn(
     ctx.state,
     { players: [ctx.player], pos: muzzle, angle: angle, typeId: ProjectileTemplateId.FIRE_BULLETS, owner: owner, ownerPlayerIndex: ctx.player.index },

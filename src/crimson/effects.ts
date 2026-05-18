@@ -459,7 +459,7 @@ export class ParticlePool {
             entry.vel = new Vec2();
           } else {
             entry.angle = ((entry.angle % (Math.PI * 2.0)) + (Math.PI * 2.0)) % (Math.PI * 2.0);
-            hitAngle = new Vec2((entry.pos.x - entry.vel.x * dt) - creature.pos.x, (entry.pos.y - entry.vel.y * dt) - creature.pos.y, ).toAngle();
+            hitAngle = (new Vec2((entry.pos.x - entry.vel.x * dt) - creature.pos.x, (entry.pos.y - entry.vel.y * dt) - creature.pos.y)).toAngle();
             hitAngle = ((hitAngle % (Math.PI * 2.0)) + (Math.PI * 2.0)) % (Math.PI * 2.0);
             const deflectStep = (Math.PI * 2.0) * 0.2;
             if (entry.angle <= hitAngle) {

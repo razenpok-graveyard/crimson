@@ -248,7 +248,7 @@ export class QuestFailedView {
 
   protected _panelOrigin(): Vec2 {
     const screenW = wgl.getScreenWidth();
-    const widescreenShiftY = MenuView._menuWidescreenYShift(screenW);
+    const widescreenShiftY = MenuView.menuWidescreenYShift(screenW);
     return new Vec2(QUEST_FAILED_PANEL_GEOM_X0 + QUEST_FAILED_PANEL_POS_X, QUEST_FAILED_PANEL_GEOM_Y0 + QUEST_FAILED_PANEL_POS_Y + widescreenShiftY);
   }
 

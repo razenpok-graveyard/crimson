@@ -41,7 +41,7 @@ function drawBeamBodySprites(opts: { ctx: ProjectileDrawCtx; origin: Vec2; direc
       const pos = origin.add(direction.mul(s));
       const posScreen = renderer.worldToScreen(pos);
       const tint = new RGBA(streakRgb[0], streakRgb[1], streakRgb[2], segAlpha).toRl();
-      renderer._drawAtlasSprite(
+      renderer.drawAtlasSprite(
         texture,
         { grid: grid, frame: frame, pos: posScreen, scale: spriteScale, rotationRad: 0.0, tint: tint },
       );
@@ -70,7 +70,7 @@ export function drawBeamEffect(ctx: ProjectileDrawCtx): boolean {
   const isFireBullets = typeId === ProjectileTemplateId.FIRE_BULLETS;
   const isIon = ((container: unknown, value: unknown) => container instanceof Set || container instanceof Map ? container.has(value) : Array.isArray(container) ? container.includes(value) : typeof container === 'string' ? container.includes(String(value)) : container !== null && typeof container === 'object' ? Object.prototype.hasOwnProperty.call(container, String(value)) : false)(ION_TYPES, typeId);
 
-  let origin = projOrigin(ctx.proj, ctx.pos);
+  let origin: ReturnType<typeof projOrigin> | Vec2 = projOrigin(ctx.proj, ctx.pos);
   const beam = ctx.pos.sub(origin);
   const [direction, dist] = beam.normalizedWithLength();
   if (dist <= 1e-6) {
@@ -79,7 +79,7 @@ export function drawBeamEffect(ctx: ProjectileDrawCtx): boolean {
 
   // In the native renderer, Ion Gun Master increases the chain effect thickness and reach.
   let perkScale = 1.0;
-  if (Array.from(renderFrame.players).some((player) => perkActive(player, PerkId.ION_GUN_MASTER))) {
+  if (Array.from(renderFrame.players).some((player: any) => perkActive(player, PerkId.ION_GUN_MASTER))) {
     perkScale = 1.2;
   }
 
@@ -158,7 +158,7 @@ export function drawBeamEffect(ctx: ProjectileDrawCtx): boolean {
       });
     } else {
       const headTint = new RGBA(headRgb[0], headRgb[1], headRgb[2], baseAlpha).toRl();
-      renderer._drawAtlasSprite(
+      renderer.drawAtlasSprite(
         texture,
         { grid: grid, frame: atlasFrame, pos: ctx.screenPos, scale: spriteScale, rotationRad: ctx.angle, tint: headTint },
       );
@@ -200,7 +200,7 @@ export function drawBeamEffect(ctx: ProjectileDrawCtx): boolean {
       });
     } else {
       const coreTint = new RGBA(coreRgb[0], coreRgb[1], coreRgb[2], baseAlpha).toRl();
-      renderer._drawAtlasSprite(
+      renderer.drawAtlasSprite(
         texture,
         { grid: grid, frame: atlasFrame, pos: ctx.screenPos, scale: ctx.scale, rotationRad: ctx.angle, tint: coreTint },
       );
@@ -289,7 +289,7 @@ export function drawBeamEffect(ctx: ProjectileDrawCtx): boolean {
       for (const creature of glowTargets) {
         let targetScreen = renderer.worldToScreen(creature.pos);
         const targetTint = new RGBA(0.5, 0.6, 1.0, baseAlpha).toRl();
-        renderer._drawAtlasSprite(
+        renderer.drawAtlasSprite(
           texture,
           { grid: grid, frame: atlasFrame, pos: targetScreen, scale: spriteScale, rotationRad: 0.0, tint: targetTint },
         );

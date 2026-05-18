@@ -159,7 +159,7 @@ export class DemoView {
     this._purchaseActive = false;
     this._purchaseButton = new UiButtonState({ label: 'Purchase', forceWide: true });
     this._maybeLaterButton = new UiButtonState({ label: 'Maybe later', forceWide: true });
-    this._tickHarness = new StandaloneTickHarness({ gameMode: GameMode.DEMO, buildInputs: this._buildRunnerInputs.bind(this) });
+    this._tickHarness = new StandaloneTickHarness({ gameMode: GameMode.DEMO, buildInputs: this._buildRunnerInputs?.bind(this) ?? null });
     this._seedFromAppState = true;
   }
 
@@ -492,7 +492,7 @@ export class DemoView {
 
   protected _demoModeStart(): void {
     const index = this._demoVariantIndex;
-    this._demoVariantIndex = ((index + 1) + DEMO_VARIANT_COUNT) % DEMO_VARIANT_COUNT;
+    this._demoVariantIndex = (((index + 1) % DEMO_VARIANT_COUNT) + DEMO_VARIANT_COUNT) % DEMO_VARIANT_COUNT;
     this._variantIndex = index;
     this._questSpawnTimelineMs = 0;
     this._demoTimeLimitMs = 0;
@@ -520,7 +520,7 @@ export class DemoView {
     // demo_purchase_screen_update increments demo_upsell_message_index when the
     // timeline resets (quest_spawn_timeline == 0) and the purchase screen is inactive.
     if (!this._purchaseActive && DEMO_UPSELL_MESSAGES.length > 0) {
-      this._upsellMessageIndex = ((this._upsellMessageIndex + 1) + DEMO_UPSELL_MESSAGES.length) % DEMO_UPSELL_MESSAGES.length;
+      this._upsellMessageIndex = (((this._upsellMessageIndex + 1) % DEMO_UPSELL_MESSAGES.length) + DEMO_UPSELL_MESSAGES.length) % DEMO_UPSELL_MESSAGES.length;
     }
     this._syncAudioRngFromRuntime();
   }
@@ -713,15 +713,15 @@ export class DemoView {
 
 
     const _turnTowardsHeading = (cur: number, target: number): [number, number] => {
-      cur = cur % (Math.PI * 2.0);
-      target = target % (Math.PI * 2.0);
-      const delta = ((target - cur + Math.PI) + (Math.PI * 2.0)) % (Math.PI * 2.0) - Math.PI;
+      cur = ((cur % (Math.PI * 2.0)) + (Math.PI * 2.0)) % (Math.PI * 2.0);
+      target = ((target % (Math.PI * 2.0)) + (Math.PI * 2.0)) % (Math.PI * 2.0);
+      const delta = (((target - cur + Math.PI) % (Math.PI * 2.0)) + (Math.PI * 2.0)) % (Math.PI * 2.0) - Math.PI;
       const diff = Math.abs(delta);
       if (diff <= 1e-9) {
         return [cur, 0.0];
       }
       const step = dt * diff * 5.0;
-      cur = delta > 0.0 ? ((cur + step) + (Math.PI * 2.0)) % (Math.PI * 2.0) : ((cur - step) + (Math.PI * 2.0)) % (Math.PI * 2.0);
+      cur = delta > 0.0 ? (((cur + step) % (Math.PI * 2.0)) + (Math.PI * 2.0)) % (Math.PI * 2.0) : (((cur - step) % (Math.PI * 2.0)) + (Math.PI * 2.0)) % (Math.PI * 2.0);
       return [cur, diff];
     };
 

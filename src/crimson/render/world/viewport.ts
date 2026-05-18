@@ -70,7 +70,7 @@ export function viewTransform(opts: { worldSize: number; config: CrimsonConfig |
 export function worldToScreenWith(pos: Vec2, opts: { camera: Vec2; viewScale: Vec2 }): Vec2 {
   const camera = opts.camera;
   const viewScale = opts.viewScale;
-  return pos.add(camera).mulComponents(viewScale);
+  return (pos.add(camera)).mulComponents(viewScale);
 }
 
 export function screenToWorldWith(pos: Vec2, opts: { camera: Vec2; viewScale: Vec2 }): Vec2 {

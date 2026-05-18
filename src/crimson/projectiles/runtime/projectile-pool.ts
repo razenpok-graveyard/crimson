@@ -256,7 +256,7 @@ export class ProjectilePool {
     const _projectileDamageAmountF32 = (dist: number, damageScale: number): number => {
       // `projectile_update` computes this from float locals (`fVar11/fVar23`),
       // so keep the damage path rounded through float32.
-      let distF32 = f32(dist);
+      let distF32: ReturnType<typeof f32> | number = f32(dist);
       if (distF32 < 50.0) {
         distF32 = 50.0;
       }

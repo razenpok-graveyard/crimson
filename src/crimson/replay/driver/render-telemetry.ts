@@ -169,7 +169,7 @@ export class RenderTelemetrySession {
         const _apiName: string = apiName;
         const kwargs: Record<string, any> = {};
         this.recordDrawCall(_apiName);
-        return _orig(...args, ...Object.values(kwargs));
+        return _orig(...args, kwargs);
       };
 
       Reflect.set(rl, fnName, _wrapped);

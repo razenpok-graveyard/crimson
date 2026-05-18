@@ -154,9 +154,7 @@ export class UnlockedPerksDatabaseView extends DatabaseBaseView {
     return new Vec2(356.0, 315.0);
   }
 
-  protected _drawContents(opts: { leftTopLeft: Vec2; rightTopLeft: Vec2; scale: number; font: SmallFontData }): void {
-    const leftTopLeft = opts.leftTopLeft;
-    const rightTopLeft = opts.rightTopLeft;
+  protected _drawContents(leftTopLeft: Vec2, rightTopLeft: Vec2, opts: { scale: number; font: SmallFontData }): void {
     const scale = opts.scale;
     const font = opts.font;
     const left = leftTopLeft;

@@ -138,7 +138,7 @@ export class EndNoteView {
     const scale = 1.0;
 
     const layoutW = scale ? screenW / scale : screenW;
-    const widescreenShiftY = MenuView._menuWidescreenYShift(layoutW);
+    const widescreenShiftY = MenuView.menuWidescreenYShift(layoutW);
 
     const panelTopLeft = new Vec2((END_NOTE_PANEL_GEOM_X0 + END_NOTE_PANEL_POS_X) * scale, (END_NOTE_PANEL_GEOM_Y0 + END_NOTE_PANEL_POS_Y + widescreenShiftY) * scale);
     let buttonPos = panelTopLeft.add(new Vec2(END_NOTE_BUTTON_X_OFFSET * scale, END_NOTE_BUTTON_Y_OFFSET * scale));
@@ -193,7 +193,7 @@ export class EndNoteView {
     const screenW = wgl.getScreenWidth();
     const scale = 1.0;
     const layoutW = scale ? screenW / scale : screenW;
-    const widescreenShiftY = MenuView._menuWidescreenYShift(layoutW);
+    const widescreenShiftY = MenuView.menuWidescreenYShift(layoutW);
 
     const panelTopLeft = new Vec2((END_NOTE_PANEL_GEOM_X0 + END_NOTE_PANEL_POS_X) * scale, (END_NOTE_PANEL_GEOM_Y0 + END_NOTE_PANEL_POS_Y + widescreenShiftY) * scale);
     const panel = wgl.makeRectangle(panelTopLeft.x, panelTopLeft.y, END_NOTE_PANEL_W * scale, END_NOTE_PANEL_H * scale);

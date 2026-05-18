@@ -233,7 +233,7 @@ export class GameOverUi {
   _beginCloseTransition(opts: { action: string }): void;
   _beginCloseTransition(action: string): void;
   _beginCloseTransition(actionOrOpts: string | { action: string }): void {
-    const action: string = typeof actionOrOpts === 'object' && actionOrOpts !== null && 'action' in actionOrOpts ? actionOrOpts.action : actionOrOpts as string;
+    const action: string = typeof actionOrOpts === 'object' && actionOrOpts !== null ? actionOrOpts.action : actionOrOpts as string;
     if (this._closing) {
       return;
     }
@@ -708,7 +708,7 @@ export class GameOverUi {
   beginCloseTransition(opts: { action: string }): void;
   beginCloseTransition(action: string): void;
   beginCloseTransition(actionOrOpts: string | { action: string }): void {
-    const action: string = typeof actionOrOpts === 'object' && actionOrOpts !== null && 'action' in actionOrOpts ? actionOrOpts.action : actionOrOpts as string;
+    const action: string = typeof actionOrOpts === 'object' && actionOrOpts !== null ? actionOrOpts.action : actionOrOpts as string;
     this._beginCloseTransition(action);
   }
 

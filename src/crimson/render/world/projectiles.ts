@@ -44,19 +44,19 @@ export function drawProjectile(renderCtx: WorldRenderCtx, proj: Projectile, opts
   const alphaByte = int(clamp(clamp(life / 0.4, 0.0, 1.0) * 255.0 * alpha, 0.0, 255.0) + 0.5);
   const [red, green, blue] = knownProjRgb(typeId);
   const tint = wgl.makeColor(int(red) / 255, int(green) / 255, int(blue) / 255, alphaByte / 255);
-  renderCtx._drawAtlasSprite(
+  renderCtx.drawAtlasSprite(
     texture,
     { grid: grid, frame: frame, pos: screen, scale: 0.6 * scale, rotationRad: angle, tint: tint },
   );
 }
 
 export function isBulletTrailType(typeId: number): boolean {
-  return WorldRenderCtx._isBulletTrailType(typeId);
+  return WorldRenderCtx.isBulletTrailType(typeId);
 }
 
 export function bulletSpriteSize(typeId: number, opts: { scale: number }): number {
   const scale = opts.scale;
-  return WorldRenderCtx._bulletSpriteSize(typeId, { scale: scale });
+  return WorldRenderCtx.bulletSpriteSize(typeId, { scale: scale });
 }
 
 export function drawBulletTrail(renderCtx: WorldRenderCtx, start: Vec2, end: Vec2, opts: { typeId: number; alpha: number; scale: number; angle: number }): boolean {
@@ -64,7 +64,7 @@ export function drawBulletTrail(renderCtx: WorldRenderCtx, start: Vec2, end: Vec
   const alpha = opts.alpha;
   const scale = opts.scale;
   const angle = opts.angle;
-  return renderCtx._drawBulletTrail(start, end, { typeId: typeId, alpha: alpha, scale: scale, angle: angle });
+  return renderCtx.drawBulletTrail(start, end, { typeId: typeId, alpha: alpha, scale: scale, angle: angle });
 }
 
 export function drawSharpshooterLaserSight(renderCtx: WorldRenderCtx, opts: { camera: Vec2; viewScale: Vec2; scale: number; alpha: number }): void {

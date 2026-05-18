@@ -119,7 +119,7 @@ export function creatureAiUpdateTarget(creature: CreatureAIStateLike, opts: { pl
   const dt = opts.dt;
   const distToPlayer = distanceF32(creature.pos, playerPos);
   const orbitPhase = f32(f32(int(creature.phaseSeed) * f32(3.7)) * NATIVE_PI);
-  let moveScale = 1.0;
+  let moveScale: number | ReturnType<typeof f32> = 1.0;
   let selfDamage: number | null = null;
 
   creature.forceTarget = 0;

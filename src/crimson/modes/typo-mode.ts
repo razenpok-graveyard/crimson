@@ -4,7 +4,7 @@ import { TextureId } from '@grim/assets.ts';
 import type { AudioState } from '@grim/audio.ts';
 import type { CrimsonConfig } from '@grim/config.ts';
 import type { ConsoleState } from '@grim/console.ts';
-import type { Crand } from '@grim/rand.ts';
+import type { CrandLike } from '@grim/rand.ts';
 import { InputState } from '@grim/input.ts';
 import type { ViewContext } from '@grim/view.ts';
 import { GameMode } from '@crimson/game-modes.ts';
@@ -53,11 +53,11 @@ function _pathJoin(...parts: Array<string | number>): string {
 
 export class TypoShooterMode extends BaseGameplayMode {
 
-  constructor(ctx: ViewContext, opts: { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand });
-  constructor(opts: { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean });
-  constructor(ctxOrOpts: ViewContext | { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean }, maybeOpts?: { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand }) {
+  constructor(ctx: ViewContext, opts: { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: CrandLike });
+  constructor(opts: { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: CrandLike } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean });
+  constructor(ctxOrOpts: ViewContext | { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: CrandLike } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean }, maybeOpts?: { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: CrandLike }) {
     const ctx = maybeOpts === undefined ? { assetsDir: (ctxOrOpts as { assetsUrl?: string }).assetsUrl ?? '', preserveBugs: (ctxOrOpts as { preserveBugs?: boolean }).preserveBugs ?? false } as ViewContext : ctxOrOpts as ViewContext;
-    const opts = maybeOpts ?? (ctxOrOpts as { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean });
+    const opts = maybeOpts ?? (ctxOrOpts as { config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: CrandLike } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean });
     const config = opts.config;
     const console = opts.console ?? null;
     const audio = opts.audio ?? null;

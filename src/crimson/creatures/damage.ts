@@ -51,7 +51,7 @@ export class CreatureDamageCtx {
 }
 
 function anyPlayerHasPerk(players: PlayerState[], perkId: PerkId): boolean {
-  return players.some((player) => perkActive(player, perkId));
+  return players.some((player: any) => perkActive(player, perkId));
 }
 
 function damageType1UraniumFilledBullets(ctx: CreatureDamageCtx): void {
@@ -103,7 +103,7 @@ function damageType1HeadingJitter(ctx: CreatureDamageCtx): void {
 }
 
 function damageType7IonGunMaster(ctx: CreatureDamageCtx): void {
-  if (Array.from(ctx.players).some((player) => perkActive(player, PerkId.ION_GUN_MASTER))) {
+  if (Array.from(ctx.players).some((player: any) => perkActive(player, PerkId.ION_GUN_MASTER))) {
     ctx.damage *= 1.2;
   }
 }

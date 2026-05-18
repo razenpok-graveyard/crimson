@@ -214,7 +214,7 @@ export class DeterministicSession {
   timingForDt(opts: { dt: number }): FrameTiming;
   timingForDt(dt: number): FrameTiming;
   timingForDt(dtOrOpts: number | { dt: number }): FrameTiming {
-    const dt: number = typeof dtOrOpts === 'object' && dtOrOpts !== null && 'dt' in dtOrOpts ? dtOrOpts.dt : dtOrOpts as number;
+    const dt: number = typeof dtOrOpts === 'object' && dtOrOpts !== null ? dtOrOpts.dt : dtOrOpts as number;
     return sessionTiming(this.world.state, dt);
   }
 
@@ -353,12 +353,12 @@ export function rushMidStep(ctx: MidStepContext, spawn: RushSpawnState): void {
 export function questPostStep(ctx: PostStepContext, spawn: QuestSpawnState): void {
   const state = ctx.world.state;
   const dtMs = ctx.stepResult.timing.dtMsI32;
-  let creaturesNoneActive = !Array.from(ctx.world.creatures.entries).some((c) => c.active);
+  let creaturesNoneActive: any = !Array.from(ctx.world.creatures.entries).some((c: any) => c.active);
 
-  let entries: any;
-  let timelineMs: any;
-  let noCreaturesTimerMs: any;
-  let spawns: any;
+  let entries: ReturnType<typeof tickQuestModeSpawns>[0];
+  let timelineMs: ReturnType<typeof tickQuestModeSpawns>[1];
+  let noCreaturesTimerMs: ReturnType<typeof tickQuestModeSpawns>[3];
+  let spawns: ReturnType<typeof tickQuestModeSpawns>[4];
   [entries, timelineMs, creaturesNoneActive, noCreaturesTimerMs, spawns] = tickQuestModeSpawns(spawn.spawnEntries, spawn.spawnTimelineMs, dtMs, { terrainWidth: ctx.world.spawnEnv.terrainWidth, creaturesNoneActive: creaturesNoneActive, noCreaturesTimerMs: spawn.noCreaturesTimerMs });
   spawn.spawnEntries = entries;
   spawn.spawnTimelineMs = timelineMs;
@@ -374,7 +374,7 @@ export function questPostStep(ctx: PostStepContext, spawn: QuestSpawnState): voi
     ctx.world.creatures.spawnTemplate(call.templateId, call.pos, call.heading, state.rng);
   }
 
-  const anyAliveAfter = Array.from(ctx.world.players).some((player) => player.health > 0.0);
+  const anyAliveAfter = Array.from(ctx.world.players).some((player: any) => player.health > 0.0);
   if (anyAliveAfter) {
     const [completionMs, completed, playHitSfx, playCompletionMusic] = tickQuestCompletionTransition(spawn.completionTransitionMs, dtMs, { creaturesNoneActive: creaturesNoneActive, spawnTableEmpty: spawnTableEmptyNow });
     spawn.completionTransitionMs = completionMs;

@@ -6,7 +6,7 @@ import { RGBA } from '@grim/color.ts';
 import type { SmallFontData } from '@grim/fonts/small.ts';
 import { drawSmallText } from '@grim/fonts/small.ts';
 import { Vec2 } from '@grim/geom.ts';
-import type { rl } from '@grim/raylib-api.ts';
+import { rl } from '@grim/raylib-api.ts';
 import type { BonusHudState } from '@crimson/bonuses/hud.ts';
 import { GameMode } from '@crimson/game-modes.ts';
 import { survivalLevelThreshold } from '@crimson/gameplay.ts';
@@ -389,7 +389,7 @@ export function drawHudOverlay(context: HudRenderContext, opts: { player: Player
   const hudYShift = layout.hudYShift;
 
   // Top bar background.
-  let src = wgl.makeRectangle(0.0, 0.0, gameTop.width, gameTop.height);
+  let src: rl.Rectangle | wgl.Rectangle = wgl.makeRectangle(0.0, 0.0, gameTop.width, gameTop.height);
   let dst = wgl.makeRectangle(ui(HUD_TOP_BAR_POS[0]), ui(HUD_TOP_BAR_POS[1]), ui(HUD_TOP_BAR_SIZE[0]), ui(HUD_TOP_BAR_SIZE[1]));
   const topAlpha = alpha * HUD_TOP_BAR_ALPHA;
   wgl.drawTexturePro(gameTop, src, dst, wgl.makeVector2(0.0, 0.0), 0.0, wgl.makeColor(255 / 255, 255 / 255, 255 / 255, int(255 * topAlpha) / 255));

@@ -424,8 +424,8 @@ function playerApplyMoveWithSpawnAvoidance(player: PlayerState, opts: { delta: V
   const delta = opts.delta;
   const spawnSlots = opts.spawnSlots;
   const creatures = opts.creatures;
-  let dx = delta.x;
-  let dy = delta.y;
+  let dx: number | ReturnType<typeof f32> = delta.x;
+  let dy: number | ReturnType<typeof f32> = delta.y;
   if (perkActive(player, PerkId.ALTERNATE_WEAPON)) {
     dx = f32(dx * 0.8);
     dy = f32(dy * 0.8);
@@ -658,7 +658,7 @@ export function playerUpdate(player: PlayerState, inputState: PlayerInput, dt: n
     }
   }
 
-  let dampingScalar = f32(state.playerSpreadDampingScalar);
+  let dampingScalar: ReturnType<typeof f32> | number = f32(state.playerSpreadDampingScalar);
   if (state.playerSpreadDampingGate <= 0.0) {
     dampingScalar = f32(dampingScalar + f32(dt * 0.8));
     if (dampingScalar > 1.0) {
@@ -818,7 +818,7 @@ export function playerUpdate(player: PlayerState, inputState: PlayerInput, dt: n
 
       let moveDx: number;
       let moveDy: number;
-      let angleDiff: ReturnType<typeof playerHeadingApproachTargetWithDelta>[0];
+      let angleDiff: any;
       if (!movingBackward && targetHeading === _RELATIVE_MOVE_HEADING_NONE) {
         playerDecelerateMoveSpeed(player, movementDt);
         move = directionFromHeadingNative(player.heading);
@@ -841,7 +841,7 @@ export function playerUpdate(player: PlayerState, inputState: PlayerInput, dt: n
       movingInput = rawMag > (moveMode === MovementControlType.MOUSE_POINT_CLICK ? 0.0 : 0.2);
       turnAlignmentScale = 1.0;
       let inv: number;
-      let angleDiff: ReturnType<typeof playerHeadingApproachTarget>;
+      let angleDiff: any;
       if (movingInput) {
         inv = rawMag > 1e-9 ? 1.0 / rawMag : 0.0;
         move = rawMove.mul(inv);
@@ -870,7 +870,7 @@ export function playerUpdate(player: PlayerState, inputState: PlayerInput, dt: n
     turnAlignmentScale = 1.0;
     let inv: number;
     let targetHeading: ReturnType<typeof normalizeHeadingAngle>;
-    let angleDiff: ReturnType<typeof playerHeadingApproachTarget>;
+    let angleDiff: any;
     if (movingInput) {
       inv = rawMag > 1e-9 ? 1.0 / rawMag : 0.0;
       move = rawMove.mul(inv);

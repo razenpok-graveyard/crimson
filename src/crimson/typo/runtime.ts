@@ -88,7 +88,7 @@ export function typoMidStep(ctx: MidStepContext): void {
       size *= 0.8;
     }
 
-    const creatureIdx = ctx.world.creatures.spawnInit((() => { const value = new CreatureInit({ originTemplateId: 0, pos: call.pos, heading: heading, phaseSeed: 0.0 }); value.typeId = call.typeId; value.flags = flags; value.aiMode = CreatureAiMode.CHASE_PLAYER; value.health = 1.0; value.maxHealth = 1.0; value.moveSpeed = moveSpeed; value.rewardValue = 1.0; value.size = size; value.contactDamage = 100.0; value.tint = call.tintRgba.toTuple(); return value; })());
+    const creatureIdx = ctx.world.creatures.spawnInit(new CreatureInit({ originTemplateId: 0, pos: call.pos, heading: heading, phaseSeed: 0.0, typeId: call.typeId, flags: flags, aiMode: CreatureAiMode.CHASE_PLAYER, health: 1.0, maxHealth: 1.0, moveSpeed: moveSpeed, rewardValue: 1.0, size: size, contactDamage: 100.0, tint: call.tintRgba.toTuple() }));
     if (creatureIdx === null) {
       continue;
     }

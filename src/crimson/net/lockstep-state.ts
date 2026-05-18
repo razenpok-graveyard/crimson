@@ -105,7 +105,7 @@ export class HostLockstepState {
   _tickComplete(opts: { tickIndex: number }): boolean;
   _tickComplete(tickIndex: number): boolean;
   _tickComplete(tickIndexOrOpts: number | { tickIndex: number }): boolean {
-    const tickIndex: number = typeof tickIndexOrOpts === 'object' && tickIndexOrOpts !== null && 'tickIndex' in tickIndexOrOpts ? tickIndexOrOpts.tickIndex : tickIndexOrOpts as number;
+    const tickIndex: number = typeof tickIndexOrOpts === 'object' && tickIndexOrOpts !== null ? tickIndexOrOpts.tickIndex : tickIndexOrOpts as number;
     const tickInputs = this._inputsByTick.get(int(tickIndex)) ?? null;
     if (tickInputs === null) {
       return false;
@@ -113,7 +113,7 @@ export class HostLockstepState {
     if (tickInputs.size < int(this.playerCount)) {
       return false;
     }
-    return Array.from({ length: Math.max(0, int(this.playerCount)) }, (_, i) => i).every((slot) => tickInputs.has(int(slot)));
+    return Array.from({ length: Math.max(0, int(this.playerCount)) }, (_, i) => i).every((slot: any) => tickInputs.has(int(slot)));
   }
 
   popReadyFrames(opts: { nowMs: number }): HostReadyTick[] {
@@ -150,7 +150,7 @@ export class HostLockstepState {
   tickComplete(opts: { tickIndex: number }): boolean;
   tickComplete(tickIndex: number): boolean;
   tickComplete(tickIndexOrOpts: number | { tickIndex: number }): boolean {
-    const tickIndex: number = typeof tickIndexOrOpts === 'object' && tickIndexOrOpts !== null && 'tickIndex' in tickIndexOrOpts ? tickIndexOrOpts.tickIndex : tickIndexOrOpts as number;
+    const tickIndex: number = typeof tickIndexOrOpts === 'object' && tickIndexOrOpts !== null ? tickIndexOrOpts.tickIndex : tickIndexOrOpts as number;
     return this._tickComplete(tickIndex);
   }
 }

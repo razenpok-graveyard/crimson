@@ -89,7 +89,7 @@ export class CreatureNameTable {
   clear(opts: { idx: number }): void;
   clear(idx: number): void;
   clear(idxOrOpts: number | { idx: number }): void {
-    const idx: number = typeof idxOrOpts === 'object' && idxOrOpts !== null && 'idx' in idxOrOpts ? idxOrOpts.idx : idxOrOpts as number;
+    const idx: number = typeof idxOrOpts === 'object' && idxOrOpts !== null ? idxOrOpts.idx : idxOrOpts as number;
     if (int(idx) >= 0 && int(idx) < this.names.length) {
       this.names[int(idx)] = '';
     }
@@ -162,7 +162,7 @@ export class CreatureNameTable {
         }
       }
 
-      if (name.length < NAME_MAX_CHARS) {
+      if (Array.from(name).length < NAME_MAX_CHARS) {
         this.names[idx] = name;
         return name;
       }
@@ -320,7 +320,7 @@ export function loadTypoHighscoreNames(path: string): string[] {
     if ((seen as ReadonlySet<unknown>).has(name)) {
       continue;
     }
-    if (!Array.from(name).every((ch) => /^\p{L}+$/u.test(ch) || ch === '.')) {
+    if (!Array.from(name).every((ch: any) => /^\p{L}+$/u.test(ch) || ch === '.')) {
       continue;
     }
     names.push(name);

@@ -19,7 +19,7 @@ import { drawClassicMenuPanel } from '@crimson/ui/menu-panel.ts';
 import { UiButtonState, buttonUpdate, buttonWidth } from '@crimson/ui/perk-menu.ts';
 import { requireRuntimeResources } from '@crimson/screens/assets.ts';
 import { HS_BACK_BUTTON_X, HS_BACK_BUTTON_Y, HS_BUTTON_STEP_Y, HS_BUTTON_X, HS_BUTTON_Y0, HS_LEFT_PANEL_HEIGHT, HS_LEFT_PANEL_POS_Y, HS_QUEST_ARROW_X, HS_QUEST_ARROW_Y, HS_RIGHT_CHECK_X, HS_RIGHT_CHECK_Y, HS_RIGHT_GAME_MODE_WIDGET_W, HS_RIGHT_GAME_MODE_WIDGET_X, HS_RIGHT_GAME_MODE_WIDGET_Y, HS_RIGHT_PANEL_HEIGHT, HS_RIGHT_PANEL_POS_Y, HS_RIGHT_PLAYER_COUNT_WIDGET_W, HS_RIGHT_PLAYER_COUNT_WIDGET_X, HS_RIGHT_PLAYER_COUNT_WIDGET_Y, HS_RIGHT_SCORE_LIST_WIDGET_W, HS_RIGHT_SCORE_LIST_WIDGET_X, HS_RIGHT_SCORE_LIST_WIDGET_Y, HS_RIGHT_SHOW_SCORES_WIDGET_W, HS_RIGHT_SHOW_SCORES_WIDGET_X, HS_RIGHT_SHOW_SCORES_WIDGET_Y, hsLeftPanelPosX, hsRightOptionsXShift, hsRightPanelPosX } from '@crimson/screens/high-scores-layout.ts';
-import { MENU_PANEL_OFFSET_X, MENU_PANEL_OFFSET_Y, MENU_PANEL_WIDTH, MENU_SCALE_SMALL_THRESHOLD, MENU_SIGN_HEIGHT, MENU_SIGN_OFFSET_X, MENU_SIGN_OFFSET_Y, MENU_SIGN_POS_X_PAD, MENU_SIGN_POS_Y, MENU_SIGN_POS_Y_SMALL, MENU_SIGN_WIDTH, MenuView, drawMenuCursorHelper, ensureMenuGround, menuGroundCamera, uiElementAnim } from '@crimson/screens/menu.ts';
+import { MENU_PANEL_OFFSET_X, MENU_PANEL_OFFSET_Y, MENU_PANEL_WIDTH, MENU_SCALE_SMALL_THRESHOLD, MENU_SIGN_HEIGHT, MENU_SIGN_OFFSET_X, MENU_SIGN_OFFSET_Y, MENU_SIGN_POS_X_PAD, MENU_SIGN_POS_Y, MENU_SIGN_POS_Y_SMALL, MENU_SIGN_WIDTH, MenuView, drawMenuCursorHelper, ensureMenuGround, menuGroundCamera, uiElementAnim, signLayoutScale } from '@crimson/screens/menu.ts';
 import { UI_SHADOW_OFFSET, drawUiQuadShadow } from '@crimson/ui/shadow.ts';
 import { FADE_TO_GAME_ACTIONS, PANEL_TIMELINE_END_MS, PANEL_TIMELINE_START_MS } from '@crimson/screens/panels/base.ts';
 import { mouseInsideRectWithPadding } from '@crimson/screens/panels/hit-test.ts';
@@ -142,7 +142,7 @@ export class HighScoresView {
 
   open(): void {
     const layoutW = this.state.config.display.width;
-    this._widescreenYShift = MenuView._menuWidescreenYShift(layoutW);
+    this._widescreenYShift = MenuView.menuWidescreenYShift(layoutW);
     this._action = null;
     this._ground = this.state.pauseBackground !== null ? null : ensureMenuGround(this.state);
     this._cursorPulseTime = 0.0;
@@ -230,7 +230,7 @@ export class HighScoresView {
     // Compute animated panel positions so hit-tests match the draw path even while sliding.
     const panelW = MENU_PANEL_WIDTH * scale;
     let [angleRad, leftSlideX] = uiElementAnim(this, { index: 1, startMs: PANEL_TIMELINE_START_MS, endMs: PANEL_TIMELINE_END_MS, width: panelW, directionFlag: 0 });
-    let rightSlideX: any;
+    let rightSlideX: ReturnType<typeof uiElementAnim>[1];
     [angleRad, rightSlideX] = uiElementAnim(this, { index: 2, startMs: PANEL_TIMELINE_START_MS, endMs: PANEL_TIMELINE_END_MS, width: panelW, directionFlag: 1 });
     const leftPanelPosX = hsLeftPanelPosX(screenWidth);
     const leftTopLeft = this._panelTopLeft({ pos: new Vec2(leftPanelPosX, HS_LEFT_PANEL_POS_Y), scale: scale });
@@ -447,8 +447,8 @@ export class HighScoresView {
     const playerPos = shiftedRightTopLeft.add(new Vec2(HS_RIGHT_PLAYER_COUNT_WIDGET_X * scale, HS_RIGHT_PLAYER_COUNT_WIDGET_Y * scale));
     const playerLayout = this._dropdownLayout({ pos: playerPos, width: HS_RIGHT_PLAYER_COUNT_WIDGET_W * scale, itemCount: playerItems.length, scale: scale });
     const playerEnabled = !(this._gameModeOpen || this._showScoresOpen || this._scoreListOpen);
-    let _selfPlayerCountOpen: any;
-    let playerSelected: any;
+    let _selfPlayerCountOpen: boolean;
+    let playerSelected: number | null;
     [_selfPlayerCountOpen, playerSelected, consumed] = this._updateDropdown({ layout: playerLayout, itemCount: playerItems.length, isOpen: this._playerCountOpen, enabled: Boolean(playerEnabled), scale: scale });
     this._playerCountOpen = _selfPlayerCountOpen;
     if (playerSelected !== null) {
@@ -481,8 +481,8 @@ export class HighScoresView {
     const gameModePos = shiftedRightTopLeft.add(new Vec2(HS_RIGHT_GAME_MODE_WIDGET_X * scale, HS_RIGHT_GAME_MODE_WIDGET_Y * scale));
     const gameModeLayout = this._dropdownLayout({ pos: gameModePos, width: HS_RIGHT_GAME_MODE_WIDGET_W * scale, itemCount: modeItems.length, scale: scale });
     const gameModeEnabled = !(this._playerCountOpen || this._showScoresOpen || this._scoreListOpen);
-    let _selfGameModeOpen: any;
-    let gameModeSelected: any;
+    let _selfGameModeOpen: boolean;
+    let gameModeSelected: number | null;
     [_selfGameModeOpen, gameModeSelected, consumed] = this._updateDropdown({ layout: gameModeLayout, itemCount: modeItems.length, isOpen: this._gameModeOpen, enabled: Boolean(gameModeEnabled), scale: scale });
     this._gameModeOpen = _selfGameModeOpen;
     if (gameModeSelected !== null) {
@@ -521,8 +521,8 @@ export class HighScoresView {
     const names = Array.from(this.state.config.profile.savedNameLabels());
     const scoreListPos = shiftedRightTopLeft.add(new Vec2(HS_RIGHT_SCORE_LIST_WIDGET_X * scale, HS_RIGHT_SCORE_LIST_WIDGET_Y * scale));
     const scoreListLayout = this._dropdownLayout({ pos: scoreListPos, width: HS_RIGHT_SCORE_LIST_WIDGET_W * scale, itemCount: names.length, scale: scale });
-    let _selfScoreListOpen: any;
-    let scoreListSelected: any;
+    let _selfScoreListOpen: boolean;
+    let scoreListSelected: number | null;
     [_selfScoreListOpen, scoreListSelected, consumed] = this._updateDropdown({ layout: scoreListLayout, itemCount: names.length, isOpen: this._scoreListOpen, enabled: Boolean(scoreListEnabled), scale: scale });
     this._scoreListOpen = _selfScoreListOpen;
     if (scoreListSelected !== null) {
@@ -629,7 +629,7 @@ export class HighScoresView {
     const fxDetail = this.state.config.display.fxDetailEnabled({ level: 0, default: false });
     const panelW = MENU_PANEL_WIDTH * scale;
     let [angleRad, leftSlideX] = uiElementAnim(this, { index: 1, startMs: PANEL_TIMELINE_START_MS, endMs: PANEL_TIMELINE_END_MS, width: panelW, directionFlag: 0 });
-    let rightSlideX: any;
+    let rightSlideX: ReturnType<typeof uiElementAnim>[1];
     [angleRad, rightSlideX] = uiElementAnim(this, { index: 2, startMs: PANEL_TIMELINE_START_MS, endMs: PANEL_TIMELINE_END_MS, width: panelW, directionFlag: 1 });
 
     const leftPanelPosX = hsLeftPanelPosX(screenWidth);
@@ -662,7 +662,7 @@ export class HighScoresView {
     const resources = opts.resources;
     const sign = resources.texture(TextureId.UI_SIGN_CRIMSON);
     const screenW = this.state.config.display.width;
-    const [signScale, shiftX] = MenuView._signLayoutScale(int(screenW));
+    const [signScale, shiftX] = MenuView.signLayoutScale(int(screenW));
     const signPos = new Vec2(screenW + MENU_SIGN_POS_X_PAD, screenW > MENU_SCALE_SMALL_THRESHOLD ? MENU_SIGN_POS_Y : MENU_SIGN_POS_Y_SMALL);
     const signW = MENU_SIGN_WIDTH * signScale;
     const signH = MENU_SIGN_HEIGHT * signScale;

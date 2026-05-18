@@ -114,7 +114,7 @@ export class SecondaryProjectilePool {
     const timeToLive = spec.timeToLive;
     const targetHint = spec.targetHint;
     const creatures = spec.creatures;
-    const preserveBugs = Boolean(spec.preserveBugs);
+    const preserveBugs = spec.preserveBugs;
 
     let index = null;
     for (const [i, entry] of this._entries.entries()) {
@@ -317,7 +317,7 @@ export class SecondaryProjectilePool {
         // Type 2: homing projectile.
         let targetId = entry.targetId;
         if (!(targetId >= 0 && targetId < creatures.length) || !creatures[targetId].active) {
-          entry.targetId = creatureFindNearestForSecondary({ creatures: creatures, origin: entry.pos, preserveBugs: runtimeState !== null ? Boolean(runtimeState.preserveBugs) : false });
+          entry.targetId = creatureFindNearestForSecondary({ creatures: creatures, origin: entry.pos, preserveBugs: runtimeState !== null ? runtimeState.preserveBugs : false });
           targetId = entry.targetId;
         }
 
@@ -489,7 +489,7 @@ export class SecondaryProjectilePool {
 
         // Extra debris/scorch decals (or freeze shards) on detonation.
         if (freezeActive) {
-          let shardPos: typeof entry.pos;
+          let shardPos: any;
           let freezeAngleCaller: RngCallerStatic;
           if (effects !== null) {
             shardPos = entry.pos;

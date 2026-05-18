@@ -196,7 +196,7 @@ function isStructInstance(value: unknown): boolean {
 
 function structFieldNames(value: unknown): string[] {
   const fields = Reflect.get((pythonTypeObject(value)) as object, '__struct_fields__') ?? null;
-  if (Array.isArray(fields) && Array.from(fields).every((name) => typeof name === 'string')) {
+  if (Array.isArray(fields) && Array.from(fields).every((name: any) => typeof name === 'string')) {
     return Array.from(fields).map((name) => String(name));
   }
   return [];

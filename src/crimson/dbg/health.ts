@@ -25,6 +25,7 @@ export function summarizeTraceHealth(tracePath: string, opts: { tickStart?: numb
   const tickEnd = opts.tickEnd ?? null;
   const path = tracePath;
   const trace = new TraceReader(path);
+  let channelsPresent: Map<string, number>;
   let ticksTotal: number;
   let ticksWithDt: number;
   let rngStreamRows: number;
@@ -34,9 +35,9 @@ export function summarizeTraceHealth(tracePath: string, opts: { tickStart?: numb
   let sampleSecondaryRows: number;
   let sampleBonusRows: number;
   let timingSamplesRows: number;
-  let samples: ReturnType<typeof entitySamplesChannel>;
+  let issues: string[];
   try {
-    const channelsPresent: Map<string, number> = new Map();
+    channelsPresent = new Map();
     ticksTotal = 0;
     ticksWithDt = 0;
     rngStreamRows = 0;
@@ -61,7 +62,7 @@ export function summarizeTraceHealth(tracePath: string, opts: { tickStart?: numb
             simStateRows += 1;
           }
         } else if (channelName === 'entity_samples') {
-          samples = entitySamplesChannel(tick);
+          const samples = entitySamplesChannel(tick);
           if (samples !== null) {
             sampleCreatureRows += samples.creatures.length;
             sampleProjectileRows += samples.projectiles.length;
@@ -72,7 +73,7 @@ export function summarizeTraceHealth(tracePath: string, opts: { tickStart?: numb
       }
     }
 
-    const issues: string[] = [];
+    issues = [];
     if (ticksTotal === 0) {
       issues.push('trace window has no ticks');
     }

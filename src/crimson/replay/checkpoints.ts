@@ -304,6 +304,10 @@ function _basename(path: string): string {
   return idx < 0 ? normalized : normalized.slice(idx + 1);
 }
 
+function _pathIsAbsolute(path: string): boolean {
+  return path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(path);
+}
+
 function _dirname(path: string): string {
   const idx = path.lastIndexOf('/');
   if (idx < 0) {

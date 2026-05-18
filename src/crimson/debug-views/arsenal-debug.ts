@@ -161,7 +161,7 @@ export class ArsenalDebugView {
     this.closeRequested = false;
     this._paused = false;
     this._screenshotRequested = false;
-    this._tickHarness = new StandaloneTickHarness({ gameMode: GameMode.SURVIVAL, buildInputs: this._buildRunnerInputs.bind(this) });
+    this._tickHarness = new StandaloneTickHarness({ gameMode: GameMode.SURVIVAL, buildInputs: this._buildRunnerInputs?.bind(this) ?? null });
   }
 
   protected _loadTexture(textureId: TextureId): rl.Texture {
@@ -238,7 +238,7 @@ export class ArsenalDebugView {
     for (let idx = 0; idx < count; idx++) {
       const spawnId = this._spawnIds[idx % this._spawnIds.length];
       const angle = idx / count * (Math.PI * 2.0);
-      const spawnPos = playerPos.add(Vec2.fromAngle(angle).mul(this._spawnRingRadius)).clampRect(48.0, 48.0, WORLD_SIZE - 48.0, WORLD_SIZE - 48.0);
+      const spawnPos = (playerPos.add(Vec2.fromAngle(angle).mul(this._spawnRingRadius))).clampRect(48.0, 48.0, WORLD_SIZE - 48.0, WORLD_SIZE - 48.0);
       const heading = angle + Math.PI;
       this._runtime.simWorld.creatures.spawnTemplate(spawnId, spawnPos, heading, this._runtime.simWorld.state.rng);
     }
@@ -291,11 +291,11 @@ export class ArsenalDebugView {
     }
 
     if (InputState.wasKeyPressed(219)) {
-      this._weaponIndex = ((this._weaponIndex - 1) + Math.max(1, this._weaponIds.length)) % Math.max(1, this._weaponIds.length);
+      this._weaponIndex = (((this._weaponIndex - 1) % Math.max(1, this._weaponIds.length)) + Math.max(1, this._weaponIds.length)) % Math.max(1, this._weaponIds.length);
       this._applyWeapon();
     }
     if (InputState.wasKeyPressed(221)) {
-      this._weaponIndex = ((this._weaponIndex + 1) + Math.max(1, this._weaponIds.length)) % Math.max(1, this._weaponIds.length);
+      this._weaponIndex = (((this._weaponIndex + 1) % Math.max(1, this._weaponIds.length)) + Math.max(1, this._weaponIds.length)) % Math.max(1, this._weaponIds.length);
       this._applyWeapon();
     }
 

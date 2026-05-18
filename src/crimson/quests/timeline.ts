@@ -76,7 +76,7 @@ export function tickQuestSpawnTimeline(entries: readonly SpawnEntry[], questSpaw
 
 export function questSpawnTableEmpty(entries: readonly SpawnEntry[]): boolean {
   // Return True when all quest spawn entries are exhausted (count <= 0).
-  return entries.every((entry) => entry.count <= 0);
+  return entries.every((entry: any) => entry.count <= 0);
 }
 
 export function tickQuestModeSpawns(entries: readonly SpawnEntry[], questSpawnTimelineMs: number, frameDtMs: number, opts: { terrainWidth: number; creaturesNoneActive: boolean; noCreaturesTimerMs: number }): [readonly SpawnEntry[], number, boolean, number, readonly SpawnTemplateCall[]] {
@@ -99,7 +99,7 @@ export function tickQuestModeSpawns(entries: readonly SpawnEntry[], questSpawnTi
     timelineMs = f32(timelineMs + dtMs);
   }
 
-  let spawns: any;
+  let spawns: readonly SpawnTemplateCall[];
   [entries, creaturesNoneActive, noCreaturesTimerMs, spawns] = tickQuestSpawnTimeline(entries, timelineMs, dtMs, { terrainWidth: terrainWidth, creaturesNoneActive: creaturesNoneActive, noCreaturesTimerMs: noCreaturesTimerMs });
 
   return [entries, timelineMs, creaturesNoneActive, noCreaturesTimerMs, spawns];

@@ -81,7 +81,7 @@ export class StandaloneTickHarness {
     }
 
     session = new DeterministicSession({ world: worldState, worldSize: runtime.worldSize, damageScaleByType: runtime.simWorld.damageScaleByType, gameMode: this.gameMode, detailPreset: int(detailPreset), violenceDisabled: int(violenceDisabled), gameTuneStarted: Boolean(runtime.simWorld.gameTuneStarted), demoModeActive: runtime.demoModeActive, perkProgressionEnabled: false, applyWorldDtSteps: true });
-    const provider = new LocalInputProvider({ playerCount: int(playerCount), buildInputs: this.buildInputs.bind(this) });
+    const provider = new LocalInputProvider({ playerCount: int(playerCount), buildInputs: this.buildInputs?.bind(this) ?? null });
     runner = new TickRunner({ session: session, inputProvider: provider, config: new TickRunnerConfig() });
     this.session = session;
     this.runner = runner;
@@ -100,11 +100,11 @@ export class StandaloneTickHarness {
     const reactions = new Map(Array.from(batch.completedResults, (result) => [int(result.sourceTick.tickIndex), buildPostApplyReaction({ tickResult: result })] as const));
     applyPresentationOutputs({
       outputs: outputs,
-      syncAudioBridgeState: runtime.syncAudioBridgeState.bind(runtime),
+      syncAudioBridgeState: runtime.syncAudioBridgeState?.bind(runtime) ?? null,
       applyAudioPlan: (plan, shouldApplyAudio) => runtime.audioBridge.applyPlan({ plan: plan, applyAudio: Boolean(shouldApplyAudio) }),
       applyTerrainFx: runtime.renderResources.consumeTerrainFxBatch,
-      updateCamera: runtime.updateCamera.bind(runtime),
-      onOutputApplied: (output) => applyPostApplyReaction({ reaction: reactions.get(int(output.tickIndex)) ?? new PostApplyReaction(), playSfx: runtime.audioBridge.router.playSfx.bind(runtime.audioBridge.router) }),
+      updateCamera: runtime.updateCamera?.bind(runtime) ?? null,
+      onOutputApplied: (output) => applyPostApplyReaction({ reaction: reactions.get(int(output.tickIndex)) ?? new PostApplyReaction(), playSfx: runtime.audioBridge.router.playSfx?.bind(runtime.audioBridge.router) ?? null }),
       applyAudio: true,
     });
     return outputs.length;

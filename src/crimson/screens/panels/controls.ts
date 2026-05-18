@@ -526,8 +526,8 @@ export class ControlsMenuView extends PanelMenuView {
       return true;
     }
 
-    let _selfAimMethodOpen: any;
-    let aimSelected: any;
+    let _selfAimMethodOpen: boolean;
+    let aimSelected: number | null;
     [_selfAimMethodOpen, aimSelected, consumed] = this._updateDropdown({ layout: aimLayout, itemCount: aimItems.length, isOpen: this._aimMethodOpen, enabled: aimEnabled, scale: panelScale });
     this._aimMethodOpen = _selfAimMethodOpen;
     if (aimSelected !== null) {
@@ -539,8 +539,8 @@ export class ControlsMenuView extends PanelMenuView {
       return true;
     }
 
-    let _selfPlayerProfileOpen: any;
-    let playerSelected: any;
+    let _selfPlayerProfileOpen: boolean;
+    let playerSelected: number | null;
     [_selfPlayerProfileOpen, playerSelected, consumed] = this._updateDropdown({ layout: playerLayout, itemCount: playerItems.length, isOpen: this._playerProfileOpen, enabled: playerEnabled, scale: panelScale });
     this._playerProfileOpen = _selfPlayerProfileOpen;
     if (playerSelected !== null) {

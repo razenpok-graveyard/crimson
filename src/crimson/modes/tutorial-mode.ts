@@ -6,7 +6,7 @@ import type { CrimsonConfig } from '@grim/config.ts';
 import type { ConsoleState } from '@grim/console.ts';
 import { Vec2 } from '@grim/geom.ts';
 import { clamp } from '@grim/math.ts';
-import type { Crand } from '@grim/rand.ts';
+import type { CrandLike } from '@grim/rand.ts';
 import { InputState } from '@grim/input.ts';
 import type { ViewContext } from '@grim/view.ts';
 import { GameMode } from '@crimson/game-modes.ts';
@@ -58,11 +58,11 @@ export class TutorialMode extends BaseGameplayMode {
     return this._perkPickPending;
   }
 
-  constructor(ctx: ViewContext, opts: { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand });
-  constructor(opts: { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean });
-  constructor(ctxOrOpts: ViewContext | { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean }, maybeOpts?: { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand }) {
+  constructor(ctx: ViewContext, opts: { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: CrandLike });
+  constructor(opts: { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: CrandLike } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean });
+  constructor(ctxOrOpts: ViewContext | { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: CrandLike } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean }, maybeOpts?: { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: CrandLike }) {
     const ctx = maybeOpts === undefined ? { assetsDir: (ctxOrOpts as { assetsUrl?: string }).assetsUrl ?? '', preserveBugs: (ctxOrOpts as { preserveBugs?: boolean }).preserveBugs ?? false } as ViewContext : ctxOrOpts as ViewContext;
-    const opts = maybeOpts ?? (ctxOrOpts as { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean });
+    const opts = maybeOpts ?? (ctxOrOpts as { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: CrandLike } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean });
     const demoModeActive = opts.demoModeActive ?? false;
     const config = opts.config;
     const console = opts.console ?? null;
@@ -245,7 +245,7 @@ export class TutorialMode extends BaseGameplayMode {
     let resources: typeof this.renderResources.resources;
     if (stage === 8) {
       resources = this.renderResources.resources;
-      const [rect, lines, lineH] = tutorialPromptPanelRect(overlay.promptText, { measureTextWidth: (text, scale) => this._uiTextWidth(text, scale), measureLineHeight: this._uiLineHeight.bind(this), pos: TUTORIAL_PANEL_POS, scale: 1.0 });
+      const [rect, lines, lineH] = tutorialPromptPanelRect(overlay.promptText, { measureTextWidth: (text, scale) => this._uiTextWidth(text, scale), measureLineHeight: this._uiLineHeight?.bind(this) ?? null, pos: TUTORIAL_PANEL_POS, scale: 1.0 });
       const gap = 18.0;
       const buttonBasePos = new Vec2(rect.x + 10.0, rect.y + rect.h + 10.0);
       const playW = buttonWidth(resources, this._playButton.label, { scale: 1.0, forceWide: true });
@@ -273,7 +273,7 @@ export class TutorialMode extends BaseGameplayMode {
 
   update(dt: number): void {
     this._updateAudio(dt);
-    let dtUiMs: any;
+    let dtUiMs: ReturnType<typeof this._tickFrame>[1];
     [dt, dtUiMs] = this._tickFrame(dt, { clampCursorPulse: true });
 
     this._handleInput();
@@ -360,7 +360,7 @@ export class TutorialMode extends BaseGameplayMode {
     const overlay = this.state.tutorialOverlay;
     drawTutorialOverlayPanels(
       overlay,
-      { drawText: (text, pos, color, scale) => this._drawUiText(text, pos, color, scale), measureTextWidth: (text, scale) => this._uiTextWidth(text, scale), measureLineHeight: this._uiLineHeight.bind(this) },
+      { drawText: (text, pos, color, scale) => this._drawUiText(text, pos, color, scale), measureTextWidth: (text, scale) => this._uiTextWidth(text, scale), measureLineHeight: this._uiLineHeight?.bind(this) ?? null },
     );
     const resources = this.renderResources.resources;
     const font = this._small;
@@ -368,7 +368,7 @@ export class TutorialMode extends BaseGameplayMode {
 
     const stage = int(this.state.tutorial.stageIndex);
     if (stage === 8) {
-      const [rect, lines, lineH] = tutorialPromptPanelRect(overlay.promptText, { measureTextWidth: (text, scale) => this._uiTextWidth(text, scale), measureLineHeight: this._uiLineHeight.bind(this), pos: TUTORIAL_PANEL_POS, scale: 1.0 });
+      const [rect, lines, lineH] = tutorialPromptPanelRect(overlay.promptText, { measureTextWidth: (text, scale) => this._uiTextWidth(text, scale), measureLineHeight: this._uiLineHeight?.bind(this) ?? null, pos: TUTORIAL_PANEL_POS, scale: 1.0 });
       const gap = 18.0;
       const buttonBasePos = new Vec2(rect.x + 10.0, rect.y + rect.h + 10.0);
       const playW = buttonWidth(resources, this._playButton.label, { scale: 1.0, forceWide: true });

@@ -207,7 +207,7 @@ function buildDrawContext(renderCtx: WorldRenderCtx, opts: { camera: Vec2; viewS
   const particlesTexture = resources.texture(TextureId.PARTICLES);
 
   const monsterVision = frame.players.length > 0 && perkActive(frame.players[0], PerkId.MONSTER_VISION);
-  let monsterVisionSrc = null;
+  let monsterVisionSrc: null | wgl.Rectangle = null;
   if (monsterVision) {
     monsterVisionSrc = effectSrcRect(particlesTexture, EffectId.AURA);
   }
@@ -388,7 +388,7 @@ function drawCreatures(renderCtx: WorldRenderCtx, opts: { ctx: WorldDrawContext 
       }
     }
 
-    let shadowAlpha = null;
+    let shadowAlpha: null | number = null;
     let shadowA: number;
     if (shadow) {
       // Shadow pass uses tint_a * 0.4 and fades much faster for corpses (lifecycle_stage < 0).
@@ -440,7 +440,7 @@ function drawFreezeOverlay(renderCtx: WorldRenderCtx, opts: { ctx: WorldDrawCont
     if (size <= 1e-3) {
       continue;
     }
-    const creatureScreen = renderCtx._worldToScreenWith(creature.pos, { camera: ctx.camera, viewScale: ctx.viewScale });
+    const creatureScreen = renderCtx.worldToScreenWith(creature.pos, { camera: ctx.camera, viewScale: ctx.viewScale });
     const dst = wgl.makeRectangle(creatureScreen.x, creatureScreen.y, size, size);
     const origin = wgl.makeVector2(size * 0.5, size * 0.5);
     const rotationDeg = (idx * 0.01 + creature.heading) * RAD_TO_DEG;
@@ -542,7 +542,7 @@ export function drawAimIndicators(renderCtx: WorldRenderCtx, opts: { ctx: WorldD
   let transform = worldToScreenWith;
   if (transform === null) {
     transform = (pos: Vec2, camera: Vec2, viewScale: Vec2): Vec2 => {
-      return renderCtx._worldToScreenWith(pos, { camera: camera, viewScale: viewScale });
+      return renderCtx.worldToScreenWith(pos, { camera: camera, viewScale: viewScale });
     };
   }
 
@@ -596,7 +596,7 @@ export function drawAimEnhancements(renderCtx: WorldRenderCtx, opts: { ctx: Worl
   let transform = worldToScreenWith;
   if (transform === null) {
     transform = (pos: Vec2, camera: Vec2, viewScale: Vec2): Vec2 => {
-      return renderCtx._worldToScreenWith(pos, { camera: camera, viewScale: viewScale });
+      return renderCtx.worldToScreenWith(pos, { camera: camera, viewScale: viewScale });
     };
   }
 

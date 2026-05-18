@@ -250,7 +250,7 @@ export function packInputFlags(opts: { fireDown: boolean; firePressed: boolean; 
     flags |= RELOAD_DOWN_FLAG;
   }
   const keyFields = [moveForwardPressed, moveBackwardPressed, turnLeftPressed, turnRightPressed];
-  if (keyFields.some((field) => field !== null)) {
+  if (keyFields.some((field: any) => field !== null)) {
     flags |= MOVE_KEYS_PRESENT_FLAG;
     if (Boolean(moveForwardPressed)) {
       flags |= MOVE_FORWARD_FLAG;

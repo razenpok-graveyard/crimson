@@ -216,7 +216,7 @@ export function postHitIonRifle(ctx: ProjectileUpdateCtx, hit: ProjectileHitInfo
       const originPos = hit.proj.pos;
       const minDistSq = 100.0 * 100.0;
 
-      bestIdx = Boolean(runtimeState.preserveBugs) ? 0 : -1;
+      bestIdx = runtimeState.preserveBugs ? 0 : -1;
       bestDistSq = 1e12;
       for (const [creatureId, creature] of creatures.entries()) {
         if (creatureId === hitCreature) {
@@ -242,9 +242,9 @@ export function postHitIonRifle(ctx: ProjectileUpdateCtx, hit: ProjectileHitInfo
 
       const origin = creatures[hitCreature];
       const target = creatures[bestIdx];
-      const angle = target.pos.sub(origin.pos).toHeading();
+      const angle = (target.pos.sub(origin.pos)).toHeading();
 
-      const prevGuard = Boolean(runtimeState.bonusSpawnGuard);
+      const prevGuard = runtimeState.bonusSpawnGuard;
       runtimeState.bonusSpawnGuard = true;
       let projId: any;
       try {
@@ -269,7 +269,7 @@ export function postHitPlasmaCannon(ctx: ProjectileUpdateCtx, hit: ProjectileHit
   const runtimeState = ctx.runtimeState;
   let prevGuard = false;
   if (runtimeState !== null) {
-    prevGuard = Boolean(runtimeState.bonusSpawnGuard);
+    prevGuard = runtimeState.bonusSpawnGuard;
     runtimeState.bonusSpawnGuard = true;
   }
   try {

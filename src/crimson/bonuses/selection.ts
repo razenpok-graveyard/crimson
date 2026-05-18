@@ -31,16 +31,16 @@ function bonusPickSuppressed(opts: { state: GameplayState; players: PlayerState[
   if (bonusId === BonusId.FREEZE && state.bonuses.freeze > 0.0) {
     return true;
   }
-  if (bonusId === BonusId.SHIELD && players.some((player) => player.shieldTimer > 0.0)) {
+  if (bonusId === BonusId.SHIELD && players.some((player: any) => player.shieldTimer > 0.0)) {
     return true;
   }
   if (bonusId === BonusId.WEAPON && hasFireBulletsDrop) {
     return true;
   }
-  if (bonusId === BonusId.WEAPON && players.some((player) => perkActive(player, PerkId.MY_FAVOURITE_WEAPON))) {
+  if (bonusId === BonusId.WEAPON && players.some((player: any) => perkActive(player, PerkId.MY_FAVOURITE_WEAPON))) {
     return true;
   }
-  if (bonusId === BonusId.MEDIKIT && players.some((player) => perkActive(player, PerkId.DEATH_CLOCK))) {
+  if (bonusId === BonusId.MEDIKIT && players.some((player: any) => perkActive(player, PerkId.DEATH_CLOCK))) {
     return true;
   }
   const level = state.questLevel;
@@ -59,7 +59,7 @@ function bonusPickSuppressed(opts: { state: GameplayState; players: PlayerState[
 }
 
 export function bonusPickRandomType(pool: BonusPool, state: GameplayState, players: PlayerState[]): BonusId {
-  const hasFireBulletsDrop = Array.from(pool.entries).some((entry) => entry.bonusId === BonusId.FIRE_BULLETS && !entry.picked);
+  const hasFireBulletsDrop = Array.from(pool.entries).some((entry: any) => entry.bonusId === BonusId.FIRE_BULLETS && !entry.picked);
 
   for (let i = 0; i < 101; i++) {
     const roll = state.rng.rand({ caller: RngCallerStatic.BONUS_PICK_RANDOM_TYPE_ROLL }) % 162 + 1;

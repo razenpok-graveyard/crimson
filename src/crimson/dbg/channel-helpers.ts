@@ -7,7 +7,7 @@ import { TraceError } from '@crimson/dbg/trace.ts';
 
 export type EntitySampleRow = CreatureEntitySample | ProjectileEntitySample | SecondaryProjectileEntitySample | BonusEntitySample;
 
-export const ENTITY_SAMPLE_KINDS = ['creatures', 'projectiles', 'secondary_projectiles', 'bonuses'];
+export const ENTITY_SAMPLE_KINDS = ['creatures', 'projectiles', 'secondary_projectiles', 'bonuses'] as const;
 
 function pythonRepr(value: unknown): string {
   if (typeof value === 'number') {

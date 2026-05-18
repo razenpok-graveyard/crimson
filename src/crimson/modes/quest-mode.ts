@@ -8,7 +8,7 @@ import type { ConsoleState } from '@grim/console.ts';
 import type { GrimMonoFont } from '@grim/fonts/grim-mono.ts';
 import { loadGrimMonoFont } from '@grim/fonts/grim-mono.ts';
 import { Vec2 } from '@grim/geom.ts';
-import type { Crand } from '@grim/rand.ts';
+import type { CrandLike } from '@grim/rand.ts';
 import { InputState } from '@grim/input.ts';
 import { SfxId } from '@grim/sfx-map.ts';
 import type { ViewContext } from '@grim/view.ts';
@@ -151,11 +151,11 @@ export class QuestMode extends BaseGameplayMode {
     return this._questSpawnState;
   }
 
-  constructor(ctx: ViewContext, opts: { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand });
-  constructor(opts: { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean });
-  constructor(ctxOrOpts: ViewContext | { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean }, maybeOpts?: { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand }) {
+  constructor(ctx: ViewContext, opts: { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: CrandLike });
+  constructor(opts: { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: CrandLike } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean });
+  constructor(ctxOrOpts: ViewContext | { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: CrandLike } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean }, maybeOpts?: { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: CrandLike }) {
     const ctx = maybeOpts === undefined ? { assetsDir: (ctxOrOpts as { assetsUrl?: string }).assetsUrl ?? '', preserveBugs: (ctxOrOpts as { preserveBugs?: boolean }).preserveBugs ?? false } as ViewContext : ctxOrOpts as ViewContext;
-    const opts = maybeOpts ?? (ctxOrOpts as { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: Crand } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean });
+    const opts = maybeOpts ?? (ctxOrOpts as { demoModeActive?: boolean; config: CrimsonConfig; console?: ConsoleState | null; audio?: AudioState | null; audioRng: CrandLike } & { assetsUrl?: string; baseDir?: string; preserveBugs?: boolean });
     const demoModeActive = opts.demoModeActive ?? false;
     const config = opts.config;
     const console = opts.console ?? null;
@@ -168,7 +168,7 @@ export class QuestMode extends BaseGameplayMode {
     this._outcome = null;
     this._grimMono = null;
     this._perkPrompt = new PerkPromptState();
-    this._perkMenu = new PerkMenuController({ onClose: this._resetPerkPrompt.bind(this) });
+    this._perkMenu = new PerkMenuController({ onClose: this._resetPerkPrompt?.bind(this) ?? null });
     this._questSpawnState = new QuestSpawnState();
     this._simSession = null;
     this._replayRecorder = null;
@@ -350,8 +350,8 @@ export class QuestMode extends BaseGameplayMode {
     const _ = dtSeconds;
     applyPostApplyReaction({
       reaction: reaction,
-      playSfx: this.audioBridge.router.playSfx.bind(this.audioBridge.router),
-      playCompletionMusic: this._playQuestCompletionMusic.bind(this),
+      playSfx: this.audioBridge.router.playSfx?.bind(this.audioBridge.router) ?? null,
+      playCompletionMusic: this._playQuestCompletionMusic?.bind(this) ?? null,
     });
   }
 
@@ -526,7 +526,7 @@ export class QuestMode extends BaseGameplayMode {
     if (idx < 0) {
       idx = 0;
     }
-    const weaponId = weaponIds[((idx + int(delta)) + weaponIds.length) % weaponIds.length];
+    const weaponId = weaponIds[(((idx + int(delta)) % weaponIds.length) + weaponIds.length) % weaponIds.length];
     weaponAssignPlayer(this.player, weaponId, { state: this.state });
   }
 
@@ -689,7 +689,7 @@ export class QuestMode extends BaseGameplayMode {
       anyAlive: this._anyPlayerAlive(),
       menuActive: this._perkMenu.active,
       config: this.config,
-      uiTextWidth: this._uiTextWidth.bind(this),
+      uiTextWidth: this._uiTextWidth?.bind(this) ?? null,
       textColor: UI_TEXT_COLOR,
       promptScale: UI_TEXT_SCALE,
     });

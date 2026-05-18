@@ -41,7 +41,7 @@ export class SessionLayout {
 }
 
 export class NetworkSessionPanelView extends PanelMenuView {
-  protected _MODES: readonly NetworkSessionMode[] = ['survival', 'rush', 'quests'];
+  protected _MODES: readonly NetworkSessionMode[] = ['survival', 'rush', 'quests'] as const;
   protected _backButton: UiButtonState;
   protected _role: string;
   protected _modeIdx: number;
@@ -136,7 +136,7 @@ export class NetworkSessionPanelView extends PanelMenuView {
       }
       this._playerCount = Math.max(1, Math.min(4, int(cfg.playerCount)));
       this._questLevel = String(cfg.questLevel || '1.1');
-      const netcodeRaw = cfg.netcodeMode.trim().toLowerCase();
+      const netcodeRaw = (String(cfg.netcodeMode)).trim().toLowerCase();
       this._netcodeMode = netcodeRaw === 'lockstep' ? 'lockstep' : 'rollback';
       const endpoint = cfg.endpoint;
       if (endpoint instanceof LockstepEndpoint) {
@@ -202,7 +202,7 @@ export class NetworkSessionPanelView extends PanelMenuView {
 
     if (this._role === 'host') {
       if (InputState.wasKeyPressed(77)) {
-        this._modeIdx = ((int(this._modeIdx) + 1) + this._MODES.length) % this._MODES.length;
+        this._modeIdx = (((int(this._modeIdx) + 1) % this._MODES.length) + this._MODES.length) % this._MODES.length;
       }
       if (InputState.wasKeyPressed(219)) {
         this._playerCount = Math.max(1, int(this._playerCount) - 1);
@@ -247,7 +247,7 @@ export class NetworkSessionPanelView extends PanelMenuView {
       } else if (this._activeField === 'host') {
         this._host = (this._host + typed).slice(0, 64);
       } else if (this._activeField === 'room_code') {
-        this._roomCode = Array.from((this._roomCode + typed).toLowerCase()).filter((ch) => /^[\p{L}\p{N}]+$/u.test(ch)).map((ch) => ch).join("").slice(0, int(ROOM_CODE_LENGTH));
+        this._roomCode = Array.from((this._roomCode + typed).lower()).filter((ch) => /^[\p{L}\p{N}]+$/u.test(ch)).map((ch) => ch).join("").slice(0, int(ROOM_CODE_LENGTH));
       } else if (this._activeField === 'port') {
         this._portText = Array.from((this._portText + typed)).filter((ch) => /^\d+$/u.test(ch)).map((ch) => ch).join("").slice(0, 5);
       }

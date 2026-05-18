@@ -48,12 +48,12 @@ export function applyPostApplyReaction(opts: { reaction: PostApplyReaction; play
     for (const sfx of reaction.sfx) {
       playSfx(sfx);
     }
-    if (quest !== null && Boolean(quest.playHitSfx)) {
+    if (quest !== null && quest.playHitSfx) {
       playSfx(SfxId.QUESTHIT);
     }
   }
 
-  if (quest !== null && Boolean(quest.playCompletionMusic) && playCompletionMusic !== null) {
+  if (quest !== null && quest.playCompletionMusic && playCompletionMusic !== null) {
     playCompletionMusic();
   }
 }

@@ -9,7 +9,7 @@ import type { GroundRenderer } from '@grim/terrain-render.ts';
 import type { GameState } from '@crimson/game/types.ts';
 import { drawClassicMenuPanel } from '@crimson/ui/menu-panel.ts';
 import { requireRuntimeResources } from '@crimson/screens/assets.ts';
-import { MENU_ITEM_OFFSET_X, MENU_ITEM_OFFSET_Y, MENU_LABEL_HEIGHT, MENU_LABEL_OFFSET_X, MENU_LABEL_OFFSET_Y, MENU_LABEL_ROW_BACK, MENU_LABEL_ROW_HEIGHT, MENU_LABEL_WIDTH, MENU_PANEL_HEIGHT, MENU_PANEL_OFFSET_X, MENU_PANEL_OFFSET_Y, MENU_PANEL_WIDTH, MENU_SCALE_SMALL_THRESHOLD, MENU_SIGN_HEIGHT, MENU_SIGN_OFFSET_X, MENU_SIGN_OFFSET_Y, MENU_SIGN_POS_X_PAD, MENU_SIGN_POS_Y, MENU_SIGN_POS_Y_SMALL, MENU_SIGN_WIDTH, MenuEntry, MenuView, drawMenuCursorHelper, ensureMenuGround, menuGroundCamera, uiElementAnim } from '@crimson/screens/menu.ts';
+import { MENU_ITEM_OFFSET_X, MENU_ITEM_OFFSET_Y, MENU_LABEL_HEIGHT, MENU_LABEL_OFFSET_X, MENU_LABEL_OFFSET_Y, MENU_LABEL_ROW_BACK, MENU_LABEL_ROW_HEIGHT, MENU_LABEL_WIDTH, MENU_PANEL_HEIGHT, MENU_PANEL_OFFSET_X, MENU_PANEL_OFFSET_Y, MENU_PANEL_WIDTH, MENU_SCALE_SMALL_THRESHOLD, MENU_SIGN_HEIGHT, MENU_SIGN_OFFSET_X, MENU_SIGN_OFFSET_Y, MENU_SIGN_POS_X_PAD, MENU_SIGN_POS_Y, MENU_SIGN_POS_Y_SMALL, MENU_SIGN_WIDTH, MenuEntry, MenuView, drawMenuCursorHelper, ensureMenuGround, menuGroundCamera, uiElementAnim, labelAlpha, signLayoutScale } from '@crimson/screens/menu.ts';
 import { UI_SHADOW_OFFSET, drawUiQuadShadow } from '@crimson/ui/shadow.ts';
 import { drawScreenFade } from '@crimson/screens/transitions.ts';
 import * as wgl from '@wgl';
@@ -27,17 +27,6 @@ export const FADE_TO_GAME_ACTIONS: ReadonlySet<string> = new Set([
   'start_tutorial',
   'start_quest',
 ]);
-
-function pythonSplitlines(text: string): string[] {
-  if (text === '') {
-    return [];
-  }
-  const lines = text.split(/\r\n|\r|\n/);
-  if (/(?:\r\n|\r|\n)$/.test(text)) {
-    lines.pop();
-  }
-  return lines;
-}
 
 export class PanelMenuView {
   state: GameState;
@@ -131,7 +120,7 @@ export class PanelMenuView {
     this.state = state;
     this._isOpen = false;
     this._title = title;
-    this._bodyLines = pythonSplitlines((body || ''));
+    this._bodyLines = (body || '').splitlines();
     this._panelPos = panelPos;
     this._panelOffset = panelOffset;
     this._panelHeight = panelHeight;
@@ -154,7 +143,7 @@ export class PanelMenuView {
   open(): void {
     const layoutW = this.state.config.display.width;
     this._menuScreenWidth = int(layoutW);
-    this._widescreenYShift = MenuView._menuWidescreenYShift(layoutW);
+    this._widescreenYShift = MenuView.menuWidescreenYShift(layoutW);
     this._entry = new MenuEntry({ slot: 0, row: MENU_LABEL_ROW_BACK, y: this._backPos.y });
     this._hovered = false;
     this._timelineMs = 0;
@@ -349,7 +338,7 @@ export class PanelMenuView {
       });
     }
     wgl.drawTexturePro(item, wgl.makeRectangle(0.0, 0.0, itemW, itemH), dst, origin, 0.0, wgl.makeColor(1, 1, 1, 1));
-    const alpha = MenuView._labelAlpha(entry.hoverAmount);
+    const alpha = MenuView.labelAlpha(entry.hoverAmount);
     const tint = wgl.makeColor(255 / 255, 255 / 255, 255 / 255, alpha / 255);
     const src = wgl.makeRectangle(0.0, entry.row * MENU_LABEL_ROW_HEIGHT, MENU_LABEL_WIDTH, MENU_LABEL_ROW_HEIGHT);
     const labelOffsetX = MENU_LABEL_OFFSET_X * itemScale;
@@ -366,7 +355,7 @@ export class PanelMenuView {
 
   protected _drawSign(): void {
     const screenW = this.state.config.display.width;
-    const [scale, shiftX] = MenuView._signLayoutScale(int(screenW));
+    const [scale, shiftX] = MenuView.signLayoutScale(int(screenW));
     const signPos = new Vec2(screenW + MENU_SIGN_POS_X_PAD, screenW > MENU_SCALE_SMALL_THRESHOLD ? MENU_SIGN_POS_Y : MENU_SIGN_POS_Y_SMALL);
     const signW = MENU_SIGN_WIDTH * scale;
     const signH = MENU_SIGN_HEIGHT * scale;

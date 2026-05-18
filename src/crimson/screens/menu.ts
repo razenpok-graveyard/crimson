@@ -387,7 +387,7 @@ export class MenuView {
     if (InputState.wasKeyPressed(9)) {
       const reverse = InputState.isKeyDown(16) || InputState.isKeyDown(16);
       const delta = reverse ? -1 : 1;
-      this._selectedIndex = ((this._selectedIndex + delta) + this._menuEntries.length) % this._menuEntries.length;
+      this._selectedIndex = (((this._selectedIndex + delta) % this._menuEntries.length) + this._menuEntries.length) % this._menuEntries.length;
       this._focusTimerMs = 1000;
     }
 
@@ -586,7 +586,7 @@ export class MenuView {
         rotationDeg: rotationDeg,
         tint: tint,
       });
-      let glowAlpha: typeof alpha;
+      let glowAlpha: number;
       if (this._menuEntryEnabled(entry)) {
         glowAlpha = alpha;
         if (0 <= entry.readyTimerMs && entry.readyTimerMs < 0x100) {
@@ -887,13 +887,13 @@ export function menuGroundCamera(state: GameState): Vec2 {
 export function ensureMenuGround(state: GameState, opts: { regenerate?: boolean } = {}): GroundRenderer {
   const regenerate = opts.regenerate ?? false;
   const resources = requireRuntimeResources(state);
-  let ground = state.menuGround;
+  let ground: GroundRenderer | null = state.menuGround;
   const generatedNewTerrain = ground === null || regenerate;
 
   let terrain!: ReturnType<typeof advanceUnlockTerrain>;
-  let base: wgl.Texture;
-  let overlay: wgl.Texture;
-  let detail: wgl.Texture;
+  let base: any;
+  let overlay: any;
+  let detail: any;
   if (generatedNewTerrain) {
     terrain = advanceUnlockTerrain(state.rng, { unlockIndex: int(state.status.questUnlockIndex), width: 1024, height: 1024 });
     [base, overlay, detail] = resolveTerrainSlots(terrain.terrainSlots, resources.texture.bind(resources));

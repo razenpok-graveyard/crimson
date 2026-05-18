@@ -15,7 +15,7 @@ import { GameMode } from '@crimson/game-modes.ts';
 import { drawClassicMenuPanel } from '@crimson/ui/menu-panel.ts';
 import { UiButtonState, buttonDraw, buttonUpdate, buttonWidth } from '@crimson/ui/perk-menu.ts';
 import { requireRuntimeResources } from '@crimson/screens/assets.ts';
-import { MENU_PANEL_OFFSET_Y, MENU_PANEL_WIDTH, MENU_SCALE_SMALL_THRESHOLD, MENU_SIGN_HEIGHT, MENU_SIGN_OFFSET_X, MENU_SIGN_OFFSET_Y, MENU_SIGN_POS_X_PAD, MENU_SIGN_POS_Y, MENU_SIGN_POS_Y_SMALL, MENU_SIGN_WIDTH, MenuView, drawMenuCursorHelper, ensureMenuGround, menuGroundCamera, uiElementAnim } from '@crimson/screens/menu.ts';
+import { MENU_PANEL_OFFSET_Y, MENU_PANEL_WIDTH, MENU_SCALE_SMALL_THRESHOLD, MENU_SIGN_HEIGHT, MENU_SIGN_OFFSET_X, MENU_SIGN_OFFSET_Y, MENU_SIGN_POS_X_PAD, MENU_SIGN_POS_Y, MENU_SIGN_POS_Y_SMALL, MENU_SIGN_WIDTH, MenuView, drawMenuCursorHelper, ensureMenuGround, menuGroundCamera, uiElementAnim, signLayoutScale } from '@crimson/screens/menu.ts';
 import { UI_SHADOW_OFFSET, drawUiQuadShadow } from '@crimson/ui/shadow.ts';
 import { FADE_TO_GAME_ACTIONS, PANEL_TIMELINE_END_MS, PANEL_TIMELINE_START_MS } from '@crimson/screens/panels/base.ts';
 import { drawScreenFade } from '@crimson/screens/transitions.ts';
@@ -117,7 +117,7 @@ export class QuestsMenuView {
   open(): void {
     const layoutW = this.state.config.display.width;
     this._menuScreenWidth = int(layoutW);
-    this._widescreenYShift = MenuView._menuWidescreenYShift(layoutW);
+    this._widescreenYShift = MenuView.menuWidescreenYShift(layoutW);
     // Sign and ground match the main menu/panels.
     this._initGround();
     this._action = null;
@@ -361,7 +361,7 @@ export class QuestsMenuView {
   }
 
   protected static _digitRowPressed(): number | null {
-    const keys: [number, number][] = [[49, 0], [50, 1], [51, 2], [52, 3], [53, 4], [54, 5], [55, 6], [56, 7], [57, 8], [48, 9]];
+    const keys = [[49, 0], [50, 1], [51, 2], [52, 3], [53, 4], [54, 5], [55, 6], [56, 7], [57, 8], [48, 9]] as const;
     for (let [key, row] of keys) {
       if (InputState.wasKeyPressed(key)) {
         return row;
@@ -621,7 +621,7 @@ export class QuestsMenuView {
 
   protected _drawSign(): void {
     const screenW = this.state.config.display.width;
-    const [scale, shiftX] = MenuView._signLayoutScale(int(screenW));
+    const [scale, shiftX] = MenuView.signLayoutScale(int(screenW));
     const signPos = new Vec2(screenW + MENU_SIGN_POS_X_PAD, screenW > MENU_SCALE_SMALL_THRESHOLD ? MENU_SIGN_POS_Y : MENU_SIGN_POS_Y_SMALL);
     const signW = MENU_SIGN_WIDTH * scale;
     const signH = MENU_SIGN_HEIGHT * scale;

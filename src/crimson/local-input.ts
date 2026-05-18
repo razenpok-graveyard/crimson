@@ -152,8 +152,8 @@ export class LocalInputInterpreter {
       return int(current);
     }
 
-    const currentDist = currentCreature.pos.sub(player.pos).length();
-    const candidateDist = candidateCreature.pos.sub(player.pos).length();
+    const currentDist = (currentCreature.pos.sub(player.pos)).length();
+    const candidateDist = (candidateCreature.pos.sub(player.pos)).length();
     if (candidateDist + _COMPUTER_TARGET_SWITCH_HYSTERESIS < currentDist) {
       state.computerTargetCreatureIndex = int(candidate);
       return int(candidate);
@@ -218,7 +218,7 @@ export class LocalInputInterpreter {
         targetPos = _COMPUTER_ARENA_CENTER;
       }
 
-      const [moveDir, moveDist] = targetPos.sub(player.pos).normalizedWithLength();
+      const [moveDir, moveDist] = (targetPos.sub(player.pos)).normalizedWithLength();
       if (moveDist > 1e-6) {
         moveVec = moveDir;
       }
@@ -227,7 +227,7 @@ export class LocalInputInterpreter {
       moveBackwardPressed = keyDownWithSinglePlayerAlt(moveBackwardKey, { altKey: _ALT_MOVE_KEY_DOWN, config: config, playerIndex: idx });
       turnLeftPressed = keyDownWithSinglePlayerAlt(turnLeftKey, { altKey: _ALT_MOVE_KEY_LEFT, config: config, playerIndex: idx });
       turnRightPressed = keyDownWithSinglePlayerAlt(turnRightKey, { altKey: _ALT_MOVE_KEY_RIGHT, config: config, playerIndex: idx });
-      moveVec = new Vec2(Number(turnRightPressed) - Number(turnLeftPressed), Number(moveBackwardPressed) - Number(moveForwardPressed));
+      moveVec = new Vec2((Number((turnRightPressed ? 1 : 0))) - (Number((turnLeftPressed ? 1 : 0))), (Number((moveBackwardPressed ? 1 : 0))) - (Number((moveForwardPressed ? 1 : 0))));
     } else if (moveModeType === MovementControlType.DUAL_ACTION_PAD) {
       axisY = -inputAxisValue(moveAxisY, { playerIndex: idx });
       axisX = -inputAxisValue(moveAxisX, { playerIndex: idx });
@@ -264,7 +264,7 @@ export class LocalInputInterpreter {
     }
     let aim = new Vec2(player.aim.x, player.aim.y);
     let computerAutoFire = false;
-    let targetIndex: typeof computerTargetIndex;
+    let targetIndex: number;
     if (aimScheme === AimScheme.MOUSE) {
       aim = mouseWorld;
       delta = aim.sub(player.pos);
@@ -331,7 +331,7 @@ export class LocalInputInterpreter {
         computerAutoFire = targetDist < _COMPUTER_AUTO_FIRE_DISTANCE;
       } else {
         let awayMag: any;
-        [away, awayMag] = player.pos.sub(_COMPUTER_ARENA_CENTER).normalizedWithLength();
+        [away, awayMag] = (player.pos.sub(_COMPUTER_ARENA_CENTER)).normalizedWithLength();
         if (awayMag <= 1e-6) {
           away = new Vec2(0.0, -1.0);
         }

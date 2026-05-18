@@ -15,7 +15,7 @@ import { WEAPON_TABLE, WeaponId, weaponEntryForProjectileTypeId } from '@crimson
 import { playerStartReload, weaponEntry } from '@crimson/weapon-runtime/assign.ts';
 import { MaskCenteredJitter, ModuloCenteredJitter, ModuloSpeedScale, MultiPlasmaFanMode, NoJitter, NoSpeedScale, ParticleStreamMode, PrimaryPelletsMode, SecondaryShotMode, SwarmerDumpMode, UseAimTargetHint, resolveFireRecipe } from '@crimson/weapon-runtime/fire-recipes.ts';
 import { ownerRefForPlayer, ownerRefForPlayerProjectiles, travelBudgetForTypeId } from '@crimson/weapon-runtime/spawn.ts';
-import type { CreatureState } from '@crimson/creatures/runtime.ts';
+import { CreatureState } from '@crimson/creatures/runtime.ts';
 import { playerTakeDamage } from '@crimson/player-damage.ts';
 
 export const WEAPON_COUNT_SIZE = Math.max(...Array.from(WEAPON_TABLE, (entry) => int(entry.weaponId))) + 1;
@@ -273,7 +273,7 @@ export function fireWeapon(ctx: WeaponFireCtx): WeaponFireResult {
   const aimDelta = aim.sub(player.pos);
   const aimHeading = headingFromDeltaF32({ dx: aimDelta.x, dy: aimDelta.y });
 
-  const muzzle = player.pos.add(Vec2.fromHeading(aimHeading).rotated(-0.150915).mul(16.0));
+  const muzzle = player.pos.add((Vec2.fromHeading(aimHeading)).rotated(-0.150915).mul(16.0));
   const weaponFlags = int(weapon.flags || 0);
   if (weaponFlags & 0x1) {
     // Native gameplay fire uses four exact `player_update` RNG sites for
@@ -288,9 +288,9 @@ export function fireWeapon(ctx: WeaponFireCtx): WeaponFireResult {
   }
 
   const shotAngle = nativeShotAngleWithJitter({ aim: aim, playerPos: player.pos, spreadHeat: player.spreadHeat, rng: state.rng });
-  let particleAngle = Vec2.fromHeading(shotAngle).toAngle();
+  let particleAngle = (Vec2.fromHeading(shotAngle)).toAngle();
   if (weaponId === WeaponId.FLAMETHROWER || weaponId === WeaponId.BLOW_TORCH || weaponId === WeaponId.HR_FLAMER) {
-    particleAngle = Vec2.fromHeading(aimHeading).toAngle();
+    particleAngle = (Vec2.fromHeading(aimHeading)).toAngle();
   }
 
   // Native gameplay fire consumes one exact `player_update` RNG draw for shot
@@ -343,7 +343,7 @@ export function fireWeapon(ctx: WeaponFireCtx): WeaponFireResult {
     const typeId = recipe.mode.typeId;
     const targeting = recipe.mode.targeting;
     let targetHint = null;
-    let spawnCreatures = null;
+    let spawnCreatures: null | readonly CreatureState[] = null;
     if (targeting instanceof UseAimTargetHint) {
       targetHint = aim;
       spawnCreatures = creatures;
@@ -356,7 +356,7 @@ export function fireWeapon(ctx: WeaponFireCtx): WeaponFireResult {
     if (slow) {
       state.particles.spawnParticleSlow({
         pos: muzzle,
-        angle: Vec2.fromHeading(shotAngle).toAngle(),
+        angle: (Vec2.fromHeading(shotAngle)).toAngle(),
         owner: owner,
       });
     } else {

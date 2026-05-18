@@ -11,7 +11,7 @@ export function drawBulletTrail(ctx: ProjectileDrawCtx): boolean {
   const renderer = ctx.renderer;
   const resources = renderer.frame.resources;
   const typeId = int(ctx.typeId);
-  if (!renderer._isBulletTrailType(typeId)) {
+  if (!renderer.isBulletTrailType(typeId)) {
     return false;
   }
 
@@ -20,16 +20,16 @@ export function drawBulletTrail(ctx: ProjectileDrawCtx): boolean {
   let drawn = false;
 
   const bulletTrail = resources.texture(TextureId.BULLET_TRAIL);
-  let origin: ReturnType<typeof projOrigin>;
+  let origin: ReturnType<typeof projOrigin> | Vec2;
   if (bulletTrail !== null) {
     origin = projOrigin(ctx.proj, ctx.pos);
     const originScreen = renderer.worldToScreen(origin);
-    drawn = renderer._drawBulletTrail(originScreen, ctx.screenPos, { typeId: typeId, alpha: alphaByte, scale: ctx.scale, angle: ctx.angle });
+    drawn = renderer.drawBulletTrail(originScreen, ctx.screenPos, { typeId: typeId, alpha: alphaByte, scale: ctx.scale, angle: ctx.angle });
   }
 
   const bullet = resources.texture(TextureId.BULLET_I);
   if (bullet !== null && ctx.life >= 0.39) {
-    const size = renderer._bulletSpriteSize(typeId, { scale: ctx.scale });
+    const size = renderer.bulletSpriteSize(typeId, { scale: ctx.scale });
     const src = wgl.makeRectangle(0.0, 0.0, bullet.width, bullet.height);
     const dst = wgl.makeRectangle(ctx.screenPos.x, ctx.screenPos.y, size, size);
     origin = new Vec2(size * 0.5, size * 0.5);

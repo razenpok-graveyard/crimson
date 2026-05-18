@@ -116,6 +116,10 @@ function _pathStem(path: string): string {
   return ext === '' ? base : base.slice(0, -ext.length);
 }
 
+function _pathIsAbsolute(path: string): boolean {
+  return path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(path);
+}
+
 function _dirname(path: string): string {
   const idx = path.lastIndexOf('/');
   if (idx < 0) {
@@ -206,7 +210,7 @@ export class HighScoreRecord {
   setName(opts: { value: string }): void;
   setName(value: string): void;
   setName(valueOrOpts: string | { value: string }): void {
-    const value: string = typeof valueOrOpts === 'object' && valueOrOpts !== null && 'value' in valueOrOpts ? valueOrOpts.value : valueOrOpts as string;
+    const value: string = typeof valueOrOpts === 'object' && valueOrOpts !== null ? valueOrOpts.value : valueOrOpts as string;
     const encoded = latin1EncodeIgnore(value).slice(0, NAME_SIZE - 1);
     this.data.fill(0, 0, NAME_SIZE);
     this.data.set(encoded, 0);
@@ -406,9 +410,9 @@ export function highscoreDateChecksum(year: number, month: number, day: number):
   let iVar1 = Math.floor((0x0E - int(month)) / 0x0C);
   let iVar2 = (int(year) - iVar1) + 0x12C0;
   iVar1 = ((Math.floor((iVar2 + (Math.floor(iVar2 / (2 ** 31)) & 3)) / (2 ** 2))) - 0x7D2D + int(day) + (Math.floor((Math.floor(iVar2 / 400) + (Math.floor(((int(month) + iVar1 * 0x0C) * 0x99 - 0x1C9) / 5 + iVar2) * 0x16D)) - iVar2 / 100)));
-  iVar2 = (((((((iVar1 - iVar1 % 7) + 0x7BFD) + 0x23AB1) % 0x23AB1) + 0x8EAC) % 0x8EAC) + 0x5B5) % 0x5B5;
+  iVar2 = ((((((((((iVar1 - iVar1 % 7) + 0x7BFD) % 0x23AB1) + 0x23AB1) % 0x23AB1) % 0x8EAC) + 0x8EAC) % 0x8EAC) % 0x5B5) + 0x5B5) % 0x5B5;
   iVar1 = Math.floor(iVar2 / 0x5B4);
-  return Math.floor((((iVar2 - iVar1) + 0x16D) % 0x16D + iVar1) / 7 + 1);
+  return Math.floor(((((iVar2 - iVar1) % 0x16D) + 0x16D) % 0x16D + iVar1) / 7 + 1);
 }
 
 export function scoresDirForBaseDir(baseDir: string): string {
@@ -519,24 +523,19 @@ export function readHighscoreRecords(path: string): HighScoreRecord[] {
   }
   const records: HighScoreRecord[] = [];
   const fp = _openTextFile(String(path), { mode: 'rb', encoding: 'utf-8' });
-  let blob: ReturnType<typeof fp.read>;
-  let payload: ReturnType<typeof blob.slice>;
-  let storedChecksum: ReturnType<typeof int>;
-  let decoded: ReturnType<typeof decodeRecordPayload>;
-  let computed: ReturnType<typeof scoreChecksum>;
   try {
     while (true) {
-      blob = fp.read(RECORD_WIRE_SIZE);
+      const blob = fp.read(RECORD_WIRE_SIZE);
       if (blob.length === 0) {
         break;
       }
       if (blob.length !== RECORD_WIRE_SIZE) {
         break;
       }
-      payload = blob.slice(0, RECORD_SIZE);
-      storedChecksum = int(pythonStructFormat('<I').unpackFrom(blob, RECORD_SIZE)[0]);
-      decoded = decodeRecordPayload(payload);
-      computed = scoreChecksum(decoded);
+      const payload = blob.slice(0, RECORD_SIZE);
+      const storedChecksum = int(pythonStructFormat('<I').unpackFrom(blob, RECORD_SIZE)[0]);
+      const decoded = decodeRecordPayload(payload);
+      const computed = scoreChecksum(decoded);
       if (computed !== storedChecksum) {
         continue;
       }
@@ -551,15 +550,13 @@ export function readHighscoreRecords(path: string): HighScoreRecord[] {
 export function writeHighscoreRecords(path: string, records: HighScoreRecord[]): void {
   _mkdirParents(_dirname(String(path)));
   const fp = _openTextFile(String(path), { mode: 'wb', encoding: 'utf-8' });
-  let encoded: ReturnType<typeof encodeRecordPayload>;
-  let checksum: ReturnType<typeof scoreChecksum>;
   try {
     for (let record of records) {
       record = record.copy();
       record.trimTrailingSpaces();
       record.ensureDateFields();
-      encoded = encodeRecordPayload(bytesFrom(record.data));
-      checksum = scoreChecksum(bytesFrom(record.data));
+      const encoded = encodeRecordPayload(bytesFrom(record.data));
+      const checksum = scoreChecksum(bytesFrom(record.data));
       fp.write(encoded);
       fp.write(pythonStructFormat('<I').pack(checksum));
     }
@@ -570,7 +567,7 @@ export function writeHighscoreRecords(path: string, records: HighScoreRecord[]):
 
 export function readHighscoreTable(path: string, opts: { gameModeId: GameMode }): HighScoreRecord[] {
   const gameModeId = opts.gameModeId;
-  let records = readHighscoreRecords(path);
+  let records: HighScoreRecord[] | unknown[] = readHighscoreRecords(path);
   records = records.filter((r) => int(r.gameModeId) === int(gameModeId));
   return sortHighscores(records, { gameModeId: gameModeId }).slice(0, TABLE_MAX);
 }

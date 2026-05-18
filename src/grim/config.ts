@@ -42,8 +42,8 @@ export class CrimsonDisplayConfig {
   fxDetailEnabled(opts: { level: number; default?: boolean }): boolean;
   fxDetailEnabled(level: number, _default?: boolean): boolean;
   fxDetailEnabled(levelOrOpts: number | { level: number; default?: boolean }, _defaultArg: boolean | undefined = undefined): boolean {
-    const level: number = typeof levelOrOpts === 'object' && levelOrOpts !== null && 'level' in levelOrOpts ? levelOrOpts.level : levelOrOpts as number;
-    const _default: boolean = typeof levelOrOpts === 'object' && levelOrOpts !== null && 'level' in levelOrOpts ? levelOrOpts.default ?? false : _defaultArg ?? false;
+    const level: number = typeof levelOrOpts === 'object' && levelOrOpts !== null ? levelOrOpts.level : levelOrOpts as number;
+    const _default: boolean = typeof levelOrOpts === 'object' && levelOrOpts !== null ? levelOrOpts.default ?? false : _defaultArg ?? false;
     const _ = _default;
     return Boolean(this.fxDetail[int(level)]);
   }
@@ -51,8 +51,8 @@ export class CrimsonDisplayConfig {
   setFxDetail(opts: { level: number; enabled: boolean }): void;
   setFxDetail(level: number, enabled: boolean): void;
   setFxDetail(levelOrOpts: number | { level: number; enabled: boolean }, enabledArg: boolean | undefined = undefined): void {
-    const level: number = typeof levelOrOpts === 'object' && levelOrOpts !== null && 'level' in levelOrOpts ? levelOrOpts.level : levelOrOpts as number;
-    const enabled: boolean = typeof levelOrOpts === 'object' && levelOrOpts !== null && 'level' in levelOrOpts ? levelOrOpts.enabled : enabledArg as boolean;
+    const level: number = typeof levelOrOpts === 'object' && levelOrOpts !== null ? levelOrOpts.level : levelOrOpts as number;
+    const enabled: boolean = typeof levelOrOpts === 'object' && levelOrOpts !== null ? levelOrOpts.enabled : enabledArg as boolean;
     const idx = int(level);
     const values = Array.from(this.fxDetail);
     values[idx] = enabled;
@@ -131,7 +131,7 @@ export class CrimsonProfileConfig {
   setPlayerNameInput(opts: { name: string }): void;
   setPlayerNameInput(name: string): void;
   setPlayerNameInput(nameOrOpts: string | { name: string }): void {
-    const name: string = typeof nameOrOpts === 'object' && nameOrOpts !== null && 'name' in nameOrOpts ? nameOrOpts.name : nameOrOpts as string;
+    const name: string = typeof nameOrOpts === 'object' && nameOrOpts !== null ? nameOrOpts.name : nameOrOpts as string;
     const encoded = latin1EncodeIgnore(name).slice(0, PLAYER_NAME_MAX_BYTES);
     const buf = new Uint8Array(PLAYER_NAME_SIZE);
     buf.set(encoded, 0);
@@ -214,7 +214,7 @@ export class CrimsonControlsConfig {
   player(opts: { playerIndex: number }): CrimsonPlayerControls;
   player(playerIndex: number): CrimsonPlayerControls;
   player(playerIndexOrOpts: number | { playerIndex: number }): CrimsonPlayerControls {
-    const playerIndex: number = typeof playerIndexOrOpts === 'object' && playerIndexOrOpts !== null && 'playerIndex' in playerIndexOrOpts ? playerIndexOrOpts.playerIndex : playerIndexOrOpts as number;
+    const playerIndex: number = typeof playerIndexOrOpts === 'object' && playerIndexOrOpts !== null ? playerIndexOrOpts.playerIndex : playerIndexOrOpts as number;
     return this.players[_playerIndex(playerIndex)];
   }
 }
@@ -266,8 +266,8 @@ export const EXT_DIRECTION_ARROW_ON = 2;
 export const KEYBIND_UNBOUND_CODE = 0x17E;
 export const RESERVED_KEYBIND_SLOT_COUNT = 2;
 export const PADDING_KEYBIND_SLOT_COUNT = 3;
-const _DEFAULT_WIRE_RESERVED_KEYS = [KEYBIND_UNBOUND_CODE, KEYBIND_UNBOUND_CODE];
-const _DEFAULT_WIRE_PADDING = [KEYBIND_UNBOUND_CODE, KEYBIND_UNBOUND_CODE, KEYBIND_UNBOUND_CODE];
+const _DEFAULT_WIRE_RESERVED_KEYS = [KEYBIND_UNBOUND_CODE, KEYBIND_UNBOUND_CODE] as const;
+const _DEFAULT_WIRE_PADDING = [KEYBIND_UNBOUND_CODE, KEYBIND_UNBOUND_CODE, KEYBIND_UNBOUND_CODE] as const;
 export const PLAYER_BIND_BLOCK_STRUCT = constructStruct([
   constructField('move_forward', constructInt32sl()),
   constructField('move_backward', constructInt32sl()),

@@ -18,9 +18,10 @@ export function perkApply(state: GameplayState, players: PlayerState[], perkId: 
     return;
   }
   const owner = players[0];
+  let handler: ReturnType<typeof PERK_APPLY_HANDLERS.get>;
   try {
     adjustPerkCount(owner, perkId);
-    const handler = PERK_APPLY_HANDLERS.get(perkId) ?? null;
+    handler = PERK_APPLY_HANDLERS.get(perkId) ?? null;
     if (handler !== null) {
       handler(new PerkApplyCtx({ state: state, players: players, owner: owner, perkId: perkId, perkState: perkState, dt: dt, creatures: creatures }));
     }

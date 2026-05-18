@@ -52,7 +52,7 @@ export function drawPulseGun(ctx: ProjectileDrawCtx): boolean {
 
     tint = new RGBA(0.1, 0.6, 0.2, alpha * 0.7).toRl();
     wgl.beginBlendMode(wgl.BlendMode.ADDITIVE);
-    renderer._drawAtlasSprite(
+    renderer.drawAtlasSprite(
       ctx.texture,
       { grid: grid, frame: frame, pos: ctx.screenPos, scale: spriteScale, rotationRad: ctx.angle, tint: tint },
     );
@@ -74,7 +74,7 @@ export function drawPulseGun(ctx: ProjectileDrawCtx): boolean {
 
   tint = new RGBA(1.0, 1.0, 1.0, fadeAlpha).toRl();
   wgl.beginBlendMode(wgl.BlendMode.ADDITIVE);
-  renderer._drawAtlasSprite(
+  renderer.drawAtlasSprite(
     ctx.texture,
     { grid: grid, frame: frame, pos: ctx.screenPos, scale: spriteScale, rotationRad: ctx.angle, tint: tint },
   );
@@ -124,7 +124,7 @@ export function drawSplitterOrBlade(ctx: ProjectileDrawCtx): boolean {
   }
 
   const tint = new RGBA(rgb[0], rgb[1], rgb[2], ctx.alpha).toRl();
-  renderer._drawAtlasSprite(
+  renderer.drawAtlasSprite(
     ctx.texture,
     { grid: grid, frame: frame, pos: ctx.screenPos, scale: spriteScale, rotationRad: rotationRad, tint: tint },
   );
@@ -163,32 +163,37 @@ export function drawPlagueSpreader(ctx: ProjectileDrawCtx): boolean {
         return;
       }
       const posScreen = renderer.worldToScreen(pos);
-      renderer._drawAtlasSprite(
+      renderer.drawAtlasSprite(
         texture,
         { grid: grid, frame: frame, pos: posScreen, scale: spriteScale, rotationRad: 0.0, tint: tint },
       );
     };
 
     beginDarkenSrcZeroBlend();
+    let offset: ReturnType<typeof Vec2.fromHeading>;
+    let phase: ReturnType<typeof int>;
+    let cosPhase: ReturnType<typeof Math.cos>;
+    let sinPhase: ReturnType<typeof Math.sin>;
+    let sinPhase120: ReturnType<typeof Math.sin>;
     try {
       drawPlagueQuad({ pos: ctx.pos, size: 60.0 });
 
-      const offset = Vec2.fromHeading(ctx.angle + Math.PI).mul(15.0);
+      offset = Vec2.fromHeading(ctx.angle + Math.PI).mul(15.0);
       drawPlagueQuad({
         pos: ctx.pos.add(offset),
         size: 60.0,
       });
 
-      const phase = int(ctx.projIndex) + renderer.frame.elapsedMs * 0.01;
-      const cosPhase = Math.cos(phase);
-      const sinPhase = Math.sin(phase);
+      phase = int(ctx.projIndex) + renderer.frame.elapsedMs * 0.01;
+      cosPhase = Math.cos(phase);
+      sinPhase = Math.sin(phase);
       drawPlagueQuad({
         pos: ctx.pos.offset({ dx: cosPhase * cosPhase - 5.0, dy: sinPhase * 11.0 - 5.0 }),
         size: 52.0,
       });
 
       const phase120 = phase + 2.0943952;
-      const sinPhase120 = Math.sin(phase120);
+      sinPhase120 = Math.sin(phase120);
       drawPlagueQuad({
         pos: ctx.pos.add(Vec2.fromPolar(phase120, 10.0)),
         size: 62.0,
@@ -220,7 +225,7 @@ export function drawPlagueSpreader(ctx: ProjectileDrawCtx): boolean {
   tint = new RGBA(1.0, 1.0, 1.0, fadeAlpha).toRl();
   beginDarkenSrcZeroBlend();
   try {
-    renderer._drawAtlasSprite(
+    renderer.drawAtlasSprite(
       texture,
       { grid: grid, frame: frame, pos: ctx.screenPos, scale: spriteScale, rotationRad: 0.0, tint: tint },
     );

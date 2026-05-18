@@ -7,10 +7,10 @@ import { RngCallerStatic } from '@crimson/rng-caller-static.ts';
 
 export type TerrainSlotTriplet = [number, number, number];
 
-export const Q1_TERRAIN_SLOTS: TerrainSlotTriplet = [0, 1, 0];
-export const Q2_TERRAIN_SLOTS: TerrainSlotTriplet = [2, 3, 2];
-export const Q3_TERRAIN_SLOTS: TerrainSlotTriplet = [4, 5, 4];
-export const Q4_TERRAIN_SLOTS: TerrainSlotTriplet = [6, 7, 6];
+export const Q1_TERRAIN_SLOTS: TerrainSlotTriplet = [0, 1, 0] as const;
+export const Q2_TERRAIN_SLOTS: TerrainSlotTriplet = [2, 3, 2] as const;
+export const Q3_TERRAIN_SLOTS: TerrainSlotTriplet = [4, 5, 4] as const;
+export const Q4_TERRAIN_SLOTS: TerrainSlotTriplet = [6, 7, 6] as const;
 export const DEFAULT_TERRAIN_SLOTS: TerrainSlotTriplet = Q1_TERRAIN_SLOTS;
 export const UNLOCK_TERRAIN_SLOTS: Map<number, TerrainSlotTriplet> = new Map([
   [40, Q4_TERRAIN_SLOTS], // after quest 4.10 "The End of All"

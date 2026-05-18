@@ -435,14 +435,14 @@ export class RollbackSnapshotRing<SnapshotT> {
   hasTick(opts: { tickIndex: number }): boolean;
   hasTick(tickIndex: number): boolean;
   hasTick(tickIndexOrOpts: number | { tickIndex: number }): boolean {
-    const tickIndex: number = typeof tickIndexOrOpts === 'object' && tickIndexOrOpts !== null && 'tickIndex' in tickIndexOrOpts ? tickIndexOrOpts.tickIndex : tickIndexOrOpts as number;
+    const tickIndex: number = typeof tickIndexOrOpts === 'object' && tickIndexOrOpts !== null ? tickIndexOrOpts.tickIndex : tickIndexOrOpts as number;
     return this._byTick.has(int(tickIndex));
   }
 
   restoreExact(opts: { tickIndex: number }): SnapshotT | null;
   restoreExact(tickIndex: number): SnapshotT | null;
   restoreExact(tickIndexOrOpts: number | { tickIndex: number }): SnapshotT | null {
-    const tickIndex: number = typeof tickIndexOrOpts === 'object' && tickIndexOrOpts !== null && 'tickIndex' in tickIndexOrOpts ? tickIndexOrOpts.tickIndex : tickIndexOrOpts as number;
+    const tickIndex: number = typeof tickIndexOrOpts === 'object' && tickIndexOrOpts !== null ? tickIndexOrOpts.tickIndex : tickIndexOrOpts as number;
     const blob = this._byTick.get(int(tickIndex)) ?? null;
     if (blob === null) {
       return null;
@@ -453,7 +453,7 @@ export class RollbackSnapshotRing<SnapshotT> {
   restoreLatestAtOrBefore(opts: { tickIndex: number }): [number, SnapshotT] | null;
   restoreLatestAtOrBefore(tickIndex: number): [number, SnapshotT] | null;
   restoreLatestAtOrBefore(tickIndexOrOpts: number | { tickIndex: number }): [number, SnapshotT] | null {
-    const tickIndex: number = typeof tickIndexOrOpts === 'object' && tickIndexOrOpts !== null && 'tickIndex' in tickIndexOrOpts ? tickIndexOrOpts.tickIndex : tickIndexOrOpts as number;
+    const tickIndex: number = typeof tickIndexOrOpts === 'object' && tickIndexOrOpts !== null ? tickIndexOrOpts.tickIndex : tickIndexOrOpts as number;
     const target = int(tickIndex);
     let candidate: number | null = null;
     for (const tick of this._byTick.keys()) {

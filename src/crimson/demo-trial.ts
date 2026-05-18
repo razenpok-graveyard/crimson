@@ -34,7 +34,7 @@ export function formatDemoTrialTime(ms: number): string {
     value = 0;
   }
   const minutes = Math.floor(value / 60_000);
-  const seconds = Math.floor(value / 1_000) % 60;
+  const seconds = (Math.floor(value / 1_000)) % 60;
   const centiseconds = Math.floor((value % 1_000) / 10);
   return `${minutes}:${String(seconds).padStart(2, '0')}.${String(centiseconds).padStart(2, '0')}`;
 }

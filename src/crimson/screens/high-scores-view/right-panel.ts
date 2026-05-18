@@ -129,7 +129,7 @@ function drawRightPanelQuestOptions(view: HighScoresView, opts: { resources: Run
   // Dropdown widgets (state_14 quest variant).
   const showScoresItems: [string, string, string, string] = ['Best of all time', 'Best of month', 'Best of week', 'Best of day'];
   const playerItems: [string, string, string, string] = ['1 player', '2 players', '3 players', '4 players'];
-  const modeItems: [string, number][] = [['Quests', 3], ['Rush', 2], ['Survival', 1]];
+  const modeItems: [string, number][] = [['Quests', 3], ['Rush', 2], ['Survival', 1]] as const;
   if (int(view.state.status.questUnlockIndex) >= 0x28) {
     modeItems.push(['Typ\'o\'Shooter', 4]);
   }
@@ -148,7 +148,7 @@ function drawRightPanelQuestOptions(view: HighScoresView, opts: { resources: Run
   }
   const nameSelected = Math.max(0, Math.min(names.length - 1, int(view.state.config.profile.selectedSavedNameSlot)));
 
-  const dropdowns: [boolean, Vec2, number, string[], number, Vec2, Vec2, boolean][] = [[view.playerCountOpen, new Vec2(HS_RIGHT_PLAYER_COUNT_WIDGET_X, HS_RIGHT_PLAYER_COUNT_WIDGET_Y), HS_RIGHT_PLAYER_COUNT_WIDGET_W, Array.from(playerItems), playerSelected, new Vec2(HS_RIGHT_PLAYER_COUNT_VALUE_X, HS_RIGHT_PLAYER_COUNT_VALUE_Y), new Vec2(HS_RIGHT_PLAYER_COUNT_DROP_X, HS_RIGHT_PLAYER_COUNT_DROP_Y), !(view.gameModeOpen || view.showScoresOpen || view.scoreListOpen)], [view.gameModeOpen, new Vec2(HS_RIGHT_GAME_MODE_WIDGET_X, HS_RIGHT_GAME_MODE_WIDGET_Y), HS_RIGHT_GAME_MODE_WIDGET_W, modeItems.map(([label, _id]) => label), modeSelected, new Vec2(HS_RIGHT_GAME_MODE_VALUE_X, HS_RIGHT_GAME_MODE_VALUE_Y), new Vec2(HS_RIGHT_GAME_MODE_DROP_X, HS_RIGHT_GAME_MODE_DROP_Y), !(view.playerCountOpen || view.showScoresOpen || view.scoreListOpen)], [view.showScoresOpen, new Vec2(HS_RIGHT_SHOW_SCORES_WIDGET_X, HS_RIGHT_SHOW_SCORES_WIDGET_Y), HS_RIGHT_SHOW_SCORES_WIDGET_W, Array.from(showScoresItems), showScoresSelected, new Vec2(HS_RIGHT_SHOW_SCORES_VALUE_X, HS_RIGHT_SHOW_SCORES_VALUE_Y), new Vec2(HS_RIGHT_SHOW_SCORES_DROP_X, HS_RIGHT_SHOW_SCORES_DROP_Y), !(view.playerCountOpen || view.gameModeOpen || view.scoreListOpen)], [view.scoreListOpen, new Vec2(HS_RIGHT_SCORE_LIST_WIDGET_X, HS_RIGHT_SCORE_LIST_WIDGET_Y), HS_RIGHT_SCORE_LIST_WIDGET_W, names, nameSelected, new Vec2(HS_RIGHT_SCORE_LIST_VALUE_X, HS_RIGHT_SCORE_LIST_VALUE_Y), new Vec2(HS_RIGHT_SCORE_LIST_DROP_X, HS_RIGHT_SCORE_LIST_DROP_Y), !(view.playerCountOpen || view.gameModeOpen || view.showScoresOpen)]];
+  const dropdowns: [boolean, Vec2, number, string[], number, Vec2, Vec2, boolean][] = [[view._playerCountOpen, new Vec2(HS_RIGHT_PLAYER_COUNT_WIDGET_X, HS_RIGHT_PLAYER_COUNT_WIDGET_Y), HS_RIGHT_PLAYER_COUNT_WIDGET_W, Array.from(playerItems), playerSelected, new Vec2(HS_RIGHT_PLAYER_COUNT_VALUE_X, HS_RIGHT_PLAYER_COUNT_VALUE_Y), new Vec2(HS_RIGHT_PLAYER_COUNT_DROP_X, HS_RIGHT_PLAYER_COUNT_DROP_Y), !(view._gameModeOpen || view._showScoresOpen || view._scoreListOpen)], [view._gameModeOpen, new Vec2(HS_RIGHT_GAME_MODE_WIDGET_X, HS_RIGHT_GAME_MODE_WIDGET_Y), HS_RIGHT_GAME_MODE_WIDGET_W, modeItems.map(([label, _id]) => label), modeSelected, new Vec2(HS_RIGHT_GAME_MODE_VALUE_X, HS_RIGHT_GAME_MODE_VALUE_Y), new Vec2(HS_RIGHT_GAME_MODE_DROP_X, HS_RIGHT_GAME_MODE_DROP_Y), !(view._playerCountOpen || view._showScoresOpen || view._scoreListOpen)], [view._showScoresOpen, new Vec2(HS_RIGHT_SHOW_SCORES_WIDGET_X, HS_RIGHT_SHOW_SCORES_WIDGET_Y), HS_RIGHT_SHOW_SCORES_WIDGET_W, Array.from(showScoresItems), showScoresSelected, new Vec2(HS_RIGHT_SHOW_SCORES_VALUE_X, HS_RIGHT_SHOW_SCORES_VALUE_Y), new Vec2(HS_RIGHT_SHOW_SCORES_DROP_X, HS_RIGHT_SHOW_SCORES_DROP_Y), !(view._playerCountOpen || view._gameModeOpen || view._scoreListOpen)], [view._scoreListOpen, new Vec2(HS_RIGHT_SCORE_LIST_WIDGET_X, HS_RIGHT_SCORE_LIST_WIDGET_Y), HS_RIGHT_SCORE_LIST_WIDGET_W, names, nameSelected, new Vec2(HS_RIGHT_SCORE_LIST_VALUE_X, HS_RIGHT_SCORE_LIST_VALUE_Y), new Vec2(HS_RIGHT_SCORE_LIST_DROP_X, HS_RIGHT_SCORE_LIST_DROP_Y), !(view._playerCountOpen || view._gameModeOpen || view._showScoresOpen)]];
   // Active list must render last so overlapping widgets don't occlude open options.
   for (let [isOpen, widgetOffset, widgetW, items, selectedIndex, valueOffset, arrowOffset, enabled] of dropdowns) {
     if (isOpen) {
@@ -196,17 +196,17 @@ function drawRightPanelLocalScore(view: HighScoresView, opts: { resources: Runti
   const highlightRank = opts.highlightRank;
   const localShiftX = hsRightLocalCardXShift(view.state.config.display.width);
   const cardTopLeft = rightTopLeft.add(new Vec2(localShiftX * scale, 0.0));
-  if (view.records.length === 0) {
+  if (view._records.length === 0) {
     return;
   }
-  let idx = highlightRank !== null ? int(highlightRank) : int(view.scrollIndex);
+  let idx = highlightRank !== null ? int(highlightRank) : int(view._scrollIndex);
   if (idx < 0) {
     idx = 0;
   }
-  if (idx >= view.records.length) {
-    idx = view.records.length - 1;
+  if (idx >= view._records.length) {
+    idx = view._records.length - 1;
   }
-  const entry = view.records[idx];
+  const entry = view._records[idx];
 
   const textColor = wgl.makeColor(int(255 * 0.9) / 255, int(255 * 0.9) / 255, int(255 * 0.9) / 255, int(255 * 0.8) / 255);
   const valueColor = wgl.makeColor(int(255 * 0.9) / 255, int(255 * 0.9) / 255, 255 / 255, 255 / 255);

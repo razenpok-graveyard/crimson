@@ -81,20 +81,8 @@ export class TerrainFxScratch {
   }
 
   clear(): void {
-    ((target: unknown) => {
-      if (target !== null && typeof target === 'object' && typeof (target as { clear?: unknown }).clear === 'function') {
-        (target as { clear: () => void }).clear();
-      } else if (target !== null && typeof target === 'object' && 'length' in target) {
-        (target as { length: number }).length = 0;
-      }
-    })(this.decals);
-    ((target: unknown) => {
-      if (target !== null && typeof target === 'object' && typeof (target as { clear?: unknown }).clear === 'function') {
-        (target as { clear: () => void }).clear();
-      } else if (target !== null && typeof target === 'object' && 'length' in target) {
-        (target as { length: number }).length = 0;
-      }
-    })(this.corpses);
+    this.decals.clear();
+    this.corpses.clear();
   }
 
   takeBatch(): TerrainFxBatch {

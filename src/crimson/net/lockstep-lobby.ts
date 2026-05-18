@@ -98,7 +98,7 @@ export class HostLobby {
     if (!buildsCompatible(String(hello.buildId), String(this.buildId))) {
       return new Welcome({ accepted: false, reason: 'build_mismatch' });
     }
-    if (Boolean(hello.host)) {
+    if (hello.host) {
       return new Welcome({ accepted: false, reason: 'hello_host_flag' });
     }
 
@@ -123,7 +123,7 @@ export class HostLobby {
     if (int(ready.slotIndex) !== int(peer.slotIndex)) {
       return;
     }
-    peer.ready = Boolean(ready.ready);
+    peer.ready = ready.ready;
   }
 
   allConnected(): boolean {
@@ -163,7 +163,7 @@ export class HostLobby {
         slots.push(new LobbySlot({ slotIndex: 0, connected: true, ready: this.hostReady, isHost: true, peerName: 'host' }));
         continue;
       }
-      const peer = (() => { for (const p of this.peersByAddr.values()) { if (int(p.slotIndex) === slot) return p; } return null; })();
+      const peer = (() => { for (const p of Array.from(this.peersByAddr.values())) { if (int(p.slotIndex) === slot) return p; } return null; })();
       if (peer === null) {
         slots.push(new LobbySlot({ slotIndex: int(slot), connected: false, ready: false, isHost: false, peerName: '' }));
         continue;
@@ -217,7 +217,7 @@ export class ClientLobby {
 
   get joined(): boolean {
     const welcome = this.welcome;
-    return welcome !== null && Boolean(welcome.accepted);
+    return welcome !== null && welcome.accepted;
   }
 
   get started(): boolean {

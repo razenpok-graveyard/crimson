@@ -8,7 +8,7 @@ import { SfxId } from '@grim/sfx-map.ts';
 import type { GameState } from '@crimson/game/types.ts';
 import type { PauseBackground } from '@crimson/pause-background.ts';
 import { requireRuntimeResources } from '@crimson/screens/assets.ts';
-import { MENU_ITEM_OFFSET_X, MENU_ITEM_OFFSET_Y, MENU_LABEL_BASE_Y, MENU_LABEL_HEIGHT, MENU_LABEL_OFFSET_X, MENU_LABEL_OFFSET_Y, MENU_LABEL_ROW_BACK, MENU_LABEL_ROW_HEIGHT, MENU_LABEL_ROW_OPTIONS, MENU_LABEL_ROW_QUIT, MENU_LABEL_STEP, MENU_LABEL_WIDTH, MENU_SCALE_SMALL_THRESHOLD, MENU_SIGN_HEIGHT, MENU_SIGN_OFFSET_X, MENU_SIGN_OFFSET_Y, MENU_SIGN_POS_X_PAD, MENU_SIGN_POS_Y, MENU_SIGN_POS_Y_SMALL, MENU_SIGN_WIDTH, MenuEntry, MenuView, drawMenuCursorHelper } from '@crimson/screens/menu.ts';
+import { MENU_ITEM_OFFSET_X, MENU_ITEM_OFFSET_Y, MENU_LABEL_BASE_Y, MENU_LABEL_HEIGHT, MENU_LABEL_OFFSET_X, MENU_LABEL_OFFSET_Y, MENU_LABEL_ROW_BACK, MENU_LABEL_ROW_HEIGHT, MENU_LABEL_ROW_OPTIONS, MENU_LABEL_ROW_QUIT, MENU_LABEL_STEP, MENU_LABEL_WIDTH, MENU_SCALE_SMALL_THRESHOLD, MENU_SIGN_HEIGHT, MENU_SIGN_OFFSET_X, MENU_SIGN_OFFSET_Y, MENU_SIGN_POS_X_PAD, MENU_SIGN_POS_Y, MENU_SIGN_POS_Y_SMALL, MENU_SIGN_WIDTH, MenuEntry, MenuView, drawMenuCursorHelper, labelAlpha, signLayoutScale, menuSlotPosX, menuSlotStartMs, menuSlotEndMs } from '@crimson/screens/menu.ts';
 import { UI_SHADOW_OFFSET, drawUiQuadShadow } from '@crimson/ui/shadow.ts';
 import { drawScreenFade } from '@crimson/screens/transitions.ts';
 import * as wgl from '@wgl';
@@ -93,14 +93,14 @@ export class PauseMenuView {
   open(): void {
     const layoutW = this.state.config.display.width;
     this._menuScreenWidth = int(layoutW);
-    this._widescreenYShift = MenuView._menuWidescreenYShift(layoutW);
+    this._widescreenYShift = MenuView.menuWidescreenYShift(layoutW);
     const ys = [MENU_LABEL_BASE_Y + this._widescreenYShift, MENU_LABEL_BASE_Y + MENU_LABEL_STEP + this._widescreenYShift, MENU_LABEL_BASE_Y + MENU_LABEL_STEP * 2.0 + this._widescreenYShift];
     this._menuEntries = [new MenuEntry({ slot: 0, row: MENU_LABEL_ROW_OPTIONS, y: ys[0] }), new MenuEntry({ slot: 1, row: MENU_LABEL_ROW_QUIT, y: ys[1] }), new MenuEntry({ slot: 2, row: MENU_LABEL_ROW_BACK, y: ys[2] })];
     this._selectedIndex = this._menuEntries.length > 0 ? 0 : -1;
     this._focusTimerMs = 0;
     this._hoveredIndex = null;
     this._timelineMs = 0;
-    this._timelineMaxMs = Math.max(300, ...Array.from(this._menuEntries, (entry) => MenuView._menuSlotStartMs(entry.slot)));
+    this._timelineMaxMs = Math.max(300, ...Array.from(this._menuEntries, (entry) => MenuView.menuSlotStartMs(entry.slot)));
     this._cursorPulseTime = 0.0;
     this._closing = false;
     this._closeAction = null;
@@ -155,7 +155,7 @@ export class PauseMenuView {
     if (InputState.wasKeyPressed(9)) {
       const reverse = InputState.isKeyDown(16) || InputState.isKeyDown(16);
       const delta = reverse ? -1 : 1;
-      this._selectedIndex = ((this._selectedIndex + delta) + this._menuEntries.length) % this._menuEntries.length;
+      this._selectedIndex = (((this._selectedIndex + delta) % this._menuEntries.length) + this._menuEntries.length) % this._menuEntries.length;
       this._focusTimerMs = 1000;
     }
 
@@ -322,7 +322,7 @@ export class PauseMenuView {
     const offsetMin = new Vec2(MENU_ITEM_OFFSET_X * itemScale, MENU_ITEM_OFFSET_Y * itemScale - localYShift);
     const offsetMax = new Vec2((MENU_ITEM_OFFSET_X + itemW) * itemScale, (MENU_ITEM_OFFSET_Y + itemH) * itemScale - localYShift);
     const size = offsetMax.sub(offsetMin);
-    const pos = new Vec2(MenuView._menuSlotPosX(entry.slot), entry.y);
+    const pos = new Vec2(MenuView.menuSlotPosX(entry.slot), entry.y);
     const topLeft = pos.add(new Vec2(offsetMin.x + size.x * 0.54, offsetMin.y + size.y * 0.28));
     const bottomRight = pos.add(new Vec2(offsetMax.x - size.x * 0.05, offsetMax.y - size.y * 0.10));
     return Rect.fromPosSize(topLeft, bottomRight.sub(topLeft));
@@ -367,7 +367,7 @@ export class PauseMenuView {
   }
 
   protected _menuEntryEnabled(entry: MenuEntry): boolean {
-    return this._timelineMs >= MenuView._menuSlotStartMs(entry.slot);
+    return this._timelineMs >= MenuView.menuSlotStartMs(entry.slot);
   }
 
   protected _drawMenuItems(): void {
@@ -382,8 +382,8 @@ export class PauseMenuView {
     const fxDetail = this.state.config.display.fxDetailEnabled({ level: 0, default: false });
     for (let idx = this._menuEntries.length - 1; -1 >= 0 ? idx < -1 : idx > -1; idx += -1) {
       const entry = this._menuEntries[idx];
-      const pos = new Vec2(MenuView._menuSlotPosX(entry.slot), entry.y);
-      const [angleRad, slideX] = this._uiElementAnim({ index: entry.slot + 2, startMs: MenuView._menuSlotStartMs(entry.slot), endMs: MenuView._menuSlotEndMs(entry.slot), width: itemW });
+      const pos = new Vec2(MenuView.menuSlotPosX(entry.slot), entry.y);
+      const [angleRad, slideX] = this._uiElementAnim({ index: entry.slot + 2, startMs: MenuView.menuSlotStartMs(entry.slot), endMs: MenuView.menuSlotEndMs(entry.slot), width: itemW });
       const _ = slideX; // slide is ignored for render_mode==0 (transform) elements
       const [itemScale, localYShift] = this._menuItemScale(entry.slot);
       const offsetX = MENU_ITEM_OFFSET_X * itemScale;
@@ -405,7 +405,7 @@ export class PauseMenuView {
       if (idx === this._selectedIndex && this._focusTimerMs > 0) {
         counterValue = this._focusTimerMs;
       }
-      const alpha = MenuView._labelAlpha(counterValue);
+      const alpha = MenuView.labelAlpha(counterValue);
       const tint = wgl.makeColor(255 / 255, 255 / 255, 255 / 255, alpha / 255);
       const src = wgl.makeRectangle(0.0, entry.row * MENU_LABEL_ROW_HEIGHT, MENU_LABEL_WIDTH, MENU_LABEL_ROW_HEIGHT);
       const labelOffsetX = MENU_LABEL_OFFSET_X * itemScale;
@@ -428,7 +428,7 @@ export class PauseMenuView {
 
   protected _drawMenuSign(): void {
     const screenW = this.state.config.display.width;
-    const [scale, shiftX] = MenuView._signLayoutScale(int(screenW));
+    const [scale, shiftX] = MenuView.signLayoutScale(int(screenW));
     const signPos = new Vec2(screenW + MENU_SIGN_POS_X_PAD, screenW > MENU_SCALE_SMALL_THRESHOLD ? MENU_SIGN_POS_Y : MENU_SIGN_POS_Y_SMALL);
     const signW = MENU_SIGN_WIDTH * scale;
     const signH = MENU_SIGN_HEIGHT * scale;

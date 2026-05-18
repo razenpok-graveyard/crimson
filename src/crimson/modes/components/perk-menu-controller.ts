@@ -228,10 +228,10 @@ export class PerkMenuController {
     }
 
     if (InputState.wasKeyPressed(40)) {
-      this._selectedIndex = ((this._selectedIndex + 1) + choices.length) % choices.length;
+      this._selectedIndex = (((this._selectedIndex + 1) % choices.length) + choices.length) % choices.length;
     }
     if (InputState.wasKeyPressed(38)) {
-      this._selectedIndex = ((this._selectedIndex - 1) + choices.length) % choices.length;
+      this._selectedIndex = (((this._selectedIndex - 1) % choices.length) + choices.length) % choices.length;
     }
 
     const screenW = wgl.getScreenWidth();
@@ -246,7 +246,7 @@ export class PerkMenuController {
     const expertOwned = int(ctx.player.perkCounts[int(PerkId.PERK_EXPERT)]) > 0;
     const computed = perkMenuComputeLayout(this._layout, { screenW: screenW, origin: origin, scale: scale, choiceCount: choices.length, expertOwned: expertOwned, masterOwned: masterOwned, panelSlideX: slideX });
 
-    const preserveBugs = Boolean(ctx.preserveBugs);
+    const preserveBugs = ctx.preserveBugs;
     for (const [idx, perkId] of choices.entries()) {
       const label = perkDisplayName(perkId, { violenceDisabled: int(ctx.violenceDisabled), preserveBugs: preserveBugs });
       const itemPos = computed.listPos.offset({ dy: idx * computed.listStepY });
@@ -307,7 +307,7 @@ export class PerkMenuController {
     const computed = perkMenuComputeLayout(this._layout, { screenW: screenW, origin: origin, scale: scale, choiceCount: choices.length, expertOwned: expertOwned, masterOwned: masterOwned, panelSlideX: slideX });
 
     const panelTex = ctx.resources.texture(TextureId.UI_MENU_PANEL);
-    drawClassicMenuPanel(panelTex, { dst: computed.panel.toRl(), shadow: Boolean(ctx.fxDetail) });
+    drawClassicMenuPanel(panelTex, { dst: computed.panel.toRl(), shadow: ctx.fxDetail });
 
     const titleTex = ctx.resources.texture(TextureId.UI_TEXT_PICK_A_PERK);
     const src = wgl.makeRectangle(0.0, 0.0, titleTex.width, titleTex.height);
@@ -323,7 +323,7 @@ export class PerkMenuController {
       drawUiText(ctx.resources, sponsor, computed.sponsorPos, { scale: scale, color: UI_SPONSOR_COLOR });
     }
 
-    const preserveBugs = Boolean(ctx.preserveBugs);
+    const preserveBugs = ctx.preserveBugs;
     for (const [idx, perkId] of choices.entries()) {
       const label = perkDisplayName(perkId, { violenceDisabled: int(ctx.violenceDisabled), preserveBugs: preserveBugs });
       const itemPos = computed.listPos.offset({ dy: idx * computed.listStepY });

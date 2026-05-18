@@ -77,7 +77,7 @@ export class RelayReliableLink {
   primeRecvSeq(opts: { seq: number }): void;
   primeRecvSeq(seq: number): void;
   primeRecvSeq(seqOrOpts: number | { seq: number }): void {
-    const seq: number = typeof seqOrOpts === 'object' && seqOrOpts !== null && 'seq' in seqOrOpts ? seqOrOpts.seq : seqOrOpts as number;
+    const seq: number = typeof seqOrOpts === 'object' && seqOrOpts !== null ? seqOrOpts.seq : seqOrOpts as number;
     const value = int(seq);
     if (value <= int(this._recvHighestSeq)) {
       return;

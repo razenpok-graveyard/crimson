@@ -8,7 +8,7 @@ import type { HighScoreRecord } from '@crimson/persistence/highscores.ts';
 import { highscoreDateChecksum, readHighscoreTable, scoresPathForMode } from '@crimson/persistence/highscores.ts';
 
 export function resolveRequest(state: GameState): HighScoresRequest {
-  let request = state.pendingHighScores;
+  let request: HighScoresRequest | null = state.pendingHighScores;
   state.pendingHighScores = null;
   if (request === null) {
     request = new HighScoresRequest({ gameModeId: (() => { const value = state.config.gameplay.mode; if (!Object.values(GameMode).includes(value as GameMode)) { throw new Error('invalid GameMode'); } return value as GameMode; })() });

@@ -146,7 +146,7 @@ export class WorldRenderCtx {
     return viewport.viewScaleAvg(viewScale);
   }
 
-  _drawAtlasSprite(texture: rl.Texture, opts: { grid: number; frame: number; pos: Vec2; scale: number; rotationRad?: number; tint?: rl.Color }): void {
+  _drawAtlasSprite(texture: rl.Texture, opts: { grid: number; frame: number; pos: Vec2; scale: number; rotationRad?: number; tint?: wgl.Color }): void {
     let grid = opts.grid;
     let frame = opts.frame;
     const pos = opts.pos;
@@ -252,7 +252,7 @@ export class WorldRenderCtx {
     return WorldRenderCtx._viewScaleAvg(viewScale);
   }
 
-  drawAtlasSprite(texture: rl.Texture, opts: { grid: number; frame: number; pos: Vec2; scale: number; rotationRad?: number; tint?: rl.Color }): void {
+  drawAtlasSprite(texture: rl.Texture, opts: { grid: number; frame: number; pos: Vec2; scale: number; rotationRad?: number; tint?: wgl.Color }): void {
     const grid = opts.grid;
     const frame = opts.frame;
     const pos = opts.pos;
@@ -266,11 +266,17 @@ export class WorldRenderCtx {
     return WorldRenderCtx._isBulletTrailType(typeId);
   }
 
-  _isBulletTrailType(typeId: number): boolean {
+  _isBulletTrailType(opts: { typeId: number }): boolean;
+  _isBulletTrailType(typeId: number): boolean;
+  _isBulletTrailType(typeIdOrOpts: number | { typeId: number }): boolean {
+    const typeId: number = typeof typeIdOrOpts === 'object' && typeIdOrOpts !== null ? typeIdOrOpts.typeId : typeIdOrOpts as number;
     return WorldRenderCtx._isBulletTrailType(typeId);
   }
 
-  isBulletTrailType(typeId: number): boolean {
+  isBulletTrailType(opts: { typeId: number }): boolean;
+  isBulletTrailType(typeId: number): boolean;
+  isBulletTrailType(typeIdOrOpts: number | { typeId: number }): boolean {
+    const typeId: number = typeof typeIdOrOpts === 'object' && typeIdOrOpts !== null ? typeIdOrOpts.typeId : typeIdOrOpts as number;
     return WorldRenderCtx._isBulletTrailType(typeId);
   }
 

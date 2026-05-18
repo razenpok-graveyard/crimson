@@ -277,7 +277,7 @@ function digitalDownForPlayer(keyCode: number, opts: { playerIndex: number }): b
     return InputState.isKeyDown(rlKey);
   }
   const joyButton = JOYS_BUTTON_CODES.get(code) ?? null;
-  let gamepad: number;
+  let gamepad: number | any;
   if (joyButton !== null) {
     gamepad = playerGamepadIndex(playerIndex);
     return wgl.isGamepadAvailable(gamepad) && wgl.isGamepadButtonDown(gamepad, joyButton);
@@ -458,7 +458,7 @@ export function inputPrimaryIsDown(opts: { fireCodes: readonly number[]; playerC
     keyCode: _PRIMARY_EDGE_SENTINEL_KEY,
     isDown: down,
   });
-  return Boolean(down);
+  return down;
 }
 
 export function inputPrimaryJustPressed(opts: { fireCodes: readonly number[]; playerCount: number }): boolean {

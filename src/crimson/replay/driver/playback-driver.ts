@@ -282,7 +282,7 @@ export class PlaybackDriver {
         const spawnEntries = Array.from(this._questSpawnEntriesResolved);
         const questLevel = questDefinition.level;
         const startWeaponId = this._questStartWeaponResolved;
-        let questState: any;
+        let questState: ReturnType<typeof buildQuestSession>[1];
         [session, questState] = buildQuestSession({ world: this.world, worldSize: this.worldSize, damageScaleByType: damageScaleByType, detailPreset: this.replay.header.detailPreset, violenceDisabled: this.replay.header.violenceDisabled, gameTuneStarted: false, demoModeActive: this.world.state.demoModeActive, applyWorldDtSteps: applyWorldDtSteps, finalizePostRenderLifecycle: true, spawnEntries: spawnEntries, questLevel: questLevel, startWeaponId: startWeaponId });
         this._questSpawnState = questState;
         return session;

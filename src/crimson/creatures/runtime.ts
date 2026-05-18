@@ -623,7 +623,7 @@ export class CreaturePool {
     }
 
     const effectPool = effects === null ? this.effects : effects;
-    if (effectPool !== null && plan.effects) {
+    if (effectPool !== null && plan.effects.length > 0) {
       const fxRng = rng === null ? new Crand(0) : rng;
       for (const fx of plan.effects) {
         effectPool.spawnBurst({
@@ -897,7 +897,7 @@ export class CreaturePool {
           creature.heading = angleApproach(creature.heading, creature.targetHeading, turnRate, dt);
           moveDelta = movementDeltaFromHeadingF32(creature.heading, { dt: dt, moveScale: creature.moveScale, moveSpeed: creature.moveSpeed });
           creature.vel = moveDelta;
-          creature.pos = f32Vec2(advancePosByDeltaF32(creature.pos, moveDelta).clampRect(radius, radius, maxX, maxY));
+          creature.pos = f32Vec2((advancePosByDeltaF32(creature.pos, moveDelta)).clampRect(radius, radius, maxX, maxY));
         }
       }
 
@@ -1365,7 +1365,7 @@ function angleApproach(current: number, target: number, rate: number, dt: number
   }
   const wrapped = f32(Math.abs(f32(f32(tau - hi) + lo)));
 
-  let stepScale = wrapped;
+  let stepScale: ReturnType<typeof f32> | number = wrapped;
   if (direct < wrapped) {
     stepScale = direct;
   }

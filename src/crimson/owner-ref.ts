@@ -2,6 +2,39 @@
 
 export const LOCAL_PLAYER_OWNER_ID = -100;
 
+function pythonEquals(left: object | string | number | boolean | null | undefined, right: object | string | number | boolean | null | undefined): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (left !== null && left !== undefined && typeof left === 'object') {
+    const equal = Reflect.get(left, 'equal');
+    if (typeof equal === 'function') {
+      return Boolean(equal.call(left, right));
+    }
+  }
+  if (right !== null && right !== undefined && typeof right === 'object') {
+    const equal = Reflect.get(right, 'equal');
+    if (typeof equal === 'function') {
+      return Boolean(equal.call(right, left));
+    }
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+      return false;
+    }
+    return left.every((value, index) => pythonEquals(value, right[index]));
+  }
+  if (left !== null && right !== null && typeof left === 'object' && typeof right === 'object') {
+    const leftKeys = Object.keys(left);
+    const rightKeys = Object.keys(right);
+    if (leftKeys.length !== rightKeys.length) {
+      return false;
+    }
+    return leftKeys.every((key) => Object.prototype.hasOwnProperty.call(right, key) && pythonEquals(Reflect.get(left, key), Reflect.get(right, key)));
+  }
+  return false;
+}
+
 export enum OwnerKind {
   NONE = 0,
   PLAYER = 1,
@@ -55,10 +88,10 @@ export class OwnerRef {
   }
 
   toLegacy(): number {
-    if (this.kind === OwnerKind.NONE) {
+    if (pythonEquals(this.kind, OwnerKind.NONE)) {
       return 0;
     }
-    if (this.kind === OwnerKind.CREATURE) {
+    if (pythonEquals(this.kind, OwnerKind.CREATURE)) {
       return int(this.index);
     }
     if (this.localHost && int(this.index) === 0) {
@@ -68,11 +101,11 @@ export class OwnerRef {
   }
 
   isPlayer(): boolean {
-    return this.kind === OwnerKind.PLAYER;
+    return pythonEquals(this.kind, OwnerKind.PLAYER);
   }
 
   playerIndex(): number | null {
-    if (this.kind !== OwnerKind.PLAYER) {
+    if (!pythonEquals(this.kind, OwnerKind.PLAYER)) {
       return null;
     }
     return int(this.index);
@@ -81,7 +114,7 @@ export class OwnerRef {
   playerIndexInBounds(opts: { playerCount: number }): number | null;
   playerIndexInBounds(playerCount: number): number | null;
   playerIndexInBounds(playerCountOrOpts: number | { playerCount: number }): number | null {
-    const playerCount: number = typeof playerCountOrOpts === 'object' && playerCountOrOpts !== null && 'playerCount' in playerCountOrOpts ? playerCountOrOpts.playerCount : playerCountOrOpts as number;
+    const playerCount: number = typeof playerCountOrOpts === 'object' && playerCountOrOpts !== null ? playerCountOrOpts.playerCount : playerCountOrOpts as number;
     const idx = this.playerIndex();
     if (idx === null) {
       return null;
@@ -93,7 +126,7 @@ export class OwnerRef {
   }
 
   creatureIndex(): number | null {
-    if (this.kind !== OwnerKind.CREATURE) {
+    if (!pythonEquals(this.kind, OwnerKind.CREATURE)) {
       return null;
     }
     return int(this.index);
@@ -102,7 +135,7 @@ export class OwnerRef {
   creatureIndexInBounds(opts: { creatureCount: number }): number | null;
   creatureIndexInBounds(creatureCount: number): number | null;
   creatureIndexInBounds(creatureCountOrOpts: number | { creatureCount: number }): number | null {
-    const creatureCount: number = typeof creatureCountOrOpts === 'object' && creatureCountOrOpts !== null && 'creatureCount' in creatureCountOrOpts ? creatureCountOrOpts.creatureCount : creatureCountOrOpts as number;
+    const creatureCount: number = typeof creatureCountOrOpts === 'object' && creatureCountOrOpts !== null ? creatureCountOrOpts.creatureCount : creatureCountOrOpts as number;
     const idx = this.creatureIndex();
     if (idx === null) {
       return null;

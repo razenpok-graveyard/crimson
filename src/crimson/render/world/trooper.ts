@@ -155,7 +155,7 @@ export function drawPlayerTrooperSprite(renderCtx: WorldRenderCtx, texture: rl.T
     const scaleMul = opts.scaleMul;
     const rotation = opts.rotation;
     const color = opts.color;
-    renderCtx._drawAtlasSprite(
+    renderCtx.drawAtlasSprite(
       texture,
       { grid: spriteGrid, frame: Math.max(0, Math.min(63, int(frame))), pos: pos, scale: baseScale * scaleMul, rotationRad: rotation, tint: color },
     );

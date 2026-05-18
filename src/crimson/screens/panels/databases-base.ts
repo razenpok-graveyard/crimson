@@ -12,7 +12,7 @@ import { drawClassicMenuPanel } from '@crimson/ui/menu-panel.ts';
 import { UiButtonState, buttonDraw, buttonUpdate, buttonWidth } from '@crimson/ui/perk-menu.ts';
 import { requireRuntimeResources } from '@crimson/screens/assets.ts';
 import { hsLeftPanelPosX, hsRightPanelPosX } from '@crimson/screens/high-scores-layout.ts';
-import { MENU_PANEL_OFFSET_X, MENU_PANEL_OFFSET_Y, MENU_PANEL_WIDTH, MENU_SCALE_SMALL_THRESHOLD, MENU_SIGN_HEIGHT, MENU_SIGN_OFFSET_X, MENU_SIGN_OFFSET_Y, MENU_SIGN_POS_X_PAD, MENU_SIGN_POS_Y, MENU_SIGN_POS_Y_SMALL, MENU_SIGN_WIDTH, MenuView, drawMenuCursorHelper, ensureMenuGround, menuGroundCamera, uiElementAnim } from '@crimson/screens/menu.ts';
+import { MENU_PANEL_OFFSET_X, MENU_PANEL_OFFSET_Y, MENU_PANEL_WIDTH, MENU_SCALE_SMALL_THRESHOLD, MENU_SIGN_HEIGHT, MENU_SIGN_OFFSET_X, MENU_SIGN_OFFSET_Y, MENU_SIGN_POS_X_PAD, MENU_SIGN_POS_Y, MENU_SIGN_POS_Y_SMALL, MENU_SIGN_WIDTH, MenuView, drawMenuCursorHelper, ensureMenuGround, menuGroundCamera, uiElementAnim, signLayoutScale } from '@crimson/screens/menu.ts';
 import { UI_SHADOW_OFFSET, drawUiQuadShadow } from '@crimson/ui/shadow.ts';
 import { drawScreenFade } from '@crimson/screens/transitions.ts';
 import { PANEL_TIMELINE_END_MS, PANEL_TIMELINE_START_MS } from '@crimson/screens/panels/base.ts';
@@ -24,7 +24,7 @@ export const LEFT_PANEL_HEIGHT = 378.0;
 export const RIGHT_PANEL_POS_Y = 200.0;
 export const RIGHT_PANEL_HEIGHT = 254.0;
 
-export abstract class DatabaseBaseView {
+export class DatabaseBaseView {
   state: GameState;
   protected _isOpen: boolean;
   protected _ground: GroundRenderer | null;
@@ -88,7 +88,7 @@ export abstract class DatabaseBaseView {
 
   open(): void {
     const layoutW = this.state.config.display.width;
-    this._widescreenYShift = MenuView._menuWidescreenYShift(layoutW);
+    this._widescreenYShift = MenuView.menuWidescreenYShift(layoutW);
     this._ground = this.state.pauseBackground !== null ? null : ensureMenuGround(this.state);
     this._cursorPulseTime = 0.0;
     this._timelineMs = 0;
@@ -152,7 +152,7 @@ export abstract class DatabaseBaseView {
   protected _drawSign(): void {
     const sign = requireRuntimeResources(this.state).texture(TextureId.UI_SIGN_CRIMSON);
     const screenW = this.state.config.display.width;
-    const [signScale, shiftX] = MenuView._signLayoutScale(int(screenW));
+    const [signScale, shiftX] = MenuView.signLayoutScale(int(screenW));
     const signPos = new Vec2(screenW + MENU_SIGN_POS_X_PAD, screenW > MENU_SCALE_SMALL_THRESHOLD ? MENU_SIGN_POS_Y : MENU_SIGN_POS_Y_SMALL);
     const signW = MENU_SIGN_WIDTH * signScale;
     const signH = MENU_SIGN_HEIGHT * signScale;
@@ -249,7 +249,7 @@ export abstract class DatabaseBaseView {
 
     const panelW = MENU_PANEL_WIDTH * scale;
     let [angleRad, leftSlideX] = uiElementAnim(this, { index: 1, startMs: PANEL_TIMELINE_START_MS, endMs: PANEL_TIMELINE_END_MS, width: panelW, directionFlag: 0 });
-    let rightSlideX: any;
+    let rightSlideX: ReturnType<typeof uiElementAnim>[1];
     [angleRad, rightSlideX] = uiElementAnim(this, { index: 2, startMs: PANEL_TIMELINE_START_MS, endMs: PANEL_TIMELINE_END_MS, width: panelW, directionFlag: 1 });
 
     const leftPanelPosX = hsLeftPanelPosX(screenWidth);
@@ -270,7 +270,7 @@ export abstract class DatabaseBaseView {
 
     const resources = requireRuntimeResources(this.state);
     const font = resources.smallFont;
-    this._drawContents({ leftTopLeft: leftPanelTopLeft, rightTopLeft: rightPanelTopLeft, scale: scale, font: font });
+    this._drawContents(leftPanelTopLeft, rightPanelTopLeft, { scale: scale, font: font });
 
     const backPos = this._backButtonPos();
     const backW = buttonWidth(resources, this._backButton.label, { scale: scale, forceWide: this._backButton.forceWide });
@@ -284,9 +284,15 @@ export abstract class DatabaseBaseView {
     drawMenuCursorHelper(this.state, { resources: resources, pulseTime: this._cursorPulseTime });
   }
 
-  protected abstract _backButtonPos(): Vec2;
+  protected _backButtonPos(): Vec2 {
+    throw new Error('NotImplementedError');
+  }
 
-  protected abstract _drawContents(opts: { leftTopLeft: Vec2; rightTopLeft: Vec2; scale: number; font: SmallFontData }): void;
+  protected _drawContents(leftTopLeft: Vec2, rightTopLeft: Vec2, opts: { scale: number; font: SmallFontData }): void {
+    const scale = opts.scale;
+    const font = opts.font;
+    throw new Error('NotImplementedError');
+  }
 
   protected _updateContentInteraction(opts: { leftTopLeft: Vec2; scale: number; mouse: wgl.Vector2 }): void {
     const leftTopLeft = opts.leftTopLeft;

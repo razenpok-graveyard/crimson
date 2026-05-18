@@ -48,7 +48,7 @@ export function applyFinalRevengeOnPlayerDeath(opts: { state: GameplayState; cre
       continue;
     }
 
-    const remaining = 512.0 - delta.length();
+    const remaining = (512.0.sub(delta)).length();
     if (remaining <= 0.0) {
       continue;
     }

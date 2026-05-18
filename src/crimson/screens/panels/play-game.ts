@@ -118,7 +118,7 @@ export class PlayerCountWidgetLayout {
 //
 // Layout and gating are based on `sub_44ed80` (crimsonland.exe).
 export class PlayGameMenuView extends PanelMenuView {
-  protected _PLAYER_COUNT_LABELS: string[] = ['1 player', '2 players', '3 players', '4 players'];
+  protected _PLAYER_COUNT_LABELS: string[] = ['1 player', '2 players', '3 players', '4 players'] as const;
   protected _playerListOpen: boolean;
   protected _dirty: boolean;
   protected _tooltipMs: Map<string, number>;

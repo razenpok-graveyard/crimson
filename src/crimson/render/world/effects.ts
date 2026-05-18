@@ -22,20 +22,20 @@ export function drawParticlePool(renderCtx: WorldRenderCtx, opts: { camera: Vec2
   const texture = frame.resources.texture(TextureId.PARTICLES);
 
   const particles = frame.state.particles.entries;
-  if (!particles.some((entry) => entry.active)) {
+  if (!particles.some((entry: any) => entry.active)) {
     return;
   }
 
-  const scale = renderCtx._viewScaleAvg(viewScale);
+  const scale = renderCtx.viewScaleAvg(viewScale);
 
   const srcRect = (effectId: number): wgl.Rectangle | null => {
     const atlas = EFFECT_ID_ATLAS_TABLE_BY_ID.get(int(effectId)) ?? null;
     if (atlas === null) {
-      return null;
+      return;
     }
     const grid = SIZE_CODE_GRID.get(int(atlas.sizeCode)) ?? null;
     if (!grid) {
-      return null;
+      return;
     }
     const frame = int(atlas.frame);
     const col = frame % grid;
@@ -135,14 +135,14 @@ export function drawSpriteEffectPool(renderCtx: WorldRenderCtx, opts: { camera: 
   if (alpha <= 1e-3) {
     return;
   }
-  let frame: typeof renderCtx.frame | number = renderCtx.frame;
+  let frame: RenderFrame | number = renderCtx.frame;
   if (frame.config !== null && !frame.config.display.fxDetailEnabled({ level: 2, default: false })) {
     return;
   }
   const texture = frame.resources.texture(TextureId.PARTICLES);
 
   const effects = frame.state.spriteEffects.entries;
-  if (!effects.some((entry) => entry.active)) {
+  if (!effects.some((entry: any) => entry.active)) {
     return;
   }
 
@@ -160,7 +160,7 @@ export function drawSpriteEffectPool(renderCtx: WorldRenderCtx, opts: { camera: 
   const cellW = texture.width / grid;
   const cellH = texture.height / grid;
   const src = wgl.makeRectangle(cellW * col, cellH * row, cellW, cellH);
-  const scale = renderCtx._viewScaleAvg(viewScale);
+  const scale = renderCtx.viewScaleAvg(viewScale);
 
   wgl.beginBlendMode(wgl.BlendMode.ALPHA);
   for (const entry of effects) {
@@ -193,11 +193,11 @@ export function drawEffectPool(renderCtx: WorldRenderCtx, opts: { camera: Vec2; 
   const texture = frame.resources.texture(TextureId.PARTICLES);
 
   const effects = frame.state.effects.entries;
-  if (!effects.some((entry) => entry.flags && entry.age >= 0.0)) {
+  if (!effects.some((entry: any) => entry.flags && entry.age >= 0.0)) {
     return;
   }
 
-  const scale = renderCtx._viewScaleAvg(viewScale);
+  const scale = renderCtx.viewScaleAvg(viewScale);
 
   const srcCache: Map<number, wgl.Rectangle> = new Map();
 
@@ -209,11 +209,11 @@ export function drawEffectPool(renderCtx: WorldRenderCtx, opts: { camera: Vec2; 
 
     const atlas = EFFECT_ID_ATLAS_TABLE_BY_ID.get(int(effectId)) ?? null;
     if (atlas === null) {
-      return null;
+      return;
     }
     const grid = SIZE_CODE_GRID.get(int(atlas.sizeCode)) ?? null;
     if (!grid) {
-      return null;
+      return;
     }
     const frame = int(atlas.frame);
     const col = frame % grid;

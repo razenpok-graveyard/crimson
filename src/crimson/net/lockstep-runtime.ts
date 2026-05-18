@@ -47,16 +47,16 @@ function pythonEndsWith(value: string | Uint8Array, suffix: string | Uint8Array 
   return offset >= 0 && suffix.every((byte, index) => value[offset + index] === byte);
 }
 
-function _strftimeUtcNow(): string {
+function _strftimeUtcNow(format = '%Y%m%dT%H%M%S.%fZ', utc = true): string {
   const now = new Date();
-  const year = String(now.getUTCFullYear()).padStart(4, '0');
-  const month = String(now.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(now.getUTCDate()).padStart(2, '0');
-  const hour = String(now.getUTCHours()).padStart(2, '0');
-  const minute = String(now.getUTCMinutes()).padStart(2, '0');
-  const second = String(now.getUTCSeconds()).padStart(2, '0');
+  const year = String(utc ? now.getUTCFullYear() : now.getFullYear()).padStart(4, '0');
+  const month = String((utc ? now.getUTCMonth() : now.getMonth()) + 1).padStart(2, '0');
+  const day = String(utc ? now.getUTCDate() : now.getDate()).padStart(2, '0');
+  const hour = String(utc ? now.getUTCHours() : now.getHours()).padStart(2, '0');
+  const minute = String(utc ? now.getUTCMinutes() : now.getMinutes()).padStart(2, '0');
+  const second = String(utc ? now.getUTCSeconds() : now.getSeconds()).padStart(2, '0');
   const microsecond = `${String(now.getUTCMilliseconds()).padStart(3, '0')}000`;
-  return `${year}${month}${day}T${hour}${minute}${second}.${microsecond}Z`;
+  return format.replaceAll('%Y', year).replaceAll('%m', month).replaceAll('%d', day).replaceAll('%H', hour).replaceAll('%M', minute).replaceAll('%S', second).replaceAll('%f', microsecond);
 }
 
 function _pathJoin(...parts: Array<string | number>): string {

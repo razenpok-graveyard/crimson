@@ -381,6 +381,6 @@ export function cursorDraw(resources: RuntimeResources, opts: { mouse: wgl.Vecto
   wgl.drawTexturePro(tex, src, dst, wgl.makeVector2(0.0, 0.0), 0.0, tint);
 }
 
-export const MENU_ITEM_RGB = [0x46, 0xB4, 0xF0]; // from ui_menu_item_update: rgb(70, 180, 240)
+export const MENU_ITEM_RGB = [0x46, 0xB4, 0xF0] as const; // from ui_menu_item_update: rgb(70, 180, 240)
 export const MENU_ITEM_ALPHA_IDLE = 0.6;
 export const MENU_ITEM_ALPHA_HOVER = 1.0;

@@ -63,6 +63,10 @@ function _basename(path: string): string {
   return idx < 0 ? normalized : normalized.slice(idx + 1);
 }
 
+function _pathIsAbsolute(path: string): boolean {
+  return path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(path);
+}
+
 function _dirname(path: string): string {
   const idx = path.lastIndexOf('/');
   if (idx < 0) {
@@ -826,22 +830,22 @@ function runRenderOnce(opts: { ctx: ViewContext; replayPath: string; cfg: Crimso
   const rtx = opts.rtx;
   const telemetrySession = opts.telemetrySession ?? null;
   const tickProgressCallback = opts.tickProgressCallback ?? null;
-  const mode = new ReplayPlaybackMode(ctx, { replayPath: replayPath, config: cfg, console: console, maxTicks: maxTicks, traceRng: traceRng, rtx: rtx });
+  const mode = new ReplayPlaybackMode({ replayPath: ctx, replayPath: replayPath, config: cfg, console: console, maxTicks: maxTicks, traceRng: traceRng, rtx: rtx });
   mode.open();
   let frameIndex: number;
   try {
-    const replay = mode.replay;
+    const replay = mode._replay;
     if (replay === null) {
       throw new ReplayBenchmarkError('render benchmark failed: replay playback did not initialize replay state');
     }
 
-    let stepDt = mode.dt;
+    let stepDt = mode._dt;
     if (stepDt <= 0.0) {
       stepDt = 1.0 / 60.0;
     }
 
     frameIndex = 0;
-    while (!Boolean(mode.finished)) {
+    while (!mode.finished) {
       const tickBefore = int(mode.tickIndex);
       if (telemetrySession !== null) {
         telemetrySession.beginFrame({
@@ -878,7 +882,7 @@ function runRenderOnce(opts: { ctx: ViewContext; replayPath: string; cfg: Crimso
         });
       }
 
-      if (Boolean(mode.closeRequested)) {
+      if (mode.closeRequested) {
         throw new ReplayBenchmarkError('render benchmark aborted: replay playback requested close');
       }
 
@@ -893,7 +897,7 @@ function runRenderOnce(opts: { ctx: ViewContext; replayPath: string; cfg: Crimso
 
 function runResultForReplayMode(opts: { mode: ReplayPlaybackMode }): RunResult {
   const mode = opts.mode;
-  const driver = mode.driver;
+  const driver = mode._driver;
   if (driver === null) {
     throw new ReplayBenchmarkError('render benchmark failed: replay driver was not available');
   }

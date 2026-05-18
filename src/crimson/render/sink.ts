@@ -4,6 +4,10 @@ import type { RenderPresent } from '@grim/render-pipeline.ts';
 import { mkdirSync } from 'node:fs';
 export { type RenderPresent, type RenderSink, WindowSink } from '@grim/render-pipeline.ts';
 
+function _pathIsAbsolute(path: string): boolean {
+  return path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(path);
+}
+
 function _dirname(path: string): string {
   const idx = path.lastIndexOf('/');
   if (idx < 0) {

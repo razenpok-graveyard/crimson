@@ -55,6 +55,39 @@ function mapMoveToEnd<K, V>(map: Map<K, V>, key: K, last = true): void {
   }
 }
 
+function pythonEquals(left: object | string | number | boolean | null | undefined, right: object | string | number | boolean | null | undefined): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (left !== null && left !== undefined && typeof left === 'object') {
+    const equal = Reflect.get(left, 'equal');
+    if (typeof equal === 'function') {
+      return Boolean(equal.call(left, right));
+    }
+  }
+  if (right !== null && right !== undefined && typeof right === 'object') {
+    const equal = Reflect.get(right, 'equal');
+    if (typeof equal === 'function') {
+      return Boolean(equal.call(right, left));
+    }
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+      return false;
+    }
+    return left.every((value, index) => pythonEquals(value, right[index]));
+  }
+  if (left !== null && right !== null && typeof left === 'object' && typeof right === 'object') {
+    const leftKeys = Object.keys(left);
+    const rightKeys = Object.keys(right);
+    if (leftKeys.length !== rightKeys.length) {
+      return false;
+    }
+    return leftKeys.every((key) => Object.prototype.hasOwnProperty.call(right, key) && pythonEquals(Reflect.get(left, key), Reflect.get(right, key)));
+  }
+  return false;
+}
+
 export class RollbackRuntimeConfigBase {
   modeId: GameMode;
   playerCount: number;
@@ -338,8 +371,8 @@ export class RollbackRuntime {
   storeLocalSnapshot(opts: { tickIndex: number; snapshotBlob: Uint8Array }): void;
   storeLocalSnapshot(tickIndex: number, snapshotBlob: Uint8Array): void;
   storeLocalSnapshot(tickIndexOrOpts: number | { tickIndex: number; snapshotBlob: Uint8Array }, snapshotBlobArg: Uint8Array | undefined = undefined): void {
-    const tickIndex: number = typeof tickIndexOrOpts === 'object' && tickIndexOrOpts !== null && 'tickIndex' in tickIndexOrOpts ? tickIndexOrOpts.tickIndex : tickIndexOrOpts as number;
-    const snapshotBlob: Uint8Array = typeof tickIndexOrOpts === 'object' && tickIndexOrOpts !== null && 'tickIndex' in tickIndexOrOpts ? tickIndexOrOpts.snapshotBlob : snapshotBlobArg as Uint8Array;
+    const tickIndex: number = typeof tickIndexOrOpts === 'object' && tickIndexOrOpts !== null ? tickIndexOrOpts.tickIndex : tickIndexOrOpts as number;
+    const snapshotBlob: Uint8Array = typeof tickIndexOrOpts === 'object' && tickIndexOrOpts !== null ? tickIndexOrOpts.snapshotBlob : snapshotBlobArg as Uint8Array;
     const tick = Math.max(0, int(tickIndex));
     const blob = bytesFrom(snapshotBlob);
     this._localSnapshotBlobs.set(tick, blob);
@@ -375,7 +408,7 @@ export class RollbackRuntime {
   markResyncApplied(opts: { tickIndex: number }): void;
   markResyncApplied(tickIndex: number): void;
   markResyncApplied(tickIndexOrOpts: number | { tickIndex: number }): void {
-    const tickIndex: number = typeof tickIndexOrOpts === 'object' && tickIndexOrOpts !== null && 'tickIndex' in tickIndexOrOpts ? tickIndexOrOpts.tickIndex : tickIndexOrOpts as number;
+    const tickIndex: number = typeof tickIndexOrOpts === 'object' && tickIndexOrOpts !== null ? tickIndexOrOpts.tickIndex : tickIndexOrOpts as number;
     const tick = Math.max(0, int(tickIndex));
     this._pendingResyncSnapshot = null;
     this._pendingResyncSnapshotDelivered = false;
@@ -386,7 +419,7 @@ export class RollbackRuntime {
     }
     this._frameQueue.length = 0;
     this._pausedForReconnect = false;
-    if (this._reconnectState !== 'self_reconnecting') {
+    if (!pythonEquals(this._reconnectState, 'self_reconnecting')) {
       this._reconnectState = 'idle';
     }
     lanDebugLog(
@@ -448,7 +481,7 @@ export class RollbackRuntime {
     this._sendHelloIfNeeded({ nowMs: int(now) });
 
     for (let [addr, packet] of this.transport.recvPackets({ maxPackets: 512 })) {
-      if (addr !== this._serverAddr) {
+      if (!pythonEquals(addr, this._serverAddr)) {
         continue;
       }
       this._lastSeenMs = int(now);
@@ -967,7 +1000,7 @@ export class RollbackRuntime {
   _latestSnapshotAtOrBefore(opts: { tickIndex: number }): [number, Uint8Array] | null;
   _latestSnapshotAtOrBefore(tickIndex: number): [number, Uint8Array] | null;
   _latestSnapshotAtOrBefore(tickIndexOrOpts: number | { tickIndex: number }): [number, Uint8Array] | null {
-    const tickIndex: number = typeof tickIndexOrOpts === 'object' && tickIndexOrOpts !== null && 'tickIndex' in tickIndexOrOpts ? tickIndexOrOpts.tickIndex : tickIndexOrOpts as number;
+    const tickIndex: number = typeof tickIndexOrOpts === 'object' && tickIndexOrOpts !== null ? tickIndexOrOpts.tickIndex : tickIndexOrOpts as number;
     const target = int(tickIndex);
     let selectedTick: number | null = null;
     for (const tick of this._localSnapshotBlobs.keys()) {
@@ -1013,7 +1046,7 @@ export class RollbackRuntime {
     if (roomCode === null) {
       return;
     }
-    if (roomCode === this._announcedRoomCode) {
+    if (pythonEquals(roomCode, this._announcedRoomCode)) {
       return;
     }
     this._announcedRoomCode = roomCode;
@@ -1113,7 +1146,7 @@ export class RollbackRuntime {
   latestSnapshotAtOrBefore(opts: { tickIndex: number }): [number, Uint8Array] | null;
   latestSnapshotAtOrBefore(tickIndex: number): [number, Uint8Array] | null;
   latestSnapshotAtOrBefore(tickIndexOrOpts: number | { tickIndex: number }): [number, Uint8Array] | null {
-    const tickIndex: number = typeof tickIndexOrOpts === 'object' && tickIndexOrOpts !== null && 'tickIndex' in tickIndexOrOpts ? tickIndexOrOpts.tickIndex : tickIndexOrOpts as number;
+    const tickIndex: number = typeof tickIndexOrOpts === 'object' && tickIndexOrOpts !== null ? tickIndexOrOpts.tickIndex : tickIndexOrOpts as number;
     return this._latestSnapshotAtOrBefore(tickIndex);
   }
 
