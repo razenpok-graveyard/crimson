@@ -316,6 +316,55 @@ export function parsePlainClass(
       const annotatedFieldAssignment = /^self\.([A-Za-z_][A-Za-z0-9_]*): (.+?) = (.+)$/.exec(statement);
       const fieldAssignment = /^self\.([A-Za-z_][A-Za-z0-9_]*) = (.+)$/.exec(statement);
       const assignment = annotatedFieldAssignment ?? fieldAssignment;
+      const tupleFieldAssignment = /^(.+?) = (.+)$/.exec(statement);
+      if (assignment === null && tupleFieldAssignment !== null) {
+        const targets = splitTopLevelComma(tupleFieldAssignment[1]).map((target) => target.trim());
+        const fields = targets.map((target) => /^self\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(target)?.[1] ?? null);
+        if (fields.length > 1 && fields.every((field) => field !== null)) {
+          const valueText = tupleFieldAssignment[2];
+          const inferredType = inferPlainClassFieldType(valueText, fieldTypes, constructorNameMap);
+          const elementTypes = inferredType === null ? null : tupleTypeElementTypes(inferredType, fields.length);
+          for (let fieldIndex = 0; fieldIndex < fields.length; fieldIndex += 1) {
+            const pythonFieldName = fields[fieldIndex];
+            if (pythonFieldName === null) {
+              continue;
+            }
+            const fieldName = tsAttributeNameForPythonName(pythonFieldName);
+            const typeExpression = elementTypes?.[fieldIndex] ?? 'any';
+            fieldNameMap.set(pythonFieldName, fieldName);
+            recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, fieldArrayNames, fieldMapNames);
+            recordPlainClassFieldMarkers(pythonFieldName, fieldName, typeExpression, constructorArrayNames, constructorMapNames);
+            if (!propertyFieldNames.has(fieldName) && !plainClassBaseDeclaresField(extendsName, fieldName, moduleNameMap)) {
+              fieldMap.set(fieldName, {
+                name: fieldName,
+                typeExpression,
+                readonly: false,
+                private: plainClassFieldIsPrivate(pythonFieldName),
+              });
+            }
+            constructorNameMap.set(pythonFieldName, fieldName);
+          }
+          const translated = translateStraightLineStatement(
+            lines,
+            bodyIndex,
+            '        ',
+            constructorNameMap,
+            constructorDeclaredNames,
+            constructorReassignedNames,
+            constructorArrayNames,
+            new Set(),
+            relativePath,
+            constructorMapNames,
+            imports,
+          );
+          if (translated === null) {
+            return null;
+          }
+          constructorStatements.push(...translated.statements);
+          bodyIndex = translated.nextIndex;
+          continue;
+        }
+      }
       if (assignment !== null) {
         const pythonFieldName = assignment[1];
         const fieldName = tsAttributeNameForPythonName(pythonFieldName);
@@ -1026,6 +1075,10 @@ function inferPlainClassFieldType(
   if (/^(?:max|min)\(/.test(trimmedValueText)) {
     return 'number';
   }
+  const tupleLiteralParts = splitTopLevelComma(trimmedValueText);
+  if (tupleLiteralParts.length > 1 && tupleLiteralParts.every((part) => part.trim() !== '')) {
+    return `[${tupleLiteralParts.map((part) => inferPythonExpressionType(part.trim())).join(', ')}]`;
+  }
   const sortedCall = /^sorted\((.+)\)$/.exec(trimmedValueText);
   if (sortedCall !== null) {
     return `${inferPlainIterableElementType(sortedCall[1])}[]`;
@@ -1078,6 +1131,15 @@ function inferPlainClassFieldType(
     return 'any';
   }
   return literalType === 'any' ? null : literalType;
+}
+
+function tupleTypeElementTypes(typeExpression: string, expectedLength: number): string[] | null {
+  const tuple = /^\[(.*)\]$/.exec(typeExpression.trim());
+  if (tuple === null) {
+    return null;
+  }
+  const parts = splitTopLevelComma(tuple[1]).map((part) => part.trim());
+  return parts.length === expectedLength ? parts : null;
 }
 
 function stripOuterParenthesizedExpression(valueText: string): string {

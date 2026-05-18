@@ -54,6 +54,14 @@ export function parseTopLevelAssignment(
     typeExpression,
     trailingComment: parsedLine.comment ?? undefined,
   };
+  const tripleQuotedString = parseTripleQuotedStringAssignment(lines, index, value, nameMap, mapNames);
+  if (tripleQuotedString !== null) {
+    return {
+      assignment: { ...baseAssignment, valueLines: [tripleQuotedString.expression] },
+      nextIndex: tripleQuotedString.nextIndex,
+    };
+  }
+
   if (value === '(') {
     const stringValue = parseParenthesizedStringAssignment(lines, index + 1, nameMap, mapNames);
     if (stringValue !== null) {
@@ -418,6 +426,66 @@ export function parseTopLevelAssignment(
   }
 
   return null;
+}
+
+function parseTripleQuotedStringAssignment(
+  lines: string[],
+  index: number,
+  value: string,
+  nameMap: Map<string, string>,
+  mapNames: ReadonlySet<string>,
+): { expression: string; nextIndex: number } | null {
+  const opener = /^(?:"""|''')$/.exec(value.trim());
+  if (opener === null) {
+    return null;
+  }
+  const delimiter = opener[0];
+  const contentLines: string[] = [];
+  let nextIndex = index + 1;
+  while (nextIndex < lines.length) {
+    const line = lines[nextIndex] ?? '';
+    const trimmed = line.trim();
+    if (trimmed.startsWith(delimiter)) {
+      const suffix = trimmed.slice(delimiter.length).trim();
+      const templateExpression = `\`${escapeTemplateLiteralContent(`\n${contentLines.join('\n')}\n`)}\``;
+      return {
+        expression: suffix === ''
+          ? templateExpression
+          : applyPercentStringFormatting(templateExpression, suffix, nameMap, mapNames),
+        nextIndex: nextIndex + 1,
+      };
+    }
+    contentLines.push(line);
+    nextIndex += 1;
+  }
+  return null;
+}
+
+function applyPercentStringFormatting(
+  templateExpression: string,
+  suffix: string,
+  nameMap: Map<string, string>,
+  mapNames: ReadonlySet<string>,
+): string {
+  const percentFormat = /^% (.+)$/.exec(suffix);
+  if (percentFormat === null) {
+    return templateExpression;
+  }
+  const rawArgs = percentFormat[1].trim();
+  const args = /^\(([\s\S]*)\)$/.exec(rawArgs) !== null
+    ? splitTopLevelComma(rawArgs.slice(1, -1)).filter((part) => part.trim() !== '')
+    : [rawArgs];
+  return args.reduce(
+    (formatted, arg) => `${formatted}.replace(/%[-+ #0]*(?:\\d+|\\*)?(?:\\.(?:\\d+|\\*))?[sdif]/, String(${translateExpression(arg, nameMap, new Set(), new Set(), mapNames)}))`,
+    templateExpression,
+  );
+}
+
+function escapeTemplateLiteralContent(content: string): string {
+  return content
+    .replace(/\\/g, '\\\\')
+    .replace(/`/g, '\\`')
+    .replace(/\$\{/g, '\\${');
 }
 
 function parseParenthesizedStringAssignment(

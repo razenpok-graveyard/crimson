@@ -3,7 +3,7 @@ import type {
   OptionalFunctionParameter,
   SimpleFunctionParameter,
 } from '../model.js';
-import { tsExportNameForPythonName, tsTypeExpression } from '../naming.js';
+import { tsBindingNameForPythonName, tsExportNameForPythonName, tsTypeExpression } from '../naming.js';
 import { splitTopLevelComma } from './common.js';
 import {
   colorNameMarker,
@@ -260,58 +260,7 @@ export function pythonParameterNames(parametersText: string): string[] {
 }
 
 function tsParameterNameForPythonName(pythonName: string): string {
-  const name = tsExportNameForPythonName(pythonName);
-  return isReservedTsBindingName(name) ? `_${name}` : name;
-}
-
-function isReservedTsBindingName(name: string): boolean {
-  return new Set([
-    'break',
-    'case',
-    'catch',
-    'class',
-    'const',
-    'continue',
-    'debugger',
-    'default',
-    'delete',
-    'do',
-    'else',
-    'enum',
-    'export',
-    'extends',
-    'false',
-    'finally',
-    'for',
-    'function',
-    'if',
-    'import',
-    'in',
-    'instanceof',
-    'new',
-    'null',
-    'return',
-    'super',
-    'switch',
-    'this',
-    'throw',
-    'true',
-    'try',
-    'typeof',
-    'var',
-    'void',
-    'while',
-    'with',
-    'yield',
-    'let',
-    'static',
-    'implements',
-    'interface',
-    'package',
-    'private',
-    'protected',
-    'public',
-  ]).has(name);
+  return tsBindingNameForPythonName(pythonName);
 }
 export function tsSimpleExpression(pythonExpression: string, parameters: SimpleFunctionParameter[]): string | null {
   const stringParameterNames = new Set(

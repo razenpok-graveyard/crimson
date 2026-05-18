@@ -1,5 +1,6 @@
 import type { ImportDefinition } from '../model.js';
 import {
+  tsBindingNameForPythonName,
   tsExportNameForPythonName,
   tsMutableNameForPythonName,
   tsTypeExpression,
@@ -145,6 +146,18 @@ type FunctionCallSignature = {
   positional: string[];
   returnTupleMarkers?: (FunctionReturnMarker | null)[];
 };
+
+function recordBindingNameMapping(pythonName: string, tsName: string, nameMap: Map<string, string>): void {
+  if (tsName !== tsExportNameForPythonName(pythonName)) {
+    nameMap.set(pythonName, tsName);
+  }
+}
+
+function tsStatementBindingNameForPythonName(pythonName: string, nameMap: Map<string, string>): string {
+  const tsName = tsBindingNameForPythonName(pythonName);
+  recordBindingNameMapping(pythonName, tsName, nameMap);
+  return tsName;
+}
 
 type MultilineKeywordPart = {
   pythonName: string;
@@ -457,7 +470,7 @@ export function translateStraightLineStatement(
     const recordWalrusDeclarations = (condition: string | null): string[] => {
       const declarations: string[] = [];
       for (const pythonName of walrusAssignmentNames(condition ?? '')) {
-        const tsName = tsExportNameForPythonName(pythonName);
+        const tsName = tsBindingNameForPythonName(pythonName);
         if (walrusDeclarationNames.has(tsName) || declaredNames.has(pythonName)) {
           continue;
         }
@@ -622,12 +635,22 @@ export function translateStraightLineStatement(
         if (clause === null) {
           break;
         }
+        const pythonCatchName = clause.name ?? 'exc';
+        const catchName = tsBindingNameForPythonName(pythonCatchName);
+        const hadCatchNameMapping = nameMap.has(pythonCatchName);
+        const previousCatchNameMapping = nameMap.get(pythonCatchName);
+        nameMap.set(pythonCatchName, catchName);
         const exceptBlock = translateBlock(exceptIndex + 1);
+        if (hadCatchNameMapping) {
+          nameMap.set(pythonCatchName, previousCatchNameMapping ?? catchName);
+        } else {
+          nameMap.delete(pythonCatchName);
+        }
         if (exceptBlock === null) {
           return null;
         }
         exceptBlocks.push({
-          catchName: tsExportNameForPythonName(clause.name ?? 'exc'),
+          catchName,
           statements: exceptBlock.statements,
           types: clause.types,
         });
@@ -1150,6 +1173,9 @@ export function translateStraightLineStatement(
 
     const innerIndent = `${indent}    `;
     const innerStatements: string[] = [];
+    const targets = multilineTupleForOfStatement[1]
+      .split(', ')
+      .map((target) => tsStatementBindingNameForPythonName(target, nameMap));
     let nextIndex = iterableIndex + 1;
     while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, innerIndent)) {
       if (lines[nextIndex].trim() === '') {
@@ -1180,7 +1206,6 @@ export function translateStraightLineStatement(
       return null;
     }
 
-    const targets = multilineTupleForOfStatement[1].split(', ').map(tsExportNameForPythonName);
     return {
       statements: [
         `for (const [${targets.join(', ')}] of [`,
@@ -1224,6 +1249,7 @@ export function translateStraightLineStatement(
     const innerStatements: string[] = [];
     const branchDeclaredNames = new Set(declaredNames);
     branchDeclaredNames.add(multilineValueForOfStatement[1]);
+    const itemName = tsStatementBindingNameForPythonName(multilineValueForOfStatement[1], nameMap);
     let nextIndex = iterableIndex + 1;
     while (nextIndex < lines.length && isIndentedBlockLine(lines, nextIndex, innerIndent)) {
       if (lines[nextIndex].trim() === '') {
@@ -1256,7 +1282,7 @@ export function translateStraightLineStatement(
 
     return {
       statements: [
-        `for (const ${tsExportNameForPythonName(multilineValueForOfStatement[1])} of [`,
+        `for (const ${itemName} of [`,
         ...iterableItems.map((item) => `  ${item},`),
         sliceLimit === null
           ? ']) {'
@@ -1278,6 +1304,7 @@ export function translateStraightLineStatement(
     for (const target of targets) {
       branchDeclaredNames.add(target);
     }
+    const tsTargets = targets.map((target) => tsStatementBindingNameForPythonName(target, nameMap));
     applyTupleTargetTypeMarkers(
       targets,
       nameMap.get(arrayElementTypeMarker(tupleForOfStatement[2]))
@@ -1328,8 +1355,8 @@ export function translateStraightLineStatement(
             `const ${zipSourceNames[sourceIndex]} = Array.from(${translateExpression(source, nameMap, arrayNames, validatedTypeAliases, mapNames)});`
           )),
           `for (let ${zipIndexName} = 0; ${zipIndexName} < Math.min(${zipSourceNames.map((sourceName) => `${sourceName}.length`).join(', ')}); ${zipIndexName}++) {`,
-          ...targets.map((target, targetIndex) => (
-            `  let ${tsExportNameForPythonName(target)} = ${zipSourceNames[targetIndex]}[${zipIndexName}];`
+          ...tsTargets.map((target, targetIndex) => (
+            `  let ${target} = ${zipSourceNames[targetIndex]}[${zipIndexName}];`
           )),
           ...innerStatements,
           '}',
@@ -1339,7 +1366,7 @@ export function translateStraightLineStatement(
     }
     return {
       statements: [
-        `for (let [${targets.map(tsExportNameForPythonName).join(', ')}] of ${iterableExpression}) {`,
+        `for (let [${tsTargets.join(', ')}] of ${iterableExpression}) {`,
         ...innerStatements,
         '}',
       ],
@@ -1354,22 +1381,23 @@ export function translateStraightLineStatement(
     const innerStatements: string[] = [];
     const branchDeclaredNames = new Set(declaredNames);
     branchDeclaredNames.add(forOfStatement[1]);
+    const loopName = forOfStatement[1] === '_' && rangeLoop !== null
+      ? 'i'
+      : tsStatementBindingNameForPythonName(forOfStatement[1], nameMap);
     if (iterableIsPathArray(forOfStatement[2], nameMap, arrayNames, validatedTypeAliases, mapNames)) {
-      const itemName = tsExportNameForPythonName(forOfStatement[1]);
       arrayNames.add(pathNameMarker(forOfStatement[1]));
-      arrayNames.add(pathNameMarker(itemName));
+      arrayNames.add(pathNameMarker(loopName));
     }
     const mapValuesLoop = /^(.+)\.values\(\)$/.exec(forOfStatement[2]);
     if (mapValuesLoop !== null) {
       const source = translateExpression(mapValuesLoop[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
-      const itemName = tsExportNameForPythonName(forOfStatement[1]);
       if (mapNames.has(mapValueMapNameMarker(mapValuesLoop[1])) || mapNames.has(mapValueMapNameMarker(source))) {
         addMutableName(mapNames, forOfStatement[1]);
-        addMutableName(mapNames, itemName);
+        addMutableName(mapNames, loopName);
       }
       if (mapNames.has(arrayValueMapNameMarker(mapValuesLoop[1])) || mapNames.has(arrayValueMapNameMarker(source))) {
         arrayNames.add(forOfStatement[1]);
-        arrayNames.add(itemName);
+        arrayNames.add(loopName);
       }
     }
     let nextIndex = index + 1;
@@ -1406,7 +1434,6 @@ export function translateStraightLineStatement(
       if (rangeArgs.length < 1 || rangeArgs.length > 3) {
         return null;
       }
-      const loopName = forOfStatement[1] === '_' ? 'i' : tsExportNameForPythonName(forOfStatement[1]);
       const start = rangeArgs.length === 1 ? '0' : translateExpression(rangeArgs[0], nameMap, arrayNames, validatedTypeAliases, mapNames);
       const stop = translateExpression(rangeArgs.length === 1 ? rangeArgs[0] : rangeArgs[1], nameMap, arrayNames, validatedTypeAliases, mapNames);
       const step = rangeArgs.length === 3
@@ -1426,7 +1453,7 @@ export function translateStraightLineStatement(
     const loopVariableReassigned = reassignedNames.has(forOfStatement[1]) || blockAssignsName(lines, index + 1, innerIndent, forOfStatement[1]);
     return {
       statements: [
-        `for (${loopVariableReassigned ? 'let' : 'const'} ${tsExportNameForPythonName(forOfStatement[1])} of ${translateExpression(forOfStatement[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`,
+        `for (${loopVariableReassigned ? 'let' : 'const'} ${loopName} of ${translateExpression(forOfStatement[2], nameMap, arrayNames, validatedTypeAliases, mapNames)}) {`,
         ...innerStatements,
         '}',
       ],
@@ -1704,7 +1731,7 @@ export function translateStraightLineStatement(
 
   const annotatedMultilineDictAssignment = /^([A-Za-z_][A-Za-z0-9_]*): (.+?) = \{$/.exec(statement);
   if (annotatedMultilineDictAssignment !== null) {
-    const tsName = tsExportNameForPythonName(annotatedMultilineDictAssignment[1]);
+    const tsName = tsBindingNameForPythonName(annotatedMultilineDictAssignment[1]);
     const typeExpression = tsTypeExpression(annotatedMultilineDictAssignment[2]);
     const dictLiteral = collectMultilineDictLiteral(
       lines,
@@ -1718,6 +1745,7 @@ export function translateStraightLineStatement(
       return null;
     }
     declaredNames.add(annotatedMultilineDictAssignment[1]);
+    recordBindingNameMapping(annotatedMultilineDictAssignment[1], tsName, nameMap);
     if (typeExpression === 'BuiltinObject' || typeExpression.startsWith('Record<')) {
       arrayNames.add(objectNameMarker(annotatedMultilineDictAssignment[1]));
       arrayNames.add(objectNameMarker(tsName));
@@ -1738,7 +1766,7 @@ export function translateStraightLineStatement(
   if (annotatedMultilineListAssignment !== null) {
     const pythonName = annotatedMultilineListAssignment[1];
     const annotation = annotatedMultilineListAssignment[2].trim();
-    const tsName = tsExportNameForPythonName(pythonName);
+    const tsName = tsBindingNameForPythonName(pythonName);
     const typeExpression = tsTypeExpression(annotation);
     const alreadyDeclared = declaredNames.has(pythonName);
     const listComprehension = parseMultilineListComprehension(
@@ -1765,6 +1793,7 @@ export function translateStraightLineStatement(
       return null;
     }
     declaredNames.add(pythonName);
+    recordBindingNameMapping(pythonName, tsName, nameMap);
     if (typeExpression.endsWith('[]')) {
       arrayNames.add(pythonName);
       arrayNames.add(tsName);
@@ -1848,7 +1877,7 @@ export function translateStraightLineStatement(
 
   const annotatedAssignment = /^([A-Za-z_][A-Za-z0-9_]*): (.+?) = (.+)$/.exec(statement);
   if (annotatedAssignment !== null) {
-    const tsName = tsExportNameForPythonName(annotatedAssignment[1]);
+    const tsName = tsBindingNameForPythonName(annotatedAssignment[1]);
     const typeExpression = tsTypeExpression(annotatedAssignment[2]);
     const receiverType = nullableTypeExpressionBase(typeExpression);
     if (receiverType !== undefined && /^[A-Z][A-Za-z0-9_$]*$/.test(receiverType)) {
@@ -1867,6 +1896,7 @@ export function translateStraightLineStatement(
       nameMap,
     );
     declaredNames.add(annotatedAssignment[1]);
+    recordBindingNameMapping(annotatedAssignment[1], tsName, nameMap);
     if (typeExpression.startsWith('Set<') || typeExpression.startsWith('ReadonlySet<')) {
       arrayNames.add(setNameMarker(annotatedAssignment[1]));
       arrayNames.add(setNameMarker(tsName));
@@ -1944,8 +1974,9 @@ export function translateStraightLineStatement(
 
   const annotatedDeclaration = /^([A-Za-z_][A-Za-z0-9_]*): (.+)$/.exec(statement);
   if (annotatedDeclaration !== null) {
-    const tsName = tsExportNameForPythonName(annotatedDeclaration[1]);
+    const tsName = tsBindingNameForPythonName(annotatedDeclaration[1]);
     declaredNames.add(annotatedDeclaration[1]);
+    recordBindingNameMapping(annotatedDeclaration[1], tsName, nameMap);
     return {
       statements: [`let ${tsName}: ${tsTypeExpression(annotatedDeclaration[2])};`],
       nextIndex: index + 1,
@@ -3682,7 +3713,7 @@ function parseMultilineLambdaTupleExpression(
   for (const paramText of splitTopLevelComma(paramsText)) {
     const defaulted = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(paramText);
     if (defaulted !== null) {
-      const tsName = tsExportNameForPythonName(defaulted[1]);
+      const tsName = tsBindingNameForPythonName(defaulted[1]);
       const defaultValue = translateExpression(defaulted[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
       if (defaultValue === tsName) {
         lambdaNameMap.set(defaulted[1], tsName);
@@ -3697,7 +3728,7 @@ function parseMultilineLambdaTupleExpression(
     if (plain === null) {
       return null;
     }
-    const tsName = tsExportNameForPythonName(plain[1]);
+    const tsName = tsBindingNameForPythonName(plain[1]);
     params.push(tsName);
     lambdaNameMap.set(plain[1], tsName);
   }
@@ -3759,7 +3790,7 @@ function parseMultilineLambdaCallExpression(
   for (const paramText of splitTopLevelComma(paramsText)) {
     const defaulted = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/.exec(paramText);
     if (defaulted !== null) {
-      const tsName = tsExportNameForPythonName(defaulted[1]);
+      const tsName = tsBindingNameForPythonName(defaulted[1]);
       const defaultValue = translateExpression(defaulted[2], nameMap, arrayNames, validatedTypeAliases, mapNames);
       if (defaultValue === tsName) {
         lambdaNameMap.set(defaulted[1], tsName);
@@ -3774,7 +3805,7 @@ function parseMultilineLambdaCallExpression(
     if (plain === null) {
       return null;
     }
-    const tsName = tsExportNameForPythonName(plain[1]);
+    const tsName = tsBindingNameForPythonName(plain[1]);
     params.push(tsName);
     lambdaNameMap.set(plain[1], tsName);
   }
@@ -5214,7 +5245,7 @@ function translateStraightLineAssignment(
         nextIndex,
       };
     }
-    const tsName = tsExportNameForPythonName(localAssignment[1]);
+    const tsName = tsBindingNameForPythonName(localAssignment[1]);
     if (assignedRight === tsName) {
       return { statements: [], nextIndex };
     }
@@ -5228,7 +5259,7 @@ function translateStraightLineAssignment(
     }
     declaredNames.add(localAssignment[1]);
     const localTsName = tsLocalDeclarationNameForAssignment(tsName, assignedRight);
-    if (localTsName !== tsName) {
+    if (localTsName !== tsName || tsName !== tsExportNameForPythonName(localAssignment[1])) {
       nameMap.set(localAssignment[1], localTsName);
     }
     const localAssignedRight = assignedRightAsKnownVector(localAssignment[1], localTsName, assignedRight, arrayNames);
@@ -5255,11 +5286,12 @@ function translateStraightLineAssignment(
   const singletonTupleAssignment = /^\(([A-Za-z_][A-Za-z0-9_]*),\)$/.exec(pythonLeft);
   if (operator === '=' && singletonTupleAssignment !== null) {
     const name = singletonTupleAssignment[1];
-    const tsName = tsExportNameForPythonName(name);
+    const tsName = tsBindingNameForPythonName(name);
     const declaration = declaredNames.has(name)
       ? ''
       : `${reassignedNames.has(name) ? 'let' : 'const'} `;
     declaredNames.add(name);
+    recordBindingNameMapping(name, tsName, nameMap);
     return {
       statements: [`${declaration}[${tsName}] = ${assignedRight};`],
       nextIndex,
@@ -5286,13 +5318,14 @@ function translateStraightLineAssignment(
       }
       const localTarget = /^([A-Za-z_][A-Za-z0-9_]*)$/.exec(target);
       if (localTarget !== null) {
-        const tsName = tsExportNameForPythonName(localTarget[1]);
+        const tsName = tsBindingNameForPythonName(localTarget[1]);
         bindings.push(tsName);
         if (!declaredNames.has(localTarget[1])) {
           if (hasExistingLocalTarget) {
             preDeclarations.push(`let ${tsName}: ${tupleAssignmentElementType(assignedRight, targetIndex, nameMap)};`);
           }
           declaredNames.add(localTarget[1]);
+          recordBindingNameMapping(localTarget[1], tsName, nameMap);
         }
         continue;
       }
@@ -5331,7 +5364,7 @@ function translateStraightLineAssignment(
   const tupleAssignment = /^([A-Za-z_][A-Za-z0-9_]*(?:, [A-Za-z_][A-Za-z0-9_]*)+)$/.exec(pythonLeft);
   if (operator === '=' && tupleAssignment !== null) {
     const names = tupleAssignment[1].split(', ');
-    const tsNames = names.map((name) => name === '_' ? '' : tsExportNameForPythonName(name));
+    const tsNames = names.map((name) => name === '_' ? '' : tsBindingNameForPythonName(name));
     const alreadyDeclared = names.filter((name) => name !== '_').every((name) => declaredNames.has(name));
     const someAlreadyDeclared = names.some((name) => name !== '_' && declaredNames.has(name));
     const declaration = alreadyDeclared
@@ -5342,11 +5375,12 @@ function translateStraightLineAssignment(
       ? []
       : names
         .flatMap((name, targetIndex) => name !== '_' && !declaredNames.has(name)
-          ? [`let ${tsExportNameForPythonName(name)}: ${tupleAssignmentElementType(assignedRight, targetIndex, nameMap)};`]
+          ? [`let ${tsBindingNameForPythonName(name)}: ${tupleAssignmentElementType(assignedRight, targetIndex, nameMap)};`]
           : []);
     for (const name of names) {
       if (name !== '_') {
         declaredNames.add(name);
+        recordBindingNameMapping(name, tsBindingNameForPythonName(name), nameMap);
       }
     }
     applyTupleAssignmentReturnMarkers(names, assignedRight, nameMap, arrayNames, mapNames);
@@ -5487,7 +5521,7 @@ function translateMapPopAssignment(
     };
   }
 
-  const tsName = tsExportNameForPythonName(localAssignment[1]);
+  const tsName = tsBindingNameForPythonName(localAssignment[1]);
   if (declaredNames.has(localAssignment[1])) {
     return {
       statements: [
@@ -5499,6 +5533,7 @@ function translateMapPopAssignment(
   }
 
   declaredNames.add(localAssignment[1]);
+  recordBindingNameMapping(localAssignment[1], tsName, nameMap);
   return {
     statements: [
       `${reassignedNames.has(localAssignment[1]) ? 'let' : 'const'} ${tsName} = ${valueExpression};`,
